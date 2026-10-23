@@ -2,11 +2,11 @@
 
 namespace App\Enums;
 
-use Filament\Support\Contracts\HasLabel;
 use Filament\Support\Contracts\HasColor;
+use Filament\Support\Contracts\HasLabel;
 
 /** Estado en lista de espera. */
-enum WaitlistStatus: string implements HasLabel, HasColor
+enum WaitlistStatus: string implements HasColor, HasLabel
 {
     case Waiting = 'waiting';
     case Offered = 'offered';

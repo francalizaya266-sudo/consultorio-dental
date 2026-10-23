@@ -2,11 +2,11 @@
 
 namespace App\Enums;
 
-use Filament\Support\Contracts\HasLabel;
 use Filament\Support\Contracts\HasColor;
+use Filament\Support\Contracts\HasLabel;
 
 /** Estado de la solicitud. */
-enum RescheduleRequestStatus: string implements HasLabel, HasColor
+enum RescheduleRequestStatus: string implements HasColor, HasLabel
 {
     case Pending = 'pending';
     case Approved = 'approved';

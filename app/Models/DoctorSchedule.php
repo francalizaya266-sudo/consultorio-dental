@@ -5,6 +5,7 @@ namespace App\Models;
 use App\Models\Concerns\Auditable;
 use Carbon\CarbonInterface;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
+use Illuminate\Database\Eloquent\Attributes\Scope;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -29,7 +30,8 @@ class DoctorSchedule extends Model
         return $this->belongsTo(Doctor::class);
     }
 
-    public function scopeValidOn(Builder $query, CarbonInterface $date): Builder
+    #[Scope]
+    protected function validOn(Builder $query, CarbonInterface $date): Builder
     {
         return $query
             ->where('weekday', $date->dayOfWeekIso)

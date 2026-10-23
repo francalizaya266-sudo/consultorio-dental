@@ -10,6 +10,7 @@ use App\Enums\ConfirmationChannel;
 use App\Models\Concerns\Auditable;
 use Database\Factories\AppointmentFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
+use Illuminate\Database\Eloquent\Attributes\Scope;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Casts\Attribute;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
@@ -24,7 +25,7 @@ use Illuminate\Database\Eloquent\SoftDeletes;
 class Appointment extends Model
 {
     /** @use HasFactory<AppointmentFactory> */
-    use HasFactory, SoftDeletes, Auditable;
+    use Auditable, HasFactory, SoftDeletes;
 
     protected function casts(): array
     {
@@ -110,12 +111,14 @@ class Appointment extends Model
         return Attribute::get(fn () => $this->ends_at->copy()->addMinutes($this->buffer_minutes));
     }
 
-    public function scopeOccupying(Builder $query): Builder
+    #[Scope]
+    protected function occupying(Builder $query): Builder
     {
         return $query->whereIn('status', AppointmentStatus::occupying());
     }
 
-    public function scopeUpcoming(Builder $query): Builder
+    #[Scope]
+    protected function upcoming(Builder $query): Builder
     {
         return $query->where('starts_at', '>=', now())->whereIn('status', AppointmentStatus::changeable());
     }

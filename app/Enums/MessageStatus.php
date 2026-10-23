@@ -2,11 +2,11 @@
 
 namespace App\Enums;
 
-use Filament\Support\Contracts\HasLabel;
 use Filament\Support\Contracts\HasColor;
+use Filament\Support\Contracts\HasLabel;
 
 /** Estado del aviso. */
-enum MessageStatus: string implements HasLabel, HasColor
+enum MessageStatus: string implements HasColor, HasLabel
 {
     case Pending = 'pending';
     case Opened = 'opened';

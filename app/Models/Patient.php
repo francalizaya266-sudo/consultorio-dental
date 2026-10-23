@@ -25,7 +25,7 @@ use Illuminate\Support\Facades\DB;
 class Patient extends Model
 {
     /** @use HasFactory<PatientFactory> */
-    use HasFactory, SoftDeletes, Auditable;
+    use Auditable, HasFactory, SoftDeletes;
 
     protected function casts(): array
     {

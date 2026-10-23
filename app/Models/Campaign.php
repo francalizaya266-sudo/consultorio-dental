@@ -6,6 +6,7 @@ use App\Enums\AppointmentStatus;
 use App\Enums\DiscountType;
 use App\Models\Concerns\Auditable;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
+use Illuminate\Database\Eloquent\Attributes\Scope;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -16,7 +17,7 @@ use Illuminate\Database\Eloquent\SoftDeletes;
 #[Fillable(['name', 'slug', 'summary', 'description', 'image_path', 'treatment_id', 'discount_type', 'discount_value', 'starts_at', 'ends_at', 'promo_code', 'max_redemptions', 'show_on_home', 'whatsapp_text', 'views_count', 'is_active'])]
 class Campaign extends Model
 {
-    use SoftDeletes, Auditable;
+    use Auditable, SoftDeletes;
 
     protected function casts(): array
     {
@@ -46,7 +47,8 @@ class Campaign extends Model
     }
 
     /** Campañas visibles ahora mismo en la web. */
-    public function scopePublished(Builder $query): Builder
+    #[Scope]
+    protected function published(Builder $query): Builder
     {
         return $query->where('is_active', true)
             ->where('starts_at', '<=', now())

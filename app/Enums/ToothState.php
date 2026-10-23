@@ -2,11 +2,11 @@
 
 namespace App\Enums;
 
-use Filament\Support\Contracts\HasLabel;
 use Filament\Support\Contracts\HasColor;
+use Filament\Support\Contracts\HasLabel;
 
 /** Estado en el odontograma. */
-enum ToothState: string implements HasLabel, HasColor
+enum ToothState: string implements HasColor, HasLabel
 {
     case Bad = 'bad';
     case Good = 'good';

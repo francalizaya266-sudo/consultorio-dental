@@ -20,7 +20,7 @@ use Illuminate\Database\Eloquent\SoftDeletes;
 class Account extends Model
 {
     /** @use HasFactory<AccountFactory> */
-    use HasFactory, SoftDeletes, Auditable;
+    use Auditable, HasFactory, SoftDeletes;
 
     protected function casts(): array
     {

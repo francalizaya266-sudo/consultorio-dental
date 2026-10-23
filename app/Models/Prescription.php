@@ -13,7 +13,7 @@ use Illuminate\Database\Eloquent\SoftDeletes;
 #[Fillable(['patient_id', 'doctor_id', 'consultation_id', 'issued_at', 'indications'])]
 class Prescription extends Model
 {
-    use SoftDeletes, Auditable;
+    use Auditable, SoftDeletes;
 
     protected function casts(): array
     {

@@ -17,7 +17,7 @@ use Illuminate\Database\Eloquent\SoftDeletes;
 class Consultation extends Model
 {
     /** @use HasFactory<ConsultationFactory> */
-    use HasFactory, SoftDeletes, Auditable;
+    use Auditable, HasFactory, SoftDeletes;
 
     protected function casts(): array
     {

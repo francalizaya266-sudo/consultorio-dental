@@ -5,6 +5,7 @@ namespace App\Models;
 use App\Models\Concerns\Auditable;
 use Database\Factories\TreatmentFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
+use Illuminate\Database\Eloquent\Attributes\Scope;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
@@ -17,7 +18,7 @@ use Illuminate\Database\Eloquent\SoftDeletes;
 class Treatment extends Model
 {
     /** @use HasFactory<TreatmentFactory> */
-    use HasFactory, SoftDeletes, Auditable;
+    use Auditable, HasFactory, SoftDeletes;
 
     protected function casts(): array
     {
@@ -57,13 +58,15 @@ class Treatment extends Model
         return $this->buffer_minutes ?? (int) Setting::get('agenda.buffer_minutes', 10);
     }
 
-    public function scopeActive(Builder $query): Builder
+    #[Scope]
+    protected function active(Builder $query): Builder
     {
         return $query->where('is_active', true);
     }
 
     /** Lo que el paciente puede reservar solo desde la web (primera cita). */
-    public function scopeOnlineBookable(Builder $query): Builder
+    #[Scope]
+    protected function onlineBookable(Builder $query): Builder
     {
         return $query->active()->where('online_bookable', true);
     }

@@ -6,6 +6,7 @@ use App\Enums\ScheduleBlockType;
 use App\Models\Concerns\Auditable;
 use Carbon\CarbonInterface;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
+use Illuminate\Database\Eloquent\Attributes\Scope;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -36,7 +37,8 @@ class ScheduleBlock extends Model
     }
 
     /** Bloqueos del doctor o de todo el consultorio que se cruzan con el rango. */
-    public function scopeAffecting(Builder $query, Doctor $doctor, CarbonInterface $from, CarbonInterface $to): Builder
+    #[Scope]
+    protected function affecting(Builder $query, Doctor $doctor, CarbonInterface $from, CarbonInterface $to): Builder
     {
         return $query
             ->where(fn (Builder $q) => $q->whereNull('doctor_id')->orWhere('doctor_id', $doctor->getKey()))

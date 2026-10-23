@@ -2,11 +2,11 @@
 
 namespace App\Enums;
 
-use Filament\Support\Contracts\HasLabel;
 use Filament\Support\Contracts\HasColor;
+use Filament\Support\Contracts\HasLabel;
 
 /** Rol del personal. */
-enum UserRole: string implements HasLabel, HasColor
+enum UserRole: string implements HasColor, HasLabel
 {
     case Admin = 'admin';
     case Reception = 'reception';

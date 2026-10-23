@@ -2,11 +2,11 @@
 
 namespace App\Enums;
 
-use Filament\Support\Contracts\HasLabel;
 use Filament\Support\Contracts\HasColor;
+use Filament\Support\Contracts\HasLabel;
 
 /** Estado del procedimiento. */
-enum PlanItemStatus: string implements HasLabel, HasColor
+enum PlanItemStatus: string implements HasColor, HasLabel
 {
     case Pending = 'pending';
     case InProgress = 'in_progress';

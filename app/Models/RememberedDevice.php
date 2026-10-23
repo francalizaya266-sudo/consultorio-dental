@@ -4,7 +4,9 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Attributes\Hidden;
+use Illuminate\Database\Eloquent\Attributes\Scope;
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Database\Eloquent\MassPrunable;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
@@ -13,6 +15,8 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 #[Hidden(['token_hash'])]
 class RememberedDevice extends Model
 {
+    use MassPrunable;
+
     protected function casts(): array
     {
         return [
@@ -27,7 +31,16 @@ class RememberedDevice extends Model
         return $this->belongsTo(Account::class);
     }
 
-    public function scopeUsable(Builder $query): Builder
+    /** Se eliminan 30 días después de vencer o ser revocados. */
+    public function prunable(): Builder
+    {
+        return static::query()
+            ->where('expires_at', '<', now()->subDays(30))
+            ->orWhere('revoked_at', '<', now()->subDays(30));
+    }
+
+    #[Scope]
+    protected function usable(Builder $query): Builder
     {
         return $query->whereNull('revoked_at')->where('expires_at', '>', now());
     }

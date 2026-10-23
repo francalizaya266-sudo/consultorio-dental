@@ -13,7 +13,7 @@ use Illuminate\Database\Eloquent\SoftDeletes;
 #[Fillable(['patient_id', 'consultation_id', 'type', 'title', 'disk', 'path', 'mime_type', 'size_bytes', 'taken_at', 'uploaded_by_user_id'])]
 class ClinicalFile extends Model
 {
-    use SoftDeletes, Auditable;
+    use Auditable, SoftDeletes;
 
     protected function casts(): array
     {

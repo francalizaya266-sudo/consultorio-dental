@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use Illuminate\Database\Eloquent\Attributes\Fillable;
+use Illuminate\Database\Eloquent\Attributes\Scope;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 
@@ -19,7 +20,8 @@ class Icd10Code extends Model
         ];
     }
 
-    public function scopeSearch(Builder $query, string $term): Builder
+    #[Scope]
+    protected function search(Builder $query, string $term): Builder
     {
         return $query->where(fn (Builder $q) => $q->where('code', 'like', "{$term}%")->orWhere('description', 'like', "%{$term}%"));
     }

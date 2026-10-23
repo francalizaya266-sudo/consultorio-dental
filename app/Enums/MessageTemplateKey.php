@@ -42,12 +42,12 @@ enum MessageTemplateKey: string implements HasLabel
             self::AppointmentScheduled => "Hola {nombre}, te escribimos de {consultorio}.\nTu próxima cita de {tratamiento} es el {fecha} a las {hora} con {doctor}.\n\nPuedes confirmarla aquí:\n{enlace}",
             self::Reminder => "Hola {nombre}, te recordamos tu cita de mañana {fecha} a las {hora} con {doctor} en {consultorio}.\n\nConfirma tu asistencia aquí:\n{enlace}",
             self::Rescheduled => "Hola {nombre}, tu cita de {tratamiento} cambió al {fecha} a las {hora} con {doctor}.\n\nConfirma el nuevo horario aquí:\n{enlace}",
-            self::Cancelled => "Hola {nombre}, lamentamos avisarte que tu cita del {fecha} a las {hora} fue cancelada. Escríbenos y te ayudamos a elegir otro horario.",
+            self::Cancelled => 'Hola {nombre}, lamentamos avisarte que tu cita del {fecha} a las {hora} fue cancelada. Escríbenos y te ayudamos a elegir otro horario.',
             self::RescheduleApproved => "Hola {nombre}, aprobamos tu cambio. Tu cita de {tratamiento} ahora es el {fecha} a las {hora} con {doctor}.\n\nDetalles aquí:\n{enlace}",
-            self::RescheduleRejected => "Hola {nombre}, no pudimos mover tu cita a los horarios que propusiste. Tu cita sigue el {fecha} a las {hora}. Escríbenos y buscamos otra opción.",
+            self::RescheduleRejected => 'Hola {nombre}, no pudimos mover tu cita a los horarios que propusiste. Tu cita sigue el {fecha} a las {hora}. Escríbenos y buscamos otra opción.',
             self::AccessLink => "Hola, este es tu enlace para entrar a Mi cuenta en {consultorio}:\n{enlace}\n\nNo lo compartas con nadie.",
             self::Prescription => "Hola {nombre}, te enviamos tu receta e indicaciones de {doctor}:\n\n{receta}",
-            self::WaitlistOffer => "Hola {nombre}, se liberó un horario para {tratamiento} el {fecha} a las {hora} con {doctor}. ¿Lo quieres? Respóndenos y te lo reservamos.",
+            self::WaitlistOffer => 'Hola {nombre}, se liberó un horario para {tratamiento} el {fecha} a las {hora} con {doctor}. ¿Lo quieres? Respóndenos y te lo reservamos.',
         };
     }
 }

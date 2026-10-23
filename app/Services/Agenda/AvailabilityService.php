@@ -130,12 +130,13 @@ class AvailabilityService
         $dayEnd = $date->endOfDay();
 
         $busy = $this->occupyingAppointments($doctor, $dayStart->subDay(), $dayEnd, $ignoreAppointmentId)
+            ->toBase()
             ->map(fn (Appointment $a) => [
                 'start' => CarbonImmutable::instance($a->starts_at),
                 'end' => CarbonImmutable::instance($a->occupied_until),
                 'is_appointment' => true,
             ])
-            ->merge(ScheduleBlock::query()->affecting($doctor, $dayStart, $dayEnd)->get()->map(fn (ScheduleBlock $b) => [
+            ->merge(ScheduleBlock::query()->affecting($doctor, $dayStart, $dayEnd)->get()->toBase()->map(fn (ScheduleBlock $b) => [
                 'start' => CarbonImmutable::instance($b->starts_at),
                 'end' => CarbonImmutable::instance($b->ends_at),
                 'is_appointment' => false,
@@ -193,6 +194,7 @@ class AvailabilityService
             ->validOn($day)
             ->orderBy('starts_at')
             ->get()
+            ->toBase()
             ->map(fn (DoctorSchedule $s) => [
                 'start' => $day->setTimeFromTimeString($s->starts_at),
                 'end' => $day->setTimeFromTimeString($s->ends_at),

@@ -38,11 +38,12 @@ return [
             'max_reschedule_options' => 3,
         ],
 
+        // Horas fijas del cron (se leen al arrancar, por eso vienen del .env y no del panel).
         'reminders' => [
             // A qué hora del día anterior se preparan los recordatorios.
-            'day_before_at' => '09:00',
+            'day_before_at' => env('REMINDERS_AT', '09:00'),
             // A qué hora del día anterior una cita sin confirmar pasa a "llamar".
-            'flag_unconfirmed_at' => '16:00',
+            'flag_unconfirmed_at' => env('FLAG_UNCONFIRMED_AT', '16:00'),
         ],
 
         'devices' => [

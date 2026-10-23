@@ -15,7 +15,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 class Payment extends Model
 {
     /** @use HasFactory<PaymentFactory> */
-    use HasFactory, Auditable;
+    use Auditable, HasFactory;
 
     protected function casts(): array
     {

@@ -5,6 +5,7 @@ namespace App\Models;
 use App\Enums\SnippetField;
 use App\Enums\SnippetStatus;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
+use Illuminate\Database\Eloquent\Attributes\Scope;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -33,7 +34,8 @@ class TextSnippet extends Model
     }
 
     /** Opciones que ve un doctor en un campo: compartidas + personales, las más usadas primero. */
-    public function scopeAvailableFor(Builder $query, User $user, SnippetField $field): Builder
+    #[Scope]
+    protected function availableFor(Builder $query, User $user, SnippetField $field): Builder
     {
         return $query
             ->where('status', SnippetStatus::Active)

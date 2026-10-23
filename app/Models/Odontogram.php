@@ -16,7 +16,7 @@ use Illuminate\Support\Facades\DB;
 #[Fillable(['patient_id', 'consultation_id', 'doctor_id', 'type', 'dentition', 'specifications', 'observations'])]
 class Odontogram extends Model
 {
-    use SoftDeletes, Auditable;
+    use Auditable, SoftDeletes;
 
     protected function casts(): array
     {

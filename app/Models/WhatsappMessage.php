@@ -6,6 +6,7 @@ use App\Enums\MessageChannel;
 use App\Enums\MessageStatus;
 use App\Enums\MessageTemplateKey;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
+use Illuminate\Database\Eloquent\Attributes\Scope;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -52,13 +53,15 @@ class WhatsappMessage extends Model
         return $this->belongsTo(User::class, 'sent_by_user_id');
     }
 
-    public function scopePending(Builder $query): Builder
+    #[Scope]
+    protected function pending(Builder $query): Builder
     {
         return $query->whereIn('status', [MessageStatus::Pending, MessageStatus::Opened]);
     }
 
     /** Avisos que ya toca enviar (los recordatorios esperan a su día). */
-    public function scopeDue(Builder $query): Builder
+    #[Scope]
+    protected function due(Builder $query): Builder
     {
         return $query->pending()->where(fn (Builder $q) => $q->whereNull('due_at')->orWhere('due_at', '<=', now()));
     }

@@ -16,7 +16,7 @@ use Illuminate\Support\Facades\DB;
 #[Fillable(['patient_id', 'doctor_id', 'consultation_id', 'title', 'status', 'notes', 'accepted_at', 'completed_at'])]
 class TreatmentPlan extends Model
 {
-    use SoftDeletes, Auditable;
+    use Auditable, SoftDeletes;
 
     protected function casts(): array
     {

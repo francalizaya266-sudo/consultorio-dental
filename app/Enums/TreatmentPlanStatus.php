@@ -2,11 +2,11 @@
 
 namespace App\Enums;
 
-use Filament\Support\Contracts\HasLabel;
 use Filament\Support\Contracts\HasColor;
+use Filament\Support\Contracts\HasLabel;
 
 /** Estado del plan. */
-enum TreatmentPlanStatus: string implements HasLabel, HasColor
+enum TreatmentPlanStatus: string implements HasColor, HasLabel
 {
     case Draft = 'draft';
     case Proposed = 'proposed';

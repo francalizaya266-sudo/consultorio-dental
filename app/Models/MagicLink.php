@@ -5,6 +5,7 @@ namespace App\Models;
 use App\Enums\MagicLinkPurpose;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Attributes\Hidden;
+use Illuminate\Database\Eloquent\MassPrunable;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
@@ -13,6 +14,8 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 #[Hidden(['token_hash'])]
 class MagicLink extends Model
 {
+    use MassPrunable;
+
     protected function casts(): array
     {
         return [
@@ -37,6 +40,12 @@ class MagicLink extends Model
     public function createdBy(): BelongsTo
     {
         return $this->belongsTo(User::class, 'created_by_user_id');
+    }
+
+    /** Se eliminan 30 días después de vencer. */
+    public function prunable(): Builder
+    {
+        return static::query()->where('expires_at', '<', now()->subDays(30));
     }
 
     public function isUsable(): bool
