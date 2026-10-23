@@ -7,7 +7,6 @@ use App\Filament\Forms\PaymentTermsFields;
 use App\Filament\Resources\TreatmentPackages\Pages\ManageTreatmentPackages;
 use App\Models\Treatment;
 use App\Models\TreatmentPackage;
-use App\Models\TreatmentPackageItem;
 use App\Services\Clinical\TreatmentPlanService;
 use App\Support\Money;
 use BackedEnum;
@@ -126,6 +125,10 @@ class TreatmentPackageResource extends Resource
                             return $savings > 0 && filled($get('price')) ? 'Ahorra '.Money::format($savings) : null;
                         })
                         ->hintColor('success'),
+                    Toggle::make('for_two')
+                        ->label('2x1')
+                        ->helperText('Con el mismo pago se atiende otra persona: un familiar o alguien que trae el paciente.')
+                        ->default(false),
                 ]),
                 Section::make('Cómo se puede pagar')
                     ->compact()
@@ -170,7 +173,7 @@ class TreatmentPackageResource extends Resource
                     ->label('Paquete')
                     ->searchable()
                     ->weight(FontWeight::Medium)
-                    ->description(fn (TreatmentPackage $record) => $record->items->map(fn (TreatmentPackageItem $item) => $item->label())->implode(' · '))
+                    ->description(fn (TreatmentPackage $record) => $record->contents())
                     ->wrap(),
                 TextColumn::make('normal_price')
                     ->label('Precio normal')
@@ -179,7 +182,10 @@ class TreatmentPackageResource extends Resource
                     ->label('Precio del paquete')
                     ->formatStateUsing(fn (string $state) => Money::format($state))
                     ->weight(FontWeight::Bold)
-                    ->description(fn (TreatmentPackage $record) => $record->savings() > 0 ? 'Ahorra '.Money::format($record->savings()) : null),
+                    ->description(fn (TreatmentPackage $record) => collect([
+                        $record->savings() > 0 ? 'Ahorra '.Money::format($record->savings()) : null,
+                        $record->for_two ? '2x1: atiende a 2 personas' : null,
+                    ])->filter()->implode(' · ') ?: null),
                 TextColumn::make('payment_options')
                     ->label('Cómo se paga')
                     ->state(fn (TreatmentPackage $record) => TreatmentPlanService::packagePaymentOptions($record))

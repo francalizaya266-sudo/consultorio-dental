@@ -3,6 +3,7 @@
 namespace App\Filament\Resources\Patients\Schemas;
 
 use App\Enums\PlanItemStatus;
+use App\Models\Patient;
 use App\Models\Treatment;
 use App\Models\TreatmentPackage;
 use App\Models\TreatmentPlan;
@@ -31,8 +32,9 @@ class TreatmentPlanForm
 {
     /**
      * @param  Closure(): array<array-key, array<string, mixed>>|null  $suggestedItems  Renglones con que empieza un plan nuevo.
+     * @param  Patient|null  $patient  El paciente del plan: en un 2x1 se ofrece primero su familia.
      */
-    public static function configure(Schema $schema, ?Closure $suggestedItems = null): Schema
+    public static function configure(Schema $schema, ?Closure $suggestedItems = null, ?Patient $patient = null): Schema
     {
         return $schema
             ->columns(1)
@@ -41,6 +43,10 @@ class TreatmentPlanForm
                     ->label('Nombre del plan')
                     ->default('Plan de tratamiento')
                     ->maxLength(255),
+
+                Text::make(fn (?TreatmentPlan $record) => 'Va incluido en el 2x1 de '.$record?->includedIn?->patient?->full_name.': lo que viene del paquete no tiene costo.')
+                    ->color('success')
+                    ->visible(fn (?TreatmentPlan $record) => $record?->included_in_plan_id !== null),
 
                 Select::make('add_package')
                     ->label('Agregar un paquete')
@@ -148,6 +154,18 @@ class TreatmentPlanForm
                             ->columnSpan(['default' => 12, 'lg' => 2]),
                     ]),
 
+                // Se lee al guardar (ver el gestor de planes): con ella se arma el plan sin costo de la otra persona.
+                self::companionSelect($patient)
+                    ->dehydrated(false)
+                    ->visible(fn (Get $get, ?TreatmentPlan $record) => $patient !== null
+                        && self::twoForOnePackage($get('items') ?? []) !== null
+                        && $record?->included_in_plan_id === null
+                        && ! $record?->companionPlans()->exists()),
+
+                Text::make(fn (?TreatmentPlan $record) => '2x1: con este plan se atiende también a '.$record?->companionNames().', sin costo.')
+                    ->color('success')
+                    ->visible(fn (?TreatmentPlan $record) => $record?->companionNames() !== null),
+
                 Text::make(fn (Get $get) => 'Total: '.Money::format(self::total($get('items') ?? [])))
                     ->size(TextSize::Large)
                     ->weight(FontWeight::Bold),
@@ -165,6 +183,42 @@ class TreatmentPlanForm
         return round(collect($items)
             ->reject(fn (array $item) => in_array($item['status'] ?? null, [PlanItemStatus::Cancelled, PlanItemStatus::Cancelled->value], true))
             ->sum(fn (array $item) => (int) ($item['quantity'] ?? 1) * (float) ($item['unit_price'] ?? 0) - (float) ($item['discount'] ?? 0)), 2);
+    }
+
+    /** 2x1: a quién más se atiende con el paquete. Primero la familia del paciente; se puede buscar a cualquiera. */
+    public static function companionSelect(?Patient $patient): Select
+    {
+        return Select::make('companion_patient_id')
+            ->label('2x1: ¿a quién más se atiende?')
+            ->placeholder('Un familiar o alguien que trae el paciente')
+            ->helperText('Se le arma su plan con lo mismo del paquete, sin costo. Queda aceptado cuando este paciente firme el suyo.')
+            ->options(fn () => $patient?->account?->patients()->whereKeyNot($patient->getKey())->orderBy('first_name')->with('account')->get()
+                ->mapWithKeys(fn (Patient $relative) => [$relative->getKey() => $relative->selectLabel()]) ?? [])
+            ->searchable()
+            ->getSearchResultsUsing(fn (string $search) => Patient::query()
+                ->search($search)
+                ->whereKeyNot($patient?->getKey())
+                ->with('account')
+                ->limit(20)
+                ->get()
+                ->mapWithKeys(fn (Patient $other) => [$other->getKey() => $other->selectLabel()]))
+            ->getOptionLabelUsing(fn ($value) => Patient::with('account')->find($value)?->selectLabel());
+    }
+
+    /**
+     * El paquete 2x1 entre los procedimientos del formulario, si hay uno.
+     *
+     * @param  array<array-key, array<string, mixed>>  $items
+     */
+    public static function twoForOnePackage(array $items): ?TreatmentPackage
+    {
+        $packageIds = collect($items)
+            ->reject(fn (array $item) => in_array($item['status'] ?? null, [PlanItemStatus::Cancelled, PlanItemStatus::Cancelled->value], true))
+            ->pluck('treatment_package_id')
+            ->filter()
+            ->unique();
+
+        return $packageIds->isEmpty() ? null : TreatmentPackage::withTrashed()->whereKey($packageIds->all())->where('for_two', true)->first();
     }
 
     /** Suma al plan los tratamientos del paquete, con el precio del paquete repartido entre ellos. */

@@ -8,6 +8,7 @@ use App\Models\Review;
 use App\Models\Setting;
 use App\Models\SmileCase;
 use App\Models\Treatment;
+use App\Models\TreatmentPackage;
 use Illuminate\Foundation\Testing\LazilyRefreshDatabase;
 use Tests\Concerns\CreatesAgenda;
 use Tests\TestCase;
@@ -123,6 +124,29 @@ class PublicPagesTest extends TestCase
         $this->get(route('site.treatment', 'interno'))->assertNotFound();
         $this->get(route('site.treatment', 'retirado'))->assertNotFound();
         $this->get(route('site.treatment', 'no-existe'))->assertNotFound();
+    }
+
+    public function test_a_promotion_with_a_package_shows_what_it_includes_the_savings_and_how_to_pay(): void
+    {
+        $cleaning = Treatment::factory()->create(['name' => 'Limpieza dental', 'price_from' => 120]);
+        $whitening = Treatment::factory()->create(['name' => 'Blanqueamiento', 'price_from' => 480]);
+        $package = TreatmentPackage::factory()->inInstallments(100, 4)->create(['name' => 'Sonrisa en familia', 'price' => 500, 'for_two' => true, 'description' => 'Incluye el control al mes.']);
+        $package->items()->create(['treatment_id' => $cleaning->id, 'quantity' => 1, 'sessions_planned' => 1, 'sort_order' => 0]);
+        $package->items()->create(['treatment_id' => $whitening->id, 'quantity' => 1, 'sessions_planned' => 1, 'sort_order' => 1]);
+        $this->campaign(['name' => 'Sonrisa de verano', 'slug' => 'sonrisa-verano', 'summary' => null, 'treatment_package_id' => $package->id]);
+
+        $this->get(route('site.promotions'))->assertOk()->assertSee('2x1 · ahorras S/ 100');
+
+        $this->get(route('site.promotion', 'sonrisa-verano'))
+            ->assertOk()
+            ->assertSeeInOrder(['Qué incluye', 'Limpieza dental', 'Blanqueamiento', 'Precio normal S/ 600.00', 'S/ 500.00', 'Ahorras S/ 100.00'])
+            ->assertSee(['con el mismo pago atendemos también a otra persona', 'Cómo se puede pagar', 'Pago único de S/ 500.00.', 'En cuotas: inicial de S/ 100.00 y 4 cuotas mensuales de S/ 100.00.', 'Incluye el control al mes.'])
+            ->assertSee('al firmar el plan de tratamiento');
+
+        // Si el paquete deja de ofrecerse, la promoción sigue sin mostrarlo.
+        $package->update(['is_active' => false]);
+
+        $this->get(route('site.promotion', 'sonrisa-verano'))->assertOk()->assertDontSee('Qué incluye');
     }
 
     public function test_a_promotion_counts_one_visit_per_person_and_an_ended_one_offers_the_current_ones(): void

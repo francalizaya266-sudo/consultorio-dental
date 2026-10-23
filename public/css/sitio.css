@@ -443,6 +443,15 @@ details.more > summary::-webkit-details-marker { display: none; }
 .discount-big { font-size: clamp(1.75rem, 5vw, 2.5rem); letter-spacing: -.02em; }
 .promo-page .code { font-size: 1.125rem; }
 .promo-page .code strong { background: var(--surface); padding: 4px 12px; border-radius: 8px; letter-spacing: .06em; }
+.promo-package { background: var(--surface); border-radius: var(--radius); padding: 20px; display: grid; gap: 10px; }
+.promo-package h2 { font-size: 1.25rem; letter-spacing: -.01em; margin: 0; }
+.promo-package h3 { font-size: 1rem; margin: 6px 0 0; }
+.promo-package p { margin: 0; }
+.promo-package ul { margin: 0; padding-left: 1.2em; display: grid; gap: 4px; }
+.promo-package .prices { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 14px; }
+.promo-package .prices s { color: var(--muted); }
+.promo-package .prices strong { font-size: 1.75rem; font-weight: 800; letter-spacing: -.02em; }
+.promo-package .prices .save { color: var(--ok); font-weight: 700; }
 @media (min-width: 900px) { .promo-page.with-image { grid-template-columns: 1fr 1fr; align-items: start; gap: 48px; } }
 
 a.chip { text-decoration: none; display: inline-flex; align-items: center; }

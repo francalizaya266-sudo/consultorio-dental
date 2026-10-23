@@ -15,20 +15,20 @@ class PromotionController extends Controller
     public function index(StructuredData $structuredData): View
     {
         return view('site.promotions.index', [
-            'campaigns' => Campaign::query()->published()->with('treatment')->latest('starts_at')->get(),
+            'campaigns' => Campaign::query()->published()->with('treatment', 'package.items.treatment')->latest('starts_at')->get(),
             'jsonLd' => [$structuredData->breadcrumbs(['Promociones' => route('site.promotions')])],
         ]);
     }
 
     public function show(Request $request, string $slug, StructuredData $structuredData): View|Response
     {
-        $campaign = Campaign::query()->where('slug', $slug)->with('treatment')->first();
+        $campaign = Campaign::query()->where('slug', $slug)->with('treatment', 'package.items.treatment')->first();
 
         // Una promoción que ya terminó no da error: ofrece las vigentes.
         if ($campaign === null || ! Campaign::query()->published()->whereKey($campaign->getKey())->exists()) {
             return response()->view('site.promotions.ended', [
                 'campaign' => $campaign,
-                'campaigns' => Campaign::query()->published()->with('treatment')->latest('starts_at')->get(),
+                'campaigns' => Campaign::query()->published()->with('treatment', 'package.items.treatment')->latest('starts_at')->get(),
             ], 404);
         }
 
