@@ -3,17 +3,20 @@
 namespace App\Filament\Resources\Patients\Pages;
 
 use App\Filament\Resources\Patients\PatientResource;
+use App\Filament\Resources\Patients\RelationManagers\ClinicalFilesRelationManager;
+use App\Filament\Resources\Patients\RelationManagers\ConsentsRelationManager;
 use App\Filament\Resources\Patients\RelationManagers\ConsultationsRelationManager;
 use App\Filament\Resources\Patients\RelationManagers\TreatmentPlansRelationManager;
 use App\Filament\Resources\Patients\Schemas\ClinicalRecordInfolist;
 use App\Models\Patient;
 use Filament\Actions\Action;
+use Filament\Facades\Filament;
 use Filament\Resources\Pages\ViewRecord;
 use Filament\Schemas\Schema;
 use Filament\Support\Icons\Heroicon;
 use Illuminate\Contracts\Support\Htmlable;
 
-/** Historia clínica del paciente: alertas, antecedentes, odontograma, atenciones y planes de tratamiento. */
+/** Historia clínica del paciente: alertas, antecedentes, odontograma, atenciones, planes, radiografías y consentimientos. */
 class ViewClinicalRecord extends ViewRecord
 {
     protected static string $resource = PatientResource::class;
@@ -52,12 +55,18 @@ class ViewClinicalRecord extends ViewRecord
 
     protected function getAllRelationManagers(): array
     {
-        return [ConsultationsRelationManager::class, TreatmentPlansRelationManager::class];
+        return [ConsultationsRelationManager::class, TreatmentPlansRelationManager::class, ClinicalFilesRelationManager::class, ConsentsRelationManager::class];
     }
 
     protected function getHeaderActions(): array
     {
         return [
+            Action::make('print')
+                ->label('Imprimir historia (PDF)')
+                ->icon(Heroicon::OutlinedPrinter)
+                ->color('gray')
+                ->url(fn () => Filament::getPanel('admin')->route('print.history', ['patient' => $this->getRecord()]))
+                ->openUrlInNewTab(),
             Action::make('patient')
                 ->label('Ficha del paciente')
                 ->icon(Heroicon::OutlinedUser)

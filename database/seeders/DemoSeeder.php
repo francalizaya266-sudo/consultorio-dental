@@ -4,9 +4,11 @@ namespace Database\Seeders;
 
 use App\Enums\AppointmentStatus;
 use App\Enums\BookingChannel;
+use App\Enums\ClinicalFileType;
 use App\Enums\ConfirmationChannel;
 use App\Enums\Dentition;
 use App\Enums\DiscountType;
+use App\Enums\DocumentType;
 use App\Enums\MessageTemplateKey;
 use App\Enums\OdontogramType;
 use App\Enums\PatientRelationship;
@@ -28,9 +30,12 @@ use App\Models\Payment;
 use App\Models\Setting;
 use App\Models\Treatment;
 use App\Models\User;
+use App\Services\Clinical\ClinicalFileService;
+use App\Services\Clinical\ConsentService;
 use App\Services\WhatsApp\WhatsAppOutbox;
 use Carbon\CarbonImmutable;
 use Illuminate\Database\Seeder;
+use Illuminate\Http\UploadedFile;
 
 /**
  * Datos de demostración para probar el panel en local.
@@ -39,7 +44,7 @@ use Illuminate\Database\Seeder;
  */
 class DemoSeeder extends Seeder
 {
-    public function run(WhatsAppOutbox $outbox): void
+    public function run(WhatsAppOutbox $outbox, ClinicalFileService $files, ConsentService $consents): void
     {
         Setting::set('clinic.name', 'Consultorio Dental Sonrisas');
         Setting::set('clinic.address', 'Av. Larco 123, Miraflores');
@@ -74,7 +79,7 @@ class DemoSeeder extends Seeder
         $quispe = Account::factory()->verified()->create(['phone' => '+51987654321', 'accepts_promotions' => true]);
         $maria = Patient::factory()->create(['account_id' => $quispe->id, 'first_name' => 'María', 'last_name' => 'Quispe Huamán', 'birth_date' => '1988-04-12']);
         $mateo = Patient::factory()->dependentOf($quispe)->create(['first_name' => 'Mateo', 'last_name' => 'Rojas Quispe', 'birth_date' => '2018-09-03']);
-        $rosa = Patient::factory()->dependentOf($quispe, PatientRelationship::Parent)->create(['first_name' => 'Rosa', 'last_name' => 'Huamán Torres', 'birth_date' => '1956-01-20']);
+        $rosa = Patient::factory()->dependentOf($quispe, PatientRelationship::Parent)->create(['first_name' => 'Rosa', 'last_name' => 'Huamán Torres', 'birth_date' => '1956-01-20', 'document_type' => DocumentType::Dni, 'document_number' => '07654321']);
 
         $others = Patient::factory()->count(6)->create();
 
@@ -161,6 +166,10 @@ class DemoSeeder extends Seeder
         ]);
         $prescription->items()->create(['medication' => 'Paracetamol 500 mg', 'instructions' => '1 tableta cada 8 horas por 3 días, si hay dolor']);
 
+        // La radiografía de esa consulta y el consentimiento firmado para la endodoncia.
+        $files->store($rosa, $this->demoImage('periapical-36.jpg'), ClinicalFileType::Xray, $torres->user, $consultation, 'Periapical de 36', $past->starts_at);
+        $consents->sign($rosa, $consents->templateFor($treatments['endodoncia']), $treatments['endodoncia'], $consents->defaultSigner($rosa), $this->demoSignature(), $torres->user);
+
         Charge::create([
             'patient_id' => $rosa->id, 'appointment_id' => $past->id, 'treatment_id' => $evaluation->id, 'doctor_id' => $torres->id,
             'description' => 'Evaluación', 'amount' => 50, 'charged_at' => $past->starts_at, 'created_by_user_id' => $reception->id,
@@ -185,6 +194,47 @@ class DemoSeeder extends Seeder
         ]);
 
         $this->command?->info("Demo lista. Entra a /panel con {$admin->email} / password");
+    }
+
+    /** Una "radiografía" de muestra: fondo oscuro con dos piezas claras. */
+    private function demoImage(string $name): UploadedFile
+    {
+        $image = imagecreatetruecolor(900, 1200);
+        imagefill($image, 0, 0, imagecolorallocate($image, 18, 18, 22));
+
+        foreach ([[300, 170], [600, 190]] as [$x, $gray]) {
+            $color = imagecolorallocate($image, $gray, $gray, $gray);
+            imagefilledellipse($image, $x, 420, 260, 320, $color);
+            imagefilledpolygon($image, [$x - 110, 480, $x + 110, 480, $x + 60, 1050, $x - 60, 1050], $color);
+        }
+
+        $path = tempnam(sys_get_temp_dir(), 'demo').'.jpg';
+        imagejpeg($image, $path, 90);
+
+        return new UploadedFile($path, $name, 'image/jpeg', null, true);
+    }
+
+    /** Un trazo como el de una firma hecha con el dedo. */
+    private function demoSignature(): string
+    {
+        $image = imagecreatetruecolor(600, 200);
+        imagefill($image, 0, 0, imagecolorallocate($image, 255, 255, 255));
+        imagesetthickness($image, 4);
+        $ink = imagecolorallocate($image, 15, 23, 42);
+        $points = [];
+
+        for ($x = 40; $x <= 560; $x += 8) {
+            $points[] = [$x, (int) (110 + 45 * sin($x / 38) * cos($x / 95))];
+        }
+
+        foreach (array_slice($points, 1) as $i => [$x, $y]) {
+            imageline($image, $points[$i][0], $points[$i][1], $x, $y, $ink);
+        }
+
+        ob_start();
+        imagepng($image);
+
+        return 'data:image/png;base64,'.base64_encode((string) ob_get_clean());
     }
 
     private function doctor(string $name, string $email, string $specialty, string $color, string $cop): Doctor

@@ -3,6 +3,7 @@
 namespace App\Filament\Resources\Consultations\Pages;
 
 use App\Exceptions\ClinicalException;
+use App\Filament\Actions\SignConsentAction;
 use App\Filament\Resources\Appointments\AppointmentResource;
 use App\Filament\Resources\Consultations\ConsultationResource;
 use App\Filament\Resources\Patients\PatientResource;
@@ -64,6 +65,9 @@ class EditConsultation extends EditRecord
     {
         return [
             $this->templateAction(),
+            SignConsentAction::make(fn () => $this->getConsultation()->patient, fn () => $this->getConsultation()->appointment?->treatment)
+                ->label('Consentimiento')
+                ->color('gray'),
             Action::make('clinicalRecord')
                 ->label('Historia clínica')
                 ->icon(Heroicon::OutlinedFolderOpen)

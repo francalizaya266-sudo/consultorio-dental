@@ -208,7 +208,7 @@ class OdontogramChart extends Component
         return view('livewire.odontogram-chart', [
             'odontogram' => $odontogram,
             'rows' => $odontogram ? Teeth::rows($odontogram->dentition) : [],
-            'teeth' => $this->teethData($entries),
+            'teeth' => self::teethData($entries),
             'spans' => $entries->filter(fn (OdontogramEntry $e) => $e->to_tooth !== null)->values(),
             'findings' => $entries
                 ->when($this->selectedTooth, fn (Collection $all) => $all->filter(fn (OdontogramEntry $e) => $this->touches($e, $this->selectedTooth)))
@@ -232,7 +232,7 @@ class OdontogramChart extends Component
      * @param  Collection<int, OdontogramEntry>  $entries
      * @return array<int, array{surfaces: array<string, string>, marks: array<string, string>, labels: list<array{text: string, state: string}>}>
      */
-    private function teethData(Collection $entries): array
+    public static function teethData(Collection $entries): array
     {
         $teeth = [];
 

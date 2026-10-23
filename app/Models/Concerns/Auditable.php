@@ -35,6 +35,12 @@ trait Auditable
         }
     }
 
+    /** Deja constancia de un acceso o acción sin cambios en los datos (por ejemplo, imprimir la historia). */
+    public function auditEvent(string $event): void
+    {
+        $this->writeAudit($event, [], []);
+    }
+
     public function audits(): MorphMany
     {
         return $this->morphMany(AuditLog::class, 'auditable')->latest('id');

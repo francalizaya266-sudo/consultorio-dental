@@ -1,4 +1,4 @@
-@props(['title', 'size' => 'A4', 'doctor', 'patient', 'date'])
+@props(['title', 'size' => 'A4', 'doctor' => null, 'patient', 'date' => null])
 @php
     $clinic = \App\Models\Setting::get('clinic.name');
     $contact = collect([\App\Models\Setting::get('clinic.address'), \App\Models\Setting::get('clinic.phone')])->filter()->implode(' · ');
@@ -12,8 +12,10 @@
     <title>{{ $title }} · {{ $patient->full_name }}</title>
     <style>
         @page { size: {{ $size }}; margin: 12mm; }
-        :root { --brand: #0f766e; --ink: #0f172a; --muted: #475569; --line: #cbd5e1; }
+        :root { --brand: #0f766e; --ink: #0f172a; --muted: #475569; --line: #cbd5e1; --gray-600: #4b5563; --primary-100: #ccfbf1; }
         * { box-sizing: border-box; }
+        /* Que salgan los colores (puntos rojo / azul, fondos) también al imprimir. */
+        html { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
         body { margin: 0; font: 14px/1.45 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; color: var(--ink); background: #e2e8f0; }
         .sheet { background: #fff; margin: 24px auto; padding: 14mm; max-width: {{ $size === 'A5' ? '148mm' : '210mm' }}; min-height: {{ $size === 'A5' ? '210mm' : '297mm' }}; box-shadow: 0 4px 24px rgb(15 23 42 / .12); display: flex; flex-direction: column; }
         header { display: flex; justify-content: space-between; gap: 16px; border-bottom: 2px solid var(--brand); padding-bottom: 10px; margin-bottom: 14px; }
@@ -55,6 +57,7 @@
                 <div class="muted">{{ $contact }}</div>
             @endif
         </div>
+        @if ($doctor)
         <div class="doctor">
             <strong>{{ $doctor->name }}</strong>
             @if ($doctor->specialty)
@@ -64,6 +67,7 @@
                 {{ collect([$doctor->cop_number ? 'C.O.P. '.$doctor->cop_number : null, $doctor->rne_number ? 'R.N.E. '.$doctor->rne_number : null])->filter()->implode(' · ') }}
             </div>
         </div>
+        @endif
     </header>
 
     <h1>{{ $title }}</h1>
@@ -76,7 +80,7 @@
         @if ($patient->document_number)
             <div><span>{{ $patient->document_type?->getLabel() ?? 'Documento' }}</span>{{ $patient->document_number }}</div>
         @endif
-        <div><span>Fecha</span>{{ $date->format('d/m/Y') }}</div>
+        <div><span>Fecha</span>{{ ($date ?? now())->format('d/m/Y') }}</div>
     </div>
 
     <main>{{ $slot }}</main>

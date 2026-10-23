@@ -4,6 +4,7 @@ namespace App\Providers\Filament;
 
 use App\Filament\Pages\Dashboard;
 use App\Filament\Support\InitialsAvatarProvider;
+use App\Http\Controllers\Clinical\ClinicalFileController;
 use App\Http\Controllers\Clinical\PrintController;
 use App\Models\Setting;
 use Filament\Http\Middleware\Authenticate;
@@ -71,6 +72,9 @@ class AdminPanelProvider extends PanelProvider
             ->authenticatedRoutes(function () {
                 Route::get('imprimir/receta/{prescription}', [PrintController::class, 'prescription'])->name('print.prescription');
                 Route::get('imprimir/plan/{plan}', [PrintController::class, 'plan'])->name('print.plan');
+                Route::get('imprimir/consentimiento/{consent}', [PrintController::class, 'consent'])->name('print.consent');
+                Route::get('imprimir/historia/{patient}', [PrintController::class, 'history'])->name('print.history');
+                Route::get('archivos/{file}', [ClinicalFileController::class, 'show'])->name('clinical-files.show');
             });
     }
 }
