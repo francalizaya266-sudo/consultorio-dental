@@ -122,6 +122,21 @@ class ActivityReportTest extends TestCase
         $this->assertSame([], $sunday->occupancyByDoctor());
     }
 
+    public function test_occupancy_by_weekday_shows_which_days_have_room(): void
+    {
+        $patient = Patient::factory()->create();
+        // Lunes 19: 4 horas abiertas (la tarde, bloqueada) y 2 reservadas. Martes 20: 8 abiertas y 2 reservadas.
+        ScheduleBlock::query()->create(['doctor_id' => $this->doctor->id, 'type' => ScheduleBlockType::Course, 'starts_at' => '2026-10-19 15:00', 'ends_at' => '2026-10-19 19:00']);
+        $this->visit($patient, '2026-10-19 09:00', minutes: 120);
+        $this->visit($patient, '2026-10-20 09:00', AppointmentStatus::NoShow, minutes: 120);
+        $this->visit($patient, '2026-10-21 09:00', AppointmentStatus::Cancelled, minutes: 120);
+
+        $week = new ActivityReport(new ReportPeriod(CarbonImmutable::parse('2026-10-19'), CarbonImmutable::parse('2026-10-25')->endOfDay()));
+
+        // El domingo no atiende, así que no aparece.
+        $this->assertSame(['Lunes' => 50, 'Martes' => 25, 'Miércoles' => 0, 'Jueves' => 0, 'Viernes' => 0, 'Sábado' => 0], $week->occupancyByWeekday());
+    }
+
     public function test_income_by_month_covers_the_last_twelve_months_without_voided_payments(): void
     {
         Payment::factory()->create(['doctor_id' => $this->doctor->id, 'amount' => 200, 'paid_at' => '2026-10-02 10:00']);
