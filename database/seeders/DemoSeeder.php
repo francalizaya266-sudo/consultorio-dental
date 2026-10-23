@@ -17,7 +17,6 @@ use App\Enums\PaymentMethod;
 use App\Enums\PlanItemStatus;
 use App\Enums\ToothState;
 use App\Enums\TreatmentPlanStatus;
-use App\Enums\UserRole;
 use App\Models\Account;
 use App\Models\Appointment;
 use App\Models\Campaign;
@@ -42,34 +41,29 @@ use Illuminate\Http\UploadedFile;
 
 /**
  * Datos de demostración para probar el panel en local.
- * Usuarios: admin@consultorio.test, recepcion@consultorio.test,
- * dra.torres@consultorio.test y dr.ramos@consultorio.test (clave: password).
+ * Usuarios: admin@consultorio.test (el Dr. Vega: administrador y único doctor)
+ * y recepcion@consultorio.test (clave: password).
  */
 class DemoSeeder extends Seeder
 {
     public function run(WhatsAppOutbox $outbox, ClinicalFileService $files, ConsentService $consents, BillingService $billing): void
     {
-        Setting::set('clinic.name', 'Consultorio Dental Sonrisas');
-        Setting::set('clinic.address', 'Av. Larco 123, Miraflores');
-        Setting::set('clinic.phone', '(01) 445 1234');
-        Setting::set('clinic.district', 'Miraflores');
-        Setting::set('clinic.email', 'citas@sonrisas.test');
+        // Nombre, dirección y WhatsApp de la clínica ya vienen en config/consultorio.php.
         Setting::set('clinic.hours_note', 'Feriados: con cita previa.');
-        Setting::set('web.about', "Somos un consultorio de barrio en Miraflores. Atendemos a toda la familia, desde la primera visita de los chicos hasta los abuelos.\n\nAntes de empezar cualquier tratamiento te explicamos qué tienes, qué opciones hay y cuánto cuesta cada una. Sin sorpresas.");
+        Setting::set('web.about', 'Te atiende el Dr. Jassmanny Neil Vega Jaen, cirujano dentista e implantólogo (C.O.P. 29668).');
 
-        $admin = User::factory()->admin(isDentist: true)->create(['name' => 'Administrador', 'email' => 'admin@consultorio.test']);
+        // El doctor es también el administrador: el gerente general de la clínica.
+        $admin = User::factory()->admin(isDentist: true)->create(['name' => 'Dr. Jassmanny Neil Vega Jaen', 'email' => 'admin@consultorio.test']);
         $reception = User::factory()->reception()->create(['name' => 'Recepción', 'email' => 'recepcion@consultorio.test']);
 
-        $torres = $this->doctor('Dra. Ana Torres', 'dra.torres@consultorio.test', 'Odontología general', '#0ea5e9', '24581');
-        $ramos = $this->doctor('Dr. Luis Ramos', 'dr.ramos@consultorio.test', 'Ortodoncia', '#a855f7', '19873');
-        $torres->update([
-            'bio' => 'Atiendo a toda la familia. Me gusta explicar cada paso con calma, sobre todo a quienes llegan con miedo al dentista.',
-            'education' => "Cirujana dentista, Universidad Peruana Cayetano Heredia\nDiplomado en estética dental",
-        ]);
-        $ramos->update([
-            'rne_number' => '03215',
-            'bio' => 'Especialista en ortodoncia: brackets y alineadores para chicos y adultos.',
-            'education' => "Cirujano dentista, Universidad Nacional Mayor de San Marcos\nEspecialidad en ortodoncia y ortopedia maxilar",
+        // Biografía y estudios quedan vacíos: los escribe el doctor desde el panel.
+        $vega = Doctor::factory()->withSchedule()->create([
+            'user_id' => $admin->id,
+            'name' => 'Dr. Jassmanny Neil Vega Jaen',
+            'slug' => 'dr-jassmanny-neil-vega-jaen',
+            'specialty' => 'Cirujano dentista · Implantólogo',
+            'agenda_color' => '#1e4f91',
+            'cop_number' => '29668',
         ]);
 
         $treatments = Treatment::all()->keyBy('slug');
@@ -95,13 +89,9 @@ class DemoSeeder extends Seeder
             Dura unos 45 minutos y no duele; si tienes las encías sensibles, avísanos y vamos más despacio.
             MD]);
 
-        $ids = fn (array $slugs) => array_map(fn (string $slug) => $treatments[$slug]->id, $slugs);
-
-        $torres->treatments()->sync($ids([
-            'evaluacion-o-primera-consulta', 'limpieza-dental', 'curacion-con-resina', 'extraccion-simple', 'blanqueamiento', 'endodoncia', 'implante',
-        ]));
-        $ramos->treatments()->sync($ids(['evaluacion-o-primera-consulta', 'limpieza-dental', 'colocacion-de-brackets']));
-        $ramos->treatments()->attach($treatments['control-de-ortodoncia']->id, ['duration_minutes' => 20]);
+        // Único doctor: hace todos los tratamientos del catálogo.
+        $vega->treatments()->sync($treatments->where('slug', '!=', 'control-de-ortodoncia')->modelKeys());
+        $vega->treatments()->attach($treatments['control-de-ortodoncia']->id, ['duration_minutes' => 20]);
         $this->faqs($treatments['blanqueamiento']);
 
         // Una familia: la mamá tiene el celular y tiene a cargo a su hijo y a su madre.
@@ -118,25 +108,24 @@ class DemoSeeder extends Seeder
         $evaluation = $treatments['evaluacion-o-primera-consulta'];
         $cleaning = $treatments['limpieza-dental'];
         $resin = $treatments['curacion-con-resina'];
-        $ortho = $treatments['control-de-ortodoncia'];
 
         // Agenda de hoy y los próximos días con distintos estados.
-        $this->appointment($maria, $torres, $cleaning, $workday(0)->setTime(9, 0), AppointmentStatus::Confirmed);
-        $this->appointment($others[0], $torres, $evaluation, $workday(0)->setTime(10, 0), AppointmentStatus::CheckedIn);
-        $this->appointment($others[1], $torres, $resin, $workday(0)->setTime(15, 0), AppointmentStatus::Pending);
-        $this->appointment($others[2], $ramos, $ortho, $workday(0)->setTime(9, 30), AppointmentStatus::Confirmed, BookingChannel::Doctor);
-        $this->appointment($mateo, $ramos, $evaluation, $workday(1)->setTime(16, 0), AppointmentStatus::Pending)
+        $this->appointment($maria, $vega, $cleaning, $workday(0)->setTime(9, 0), AppointmentStatus::Confirmed);
+        $this->appointment($others[0], $vega, $evaluation, $workday(0)->setTime(10, 0), AppointmentStatus::CheckedIn);
+        $this->appointment($others[1], $vega, $resin, $workday(0)->setTime(15, 0), AppointmentStatus::Pending);
+        $this->appointment($others[2], $vega, $treatments['extraccion-simple'], $workday(0)->setTime(12, 0), AppointmentStatus::Confirmed, BookingChannel::Doctor);
+        $this->appointment($mateo, $vega, $evaluation, $workday(1)->setTime(16, 0), AppointmentStatus::Pending)
             ->update(['unconfirmed_flagged_at' => now()]);
-        $this->appointment($others[3], $torres, $evaluation, $workday(2)->setTime(11, 0), AppointmentStatus::Pending);
-        $web = $this->appointment($others[4], $torres, $cleaning, $workday(3)->setTime(9, 0), AppointmentStatus::Pending);
+        $this->appointment($others[3], $vega, $evaluation, $workday(2)->setTime(11, 0), AppointmentStatus::Pending);
+        $web = $this->appointment($others[4], $vega, $cleaning, $workday(3)->setTime(9, 0), AppointmentStatus::Pending);
         $outbox->queueForAppointment($web, MessageTemplateKey::BookingConfirmation);
 
         // Historia de una paciente atendida: consulta, odontograma, plan y pago.
-        $past = $this->appointment($rosa, $torres, $evaluation, $today->subDays(7)->setTime(10, 0), AppointmentStatus::Completed);
+        $past = $this->appointment($rosa, $vega, $evaluation, $today->subDays(7)->setTime(10, 0), AppointmentStatus::Completed);
         $rosa->forceFill(['first_visit_at' => $past->starts_at, 'last_visit_at' => $past->starts_at])->save();
         $consultation = Consultation::create([
             'patient_id' => $rosa->id,
-            'doctor_id' => $torres->id,
+            'doctor_id' => $vega->id,
             'appointment_id' => $past->id,
             'attended_at' => $past->starts_at,
             'chief_complaint' => 'Refiere dolor al masticar en pieza 36.',
@@ -150,13 +139,13 @@ class DemoSeeder extends Seeder
             'conditions' => ['hypertension'],
             'allergies' => 'Penicilina',
             'medications' => 'Losartán 50 mg cada mañana',
-            'updated_by_user_id' => $torres->user_id,
+            'updated_by_user_id' => $vega->user_id,
         ]);
         $consultation->diagnoses()->create(['icd10_code_id' => Icd10Code::where('code', 'K02.1')->value('id'), 'tooth' => '36']);
 
         $odontogram = $rosa->odontograms()->create([
             'consultation_id' => $consultation->id,
-            'doctor_id' => $torres->id,
+            'doctor_id' => $vega->id,
             'type' => OdontogramType::Initial,
             'dentition' => Dentition::Permanent,
         ]);
@@ -172,7 +161,7 @@ class DemoSeeder extends Seeder
         ]);
 
         $plan = $rosa->treatmentPlans()->create([
-            'doctor_id' => $torres->id,
+            'doctor_id' => $vega->id,
             'consultation_id' => $consultation->id,
             'title' => 'Plan inicial',
             'status' => TreatmentPlanStatus::Accepted,
@@ -185,45 +174,45 @@ class DemoSeeder extends Seeder
         ]);
 
         // Primera sesión de la endodoncia, ya agendada desde el plan.
-        $this->appointment($rosa, $torres, $treatments['endodoncia'], $workday(1)->setTime(11, 0), AppointmentStatus::Confirmed, BookingChannel::Reception)
+        $this->appointment($rosa, $vega, $treatments['endodoncia'], $workday(1)->setTime(11, 0), AppointmentStatus::Confirmed, BookingChannel::Reception)
             ->update(['treatment_plan_item_id' => $endodontics->id]);
 
         $prescription = $consultation->prescriptions()->create([
             'patient_id' => $rosa->id,
-            'doctor_id' => $torres->id,
+            'doctor_id' => $vega->id,
             'issued_at' => $consultation->closed_at,
             'indications' => $consultation->indications,
         ]);
         $prescription->items()->create(['medication' => 'Paracetamol 500 mg', 'instructions' => '1 tableta cada 8 horas por 3 días, si hay dolor']);
 
         // La radiografía de esa consulta y el consentimiento firmado para la endodoncia.
-        $files->store($rosa, $this->demoImage('periapical-36.jpg'), ClinicalFileType::Xray, $torres->user, $consultation, 'Periapical de 36', $past->starts_at);
-        $consents->sign($rosa, $consents->templateFor($treatments['endodoncia']), $treatments['endodoncia'], $consents->defaultSigner($rosa), $this->demoSignature(), $torres->user);
+        $files->store($rosa, $this->demoImage('periapical-36.jpg'), ClinicalFileType::Xray, $vega->user, $consultation, 'Periapical de 36', $past->starts_at);
+        $consents->sign($rosa, $consents->templateFor($treatments['endodoncia']), $treatments['endodoncia'], $consents->defaultSigner($rosa), $this->demoSignature(), $vega->user);
 
         Charge::create([
-            'patient_id' => $rosa->id, 'appointment_id' => $past->id, 'treatment_id' => $evaluation->id, 'doctor_id' => $torres->id,
+            'patient_id' => $rosa->id, 'appointment_id' => $past->id, 'treatment_id' => $evaluation->id, 'doctor_id' => $vega->id,
             'description' => 'Evaluación', 'amount' => 50, 'charged_at' => $past->starts_at, 'created_by_user_id' => $reception->id,
         ]);
         Payment::create([
-            'patient_id' => $rosa->id, 'appointment_id' => $past->id, 'treatment_id' => $evaluation->id, 'doctor_id' => $torres->id,
+            'patient_id' => $rosa->id, 'appointment_id' => $past->id, 'treatment_id' => $evaluation->id, 'doctor_id' => $vega->id,
             'amount' => 50, 'method' => PaymentMethod::Yape, 'paid_at' => $past->starts_at->addHour(), 'received_by_user_id' => $reception->id,
         ]);
 
         // María pagó una parte de su limpieza: queda con saldo pendiente.
-        $cleaned = $this->appointment($maria, $torres, $cleaning, $today->subDays(21)->setTime(16, 0), AppointmentStatus::Completed);
+        $cleaned = $this->appointment($maria, $vega, $cleaning, $today->subDays(21)->setTime(16, 0), AppointmentStatus::Completed);
         $maria->forceFill(['first_visit_at' => $cleaned->starts_at, 'last_visit_at' => $cleaned->starts_at])->save();
         Charge::create([
-            'patient_id' => $maria->id, 'appointment_id' => $cleaned->id, 'treatment_id' => $cleaning->id, 'doctor_id' => $torres->id,
+            'patient_id' => $maria->id, 'appointment_id' => $cleaned->id, 'treatment_id' => $cleaning->id, 'doctor_id' => $vega->id,
             'description' => 'Limpieza dental', 'amount' => 120, 'charged_at' => $cleaned->starts_at, 'created_by_user_id' => $reception->id,
         ]);
         Payment::create([
-            'patient_id' => $maria->id, 'appointment_id' => $cleaned->id, 'treatment_id' => $cleaning->id, 'doctor_id' => $torres->id,
+            'patient_id' => $maria->id, 'appointment_id' => $cleaned->id, 'treatment_id' => $cleaning->id, 'doctor_id' => $vega->id,
             'amount' => 80, 'method' => PaymentMethod::Plin, 'paid_at' => $cleaned->starts_at->addHour(), 'received_by_user_id' => $reception->id,
         ]);
 
         // Si hoy se atiende, una cita ya atendida y lista para "Cobrar".
         if ($workday(0)->isToday()) {
-            $done = $this->appointment($others[5], $ramos, $cleaning, $today->setTime(10, 0), AppointmentStatus::Completed);
+            $done = $this->appointment($others[5], $vega, $cleaning, $today->setTime(11, 0), AppointmentStatus::Completed);
             $billing->chargeAppointment($done, $reception);
         }
 
@@ -241,7 +230,7 @@ class DemoSeeder extends Seeder
             'whatsapp_text' => 'Hola, quiero la promoción de blanqueamiento 20%',
         ]);
 
-        $this->history([$torres, $ramos], $treatments->all(), $reception);
+        $this->history($vega, $treatments->all(), $reception);
 
         $this->command?->info("Demo lista. Entra a /panel con {$admin->email} / password");
     }
@@ -250,24 +239,20 @@ class DemoSeeder extends Seeder
      * Un año de consultorio en marcha, para que Resumen y Ganancias tengan qué mostrar.
      * Siempre salen los mismos datos (semilla fija) y no toca hoy ni los días que vienen.
      *
-     * @param  list<Doctor>  $doctors  [general, ortodoncista]
      * @param  array<string, Treatment>  $treatments
      */
-    private function history(array $doctors, array $treatments, User $reception): void
+    private function history(Doctor $doctor, array $treatments, User $reception): void
     {
         mt_srand(2026);
 
         $pick = fn (array $weighted) => $this->weighted($weighted);
-        $menus = [
-            [['limpieza-dental', 5], ['curacion-con-resina', 4], ['extraccion-simple', 1], ['blanqueamiento', 1], ['endodoncia', 1]],
-            [['control-de-ortodoncia', 8], ['limpieza-dental', 1], ['colocacion-de-brackets', 1]],
-        ];
+        $menu = [['limpieza-dental', 5], ['curacion-con-resina', 4], ['extraccion-simple', 2], ['blanqueamiento', 1], ['endodoncia', 1], ['implante', 1]];
         $hours = [[9, 2], [10, 4], [11, 4], [12, 2], [15, 2], [16, 3], [17, 4], [18, 3]];
         $origins = [[AppointmentOrigin::Google, 5], [AppointmentOrigin::Recommendation, 4], [AppointmentOrigin::Instagram, 3], [AppointmentOrigin::Facebook, 2], [AppointmentOrigin::WalkIn, 1], [AppointmentOrigin::Referral, 1], [null, 2]];
         $methods = [[PaymentMethod::Yape, 4], [PaymentMethod::Cash, 3], [PaymentMethod::Card, 2], [PaymentMethod::Plin, 2], [PaymentMethod::Transfer, 1]];
 
-        /** @var array<int, list<Patient>> $regulars Pacientes que ya vinieron, por doctor. */
-        $regulars = [[], []];
+        /** @var list<Patient> $regulars Pacientes que ya vinieron. */
+        $regulars = [];
         $today = CarbonImmutable::today();
         $start = $today->subMonthsNoOverflow(11)->startOfMonth();
 
@@ -279,63 +264,59 @@ class DemoSeeder extends Seeder
             // El consultorio crece: cada mes, un poco más de citas.
             $month = (int) $start->diffInMonths($day);
 
-            foreach ($doctors as $d => $doctor) {
-                $taken = [];
+            for ($i = mt_rand(2, $day->isSaturday() ? 4 : 4 + intdiv($month, 3)); $i > 0; $i--) {
+                $at = $day->setTime($pick($hours), 0);
+                $isNew = $regulars === [] || mt_rand(1, 100) <= 30;
+                $treatment = $treatments[$isNew ? 'evaluacion-o-primera-consulta' : $pick($menu)];
+                $endsAt = $at->addMinutes($doctor->durationFor($treatment));
 
-                for ($i = mt_rand(1, $day->isSaturday() ? 3 : 3 + intdiv($month, 4)); $i > 0; $i--) {
-                    $hour = $pick($hours);
-                    $at = $day->setTime($hour, 0);
+                // Un solo doctor: las citas no se cruzan.
+                if (Appointment::query()->whereBelongsTo($doctor)->where('starts_at', '<', $endsAt)->where('ends_at', '>', $at)->exists()) {
+                    continue;
+                }
 
-                    if (isset($taken[$hour]) || Appointment::query()->whereBelongsTo($doctor)->where('starts_at', $at)->exists()) {
-                        continue;
-                    }
+                $origin = $pick($origins);
+                $patient = $isNew
+                    ? Patient::factory()->create(['origin' => $origin])
+                    : $regulars[mt_rand(0, count($regulars) - 1)];
+                $roll = mt_rand(1, 100);
+                $status = match (true) {
+                    $roll <= 8 => AppointmentStatus::NoShow,
+                    $roll <= 12 => AppointmentStatus::Cancelled,
+                    default => AppointmentStatus::Completed,
+                };
 
-                    $taken[$hour] = true;
-                    $isNew = $regulars[$d] === [] || mt_rand(1, 100) <= 30;
-                    $origin = $pick($origins);
-                    $patient = $isNew
-                        ? Patient::factory()->create(['origin' => $origin])
-                        : $regulars[$d][mt_rand(0, count($regulars[$d]) - 1)];
-                    $treatment = $treatments[$isNew ? 'evaluacion-o-primera-consulta' : $pick($menus[$d])];
-                    $roll = mt_rand(1, 100);
-                    $status = match (true) {
-                        $roll <= 8 => AppointmentStatus::NoShow,
-                        $roll <= 12 => AppointmentStatus::Cancelled,
-                        default => AppointmentStatus::Completed,
-                    };
+                $appointment = $this->appointment($patient, $doctor, $treatment, $at, $status, mt_rand(1, 100) <= 55 ? BookingChannel::Web : BookingChannel::Reception);
+                $appointment->update(['origin' => $isNew ? $origin : null, 'is_new_patient' => $isNew]);
 
-                    $appointment = $this->appointment($patient, $doctor, $treatment, $at, $status, mt_rand(1, 100) <= 55 ? BookingChannel::Web : BookingChannel::Reception);
-                    $appointment->update(['origin' => $isNew ? $origin : null, 'is_new_patient' => $isNew]);
+                if ($status !== AppointmentStatus::Completed) {
+                    continue;
+                }
 
-                    if ($status !== AppointmentStatus::Completed) {
-                        continue;
-                    }
+                if ($isNew) {
+                    $regulars[] = $patient;
+                }
 
-                    if ($isNew) {
-                        $regulars[$d][] = $patient;
-                    }
+                $patient->forceFill(['first_visit_at' => $patient->first_visit_at ?? $at, 'last_visit_at' => $at])->save();
+                $price = (float) $treatment->price_from;
+                Charge::create([
+                    'patient_id' => $patient->id, 'appointment_id' => $appointment->id, 'treatment_id' => $treatment->id, 'doctor_id' => $doctor->id,
+                    'description' => $treatment->name, 'amount' => $price, 'charged_at' => $at->addMinutes(40), 'created_by_user_id' => $reception->id,
+                ]);
 
-                    $patient->forceFill(['first_visit_at' => $patient->first_visit_at ?? $at, 'last_visit_at' => $at])->save();
-                    $price = (float) $treatment->price_from;
-                    Charge::create([
+                // Casi todos pagan al salir; algunos dejan una parte y unos pocos, todo para después.
+                $paid = match (true) {
+                    mt_rand(1, 100) <= 4 => 0,
+                    $price >= 400 && mt_rand(1, 100) <= 50 => round($price / 2, 2),
+                    mt_rand(1, 100) <= 8 => round($price * 0.6, 2),
+                    default => $price,
+                };
+
+                if ($paid > 0) {
+                    Payment::create([
                         'patient_id' => $patient->id, 'appointment_id' => $appointment->id, 'treatment_id' => $treatment->id, 'doctor_id' => $doctor->id,
-                        'description' => $treatment->name, 'amount' => $price, 'charged_at' => $at->addMinutes(40), 'created_by_user_id' => $reception->id,
+                        'amount' => $paid, 'method' => $pick($methods), 'paid_at' => $at->addMinutes(50), 'received_by_user_id' => $reception->id,
                     ]);
-
-                    // Casi todos pagan al salir; algunos dejan una parte y unos pocos, todo para después.
-                    $paid = match (true) {
-                        mt_rand(1, 100) <= 4 => 0,
-                        $price >= 400 && mt_rand(1, 100) <= 50 => round($price / 2, 2),
-                        mt_rand(1, 100) <= 8 => round($price * 0.6, 2),
-                        default => $price,
-                    };
-
-                    if ($paid > 0) {
-                        Payment::create([
-                            'patient_id' => $patient->id, 'appointment_id' => $appointment->id, 'treatment_id' => $treatment->id, 'doctor_id' => $doctor->id,
-                            'amount' => $paid, 'method' => $pick($methods), 'paid_at' => $at->addMinutes(50), 'received_by_user_id' => $reception->id,
-                        ]);
-                    }
                 }
             }
         }
@@ -415,15 +396,6 @@ class DemoSeeder extends Seeder
         imagepng($image);
 
         return 'data:image/png;base64,'.base64_encode((string) ob_get_clean());
-    }
-
-    private function doctor(string $name, string $email, string $specialty, string $color, string $cop): Doctor
-    {
-        $user = User::factory()->create(['name' => $name, 'email' => $email, 'role' => UserRole::Doctor]);
-
-        return Doctor::factory()
-            ->withSchedule()
-            ->create(['user_id' => $user->id, 'name' => $name, 'specialty' => $specialty, 'agenda_color' => $color, 'cop_number' => $cop]);
     }
 
     private function appointment(

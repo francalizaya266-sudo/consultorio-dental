@@ -179,12 +179,17 @@ class PatientsAndSetupPanelTest extends TestCase
         $this->actingAs(User::factory()->admin()->create());
 
         Livewire::test(Settings::class)
-            ->fillForm(['booking' => ['max_web_appointments_per_patient' => 3], 'clinic' => ['whatsapp' => '912 345 678']])
+            // Los datos del recetario de la clínica ya vienen puestos.
+            ->assertSchemaStateSet(fn (array $state) => $this->assertSame(
+                ['Clínica Vega Implant', '+51990467757', 'Jr. Apurímac 648', 'Juliaca', 'Tu sonrisa, nuestra pasión'],
+                [$state['clinic']['name'], $state['clinic']['whatsapp'], $state['clinic']['address'], $state['clinic']['district'], $state['clinic']['slogan']],
+            ) ?? [])
+            ->fillForm(['booking' => ['max_web_appointments_per_patient' => 3], 'clinic' => ['whatsapp' => '912 345 678', 'slogan' => 'Sonríe sin miedo']])
             ->call('save')
             ->assertHasNoFormErrors();
 
         $this->assertSame(3, Setting::get('booking.max_web_appointments_per_patient'));
-        $this->assertSame('+51912345678', Setting::get('clinic.whatsapp'));
+        $this->assertSame(['+51912345678', 'Sonríe sin miedo'], [Setting::get('clinic.whatsapp'), Setting::get('clinic.slogan')]);
     }
 
     public function test_the_doctor_schedule_is_edited_on_the_doctor_page(): void

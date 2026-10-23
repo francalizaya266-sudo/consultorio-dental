@@ -8,6 +8,7 @@ use App\Models\Consent;
 use App\Models\ConsentTemplate;
 use App\Models\Doctor;
 use App\Models\Patient;
+use App\Models\Setting;
 use App\Models\Treatment;
 use App\Models\User;
 use Carbon\CarbonInterface;
@@ -31,6 +32,7 @@ final class ConsentService
         '{doctor}' => 'Doctor que realiza el tratamiento',
         '{tratamiento}' => 'Tratamiento',
         '{fecha}' => 'Fecha de la firma',
+        '{ciudad}' => 'Distrito o ciudad del consultorio (Ajustes)',
     ];
 
     /** La plantilla del tratamiento o, si no tiene, la general. */
@@ -81,6 +83,7 @@ final class ConsentService
             '{doctor}' => $doctor?->name ?? 'el doctor tratante',
             '{tratamiento}' => $treatment ? mb_strtolower($treatment->name) : 'el tratamiento indicado',
             '{fecha}' => $date->translatedFormat('j \d\e F \d\e Y'),
+            '{ciudad}' => (string) (Setting::get('clinic.district') ?: '________'),
         ]);
     }
 

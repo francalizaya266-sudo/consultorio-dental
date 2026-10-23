@@ -102,7 +102,7 @@ class ClinicalFilesAndConsentsTest extends TestCase
         $this->assertSame('Consentimiento informado general · Extracción simple', $consent->title);
         $this->assertStringContainsString('Paciente: Mateo Quispe Rojas.', $consent->body_snapshot);
         $this->assertStringContainsString('Yo, María Quispe Rojas, identificado(a) con documento N.º 41234567, en mi calidad de padre / madre del paciente, autorizo a '.$doctor->name.' a realizar el tratamiento de extracción simple.', $consent->body_snapshot);
-        $this->assertStringContainsString('Lima, 2 de noviembre de 2026.', $consent->body_snapshot);
+        $this->assertStringContainsString('Juliaca, 2 de noviembre de 2026.', $consent->body_snapshot);
         $this->assertTrue($doctor->is($consent->doctor));
         // Se guarda solo el trazo, sin el espacio vacío del recuadro.
         $this->assertSame([277, 57, 'image/png'], $this->imageSize(Storage::disk(ClinicalFileService::DISK)->get($consent->signature_path)));

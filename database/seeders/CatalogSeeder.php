@@ -261,7 +261,7 @@ class CatalogSeeder extends Seeder
 
                 Entiendo que puedo retirar este consentimiento en cualquier momento antes del procedimiento.
 
-                Lima, {fecha}.
+                {ciudad}, {fecha}.
                 TXT,
         ]);
     }

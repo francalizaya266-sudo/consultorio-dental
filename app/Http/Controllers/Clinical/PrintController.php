@@ -9,11 +9,13 @@ use App\Models\Consent;
 use App\Models\OdontogramEntry;
 use App\Models\Patient;
 use App\Models\Prescription;
+use App\Models\Setting;
 use App\Models\TreatmentPlan;
 use App\Models\TreatmentPlanItem;
 use App\Services\Clinical\ConsentService;
 use App\Services\Clinical\PrescriptionService;
 use App\Services\Clinical\TreatmentPlanService;
+use App\Support\Phone;
 use App\Support\Teeth;
 use Illuminate\View\View;
 
@@ -24,12 +26,18 @@ class PrintController extends Controller
     {
         abort_unless(auth()->user()->can('viewClinical', $prescription->patient), 403);
 
-        $prescription->load('patient', 'doctor', 'items');
+        $prescription->load('patient.account', 'doctor', 'items', 'consultation.diagnoses.icd10Code');
 
         return view('print.prescription', [
             'prescription' => $prescription,
             'patient' => $prescription->patient,
             'doctor' => $prescription->doctor,
+            'phone' => $prescription->patient->account ? Phone::display($prescription->patient->account->phone) : null,
+            // Como en el recetario: "K02.1 Caries de la dentina (pieza 36)".
+            'diagnosis' => $prescription->consultation?->diagnoses
+                ->map(fn ($diagnosis) => ($diagnosis->icd10Code ? "{$diagnosis->icd10Code->code} {$diagnosis->icd10Code->description}" : $diagnosis->description).($diagnosis->tooth ? " (pieza {$diagnosis->tooth})" : ''))
+                ->implode('; '),
+            'slogan' => Setting::get('clinic.slogan'),
             'items' => $prescription->items->map(fn ($item) => ['medication' => $item->medication, 'instructions' => $prescriptions->instructionsOf($item)]),
         ]);
     }

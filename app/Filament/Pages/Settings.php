@@ -43,6 +43,7 @@ class Settings extends Page
         'clinic.facebook' => 'string',
         'clinic.tiktok' => 'string',
         'clinic.hours_note' => 'string',
+        'clinic.slogan' => 'string',
         'web.headline' => 'string',
         'web.intro' => 'string',
         'web.about' => 'string',
@@ -116,12 +117,16 @@ class Settings extends Page
                             ->label('Dirección')
                             ->helperText('Sale en los avisos como {direccion}, en la web y en el mapa.'),
                         TextInput::make('clinic.district')
-                            ->label('Distrito')
-                            ->placeholder('Miraflores')
+                            ->label('Distrito o ciudad')
+                            ->placeholder('Juliaca')
                             ->helperText('Para aparecer en Google como "dentista en …".'),
                         TextInput::make('clinic.email')
                             ->label('Correo')
                             ->email(),
+                        TextInput::make('clinic.slogan')
+                            ->label('Lema')
+                            ->maxLength(80)
+                            ->helperText('Sale al pie de las recetas.'),
                     ]),
                 Section::make('Web')
                     ->description('Textos del inicio y enlaces del consultorio. El horario de atención sale solo de los horarios de los doctores.')

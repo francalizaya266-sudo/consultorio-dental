@@ -9,11 +9,13 @@ return [
 
     'defaults' => [
         'clinic' => [
-            'name' => env('APP_NAME', 'Consultorio Dental'),
-            'whatsapp' => env('CLINIC_WHATSAPP', '+51900000000'),
-            'address' => null,
+            'name' => env('APP_NAME', 'Clínica Vega Implant'),
+            'whatsapp' => env('CLINIC_WHATSAPP', '+51990467757'),
+            'address' => 'Jr. Apurímac 648',
             // Distrito o ciudad: Google lo usa para "dentista en …".
-            'district' => null,
+            'district' => 'Juliaca',
+            // Sale al pie de las recetas.
+            'slogan' => 'Tu sonrisa, nuestra pasión',
             'phone' => null,
             'email' => null,
             // Enlace de Google Maps del consultorio ("Cómo llegar") y de sus opiniones en Google.
@@ -29,7 +31,7 @@ return [
         // Textos de la página de inicio.
         'web' => [
             'headline' => 'Atención dental sin esperas',
-            'intro' => 'Evaluaciones, limpiezas, ortodoncia y más. Elige tu horario aquí mismo y te confirmamos por WhatsApp.',
+            'intro' => 'Evaluaciones, limpiezas, implantes y más. Elige tu horario aquí mismo y te confirmamos por WhatsApp.',
             'about' => null,
         ],
 

@@ -5,12 +5,13 @@
 
 :root {
     --ground: #ffffff;
-    --surface: #eef4f3;
-    --surface-strong: #dcebe8;
-    --ink: #0c1f1c;
-    --muted: #4a5d59;
-    --accent: #0f766e;
-    --accent-press: #0b5d57;
+    --surface: #eef3fa;
+    --surface-strong: #dbe6f4;
+    --ink: #0c1a2e;
+    --muted: #4a5a6e;
+    /* Azul del recetario de la clínica. */
+    --accent: #1e4f91;
+    --accent-press: #173e73;
     --accent-ink: #ffffff;
     --ok: #13795b;
     --ok-bg: #dff3ea;
@@ -18,7 +19,7 @@
     --warn-bg: #fdebcc;
     --bad: #b42318;
     --bad-bg: #fde4e1;
-    --field-line: #b7c7c4;
+    --field-line: #b7c3d3;
     --gutter: 16px;
     --measure: 720px;
     --wide: 1180px;
@@ -88,7 +89,7 @@ img { max-width: 100%; display: block; }
 
 main { padding: 24px 0 96px; }
 
-.site-footer { background: var(--ink); color: #d6e4e1; padding: 56px 0 104px; }
+.site-footer { background: var(--ink); color: #d5dfec; padding: 56px 0 104px; }
 .site-footer .wrap { display: grid; gap: 32px; }
 .site-footer .name { font-size: clamp(1.75rem, 6vw, 3rem); font-weight: 800; letter-spacing: -.02em; line-height: 1.05; color: #fff; margin: 0; }
 .site-footer a { color: #fff; }
@@ -96,7 +97,7 @@ main { padding: 24px 0 96px; }
 .site-footer h2 { font-size: 1rem; letter-spacing: 0; color: #fff; margin: 0 0 10px; }
 .site-footer .status { font-weight: 700; color: #fff; }
 .site-footer .hours { grid-template-columns: auto 1fr; }
-.site-footer .note { color: #a9bcb8; }
+.site-footer .note { color: #a8b6c9; }
 .site-footer ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
 .site-footer .socials { display: flex; flex-wrap: wrap; gap: 12px; }
 .footer-cols { display: grid; gap: 28px; }
@@ -175,7 +176,7 @@ dl.facts dd { margin: 0; font-weight: 650; }
 .choice .meta { grid-column: 1 / -1; color: var(--muted); font-size: .9375rem; }
 .choice .price { font-weight: 700; white-space: nowrap; }
 .choice.featured { background: var(--accent); color: var(--accent-ink); }
-.choice.featured .meta { color: #d4efec; }
+.choice.featured .meta { color: #d6e3f5; }
 
 .chips { display: flex; gap: 8px; overflow-x: auto; padding: 2px 2px 6px; margin: 0 -2px; scrollbar-width: none; }
 .chips::-webkit-scrollbar { display: none; }
@@ -194,7 +195,7 @@ dl.facts dd { margin: 0; font-weight: 650; }
 .day span { display: block; font-size: .8125rem; color: var(--muted); }
 .day strong { display: block; font-size: 1.5rem; margin: 2px 0; }
 .day[aria-pressed="true"] { background: var(--accent); color: var(--accent-ink); }
-.day[aria-pressed="true"] span { color: #d4efec; }
+.day[aria-pressed="true"] span { color: #d6e3f5; }
 
 .times { display: grid; grid-template-columns: repeat(auto-fill, minmax(96px, 1fr)); gap: 8px; }
 .time {
@@ -252,9 +253,9 @@ details.more > summary::-webkit-details-marker { display: none; }
 .site-footer .status.open { color: #9fe3d4; }
 
 .next-free { background: var(--accent); color: var(--accent-ink); border-radius: 24px; padding: 24px; display: grid; gap: 4px; align-content: start; }
-.next-free h2 { font-size: 1rem; letter-spacing: 0; color: #d4efec; font-weight: 700; }
+.next-free h2 { font-size: 1rem; letter-spacing: 0; color: #d6e3f5; font-weight: 700; }
 .next-free .when { font-size: clamp(1.6rem, 5vw, 2.25rem); font-weight: 800; letter-spacing: -.02em; line-height: 1.1; margin: 4px 0 0; }
-.next-free .for { margin: 4px 0 16px; color: #d4efec; }
+.next-free .for { margin: 4px 0 16px; color: #d6e3f5; }
 .free-times { list-style: none; margin: 0 0 16px; padding: 0; display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; }
 .free-times a {
     display: flex; align-items: center; justify-content: center; min-height: 52px; border-radius: 999px;
@@ -425,7 +426,7 @@ details.more > summary::-webkit-details-marker { display: none; }
 .promo-band img { width: 100%; aspect-ratio: 16 / 9; object-fit: cover; }
 .promo-text { display: grid; gap: 6px; padding: 24px; }
 .promo-text strong { font-size: clamp(1.5rem, 4vw, 2rem); letter-spacing: -.02em; line-height: 1.1; }
-.promo-text .until { color: #9fe3d4; font-weight: 700; }
+.promo-text .until { color: #a9c8f0; font-weight: 700; }
 @media (min-width: 760px) { .promo-band:has(img) { grid-template-columns: 1fr 1fr; align-items: center; } }
 
 .promos { display: grid; gap: 16px; }
@@ -452,7 +453,7 @@ a.chip { text-decoration: none; display: inline-flex; align-items: center; }
 .wa-float {
     position: fixed; right: 16px; bottom: 16px; z-index: 30; width: 60px; height: 60px; border-radius: 50%;
     display: grid; place-items: center; background: #128c4b; color: #fff;
-    box-shadow: 0 6px 20px rgb(12 31 28 / .25);
+    box-shadow: 0 6px 20px rgb(12 26 46 / .25);
 }
 .wa-float svg { width: 32px; height: 32px; }
 
@@ -472,7 +473,7 @@ a.chip { text-decoration: none; display: inline-flex; align-items: center; }
     .menu > summary:hover { background: var(--surface-strong); }
     .menu[open] > summary:hover { background: var(--ink); }
     .menu-panel a:hover { color: var(--accent); }
-    .free-times a:hover { background: #d4efec; }
+    .free-times a:hover { background: #d6e3f5; }
     .price-list a:hover, .promo-card:hover { background: var(--surface-strong); }
     .price-list a:hover .name, .promo-card:hover strong { text-decoration: underline; text-underline-offset: .15em; }
     .promo-band:hover strong { text-decoration: underline; text-underline-offset: .15em; }

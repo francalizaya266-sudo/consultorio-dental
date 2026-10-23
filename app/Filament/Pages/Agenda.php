@@ -168,7 +168,7 @@ class Agenda extends Page
                 'title' => $this->mode === 'week' ? ucfirst($day->translatedFormat('D j')) : $doctor->name,
                 'subtitle' => $this->mode === 'week' ? null : $doctor->specialty,
                 'isToday' => $day->isToday(),
-                'color' => $doctor->agenda_color ?: '#0d9488',
+                'color' => $doctor->agenda_color ?: '#1e4f91',
                 'date' => $day->toDateString(),
                 'doctorId' => $doctor->getKey(),
                 'treatments' => $doctor->treatments->modelKeys(),

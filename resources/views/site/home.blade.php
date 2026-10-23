@@ -61,8 +61,13 @@
     @if ($doctors->isNotEmpty())
         <section class="section" aria-labelledby="equipo">
             <div class="section-head">
-                <h2 id="equipo">Quiénes te atienden</h2>
-                <p>Cirujanos dentistas colegiados. Su número de colegiatura (COP) está a la vista.</p>
+                @if ($doctors->count() === 1)
+                    <h2 id="equipo">Quién te atiende</h2>
+                    <p>Con su número de colegiatura (COP) a la vista.</p>
+                @else
+                    <h2 id="equipo">Quiénes te atienden</h2>
+                    <p>Cirujanos dentistas colegiados. Su número de colegiatura (COP) está a la vista.</p>
+                @endif
             </div>
             @include('site.partials.doctors', ['doctors' => $doctors, 'full' => false])
         </section>
