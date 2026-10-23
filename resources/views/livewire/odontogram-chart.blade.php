@@ -1,9 +1,10 @@
+@use('App\Services\Clinical\OdontogramService')
 @use('App\Support\Teeth')
 @php
     $color = fn (string $state) => $state === 'good' ? '#2563eb' : '#dc2626';
 @endphp
 
-<div class="od-wrap">
+<div class="od-wrap" @if ($canEdit) x-data="odontogramEditor(@js($catalog))" @endif>
     <style>
         .od-wrap { display: flex; flex-direction: column; gap: .9rem; }
         .od-toolbar { display: flex; flex-wrap: wrap; gap: .4rem; align-items: center; }
@@ -34,6 +35,24 @@
         .dark .od-notes textarea { background: var(--gray-900); border-color: rgb(255 255 255 / .15); color: #fff; }
         .od-muted { font-size: .8rem; color: var(--gray-500); }
         .od-link { color: var(--primary-600); font-weight: 600; cursor: pointer; }
+        .od-chip-sm { padding: .1rem .5rem; font-size: .74rem; font-weight: 600; }
+        .od-siglas { display: inline-flex; flex-wrap: wrap; gap: .3rem; align-items: center; }
+        .od-treated { color: var(--primary-600); font-weight: 600; font-size: .78rem; margin-right: .5rem; cursor: pointer; white-space: nowrap; }
+        /* El dibujo usa el ancho disponible (los dientes crecen hasta 1,5 veces) y en el celular se desliza. */
+        .od-scroll .od-svg { width: 100%; height: auto; max-width: 69rem; min-width: 38rem; }
+        .od-svg [data-busy] .od-surface.is-none, .od-svg [data-busy] .od-box { fill: var(--primary-100); }
+        .od-svg [data-span-start] .od-surface.is-none, .od-svg [data-span-start] .od-box { fill: #fef3c7; }
+        @media (prefers-reduced-motion: no-preference) {
+            .od-svg [data-busy] { animation: od-busy 1s ease-in-out infinite; }
+            @keyframes od-busy { 50% { opacity: .6; } }
+        }
+        /* Modo oscuro: el odontograma sigue siendo una hoja blanca, como impreso, para que el rojo y el azul se lean igual. */
+        .dark .od-scroll { background: #fff; border-color: rgb(255 255 255 / .1); }
+        .dark .od-legend, .dark .od-notes label { color: var(--gray-300); }
+        .dark .od-hint, .dark .od-link, .dark .od-treated { color: var(--primary-400); }
+        .dark .od-state { border-color: rgb(255 255 255 / .15); }
+        .dark .od-state button:not(.is-bad):not(.is-good) { background: var(--gray-800); color: var(--gray-200); }
+        .dark .od-chip.is-active { background: var(--primary-600); border-color: var(--primary-600); color: #fff; }
     </style>
 
     @if (! $odontogram)
@@ -73,57 +92,46 @@
         </div>
 
         @if ($canEdit)
-            <div class="od-toolbar" aria-label="Hallazgos">
-                @foreach ($frequent as $condition)
-                    <button type="button" wire:click="selectTool(@js($tool === $condition->code ? null : $condition->code))" @class(['od-chip', 'is-active' => $tool === $condition->code])>{{ $condition->name }}</button>
-                @endforeach
-                <x-filament::input.wrapper style="max-width: 15rem">
-                    <x-filament::input.select wire:change="selectTool($event.target.value || null)" aria-label="Otros hallazgos">
-                        <option value="">Otros hallazgos…</option>
-                        @foreach ($others as $condition)
-                            <option value="{{ $condition->code }}" @selected($tool === $condition->code)>{{ $condition->name }}</option>
-                        @endforeach
-                    </x-filament::input.select>
-                </x-filament::input.wrapper>
-            </div>
-
-            @if ($current)
-                <div class="od-options">
-                    <span class="od-state" role="group" aria-label="Estado">
-                        <button type="button" wire:click="$set('state', 'bad')" @class(['is-bad' => $state === 'bad']) @disabled(! $current->allows_bad_state)>Por tratar</button>
-                        <button type="button" wire:click="$set('state', 'good')" @class(['is-good' => $state === 'good']) @disabled(! $current->allows_good_state)>Tratado</button>
-                    </span>
-
-                    @if ($current->abbreviations)
-                        <label>
-                            Sigla
-                            <select wire:model.live="abbreviation" style="margin-left: .3rem; border: 1px solid var(--gray-300); border-radius: .4rem; padding: .1rem .4rem; background: #fff">
-                                <option value="">Sin sigla</option>
-                                @foreach ($current->abbreviations as $option)
-                                    <option value="{{ $option }}">{{ $option }}</option>
-                                @endforeach
-                            </select>
-                        </label>
-                    @endif
-
-                    <span class="od-hint">
-                        @switch($current->applies_to)
-                            @case('surface') Toca la superficie de la pieza. @break
-                            @case('span') {{ $spanStart ? "Ahora toca la última pieza (desde la {$spanStart})." : 'Toca la primera pieza y luego la última.' }} @break
-                            @default Toca la pieza.
-                        @endswitch
-                        Tocar de nuevo la quita.
-                    </span>
-
-                    <button type="button" class="od-link" wire:click="selectTool(null)">Listo</button>
+            {{-- Elegir hallazgo, color y sigla no espera al servidor: lo maneja el navegador. --}}
+            <div wire:ignore style="display: flex; flex-direction: column; gap: .9rem">
+                <div class="od-toolbar" aria-label="Hallazgos">
+                    @foreach ($frequent as $condition)
+                        <button type="button" class="od-chip" x-bind:class="{ 'is-active': tool === @js($condition->code) }" x-on:click="select(@js($condition->code))">{{ $condition->name }}</button>
+                    @endforeach
+                    <x-filament::input.wrapper style="max-width: 15rem">
+                        <x-filament::input.select x-on:change="select($event.target.value || null)" x-effect="$el.value = [...$el.options].some((option) => option.value === tool) ? tool : ''" aria-label="Otros hallazgos">
+                            <option value="">Otros hallazgos…</option>
+                            @foreach ($others as $condition)
+                                <option value="{{ $condition->code }}">{{ $condition->name }}</option>
+                            @endforeach
+                        </x-filament::input.select>
+                    </x-filament::input.wrapper>
                 </div>
-            @else
-                <p class="od-muted">Elige un hallazgo y toca la pieza. Sin hallazgo elegido, al tocar una pieza ves lo que tiene.</p>
-            @endif
+
+                <div class="od-options" x-show="tool" x-cloak>
+                    <span class="od-state" role="group" aria-label="Estado">
+                        <button type="button" x-on:click="setState('bad')" x-bind:class="{ 'is-bad': state === 'bad' }" x-bind:disabled="! current?.bad">Por tratar</button>
+                        <button type="button" x-on:click="setState('good')" x-bind:class="{ 'is-good': state === 'good' }" x-bind:disabled="! current?.good">Tratado</button>
+                    </span>
+
+                    <span class="od-siglas" x-show="current?.abbreviations.length" role="group" aria-label="Sigla">
+                        Sigla
+                        <template x-for="option in current?.abbreviations ?? []" x-bind:key="option">
+                            <button type="button" class="od-chip od-chip-sm" x-bind:class="{ 'is-active': abbreviation === option }" x-on:click="setAbbreviation(option)" x-text="option"></button>
+                        </template>
+                    </span>
+
+                    <span class="od-hint" x-text="hint"></span>
+
+                    <button type="button" class="od-link" x-on:click="select(null)">Listo</button>
+                </div>
+
+                <p class="od-muted" x-show="! tool">Elige un hallazgo y toca la pieza. Sin hallazgo elegido, al tocar una pieza ves lo que tiene.</p>
+            </div>
         @endif
 
         <div class="od-scroll">
-            <x-odontogram-drawing :odontogram="$odontogram" :rows="$rows" :teeth="$teeth" :spans="$spans" interactive :editing="$canEdit && $current" :selected-tooth="$selectedTooth" :span-start="$spanStart" />
+            <x-odontogram-drawing :odontogram="$odontogram" :rows="$rows" :teeth="$teeth" :spans="$spans" interactive :editing="$canEdit" :selected-tooth="$selectedTooth" />
         </div>
 
         <div>
@@ -150,8 +158,13 @@
                                 <td>{{ $entry->condition->name }}{{ $entry->abbreviation ? " ({$entry->abbreviation})" : '' }}</td>
                                 <td><span class="od-dot" style="background: {{ $color($entry->state->value) }}"></span>{{ $entry->state === \App\Enums\ToothState::Good ? 'Tratado' : 'Por tratar' }}</td>
                                 @if ($canEdit)
-                                    <td style="text-align: right">
-                                        <x-filament::icon-button icon="heroicon-m-x-mark" color="gray" size="sm" label="Quitar" wire:click="remove({{ $entry->id }})" />
+                                    <td>
+                                        <div style="display: flex; justify-content: flex-end; align-items: center">
+                                            @if (OdontogramService::canMarkTreated($entry))
+                                                <button type="button" class="od-treated" x-on:click="treat({{ $entry->id }}, @js($entry->condition->code))">✓ Tratado</button>
+                                            @endif
+                                            <x-filament::icon-button icon="heroicon-m-x-mark" color="gray" size="sm" label="Quitar" wire:click="remove({{ $entry->id }})" />
+                                        </div>
                                     </td>
                                 @endif
                             </tr>
@@ -182,5 +195,177 @@
                 @endif
             </div>
         @endif
+    @endif
+    @if ($canEdit)
+        <script>
+            (() => {
+                /**
+                 * Editor del odontograma. Elegir hallazgo, color y sigla no pregunta al servidor, y cada toque
+                 * se pinta al instante: al servidor va solo la marca. Mientras no responde, cada vez que el
+                 * dibujo se vuelve a armar se repinta lo pendiente; al responder, manda lo que guardó él.
+                 */
+                const register = () => Alpine.data('odontogramEditor', (catalog) => ({
+                    catalog,
+                    tool: null,
+                    state: 'bad',
+                    abbreviation: null,
+                    spanStart: null,
+                    // Color elegido por hallazgo mientras dura la página (la sigla se recuerda también después).
+                    states: {},
+                    pending: {},
+                    stopListening: null,
+
+                    init() {
+                        this.stopListening = Livewire.hook('morphed', ({ component }) => {
+                            if (component.id === this.$wire.$id) {
+                                this.paint();
+                            }
+                        });
+                    },
+
+                    destroy() {
+                        this.stopListening?.();
+                    },
+
+                    get current() {
+                        return this.tool ? this.catalog[this.tool] : null;
+                    },
+
+                    get hint() {
+                        const where = {
+                            surface: 'Toca la superficie de la pieza.',
+                            span: this.spanStart === null ? 'Toca la primera pieza y luego la última.' : `Ahora toca la última pieza (desde la ${this.spanStart}).`,
+                        }[this.current?.appliesTo] ?? 'Toca la pieza.';
+
+                        return `${where} Tocar de nuevo la quita.`;
+                    },
+
+                    select(code) {
+                        const condition = code && code !== this.tool ? this.catalog[code] : null;
+
+                        this.tool = condition ? code : null;
+                        // Lo que se puede tener sano o tratado (restauración, corona…) empieza en azul; lo demás, en rojo.
+                        this.state = ! condition ? 'bad' : (condition.good && condition.bad ? (this.states[code] ?? 'good') : (condition.good ? 'good' : 'bad'));
+                        this.abbreviation = condition ? this.savedAbbreviation(code) : null;
+                        this.spanStart = null;
+                        this.paint();
+                    },
+
+                    setState(state) {
+                        if (this.current?.[state]) {
+                            this.state = state;
+                            this.states[this.tool] = state;
+                        }
+                    },
+
+                    setAbbreviation(option) {
+                        this.abbreviation = this.abbreviation === option ? null : option;
+
+                        try {
+                            localStorage.setItem(`odontograma.sigla.${this.tool}`, this.abbreviation ?? '');
+                        } catch (error) {}
+                    },
+
+                    savedAbbreviation(code) {
+                        try {
+                            const saved = localStorage.getItem(`odontograma.sigla.${code}`);
+
+                            return this.catalog[code]?.abbreviations.includes(saved) ? saved : null;
+                        } catch (error) {
+                            return null;
+                        }
+                    },
+
+                    tap(tooth, surface = null) {
+                        const condition = this.current;
+
+                        // Sin hallazgo elegido, el toque muestra lo que tiene la pieza.
+                        if (! condition) {
+                            this.$wire.mark(tooth, surface);
+
+                            return;
+                        }
+
+                        if (condition.appliesTo === 'span' && this.spanStart === null) {
+                            this.spanStart = tooth;
+                            this.paint();
+
+                            return;
+                        }
+
+                        const onSurface = condition.appliesTo === 'surface';
+                        const from = condition.appliesTo === 'span' ? this.spanStart : tooth;
+                        const to = condition.appliesTo === 'span' ? tooth : null;
+                        const call = () => this.$wire.mark(from, onSurface ? surface : null, this.tool, this.state, this.abbreviation, to);
+                        this.spanStart = null;
+
+                        // Sin superficie no hay qué pintar: el servidor avisa qué falta.
+                        if (onSurface && ! surface) {
+                            call();
+
+                            return;
+                        }
+
+                        const key = onSurface ? `${tooth}-${surface}` : `${from}`;
+                        const shown = onSurface ? this.surface(tooth, surface)?.getAttribute('class').match(/\bis-(bad|good)\b/)?.[1] : null;
+                        this.pending[key] = {
+                            tooth: from,
+                            surface: onSurface ? surface : null,
+                            paint: shown === this.state ? 'none' : this.state,
+                            count: (this.pending[key]?.count ?? 0) + 1,
+                        };
+                        this.paint();
+
+                        call().finally(() => {
+                            if (--this.pending[key].count === 0) {
+                                delete this.pending[key];
+                            }
+
+                            this.paint();
+                        });
+                    },
+
+                    treat(entryId, code) {
+                        this.$wire.markTreated(entryId, this.savedAbbreviation(this.catalog[code]?.treatedAs));
+                    },
+
+                    surface(tooth, surface) {
+                        return this.$root.querySelector(`.od-surface[data-tooth="${tooth}"][data-surface="${surface}"]`);
+                    },
+
+                    paint() {
+                        this.$root.querySelectorAll('[data-shown]').forEach((el) => {
+                            el.setAttribute('class', el.dataset.shown);
+                            el.removeAttribute('data-shown');
+                        });
+                        this.$root.querySelectorAll('[data-busy], [data-span-start]').forEach((el) => {
+                            el.removeAttribute('data-busy');
+                            el.removeAttribute('data-span-start');
+                        });
+
+                        Object.values(this.pending).forEach(({ tooth, surface, paint }) => {
+                            if (! surface) {
+                                this.$root.querySelector(`[data-tooth-group="${tooth}"]`)?.setAttribute('data-busy', '');
+
+                                return;
+                            }
+
+                            const el = this.surface(tooth, surface);
+
+                            if (el) {
+                                el.dataset.shown = el.getAttribute('class');
+                                el.setAttribute('class', el.dataset.shown.replace(/\bis-(bad|good|none)\b/, `is-${paint}`));
+                            }
+                        });
+
+                        if (this.spanStart !== null) {
+                            this.$root.querySelector(`[data-tooth-group="${this.spanStart}"]`)?.setAttribute('data-span-start', '');
+                        }
+                    },
+                }));
+
+                window.Alpine ? register() : document.addEventListener('alpine:init', register);
+            })();
+        </script>
     @endif
 </div>

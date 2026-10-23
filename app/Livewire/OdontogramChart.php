@@ -23,6 +23,9 @@ use Livewire\Component;
 /**
  * Odontograma interactivo: se elige un hallazgo y se toca la superficie o la pieza.
  * Rojo = por tratar, azul = tratado. En modo lectura permite ver versiones anteriores.
+ *
+ * El hallazgo, el color y la sigla elegidos viven en el navegador, y el dibujo se pinta apenas se
+ * toca: al servidor solo va cada marca, con todo lo necesario para guardarla.
  */
 class OdontogramChart extends Component
 {
@@ -46,14 +49,6 @@ class OdontogramChart extends Component
 
     #[Locked]
     public bool $editable = false;
-
-    public ?string $tool = null;
-
-    public string $state = 'bad';
-
-    public ?string $abbreviation = null;
-
-    public ?int $spanStart = null;
 
     public ?int $selectedTooth = null;
 
@@ -95,25 +90,13 @@ class OdontogramChart extends Component
         unset($this->odontogram);
     }
 
-    public function selectTool(?string $code): void
+    /**
+     * Toque en una pieza o superficie: marca con el hallazgo elegido (en un puente, de $tooth a $toTooth).
+     * Sin hallazgo, o sin permiso para cambiar, muestra lo que tiene la pieza.
+     */
+    public function mark(int $tooth, ?string $surface = null, ?string $code = null, string $state = 'bad', ?string $abbreviation = null, ?int $toTooth = null): void
     {
         $condition = $code ? $this->conditions->firstWhere('code', $code) : null;
-
-        $this->tool = $condition?->code;
-        $this->state = $condition && ! $condition->allows_bad_state ? 'good' : 'bad';
-        $this->abbreviation = null;
-        $this->spanStart = null;
-    }
-
-    public function updatedState(): void
-    {
-        $this->state = $this->state === 'good' ? 'good' : 'bad';
-    }
-
-    /** Toque en una pieza o superficie: marca con el hallazgo elegido o, sin hallazgo, muestra lo que tiene. */
-    public function mark(int $tooth, ?string $surface = null): void
-    {
-        $condition = $this->tool ? $this->conditions->firstWhere('code', $this->tool) : null;
 
         if (! $condition || ! $this->canEdit()) {
             $this->selectedTooth = $this->selectedTooth === $tooth ? null : $tooth;
@@ -121,23 +104,25 @@ class OdontogramChart extends Component
             return;
         }
 
-        if ($condition->applies_to === 'span' && $this->spanStart === null) {
-            $this->spanStart = $tooth;
-
-            return;
-        }
-
         $this->attempt(fn () => app(OdontogramService::class)->toggle(
             $this->odontogram,
             $condition,
-            ToothState::from($this->state),
-            $condition->applies_to === 'span' ? $this->spanStart : $tooth,
+            ToothState::tryFrom($state) ?? ToothState::Bad,
+            $tooth,
             $surface,
-            $condition->applies_to === 'span' ? $tooth : null,
-            $this->abbreviation,
+            $toTooth,
+            $abbreviation,
         ));
+    }
 
-        $this->spanStart = null;
+    /** De la lista: la caries pasa a restauración, la extracción a pieza ausente y lo demás a azul. */
+    public function markTreated(int $entryId, ?string $abbreviation = null): void
+    {
+        $entry = $this->canEdit() ? $this->odontogram->entries->firstWhere('id', $entryId) : null;
+
+        if ($entry) {
+            $this->attempt(fn () => app(OdontogramService::class)->markTreated($entry, $abbreviation));
+        }
     }
 
     public function remove(int $entryId): void
@@ -178,7 +163,7 @@ class OdontogramChart extends Component
     }
 
     /** @return Collection<int, OdontogramCondition> */
-    #[Computed(persist: true)]
+    #[Computed]
     public function conditions(): Collection
     {
         return OdontogramCondition::query()->where('is_active', true)->orderBy('sort_order')->get();
@@ -214,11 +199,28 @@ class OdontogramChart extends Component
                 ->when($this->selectedTooth, fn (Collection $all) => $all->filter(fn (OdontogramEntry $e) => $this->touches($e, $this->selectedTooth)))
                 ->sortBy([['tooth', 'asc'], ['id', 'asc']])
                 ->values(),
-            'current' => $this->tool ? $this->conditions->firstWhere('code', $this->tool) : null,
             'frequent' => $this->conditions->whereIn('code', self::FREQUENT)->sortBy(fn ($c) => array_search($c->code, self::FREQUENT))->values(),
             'others' => $this->conditions->whereNotIn('code', self::FREQUENT)->values(),
             'canEdit' => $this->canEdit(),
+            'catalog' => $this->catalog(),
         ]);
+    }
+
+    /**
+     * Lo que el navegador necesita de cada hallazgo para elegirlo y pintar sin preguntar al servidor.
+     *
+     * @return array<string, array{name: string, appliesTo: string, good: bool, bad: bool, abbreviations: list<string>, treatedAs: string}>
+     */
+    private function catalog(): array
+    {
+        return $this->conditions->mapWithKeys(fn (OdontogramCondition $condition) => [$condition->code => [
+            'name' => $condition->name,
+            'appliesTo' => $condition->applies_to,
+            'good' => $condition->allows_good_state,
+            'bad' => $condition->allows_bad_state,
+            'abbreviations' => $condition->abbreviations ?? [],
+            'treatedAs' => OdontogramService::TREATED_AS[$condition->code] ?? $condition->code,
+        ]])->all();
     }
 
     public static function label(OdontogramEntry $entry): string

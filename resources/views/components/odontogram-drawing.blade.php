@@ -66,12 +66,13 @@
                 $outline = collect($marks)->except(['ausente', 'extraccion_indicada', 'corona', 'corona_temporal', 'tratamiento_pulpar', 'fractura'])->last();
             @endphp
 
-            <g @if ($interactive) wire:key="t-{{ $odontogram->id }}-{{ $tooth }}" @endif>
+            <g @if ($interactive) wire:key="t-{{ $odontogram->id }}-{{ $tooth }}" data-tooth-group="{{ $tooth }}" @endif>
                 @if ($selectedTooth === $tooth || $spanStart === $tooth)
                     <rect x="{{ $cx - $W / 2 + 1 }}" y="1" width="{{ $W - 2 }}" height="{{ $rowHeight - 2 }}" rx="6" class="{{ $spanStart === $tooth ? 'od-span-start' : 'od-selected' }}" />
                 @endif
 
-                <g @if ($interactive) class="od-hit" wire:click="mark({{ $tooth }})" @endif>
+                {{-- Al editar, el toque lo recibe el editor del navegador (pinta al instante); si no, va directo al servidor. --}}
+                <g @if ($interactive) class="od-hit" @if ($editing) x-on:click="tap({{ $tooth }})" @else wire:click="mark({{ $tooth }})" @endif @endif>
                     <text x="{{ $cx }}" y="{{ $numY }}" class="od-num">{{ $tooth }}</text>
                     <rect x="{{ $x0 }}" y="{{ $boxY }}" width="{{ $D }}" height="14" rx="2" class="od-box" />
                     <text x="{{ $cx }}" y="{{ $boxY + 10.5 }}" class="od-label">
@@ -86,7 +87,7 @@
                     <polygon
                         points="{{ $points }}"
                         @class(['od-surface', 'od-hit' => $interactive, 'is-'.($data['surfaces'][$surface] ?? 'none')])
-                        @if ($interactive) wire:click="mark({{ $tooth }}, '{{ $surface }}')" @endif
+                        @if ($interactive) data-tooth="{{ $tooth }}" data-surface="{{ $surface }}" @if ($editing) x-on:click="tap({{ $tooth }}, '{{ $surface }}')" @else wire:click="mark({{ $tooth }}, '{{ $surface }}')" @endif @endif
                     ><title>{{ $tooth }} {{ Teeth::surfaceName($surface) }}</title></polygon>
                 @endforeach
 

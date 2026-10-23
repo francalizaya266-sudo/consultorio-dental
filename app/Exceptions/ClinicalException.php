@@ -52,6 +52,11 @@ class ClinicalException extends RuntimeException
         return new self('La primera y la última pieza deben estar en la misma arcada.');
     }
 
+    public static function cannotMarkTreated(): self
+    {
+        return new self('Este hallazgo no se marca como tratado: quítalo y marca lo que corresponda.');
+    }
+
     public static function teethOutsideDentition(): self
     {
         return new self('Hay marcas en piezas que no existen en esa dentición. Quítalas antes de cambiarla.');

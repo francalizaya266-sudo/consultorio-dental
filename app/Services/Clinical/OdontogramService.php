@@ -11,10 +11,14 @@ use App\Models\Odontogram;
 use App\Models\OdontogramCondition;
 use App\Models\OdontogramEntry;
 use App\Support\Teeth;
+use Illuminate\Support\Facades\DB;
 
 /** Odontograma por consulta: se parte del último y cada toque marca o desmarca un hallazgo. */
 final class OdontogramService
 {
+    /** Lo que queda al tratar un hallazgo que cambia: la caries pasa a restauración; la extracción, a pieza ausente. */
+    public const TREATED_AS = ['caries' => 'restauracion', 'extraccion_indicada' => 'ausente', 'remanente_radicular' => 'ausente'];
+
     /** Odontograma de la consulta: copia del último del paciente o, si es el primero, uno inicial según su edad. */
     public function forConsultation(Consultation $consultation): Odontogram
     {
@@ -91,6 +95,60 @@ final class OdontogramService
             'state' => $state,
             'abbreviation' => $abbreviation,
         ]);
+    }
+
+    /** Si una marca roja se puede pasar a tratada de un toque. */
+    public static function canMarkTreated(OdontogramEntry $entry): bool
+    {
+        return $entry->state === ToothState::Bad
+            && (array_key_exists($entry->condition->code, self::TREATED_AS) || $entry->condition->allows_good_state);
+    }
+
+    /**
+     * Pasa una marca roja a tratada: la misma en azul o, si el tratamiento la cambia, la nueva.
+     * La caries queda como restauración en esa superficie; la pieza extraída queda ausente y sin sus otras marcas.
+     */
+    public function markTreated(OdontogramEntry $entry, ?string $abbreviation = null): OdontogramEntry
+    {
+        $entry->loadMissing(['condition', 'odontogram']);
+
+        if (! self::canMarkTreated($entry)) {
+            throw ClinicalException::cannotMarkTreated();
+        }
+
+        $code = self::TREATED_AS[$entry->condition->code] ?? null;
+
+        if ($code === null) {
+            $entry->update(['state' => ToothState::Good]);
+
+            return $entry;
+        }
+
+        $condition = OdontogramCondition::query()->where('code', $code)->firstOrFail();
+        $odontogram = $entry->odontogram;
+
+        return DB::transaction(function () use ($entry, $condition, $odontogram, $abbreviation) {
+            $replaced = $condition->applies_to === 'tooth'
+                ? $odontogram->entries()->where('tooth', $entry->tooth)->whereNull('to_tooth')->get()
+                : collect([$entry]);
+            $replaced->each->delete();
+
+            $treated = $odontogram->entries()->firstOrNew([
+                'odontogram_condition_id' => $condition->getKey(),
+                'tooth' => $entry->tooth,
+                'surface' => $condition->applies_to === 'surface' ? $entry->surface : null,
+                'to_tooth' => null,
+            ]);
+            $treated->state = ToothState::Good;
+
+            if (in_array($abbreviation, $condition->abbreviations ?? [], true)) {
+                $treated->abbreviation = $abbreviation;
+            }
+
+            $treated->save();
+
+            return $treated;
+        });
     }
 
     public function changeDentition(Odontogram $odontogram, Dentition $dentition): void
