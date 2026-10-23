@@ -2,6 +2,7 @@
 
 namespace App\Filament\Resources\Patients\Pages;
 
+use App\Filament\Actions\RegisterPaymentAction;
 use App\Filament\Resources\Appointments\AppointmentResource;
 use App\Filament\Resources\Patients\PatientResource;
 use Filament\Actions\Action;
@@ -21,6 +22,7 @@ class ViewPatient extends ViewRecord
                 ->icon(Heroicon::OutlinedFolderOpen)
                 ->visible(fn () => auth()->user()->can('viewClinical', $this->getRecord()))
                 ->url(fn () => PatientResource::getUrl('clinical', ['record' => $this->getRecord()])),
+            RegisterPaymentAction::make(fn () => $this->getRecord()),
             Action::make('book')
                 ->label('Nueva cita')
                 ->icon(Heroicon::OutlinedCalendarDays)

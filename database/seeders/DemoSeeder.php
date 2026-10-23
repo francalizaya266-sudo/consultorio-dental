@@ -31,6 +31,7 @@ use App\Models\Payment;
 use App\Models\Setting;
 use App\Models\Treatment;
 use App\Models\User;
+use App\Services\Billing\BillingService;
 use App\Services\Clinical\ClinicalFileService;
 use App\Services\Clinical\ConsentService;
 use App\Services\WhatsApp\WhatsAppOutbox;
@@ -45,7 +46,7 @@ use Illuminate\Http\UploadedFile;
  */
 class DemoSeeder extends Seeder
 {
-    public function run(WhatsAppOutbox $outbox, ClinicalFileService $files, ConsentService $consents): void
+    public function run(WhatsAppOutbox $outbox, ClinicalFileService $files, ConsentService $consents, BillingService $billing): void
     {
         Setting::set('clinic.name', 'Consultorio Dental Sonrisas');
         Setting::set('clinic.address', 'Av. Larco 123, Miraflores');
@@ -131,6 +132,7 @@ class DemoSeeder extends Seeder
 
         // Historia de una paciente atendida: consulta, odontograma, plan y pago.
         $past = $this->appointment($rosa, $torres, $evaluation, $today->subDays(7)->setTime(10, 0), AppointmentStatus::Completed);
+        $rosa->forceFill(['first_visit_at' => $past->starts_at, 'last_visit_at' => $past->starts_at])->save();
         $consultation = Consultation::create([
             'patient_id' => $rosa->id,
             'doctor_id' => $torres->id,
@@ -205,6 +207,24 @@ class DemoSeeder extends Seeder
             'patient_id' => $rosa->id, 'appointment_id' => $past->id, 'treatment_id' => $evaluation->id, 'doctor_id' => $torres->id,
             'amount' => 50, 'method' => PaymentMethod::Yape, 'paid_at' => $past->starts_at->addHour(), 'received_by_user_id' => $reception->id,
         ]);
+
+        // María pagó una parte de su limpieza: queda con saldo pendiente.
+        $cleaned = $this->appointment($maria, $torres, $cleaning, $today->subDays(21)->setTime(16, 0), AppointmentStatus::Completed);
+        $maria->forceFill(['first_visit_at' => $cleaned->starts_at, 'last_visit_at' => $cleaned->starts_at])->save();
+        Charge::create([
+            'patient_id' => $maria->id, 'appointment_id' => $cleaned->id, 'treatment_id' => $cleaning->id, 'doctor_id' => $torres->id,
+            'description' => 'Limpieza dental', 'amount' => 120, 'charged_at' => $cleaned->starts_at, 'created_by_user_id' => $reception->id,
+        ]);
+        Payment::create([
+            'patient_id' => $maria->id, 'appointment_id' => $cleaned->id, 'treatment_id' => $cleaning->id, 'doctor_id' => $torres->id,
+            'amount' => 80, 'method' => PaymentMethod::Plin, 'paid_at' => $cleaned->starts_at->addHour(), 'received_by_user_id' => $reception->id,
+        ]);
+
+        // Si hoy se atiende, una cita ya atendida y lista para "Cobrar".
+        if ($workday(0)->isToday()) {
+            $done = $this->appointment($others[5], $ramos, $cleaning, $today->setTime(10, 0), AppointmentStatus::Completed);
+            $billing->chargeAppointment($done, $reception);
+        }
 
         Campaign::create([
             'name' => 'Blanqueamiento 20% de descuento',

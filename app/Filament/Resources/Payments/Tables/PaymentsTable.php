@@ -44,13 +44,13 @@ class PaymentsTable
                     ->description(fn (Payment $record) => $record->reference),
                 TextColumn::make('amount')
                     ->label('Monto')
-                    ->money('PEN')
+                    ->money('PEN', locale: 'es_PE')
                     ->color(fn (Payment $record) => $record->voided_at ? 'gray' : null)
                     ->description(fn (Payment $record) => $record->voided_at ? 'Anulado: '.$record->void_reason : null)
                     ->alignEnd()
                     ->summarize(Sum::make()
                         ->label('Total (sin anulados)')
-                        ->money('PEN')
+                        ->money('PEN', locale: 'es_PE')
                         ->query(fn (QueryBuilder $query) => $query->whereNull('voided_at'))),
                 TextColumn::make('receivedBy.name')
                     ->label('Registró')
@@ -91,29 +91,35 @@ class PaymentsTable
             ])
             ->filtersFormColumns(3)
             ->recordActions([
-                Action::make('void')
-                    ->label('Anular')
-                    ->icon(Heroicon::OutlinedXCircle)
-                    ->color('danger')
-                    ->visible(fn (Payment $record) => $record->voided_at === null)
-                    ->authorize('update')
-                    ->modalHeading('Anular pago')
-                    ->modalDescription('El pago queda registrado como anulado (no se borra).')
-                    ->modalSubmitActionLabel('Anular')
-                    ->schema([
-                        Textarea::make('reason')->label('Motivo')->required()->rows(2)->maxLength(250),
-                    ])
-                    ->action(function (array $data, Payment $record) {
-                        $record->update([
-                            'voided_at' => now(),
-                            'voided_by_user_id' => auth()->id(),
-                            'void_reason' => $data['reason'],
-                        ]);
-
-                        Notification::make()->success()->title('Pago anulado')->send();
-                    }),
+                self::voidAction(),
             ])
             ->emptyStateHeading('No hay pagos en estas fechas')
             ->emptyStateDescription('Usa "Registrar pago" cuando el paciente pague en el consultorio.');
+    }
+
+    /** Anular un pago: queda registrado (no se borra) y deja de sumar. */
+    public static function voidAction(): Action
+    {
+        return Action::make('void')
+            ->label('Anular')
+            ->icon(Heroicon::OutlinedXCircle)
+            ->color('danger')
+            ->visible(fn (Payment $record) => $record->voided_at === null)
+            ->authorize('update')
+            ->modalHeading('Anular pago')
+            ->modalDescription('El pago queda registrado como anulado (no se borra).')
+            ->modalSubmitActionLabel('Anular')
+            ->schema([
+                Textarea::make('reason')->label('Motivo')->required()->rows(2)->maxLength(250),
+            ])
+            ->action(function (array $data, Payment $record) {
+                $record->update([
+                    'voided_at' => now(),
+                    'voided_by_user_id' => auth()->id(),
+                    'void_reason' => $data['reason'],
+                ]);
+
+                Notification::make()->success()->title('Pago anulado')->send();
+            });
     }
 }

@@ -11,6 +11,7 @@ use App\Models\Doctor;
 use App\Models\Patient;
 use App\Models\Payment;
 use App\Models\Treatment;
+use App\Support\Money;
 use BackedEnum;
 use Filament\Forms\Components\DateTimePicker;
 use Filament\Forms\Components\Select;
@@ -63,7 +64,15 @@ class PaymentResource extends Resource
                         ->mapWithKeys(fn (Patient $p) => [$p->id => $p->selectLabel()]))
                     ->getOptionLabelUsing(fn ($value) => Patient::with('account')->find($value)?->selectLabel())
                     ->live()
-                    ->afterStateUpdated(fn (Set $set, Get $get) => $set('appointment_id', self::lastAppointmentId($get('patient_id'))))
+                    ->afterStateUpdated(function (Set $set, Get $get) {
+                        $set('appointment_id', self::lastAppointmentId($get('patient_id')));
+
+                        // Lo que debe, listo para cobrar.
+                        if (blank($get('amount')) && ($balance = Patient::find($get('patient_id'))?->balance()) > 0) {
+                            $set('amount', $balance);
+                        }
+                    })
+                    ->helperText(fn (Get $get) => ($patient = Patient::find($get('patient_id'))) ? 'Saldo: '.Money::balance($patient->balance()) : null)
                     ->columnSpanFull(),
                 Select::make('appointment_id')
                     ->label('Cita')

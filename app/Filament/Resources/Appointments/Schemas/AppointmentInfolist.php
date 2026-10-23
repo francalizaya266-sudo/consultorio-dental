@@ -6,6 +6,9 @@ use App\Enums\AppointmentStatus;
 use App\Filament\Resources\Patients\PatientResource;
 use App\Models\Appointment;
 use App\Models\AppointmentEvent;
+use App\Models\Charge;
+use App\Models\Payment;
+use App\Support\Money;
 use App\Support\Phone;
 use Filament\Infolists\Components\RepeatableEntry;
 use Filament\Infolists\Components\TextEntry;
@@ -72,6 +75,7 @@ class AppointmentInfolist
                             ->visible(fn (Appointment $record) => $record->status === AppointmentStatus::Cancelled)
                             ->columnSpanFull(),
                     ]),
+                self::billing(),
                 Section::make('Historial')
                     ->columnSpan(1)
                     ->schema([
@@ -91,6 +95,37 @@ class AppointmentInfolist
                                     ])->filter()->implode(' · ')),
                             ]),
                     ]),
+            ]);
+    }
+
+    /** Lo cargado y lo pagado por la cita, para recepción y administración. */
+    private static function billing(): Section
+    {
+        return Section::make('Cobro')
+            ->columnSpan(2)
+            ->columns(3)
+            ->visible(fn (Appointment $record) => auth()->user()->can('viewAny', Charge::class)
+                && ($record->charges()->exists() || $record->payments()->exists()))
+            ->schema([
+                TextEntry::make('charges')
+                    ->label('Cargado')
+                    ->state(fn (Appointment $record) => $record->charges()->valid()->orderBy('id')->get()
+                        ->map(fn (Charge $c) => $c->description.' · '.Money::format($c->net()).((float) $c->discount > 0 ? ' (con '.Money::format($c->discount).' de descuento)' : ''))
+                        ->all())
+                    ->listWithLineBreaks()
+                    ->placeholder('Nada'),
+                TextEntry::make('payments')
+                    ->label('Pagado')
+                    ->state(fn (Appointment $record) => $record->payments()->whereNull('voided_at')->orderBy('paid_at')->get()
+                        ->map(fn (Payment $p) => Money::format($p->amount).' · '.$p->method->getLabel().' · '.$p->paid_at->format('d/m H:i'))
+                        ->all())
+                    ->listWithLineBreaks()
+                    ->placeholder('Aún no paga'),
+                TextEntry::make('balance')
+                    ->label('Saldo del paciente')
+                    ->state(fn (Appointment $record) => Money::balance($record->patient->balance()))
+                    ->color(fn (Appointment $record) => $record->patient->balance() > 0 ? 'danger' : 'success')
+                    ->weight('bold'),
             ]);
     }
 

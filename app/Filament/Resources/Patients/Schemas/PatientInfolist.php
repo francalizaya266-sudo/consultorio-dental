@@ -3,11 +3,16 @@
 namespace App\Filament\Resources\Patients\Schemas;
 
 use App\Filament\Resources\Accounts\AccountResource;
+use App\Models\Charge;
 use App\Models\Patient;
+use App\Support\Money;
 use App\Support\Phone;
 use Filament\Infolists\Components\TextEntry;
+use Filament\Schemas\Components\Group;
 use Filament\Schemas\Components\Section;
 use Filament\Schemas\Schema;
+use Filament\Support\Enums\FontWeight;
+use Filament\Support\Enums\TextSize;
 
 class PatientInfolist
 {
@@ -61,35 +66,63 @@ class PatientInfolist
                             ->placeholder('—')
                             ->columnSpanFull(),
                     ]),
-                Section::make('Celular y familia')
-                    ->columnSpan(1)
-                    ->schema([
-                        TextEntry::make('account.phone')
-                            ->label('Celular')
-                            ->formatStateUsing(fn (string $state) => Phone::display($state))
-                            ->url(fn (Patient $record) => $record->account && auth()->user()->can('view', $record->account) ? AccountResource::getUrl('view', ['record' => $record->account]) : null)
-                            ->helperText(fn (Patient $record) => match (true) {
-                                $record->account === null => null,
-                                $record->account->isBlocked() => 'Bloqueado para reservas web',
-                                $record->account->isVerified() => 'Verificado por WhatsApp',
-                                default => 'Aún no verificado',
-                            })
-                            ->placeholder('Sin celular'),
-                        TextEntry::make('relationship')
-                            ->label('Parentesco con el titular')
-                            ->placeholder('—'),
-                        TextEntry::make('family')
-                            ->label('Otros pacientes con este celular')
-                            ->state(fn (Patient $record) => $record->account
-                                ?->patients()
-                                ->whereKeyNot($record->getKey())
-                                ->orderBy('first_name')
-                                ->get()
-                                ->map(fn (Patient $p) => $p->full_name.($p->relationship ? ' ('.$p->relationship->getLabel().')' : ''))
-                                ->all())
-                            ->listWithLineBreaks()
-                            ->placeholder('Ninguno'),
-                    ]),
+                Group::make([self::phoneAndFamily(), self::account()])
+                    ->columnSpan(1),
+            ]);
+    }
+
+    private static function phoneAndFamily(): Section
+    {
+        return Section::make('Celular y familia')
+            ->schema([
+                TextEntry::make('account.phone')
+                    ->label('Celular')
+                    ->formatStateUsing(fn (string $state) => Phone::display($state))
+                    ->url(fn (Patient $record) => $record->account && auth()->user()->can('view', $record->account) ? AccountResource::getUrl('view', ['record' => $record->account]) : null)
+                    ->helperText(fn (Patient $record) => match (true) {
+                        $record->account === null => null,
+                        $record->account->isBlocked() => 'Bloqueado para reservas web',
+                        $record->account->isVerified() => 'Verificado por WhatsApp',
+                        default => 'Aún no verificado',
+                    })
+                    ->placeholder('Sin celular'),
+                TextEntry::make('relationship')
+                    ->label('Parentesco con el titular')
+                    ->placeholder('—'),
+                TextEntry::make('family')
+                    ->label('Otros pacientes con este celular')
+                    ->state(fn (Patient $record) => $record->account
+                        ?->patients()
+                        ->whereKeyNot($record->getKey())
+                        ->orderBy('first_name')
+                        ->get()
+                        ->map(fn (Patient $p) => $p->full_name.($p->relationship ? ' ('.$p->relationship->getLabel().')' : ''))
+                        ->all())
+                    ->listWithLineBreaks()
+                    ->placeholder('Ninguno'),
+            ]);
+    }
+
+    /** Saldo y último pago, para recepción y administración. */
+    private static function account(): Section
+    {
+        return Section::make('Cuenta')
+            ->visible(fn () => auth()->user()->can('viewAny', Charge::class))
+            ->schema([
+                TextEntry::make('balance')
+                    ->label('Saldo')
+                    ->state(fn (Patient $record) => Money::balance($record->balance()))
+                    ->color(fn (Patient $record) => $record->balance() > 0 ? 'danger' : 'success')
+                    ->size(TextSize::Large)
+                    ->weight(FontWeight::Bold),
+                TextEntry::make('last_payment')
+                    ->label('Último pago')
+                    ->state(function (Patient $record) {
+                        $payment = $record->payments()->whereNull('voided_at')->latest('paid_at')->first();
+
+                        return $payment ? $payment->paid_at->format('d/m/Y').' · '.Money::format($payment->amount).' · '.$payment->method->getLabel() : null;
+                    })
+                    ->placeholder('Aún no hay pagos'),
             ]);
     }
 }

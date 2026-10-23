@@ -55,6 +55,20 @@ class Campaign extends Model
             ->where('ends_at', '>=', now());
     }
 
+    /** Descuento en soles sobre un precio, si la promoción es de ese tratamiento (o de cualquiera). */
+    public function discountOn(float $price, ?int $treatmentId): float
+    {
+        if ($price <= 0 || (float) $this->discount_value <= 0 || ($this->treatment_id !== null && $this->treatment_id !== $treatmentId)) {
+            return 0.0;
+        }
+
+        return match ($this->discount_type) {
+            DiscountType::Percent => round($price * min(100, (float) $this->discount_value) / 100, 2),
+            DiscountType::Amount => min($price, (float) $this->discount_value),
+            default => 0.0,
+        };
+    }
+
     public function hasSlotsLeft(): bool
     {
         return $this->max_redemptions === null
