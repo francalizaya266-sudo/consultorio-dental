@@ -26,10 +26,11 @@ Pruebas: `php artisan test` (usan SQLite en memoria; también pasan sobre MySQL)
 3. `composer install --no-dev --optimize-autoloader`, `php artisan migrate --force` y `php artisan db:seed --class=CatalogSeeder --force` (solo catálogos, sin datos de prueba).
 4. Un único cron cada minuto:
    `* * * * * php /ruta/al/proyecto/artisan schedule:run >> /dev/null 2>&1`
-   Ese cron prepara los recordatorios del día anterior, marca las citas sin confirmar, procesa la cola y limpia enlaces vencidos.
+   Ese cron prepara los recordatorios del día anterior, marca las citas sin confirmar, procesa la cola, limpia enlaces vencidos y guarda cada madrugada una copia de la base de datos.
 5. PHP con la extensión **GD** (casi todos los hostings la traen): comprime radiografías y fotos al subirlas. Esos archivos y las firmas quedan en `storage/app/private/clinica`, fuera de `public/`; inclúyanlo en las copias de seguridad junto con la base de datos.
 6. Las fotos de la web (doctores, tratamientos, promociones, antes y después) se guardan en `public/media`, achicadas y sin datos de ubicación. También van en las copias de seguridad.
-7. En **Ajustes → Web** se completan la dirección, el distrito, el correo, las redes y los textos del inicio. El horario de atención que muestra la web sale solo de los horarios de los doctores.
+7. **Copias de seguridad:** cada día a las 3:00 a. m. se guarda una copia de la base de datos en `storage/app/private/respaldos` (se conservan las últimas 14; `BACKUPS_KEEP` lo cambia). El administrador odontólogo las descarga desde **Configuración → Copias de seguridad** para guardarlas fuera del hosting. Se restauran importándolas en phpMyAdmin o con `php artisan respaldo:restaurar` (sin nombre, la más reciente). Las radiografías y fotos de los puntos 5 y 6 van en la copia de archivos del hosting.
+8. En **Ajustes → Web** se completan la dirección, el distrito, el correo, las redes y los textos del inicio. El horario de atención que muestra la web sale solo de los horarios de los doctores.
 
 ## Cómo está organizado
 
@@ -44,6 +45,7 @@ Pruebas: `php artisan test` (usan SQLite en memoria; también pasan sobre MySQL)
 | `app/Services/Billing` | Cargos y pagos: lo realizado se carga solo al terminar la atención y recepción cobra desde la cita. Saldo = cargos − pagos. |
 | `app/Services/Clinical` | Historia clínica: atención, odontograma, plan de tratamiento, recetas, radiografías y fotos (comprimidas) y consentimientos firmados en pantalla. |
 | `app/Services/Reports` | Ganancias (cobrado y realizado, por día, doctor, tratamiento y medio de pago) y los números del Resumen. Las mismas tablas alimentan el panel, la hoja para imprimir o guardar en PDF y el Excel (`app/Support/Spreadsheet`, sin librerías extra). |
+| `app/Services/Backup` | Copia de seguridad de la base de datos en `.sql.gz`, sin depender de `mysqldump`, y su restauración. |
 | `app/Livewire/Site`, `resources/views/site` | Web del paciente: reservar en 3 pasos (`/reservar`), Mi cuenta (`/mi-cuenta`) y cambiar el horario desde el enlace. |
 | `app/Http/Controllers/Site`, `app/Services/Web` | Páginas públicas: inicio con el próximo horario libre, tratamientos con precio "desde", equipo con COP, promociones, antes y después, opiniones, preguntas frecuentes y contacto. Datos para Google (schema.org `Dentist`, `FAQPage`), `sitemap.xml` y `robots.txt`. El contenido se edita en el panel, grupo **Web** (solo administrador). |
 | `public/css/sitio.css` | Estilos de la web, escritos a mano: el hosting no necesita Node ni compilar nada. |

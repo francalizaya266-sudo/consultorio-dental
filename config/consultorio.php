@@ -82,6 +82,11 @@ return [
         ],
     ],
 
+    'backups' => [
+        // Copias diarias de la base de datos que se guardan en storage/app/private/respaldos.
+        'keep' => (int) env('BACKUPS_KEEP', 14),
+    ],
+
     'whatsapp' => [
         // click_to_chat: el panel abre WhatsApp con el mensaje escrito (etapa 1).
         // cloud_api: los avisos salen solos por la API oficial de Meta (etapa 2).

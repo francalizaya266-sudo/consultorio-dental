@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use App\Enums\AppointmentOrigin;
+use App\Enums\AppointmentStatus;
 use App\Enums\Dentition;
 use App\Enums\DocumentType;
 use App\Enums\PatientRelationship;
@@ -164,6 +165,15 @@ class Patient extends Model
     protected function owing(Builder $query): Builder
     {
         return $query->whereRaw(self::balanceSql().' > 0');
+    }
+
+    /** Para llamarlos a control: hace 6 meses o más que no vienen y no tienen cita por delante. */
+    #[Scope]
+    protected function dueForCheckup(Builder $query): Builder
+    {
+        return $query
+            ->where('last_visit_at', '<=', now()->subMonths(6))
+            ->whereDoesntHave('appointments', fn (Builder $a) => $a->where('starts_at', '>=', now())->whereIn('status', AppointmentStatus::changeable()));
     }
 
     private static function balanceSql(): string
