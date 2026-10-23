@@ -25,6 +25,7 @@ use App\Filament\Resources\Reviews\ReviewResource;
 use App\Filament\Resources\ScheduleBlocks\ScheduleBlockResource;
 use App\Filament\Resources\SmileCases\SmileCaseResource;
 use App\Filament\Resources\TextSnippets\TextSnippetResource;
+use App\Filament\Resources\TreatmentPackages\TreatmentPackageResource;
 use App\Filament\Resources\Treatments\TreatmentResource;
 use App\Filament\Resources\Users\UserResource;
 use App\Filament\Resources\WhatsappMessages\WhatsappMessageResource;
@@ -76,7 +77,8 @@ class PanelAccessTest extends TestCase
             'ganancias para imprimir' => ['earnings.print', [true, false, false]],
             'ganancias en Excel' => ['earnings.excel', [true, false, false]],
             'opciones rápidas' => ['snippets', [true, false, true]],
-            'tratamientos' => ['treatments', [true, false, false]],
+            'tratamientos' => ['treatments', [true, false, true]],
+            'paquetes' => ['packages', [true, false, true]],
             'doctores' => ['doctors', [true, false, false]],
             'nuevo doctor' => ['doctors.create', [true, false, false]],
             'editar doctor' => ['doctors.edit', [true, false, false]],
@@ -132,6 +134,7 @@ class PanelAccessTest extends TestCase
             'payments' => PaymentResource::getUrl('index'),
             'snippets' => TextSnippetResource::getUrl('index'),
             'treatments' => TreatmentResource::getUrl('index'),
+            'packages' => TreatmentPackageResource::getUrl('index'),
             'doctors' => DoctorResource::getUrl('index'),
             'doctors.create' => DoctorResource::getUrl('create'),
             'doctors.edit' => DoctorResource::getUrl('edit', ['record' => $doctor]),

@@ -11,6 +11,8 @@ use App\Exceptions\ClinicalException;
 use App\Models\Consultation;
 use App\Models\Patient;
 use App\Models\Treatment;
+use App\Models\TreatmentPackage;
+use App\Models\TreatmentPackageItem;
 use App\Models\TreatmentPlan;
 use App\Models\TreatmentPlanInstallment;
 use App\Models\TreatmentPlanItem;
@@ -25,6 +27,7 @@ use Carbon\CarbonImmutable;
 use Carbon\CarbonInterface;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Str;
 
 /**
  * Plan de tratamiento con costos: se arma desde lo que el doctor elige de las sugerencias del
@@ -57,6 +60,81 @@ final class TreatmentPlanService
             'discount' => 0,
             'sessions_planned' => 1,
         ];
+    }
+
+    /**
+     * Los procedimientos de un paquete para el plan. El precio del paquete se reparte entre ellos según
+     * su precio normal: cada uno lleva su precio de catálogo y el descuento que le toca, así el total
+     * es exactamente el del paquete y cada sesión carga su parte.
+     *
+     * @return list<array<string, mixed>>
+     */
+    public function itemsFromPackage(TreatmentPackage $package): array
+    {
+        $package->loadMissing('items.treatment');
+        $items = $package->items->values();
+
+        if ($items->isEmpty()) {
+            return [];
+        }
+
+        $price = (float) $package->price;
+        $weights = $items->map(fn (TreatmentPackageItem $item) => $item->normalPrice());
+
+        // Sin precios en el catálogo, se reparte según la cantidad.
+        if ($weights->sum() <= 0) {
+            $weights = $items->map(fn (TreatmentPackageItem $item) => (float) $item->quantity);
+        }
+
+        $shares = $weights->map(fn (float $weight) => round($price * $weight / $weights->sum(), 2))->all();
+        // Los céntimos del redondeo van al de mayor precio.
+        $largest = array_search(max($shares), $shares, true);
+        $shares[$largest] = round($price - (array_sum($shares) - $shares[$largest]), 2);
+
+        return $items->map(function (TreatmentPackageItem $item, int $index) use ($package, $shares) {
+            $share = $shares[$index];
+            // Si el paquete cuesta más que el catálogo, el precio sube lo justo para cubrir su parte.
+            $unitPrice = $share <= $item->normalPrice()
+                ? (float) $item->treatment->price_from
+                : ceil(round($share / $item->quantity * 100, 6)) / 100;
+
+            return [
+                'treatment_id' => $item->treatment_id,
+                'treatment_package_id' => $package->getKey(),
+                'description' => $item->description ?: $item->treatment->name,
+                'tooth' => null,
+                'surfaces' => null,
+                'quantity' => $item->quantity,
+                'unit_price' => $unitPrice,
+                'discount' => round($item->quantity * $unitPrice - $share, 2),
+                'sessions_planned' => $item->sessions_planned,
+            ];
+        })->all();
+    }
+
+    /**
+     * Cómo se puede pagar un paquete, una línea por forma: "Pago único de S/ 4,600.00 (…)."
+     *
+     * @return list<string>
+     */
+    public static function packagePaymentOptions(TreatmentPackage $package): array
+    {
+        $price = (float) $package->price;
+        $options = [];
+
+        if ($package->allows_upfront) {
+            $options[] = self::scheduleText(PlanPaymentMode::Upfront, self::schedule($price, PlanPaymentMode::Upfront, $package->terms(), today()), false);
+        }
+
+        if ($package->allows_installments) {
+            try {
+                $options[] = 'En cuotas: '.Str::lcfirst(self::scheduleText(PlanPaymentMode::Installments, self::schedule($price, PlanPaymentMode::Installments, $package->terms(), today()), false));
+            } catch (ClinicalException $e) {
+                $options[] = 'En cuotas: '.Str::lcfirst($e->getMessage());
+            }
+        }
+
+        return $options ?: ['Por sesión: paga lo de cada sesión al terminarla.'];
     }
 
     /**
@@ -126,7 +204,7 @@ final class TreatmentPlanService
      * después (eso se paga por sesión). Lo firmado ya no cambia de precio. Si hoy vence la inicial o el
      * pago único, se carga.
      *
-     * @param  array{payment_mode?: PlanPaymentMode|string|null, down_payment?: float|string|null, installments?: int|string|null, first_due_on?: mixed, upfront_discount?: float|string|null}  $terms
+     * @param  array{payment_mode?: PlanPaymentMode|string|null, down_payment?: float|string|null, installments?: int|string|null, monthly_amount?: float|string|null, first_due_on?: mixed, upfront_discount?: float|string|null}  $terms
      * @param  array{signer_name: string, signer_document?: string|null, signer_relationship: PatientRelationship|string}  $signer
      */
     public function sign(TreatmentPlan $plan, array $terms, array $signer, string $signature, User $by): TreatmentPlanSignature
@@ -186,9 +264,10 @@ final class TreatmentPlanService
     /**
      * Cronograma de pagos. Pago único: todo hoy (con el descuento por pagar todo junto, si hay).
      * En cuotas: la inicial hoy y las cuotas en soles enteros, una por mes desde la primera fecha;
-     * la última ajusta la diferencia para que el total sea exacto.
+     * la última ajusta la diferencia para que el total sea exacto. Si se fijó la cuota mensual,
+     * de ella sale cuántas son; si no, el resto se reparte en el número de cuotas.
      *
-     * @param  array{down_payment?: float|string|null, installments?: int|string|null, first_due_on?: mixed, upfront_discount?: float|string|null}  $terms
+     * @param  array{down_payment?: float|string|null, installments?: int|string|null, monthly_amount?: float|string|null, first_due_on?: mixed, upfront_discount?: float|string|null}  $terms
      * @return list<array{number: int, due_on: CarbonImmutable, amount: float, discount: float}>
      */
     public static function schedule(float $total, PlanPaymentMode $mode, array $terms, CarbonInterface $today): array
@@ -206,20 +285,16 @@ final class TreatmentPlanService
         }
 
         $down = round(max(0, (float) ($terms['down_payment'] ?? 0)), 2);
-        $count = (int) ($terms['installments'] ?? 0);
+        $monthly = round(max(0, (float) ($terms['monthly_amount'] ?? 0)), 2);
         $first = filled($terms['first_due_on'] ?? null) ? CarbonImmutable::parse($terms['first_due_on'])->startOfDay() : $today->addMonthNoOverflow();
         $rest = round($total - $down, 2);
+        $count = $monthly > 0 ? self::installmentsFor($rest, $monthly) : (int) ($terms['installments'] ?? 0);
 
         if ($count < 1 || $count > self::MAX_INSTALLMENTS || $rest <= 0 || $first->lt($today)) {
             throw ClinicalException::invalidPaymentTerms();
         }
 
-        $each = round($rest / $count);
-
-        // Con montos chicos, el redondeo a soles enteros no alcanza: se usan céntimos.
-        if ($each * ($count - 1) >= $rest || $each <= 0) {
-            $each = round($rest / $count, 2);
-        }
+        $each = $monthly > 0 ? min($monthly, $rest) : self::evenInstallment($rest, $count);
 
         $rows = $down > 0 ? [['number' => 0, 'due_on' => $today, 'amount' => $down, 'discount' => 0.0]] : [];
 
@@ -235,12 +310,27 @@ final class TreatmentPlanService
         return $rows;
     }
 
+    /** Cuota pareja en soles enteros; con montos chicos, el redondeo no alcanza y se usan céntimos. */
+    public static function evenInstallment(float $rest, int $count): float
+    {
+        $each = round($rest / max(1, $count));
+
+        return $each * ($count - 1) >= $rest || $each <= 0 ? round($rest / max(1, $count), 2) : $each;
+    }
+
+    /** Cuántas cuotas hacen falta para pagar el resto con esa cuota mensual (la última es la que falta). */
+    public static function installmentsFor(float $rest, float $monthly): int
+    {
+        return $monthly > 0 && $rest > 0 ? (int) ceil(round($rest / $monthly, 6)) : 0;
+    }
+
     /**
-     * El cronograma en una línea, para revisarlo antes de firmar y para el presupuesto.
+     * El cronograma en una línea, para revisarlo antes de firmar y para el presupuesto. Sin fechas,
+     * para las condiciones de un paquete, que se fijan el día que se firma.
      *
      * @param  list<array{number: int, due_on: CarbonInterface, amount: float, discount: float}>  $schedule
      */
-    public static function scheduleText(PlanPaymentMode $mode, array $schedule): string
+    public static function scheduleText(PlanPaymentMode $mode, array $schedule, bool $withDates = true): string
     {
         if ($mode === PlanPaymentMode::PerSession || $schedule === []) {
             return 'Paga lo de cada sesión al terminarla.';
@@ -249,7 +339,7 @@ final class TreatmentPlanService
         if ($mode === PlanPaymentMode::Upfront) {
             $row = $schedule[0];
 
-            return 'Pago único de '.Money::format($row['amount'] - $row['discount']).' el '.$row['due_on']->format('d/m/Y')
+            return 'Pago único de '.Money::format($row['amount'] - $row['discount']).($withDates ? ' el '.$row['due_on']->format('d/m/Y') : '')
                 .($row['discount'] > 0 ? ' (con '.Money::format($row['discount']).' de descuento por pagar todo junto)' : '').'.';
         }
 
@@ -265,6 +355,16 @@ final class TreatmentPlanService
             $same => $cuotas->count().' cuotas de '.Money::format($first['amount']),
             default => ($cuotas->count() - 1).' cuotas de '.Money::format($first['amount']).' y la última de '.Money::format($last['amount']),
         };
+
+        if (! $withDates) {
+            $amounts = match (true) {
+                $cuotas->count() === 1 => '1 cuota de '.Money::format($first['amount']),
+                $same => $cuotas->count().' cuotas mensuales de '.Money::format($first['amount']),
+                default => $cuotas->count().' cuotas mensuales: '.($cuotas->count() - 1).' de '.Money::format($first['amount']).' y la última de '.Money::format($last['amount']),
+            };
+
+            return ($down ? 'Inicial de '.Money::format($down['amount']).' y ' : '').$amounts.'.';
+        }
 
         return collect([
             $down ? 'Inicial de '.Money::format($down['amount']).' el '.$down['due_on']->format('d/m/Y') : null,

@@ -6,6 +6,7 @@
         .notes { margin-top: 16px; white-space: pre-line; }
         .fine { margin-top: 16px; font-size: .8rem; color: var(--muted); }
         .payment { margin-top: 16px; }
+        .package { margin: 10px 0 0; }
         .payment h3 { font-size: .95rem; margin: 0 0 6px; }
         .tag { font-size: .75rem; font-weight: 700; color: #b45309; }
         .signed { display: flex; justify-content: space-around; gap: 24px; margin-top: 32px; align-items: flex-end; flex-wrap: wrap; }
@@ -36,8 +37,8 @@
                     <td>{{ $loop->iteration }}</td>
                     <td>
                         {{ $item->description }}
-                        @if ($item->sessions_planned > 1)
-                            <div class="muted">{{ $item->sessions_planned }} sesiones</div>
+                        @if ($item->sessions_planned > 1 || $item->package)
+                            <div class="muted">{{ collect([$item->sessions_planned > 1 ? $item->sessions_planned.' sesiones' : null, $item->package ? 'Paquete '.$item->package->name : null])->filter()->implode(' · ') }}</div>
                         @endif
                         @if ($plan->accepted_at && ! $item->accepted_at)
                             <div class="tag">Agregado: falta la firma del paciente</div>
@@ -58,6 +59,24 @@
             </tr>
         </tfoot>
     </table>
+
+    @foreach ($packages as $package)
+        <p class="package">
+            <strong>Paquete {{ $package['name'] }}:</strong> precio normal {{ Money::format($package['normal']) }}, en el paquete {{ Money::format($package['price']) }}.
+            @if ($package['savings'] > 0)
+                <strong>Ahorra {{ Money::format($package['savings']) }}.</strong>
+            @endif
+        </p>
+    @endforeach
+
+    @if ($packageOptions !== [])
+        <div class="payment">
+            <h3>Formas de pago del paquete</h3>
+            @foreach ($packageOptions as $option)
+                <p>{{ $option }}</p>
+            @endforeach
+        </div>
+    @endif
 
     @if ($paymentText)
         <div class="payment">

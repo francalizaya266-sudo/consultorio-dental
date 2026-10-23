@@ -99,7 +99,8 @@ class PrintController extends Controller
             $plans->markProposed($plan);
         }
 
-        $plan->load('patient', 'doctor', 'items', 'installments', 'signatures');
+        $plan->load('patient', 'doctor', 'items.package', 'installments', 'signatures');
+        $package = $plan->accepted_at ? null : $plan->offeredPackage();
 
         return view('print.plan', [
             'plan' => $plan,
@@ -107,6 +108,9 @@ class PrintController extends Controller
             'doctor' => $plan->doctor,
             'items' => $plan->items->reject(fn (TreatmentPlanItem $item) => $item->status === PlanItemStatus::Cancelled)->values(),
             'paymentText' => $plan->accepted_at ? $plans->paymentText($plan) : null,
+            'packages' => $plan->packageSummaries(),
+            // Antes de firmar, las formas de pago que ofrece el paquete.
+            'packageOptions' => $package ? TreatmentPlanService::packagePaymentOptions($package) : [],
             'signatures' => $plan->signatures->map(fn (TreatmentPlanSignature $signature) => ['signature' => $signature, 'image' => Signatures::dataUri($signature->signature_path)]),
         ]);
     }
