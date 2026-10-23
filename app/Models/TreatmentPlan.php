@@ -96,4 +96,34 @@ class TreatmentPlan extends Model
     {
         return $this->items->filter(fn (TreatmentPlanItem $item) => $item->accepted_at === null && $item->status !== PlanItemStatus::Cancelled)->values();
     }
+
+    /** El paquete con que se armó el plan: de él sale la forma de pago que se ofrece al firmar. */
+    public function offeredPackage(): ?TreatmentPackage
+    {
+        $this->loadMissing('items.package');
+
+        return $this->items->first(fn (TreatmentPlanItem $item) => $item->treatment_package_id !== null && $item->status !== PlanItemStatus::Cancelled)?->package;
+    }
+
+    /**
+     * Cada paquete del plan con su precio normal, lo que cuesta en el paquete y lo que ahorra.
+     *
+     * @return list<array{name: string, normal: float, price: float, savings: float}>
+     */
+    public function packageSummaries(): array
+    {
+        $this->loadMissing('items.package');
+
+        return $this->items
+            ->filter(fn (TreatmentPlanItem $item) => $item->treatment_package_id !== null && $item->status !== PlanItemStatus::Cancelled)
+            ->groupBy('treatment_package_id')
+            ->map(fn (Collection $items) => [
+                'name' => $items->first()->package->name,
+                'normal' => round($items->sum(fn (TreatmentPlanItem $item) => $item->quantity * (float) $item->unit_price), 2),
+                'price' => round($items->sum(fn (TreatmentPlanItem $item) => $item->subtotal()), 2),
+                'savings' => round($items->sum(fn (TreatmentPlanItem $item) => (float) $item->discount), 2),
+            ])
+            ->values()
+            ->all();
+    }
 }

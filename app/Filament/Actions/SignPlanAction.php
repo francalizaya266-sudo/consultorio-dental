@@ -6,6 +6,7 @@ use App\Enums\PatientRelationship;
 use App\Enums\PlanItemStatus;
 use App\Enums\PlanPaymentMode;
 use App\Exceptions\ClinicalException;
+use App\Filament\Forms\PaymentTermsFields;
 use App\Filament\Forms\SignaturePad;
 use App\Models\TreatmentPlan;
 use App\Models\TreatmentPlanItem;
@@ -14,7 +15,6 @@ use App\Services\Clinical\ConsentService;
 use App\Services\Clinical\TreatmentPlanService;
 use App\Support\Money;
 use Filament\Actions\Action;
-use Filament\Forms\Components\DatePicker;
 use Filament\Forms\Components\Radio;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\TextInput;
@@ -50,51 +50,43 @@ final class SignPlanAction
             ->modalSubmitActionLabel('Guardar firma')
             ->fillForm(function (TreatmentPlan $record) {
                 $signer = app(ConsentService::class)->defaultSigner($record->patient);
+                // Si el plan se armó con un paquete, llega con la forma de pago del paquete.
+                $package = self::isFirst($record) ? $record->offeredPackage() : null;
+                $terms = $package?->terms();
 
                 return [
                     ...$signer,
                     'signer_relationship' => $signer['signer_relationship']->value,
-                    'payment_mode' => PlanPaymentMode::PerSession->value,
-                    'down_payment' => 0,
-                    'installments' => 6,
+                    'payment_mode' => ($package?->defaultPaymentMode() ?? PlanPaymentMode::PerSession)->value,
+                    'down_payment' => $terms['down_payment'] ?? 0,
+                    'installments' => $terms['installments'] ?? 6,
+                    // La cuota del paquete vale si el plan es solo el paquete; si se le sumó algo, se reparte.
+                    'monthly_amount' => $package && self::total($record) === (float) $package->price ? $terms['monthly_amount'] : null,
                     'first_due_on' => today()->addMonthNoOverflow()->toDateString(),
-                    'upfront_discount' => 0,
+                    'upfront_discount' => $terms['upfront_discount'] ?? 0,
                 ];
             })
             ->schema(fn (TreatmentPlan $record) => [
                 Text::make(new HtmlString(self::itemsHtml(self::items($record))))
                     ->weight(FontWeight::Medium),
+                Text::make(fn () => collect($record->packageSummaries())
+                    ->map(fn (array $package) => 'Paquete '.$package['name'].': precio normal '.Money::format($package['normal']).', en el paquete '.Money::format($package['price']).($package['savings'] > 0 ? ' (ahorra '.Money::format($package['savings']).')' : '').'.')
+                    ->implode(' '))
+                    ->color('success')
+                    ->visible(fn () => self::isFirst($record) && $record->packageSummaries() !== []),
                 Section::make('Forma de pago')
                     ->compact()
                     ->visible(self::isFirst($record))
                     ->schema([
                         Radio::make('payment_mode')
+                            ->label('Forma de pago')
                             ->hiddenLabel()
                             ->options(PlanPaymentMode::class)
                             ->required()
                             ->live(),
-                        Grid::make(3)
+                        Grid::make(['default' => 2, 'lg' => 4])
                             ->visible(fn (Get $get) => self::mode($get) === PlanPaymentMode::Installments)
-                            ->schema([
-                                TextInput::make('down_payment')
-                                    ->label('Inicial')
-                                    ->prefix('S/')
-                                    ->numeric()
-                                    ->minValue(0)
-                                    ->live(onBlur: true),
-                                TextInput::make('installments')
-                                    ->label('Número de cuotas')
-                                    ->integer()
-                                    ->minValue(1)
-                                    ->maxValue(TreatmentPlanService::MAX_INSTALLMENTS)
-                                    ->required()
-                                    ->live(onBlur: true),
-                                DatePicker::make('first_due_on')
-                                    ->label('Primera cuota')
-                                    ->minDate(today())
-                                    ->required()
-                                    ->live(),
-                            ]),
+                            ->schema(PaymentTermsFields::make(fn () => self::total($record), withFirstDueDate: true)),
                         TextInput::make('upfront_discount')
                             ->label('Descuento por pagar todo junto')
                             ->prefix('S/')
@@ -209,6 +201,7 @@ final class SignPlanAction
             return TreatmentPlanService::scheduleText($mode, TreatmentPlanService::schedule(self::total($plan), $mode, [
                 'down_payment' => $get('down_payment'),
                 'installments' => $get('installments'),
+                'monthly_amount' => $get('monthly_amount'),
                 'first_due_on' => $get('first_due_on'),
                 'upfront_discount' => $get('upfront_discount'),
             ], today()));

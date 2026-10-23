@@ -12,7 +12,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 
 /** Procedimiento del plan, con su costo y sesiones. Una vez aceptado, su precio ya no cambia. */
-#[Fillable(['treatment_plan_id', 'treatment_id', 'description', 'tooth', 'surfaces', 'quantity', 'unit_price', 'discount', 'sessions_planned', 'sessions_done', 'status', 'accepted_at', 'in_payment_schedule', 'sort_order'])]
+#[Fillable(['treatment_plan_id', 'treatment_id', 'treatment_package_id', 'description', 'tooth', 'surfaces', 'quantity', 'unit_price', 'discount', 'sessions_planned', 'sessions_done', 'status', 'accepted_at', 'in_payment_schedule', 'sort_order'])]
 class TreatmentPlanItem extends Model
 {
     use Auditable;
@@ -49,6 +49,12 @@ class TreatmentPlanItem extends Model
     public function plan(): BelongsTo
     {
         return $this->belongsTo(TreatmentPlan::class, 'treatment_plan_id');
+    }
+
+    /** El paquete de donde vino, si vino de uno. */
+    public function package(): BelongsTo
+    {
+        return $this->belongsTo(TreatmentPackage::class, 'treatment_package_id')->withTrashed();
     }
 
     public function treatment(): BelongsTo

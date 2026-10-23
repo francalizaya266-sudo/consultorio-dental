@@ -4,6 +4,7 @@ namespace App\Filament\Resources\Patients\Schemas;
 
 use App\Enums\PlanItemStatus;
 use App\Models\Treatment;
+use App\Models\TreatmentPackage;
 use App\Models\TreatmentPlan;
 use App\Services\Clinical\TreatmentPlanService;
 use App\Support\Money;
@@ -20,6 +21,7 @@ use Filament\Schemas\Components\Utilities\Set;
 use Filament\Schemas\Schema;
 use Filament\Support\Enums\FontWeight;
 use Filament\Support\Enums\TextSize;
+use Illuminate\Support\Str;
 
 /**
  * Plan de tratamiento: procedimientos con pieza, precio y sesiones, y el total al momento.
@@ -40,6 +42,16 @@ class TreatmentPlanForm
                     ->default('Plan de tratamiento')
                     ->maxLength(255),
 
+                Select::make('add_package')
+                    ->label('Agregar un paquete')
+                    ->placeholder('Suma los tratamientos de un paquete, con su precio')
+                    ->options(fn () => TreatmentPackage::query()->active()->orderBy('name')->get()
+                        ->mapWithKeys(fn (TreatmentPackage $package) => [$package->getKey() => $package->name.' · '.Money::format($package->price)]))
+                    ->visible(fn () => TreatmentPackage::query()->active()->exists())
+                    ->dehydrated(false)
+                    ->live()
+                    ->afterStateUpdated(fn (?string $state, Get $get, Set $set) => self::addPackage($state, $get, $set)),
+
                 Repeater::make('items')
                     ->label('Procedimientos')
                     ->relationship()
@@ -58,6 +70,7 @@ class TreatmentPlanForm
                     ->schema([
                         Hidden::make('accepted_at')
                             ->dehydrated(false),
+                        Hidden::make('treatment_package_id'),
                         Select::make('treatment_id')
                             ->disabled(fn (Get $get) => self::isAgreed($get))
                             ->label('Tratamiento')
@@ -75,6 +88,7 @@ class TreatmentPlanForm
                         TextInput::make('description')
                             ->disabled(fn (Get $get) => self::isAgreed($get))
                             ->label('Detalle')
+                            ->helperText(fn (Get $get) => filled($get('treatment_package_id')) ? 'Del paquete '.TreatmentPackage::withTrashed()->find($get('treatment_package_id'))?->name : null)
                             ->required()
                             ->maxLength(255)
                             ->columnSpan(['default' => 12, 'lg' => 4]),
@@ -151,6 +165,29 @@ class TreatmentPlanForm
         return round(collect($items)
             ->reject(fn (array $item) => in_array($item['status'] ?? null, [PlanItemStatus::Cancelled, PlanItemStatus::Cancelled->value], true))
             ->sum(fn (array $item) => (int) ($item['quantity'] ?? 1) * (float) ($item['unit_price'] ?? 0) - (float) ($item['discount'] ?? 0)), 2);
+    }
+
+    /** Suma al plan los tratamientos del paquete, con el precio del paquete repartido entre ellos. */
+    private static function addPackage(?string $packageId, Get $get, Set $set): void
+    {
+        $package = TreatmentPackage::query()->active()->find($packageId);
+
+        if (! $package) {
+            return;
+        }
+
+        $items = $get('items') ?? [];
+
+        foreach (app(TreatmentPlanService::class)->itemsFromPackage($package) as $item) {
+            $items[(string) Str::uuid()] = [...$item, 'accepted_at' => null, 'status' => PlanItemStatus::Pending->value];
+        }
+
+        $set('items', $items);
+        $set('add_package', null);
+
+        if (blank($get('title')) || $get('title') === 'Plan de tratamiento') {
+            $set('title', $package->name);
+        }
     }
 
     /** El paciente ya firmó este procedimiento: su precio queda como se acordó. */
