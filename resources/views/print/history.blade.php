@@ -138,7 +138,7 @@
         <div class="visit">
             <div class="when">
                 <h3>{{ $plan->title ?: 'Plan de tratamiento' }} · {{ $plan->created_at->format('d/m/Y') }}</h3>
-                <span class="muted">{{ $plan->status->getLabel() }} · {{ $plan->doctor->name }} · {{ Money::format($plan->total()) }}</span>
+                <span class="muted">{{ $plan->status->getLabel() }} · {{ $plan->doctor->name }} · {{ Money::format($plan->total()) }}{{ $plan->payment_mode ? ' · '.mb_strtolower($plan->payment_mode->getLabel()) : '' }}{{ $plan->signatures->isNotEmpty() ? ' · firmado el '.$plan->signatures->first()->signed_at->format('d/m/Y') : '' }}</span>
             </div>
             <ul>
                 @foreach ($plan->items as $item)

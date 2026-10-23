@@ -48,11 +48,19 @@ final class CheckoutAction
             ->modalSubmitAction(fn (Action $action) => $action->label('Guardar cobro')->color('primary'))
             ->modalWidth('3xl')
             ->fillForm(function (Appointment $record) {
-                $lines = app(BillingService::class)->chargesFor($record);
+                $billing = app(BillingService::class);
+                // Si venció una cuota de su plan y aún no se cargó, entra en lo que se cobra hoy.
+                $billing->chargeDueInstallments($record->patient, self::user());
+
+                $lines = $billing->chargesFor($record);
                 $balance = $record->patient->balance();
                 $previous = round($balance - $lines->sum(fn (Charge $c) => $c->net()), 2);
 
                 return [
+                    'previous_items' => $billing->unpaidCharges($record->patient)
+                        ->reject(fn (array $row) => $row['charge']->appointment_id === $record->getKey())
+                        ->map(fn (array $row) => $row['charge']->description.' '.Money::format($row['due']))
+                        ->implode(', '),
                     'lines' => $lines->map(fn (Charge $c) => [
                         'id' => $c->getKey(),
                         'description' => $c->description,
@@ -66,6 +74,7 @@ final class CheckoutAction
             })
             ->schema([
                 Hidden::make('previous'),
+                Hidden::make('previous_items'),
                 Repeater::make('lines')
                     ->label('Lo de esta cita')
                     ->table([
@@ -153,7 +162,7 @@ final class CheckoutAction
         $total = self::total($get);
 
         return match (true) {
-            $previous > 0 => 'Saldo anterior '.Money::format($previous).' · Total a pagar '.Money::format(max(0, $total)),
+            $previous > 0 => 'Saldo anterior '.Money::format($previous).(filled($get('previous_items')) ? ' ('.$get('previous_items').')' : '').' · Total a pagar '.Money::format(max(0, $total)),
             $previous < 0 => 'Tenía a favor '.Money::format(-$previous).' · Total a pagar '.Money::format(max(0, $total)),
             default => 'Total a pagar '.Money::format(max(0, $total)),
         };

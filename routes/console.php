@@ -15,6 +15,11 @@ Schedule::command('citas:marcar-sin-confirmar')
     ->dailyAt(config('consultorio.defaults.reminders.flag_unconfirmed_at', '16:00'))
     ->withoutOverlapping();
 
+// Las cuotas de los planes entran al saldo el día que vencen.
+Schedule::command('cuotas:cargar')
+    ->dailyAt('06:00')
+    ->withoutOverlapping();
+
 Schedule::command('whatsapp:enviar')
     ->everyFiveMinutes()
     ->withoutOverlapping();

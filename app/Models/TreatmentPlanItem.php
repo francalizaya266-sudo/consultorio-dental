@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use App\Enums\PlanItemStatus;
+use App\Exceptions\ClinicalException;
 use App\Models\Concerns\Auditable;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Model;
@@ -10,11 +11,14 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 
-/** Procedimiento del plan, con su costo y sesiones. */
-#[Fillable(['treatment_plan_id', 'treatment_id', 'description', 'tooth', 'surfaces', 'quantity', 'unit_price', 'discount', 'sessions_planned', 'sessions_done', 'status', 'sort_order'])]
+/** Procedimiento del plan, con su costo y sesiones. Una vez aceptado, su precio ya no cambia. */
+#[Fillable(['treatment_plan_id', 'treatment_id', 'description', 'tooth', 'surfaces', 'quantity', 'unit_price', 'discount', 'sessions_planned', 'sessions_done', 'status', 'accepted_at', 'in_payment_schedule', 'sort_order'])]
 class TreatmentPlanItem extends Model
 {
     use Auditable;
+
+    /** Lo que el paciente firmó no se cambia ni se quita: se cancela y se agrega el correcto. */
+    public const AGREED_FIELDS = ['treatment_id', 'description', 'quantity', 'unit_price', 'discount'];
 
     protected function casts(): array
     {
@@ -22,7 +26,24 @@ class TreatmentPlanItem extends Model
             'unit_price' => 'decimal:2',
             'discount' => 'decimal:2',
             'status' => PlanItemStatus::class,
+            'accepted_at' => 'datetime',
+            'in_payment_schedule' => 'boolean',
         ];
+    }
+
+    protected static function booted(): void
+    {
+        static::updating(function (TreatmentPlanItem $item) {
+            if ($item->getOriginal('accepted_at') !== null && $item->isDirty(self::AGREED_FIELDS)) {
+                throw ClinicalException::agreedPrice();
+            }
+        });
+
+        static::deleting(function (TreatmentPlanItem $item) {
+            if ($item->getOriginal('accepted_at') !== null) {
+                throw ClinicalException::agreedPrice();
+            }
+        });
     }
 
     public function plan(): BelongsTo

@@ -102,7 +102,8 @@ class AppointmentForm
 
         return app(TreatmentPlanService::class)->workableItems($patient)
             ->mapWithKeys(fn (TreatmentPlanItem $item) => [$item->getKey() => $item->label(withTooth: $user->canSeeClinical())
-                .($item->sessions_planned > 1 ? ' · sesión '.min($item->sessions_done + 1, $item->sessions_planned).' de '.$item->sessions_planned : '')])
+                .($item->sessions_planned > 1 ? ' · sesión '.min($item->sessions_done + 1, $item->sessions_planned).' de '.$item->sessions_planned : '')
+                .($item->in_payment_schedule ? ' · ya incluida en su forma de pago' : '')])
             ->all();
     }
 

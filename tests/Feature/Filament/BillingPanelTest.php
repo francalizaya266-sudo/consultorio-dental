@@ -3,7 +3,10 @@
 namespace Tests\Feature\Filament;
 
 use App\Enums\AppointmentStatus;
+use App\Enums\PatientRelationship;
 use App\Enums\PaymentMethod;
+use App\Enums\TreatmentPlanStatus;
+use App\Filament\Resources\Appointments\Pages\ViewAppointment;
 use App\Filament\Resources\Patients\Pages\ListPatients;
 use App\Filament\Resources\Patients\Pages\ViewPatient;
 use App\Filament\Resources\Patients\RelationManagers\ChargesRelationManager;
@@ -14,11 +17,16 @@ use App\Models\Charge;
 use App\Models\Patient;
 use App\Models\Payment;
 use App\Models\Treatment;
+use App\Models\TreatmentPlan;
 use App\Models\User;
 use App\Services\Billing\BillingService;
+use App\Services\Clinical\ClinicalFileService;
+use App\Services\Clinical\TreatmentPlanService;
+use Carbon\CarbonImmutable;
 use Filament\Actions\Testing\TestAction;
 use Filament\Forms\Components\Repeater;
 use Illuminate\Foundation\Testing\LazilyRefreshDatabase;
+use Illuminate\Support\Facades\Storage;
 use Livewire\Livewire;
 use Tests\Concerns\CreatesAgenda;
 use Tests\TestCase;
@@ -158,5 +166,65 @@ class BillingPanelTest extends TestCase
         Livewire::test(ListPatients::class)
             ->assertTableColumnHidden('balance_due')
             ->assertDontSee('Con saldo pendiente');
+    }
+
+    public function test_the_installment_due_today_shows_on_the_appointment_and_is_charged_at_checkout(): void
+    {
+        Storage::fake(ClinicalFileService::DISK);
+        $brackets = Treatment::factory()->create(['name' => 'Colocación de brackets']);
+        $control = Treatment::factory()->create(['name' => 'Control de ortodoncia', 'price_from' => 150]);
+        $doctor = $this->doctorOffering($brackets, $control);
+        $patient = Patient::factory()->create();
+        $reception = User::factory()->reception()->create();
+
+        // Hace un mes aceptó la ortodoncia en cuotas y pagó la inicial.
+        $this->travelTo(CarbonImmutable::parse('2026-10-02 09:00', 'America/Lima'));
+        $plan = TreatmentPlan::create(['patient_id' => $patient->id, 'doctor_id' => $doctor->id, 'title' => 'Ortodoncia', 'status' => TreatmentPlanStatus::Proposed]);
+        $plan->items()->create(['treatment_id' => $brackets->id, 'description' => 'Colocación de brackets', 'unit_price' => 1800]);
+        $controls = $plan->items()->create(['treatment_id' => $control->id, 'description' => 'Control de ortodoncia', 'unit_price' => 200, 'sessions_planned' => 2]);
+        app(TreatmentPlanService::class)->sign(
+            $plan->load('items'),
+            ['payment_mode' => 'installments', 'down_payment' => 500, 'installments' => 3, 'first_due_on' => '2026-11-02'],
+            ['signer_name' => $patient->full_name, 'signer_relationship' => PatientRelationship::Self],
+            $this->signature(),
+            $doctor->user,
+        );
+        Payment::factory()->for($patient)->create(['amount' => 500]);
+
+        // Hoy vence la cuota 1 y viene a su control: al abrir la cita, recepción ve qué cobrar.
+        $this->freezeMonday();
+        $appointment = Appointment::factory()->confirmed()->for($patient)->for($doctor)->for($control)->at('2026-11-02 10:00')->create(['treatment_plan_item_id' => $controls->id]);
+        $this->actingAs($reception);
+
+        Livewire::test(ViewAppointment::class, ['record' => $appointment->getKey()])
+            ->assertSee(['Para cobrar ese día', 'Saldo pendiente (Ortodoncia · cuota 1 de 3): S/ 500.00', 'Control de ortodoncia · sesión 1 de 2 · incluida en el plan (en cuotas)']);
+
+        // El control ya está en el plan: no se carga aparte; se cobra la cuota.
+        $appointment->update(['status' => AppointmentStatus::Completed]);
+        app(BillingService::class)->chargeAppointment($appointment, $reception);
+        Repeater::fake();
+
+        Livewire::test(TodayAppointments::class)
+            ->mountAction(TestAction::make('checkout')->table($appointment))
+            ->assertSchemaStateSet(['lines' => [], 'previous' => 500.0, 'amount' => 500.0])
+            ->assertMountedActionModalSee('Saldo anterior S/ 500.00 (Ortodoncia · cuota 1 de 3 S/ 500.00) · Total a pagar S/ 500.00')
+            ->callMountedAction()
+            ->assertHasNoFormErrors()
+            ->assertNotified('Pago registrado');
+
+        $this->assertSame(['Ortodoncia · inicial', 'Ortodoncia · cuota 1 de 3'], $patient->charges()->orderBy('id')->pluck('description')->all());
+        $this->assertSame(0.0, $patient->balance());
+        $this->assertSame(['paid', 'paid', 'upcoming', 'upcoming'], array_column(app(BillingService::class)->installmentStates($plan->fresh()), 'state'));
+    }
+
+    private function signature(): string
+    {
+        $image = imagecreatetruecolor(300, 120);
+        imagefill($image, 0, 0, imagecolorallocate($image, 255, 255, 255));
+        imageline($image, 20, 80, 280, 40, imagecolorallocate($image, 15, 23, 42));
+        ob_start();
+        imagepng($image);
+
+        return 'data:image/png;base64,'.base64_encode((string) ob_get_clean());
     }
 }

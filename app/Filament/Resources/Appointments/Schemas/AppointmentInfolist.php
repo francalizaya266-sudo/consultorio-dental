@@ -8,12 +8,14 @@ use App\Models\Appointment;
 use App\Models\AppointmentEvent;
 use App\Models\Charge;
 use App\Models\Payment;
+use App\Services\Billing\BillingService;
 use App\Support\Money;
 use App\Support\Phone;
 use Filament\Infolists\Components\RepeatableEntry;
 use Filament\Infolists\Components\TextEntry;
 use Filament\Schemas\Components\Section;
 use Filament\Schemas\Schema;
+use Filament\Support\Enums\TextSize;
 
 class AppointmentInfolist
 {
@@ -75,6 +77,7 @@ class AppointmentInfolist
                             ->visible(fn (Appointment $record) => $record->status === AppointmentStatus::Cancelled)
                             ->columnSpanFull(),
                     ]),
+                self::toCharge(),
                 self::billing(),
                 Section::make('Historial')
                     ->columnSpan(1)
@@ -95,6 +98,34 @@ class AppointmentInfolist
                                     ])->filter()->implode(' · ')),
                             ]),
                     ]),
+            ]);
+    }
+
+    /**
+     * Antes de atenderla: lo que se espera cobrar ese día, para que recepción lo tenga listo
+     * (la cuota que vence, la sesión del plan o el tratamiento con su promoción, y el saldo).
+     */
+    private static function toCharge(): Section
+    {
+        return Section::make('Para cobrar ese día')
+            ->columnSpan(2)
+            ->visible(fn (Appointment $record) => auth()->user()->can('viewAny', Charge::class)
+                && in_array($record->status, [AppointmentStatus::Pending, AppointmentStatus::Confirmed, AppointmentStatus::CheckedIn, AppointmentStatus::InProgress], true))
+            ->schema([
+                TextEntry::make('estimate')
+                    ->label('Detalle')
+                    ->hiddenLabel()
+                    ->state(fn (Appointment $record) => collect(app(BillingService::class)->estimateFor($record)['lines'])
+                        ->map(fn (array $line) => $line['label'].($line['amount'] === null ? '' : ': '.Money::format($line['amount'])))
+                        ->all())
+                    ->listWithLineBreaks()
+                    ->bulleted()
+                    ->placeholder('Sin precio en el catálogo para este tratamiento.'),
+                TextEntry::make('estimate_total')
+                    ->label('Cobrar')
+                    ->state(fn (Appointment $record) => Money::format(app(BillingService::class)->estimateFor($record)['total']))
+                    ->weight('bold')
+                    ->size(TextSize::Large),
             ]);
     }
 

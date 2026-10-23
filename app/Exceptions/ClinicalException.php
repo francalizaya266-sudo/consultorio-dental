@@ -66,4 +66,19 @@ class ClinicalException extends RuntimeException
     {
         return new self('No se pudo leer la firma. Pide que vuelva a firmar.');
     }
+
+    public static function agreedPrice(): self
+    {
+        return new self('El paciente ya aceptó este precio. Para cambiarlo, cancela el procedimiento y agrega el correcto.');
+    }
+
+    public static function nothingToAccept(): self
+    {
+        return new self('Este plan no tiene nada nuevo que aceptar.');
+    }
+
+    public static function invalidPaymentTerms(): self
+    {
+        return new self('Revisa la forma de pago: la inicial debe ser menor que el total y las cuotas, entre 1 y 24.');
+    }
 }
