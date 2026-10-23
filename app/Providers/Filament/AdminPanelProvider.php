@@ -7,6 +7,7 @@ use App\Filament\Resources\Patients\PatientResource;
 use App\Filament\Support\InitialsAvatarProvider;
 use App\Http\Controllers\Clinical\ClinicalFileController;
 use App\Http\Controllers\Clinical\PrintController;
+use App\Http\Controllers\Reports\EarningsExportController;
 use App\Models\Charge;
 use App\Models\Setting;
 use Filament\Http\Middleware\Authenticate;
@@ -90,6 +91,8 @@ class AdminPanelProvider extends PanelProvider
                 Route::get('imprimir/consentimiento/{consent}', [PrintController::class, 'consent'])->name('print.consent');
                 Route::get('imprimir/historia/{patient}', [PrintController::class, 'history'])->name('print.history');
                 Route::get('archivos/{file}', [ClinicalFileController::class, 'show'])->name('clinical-files.show');
+                Route::get('reportes/ganancias/imprimir', [EarningsExportController::class, 'print'])->name('reports.earnings.print');
+                Route::get('reportes/ganancias/excel', [EarningsExportController::class, 'excel'])->name('reports.earnings.excel');
             });
     }
 }

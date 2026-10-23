@@ -4,7 +4,9 @@ namespace Tests\Feature\Filament;
 
 use App\Filament\Pages\Agenda;
 use App\Filament\Pages\Dashboard;
+use App\Filament\Pages\Earnings;
 use App\Filament\Pages\Settings;
+use App\Filament\Pages\Summary;
 use App\Filament\Resources\Accounts\AccountResource;
 use App\Filament\Resources\Appointments\AppointmentResource;
 use App\Filament\Resources\Campaigns\CampaignResource;
@@ -33,6 +35,7 @@ use App\Models\Patient;
 use App\Models\Treatment;
 use App\Models\User;
 use Database\Seeders\CatalogSeeder;
+use Filament\Facades\Filament;
 use Illuminate\Foundation\Testing\LazilyRefreshDatabase;
 use Illuminate\Support\Facades\Validator;
 use Livewire\Livewire;
@@ -53,6 +56,8 @@ class PanelAccessTest extends TestCase
     {
         return [
             'hoy' => ['dashboard', [true, true, true]],
+            'resumen' => ['summary', [true, false, false]],
+            'ganancias' => ['earnings', [true, false, false]],
             'agenda' => ['agenda', [true, true, true]],
             'citas' => ['appointments', [true, true, true]],
             'nueva cita' => ['appointments.create', [true, true, true]],
@@ -67,6 +72,8 @@ class PanelAccessTest extends TestCase
             'celulares' => ['accounts', [true, true, false]],
             'ficha de celular' => ['accounts.view', [true, true, false]],
             'pagos' => ['payments', [true, true, false]],
+            'ganancias para imprimir' => ['earnings.print', [true, false, false]],
+            'ganancias en Excel' => ['earnings.excel', [true, false, false]],
             'opciones rápidas' => ['snippets', [true, false, true]],
             'tratamientos' => ['treatments', [true, false, false]],
             'doctores' => ['doctors', [true, false, false]],
@@ -104,6 +111,9 @@ class PanelAccessTest extends TestCase
 
         $url = match ($page) {
             'dashboard' => Dashboard::getUrl(),
+            'summary' => Summary::getUrl(),
+            'earnings' => Earnings::getUrl(),
+            'earnings.print', 'earnings.excel' => Filament::getPanel('admin')->route('reports.'.$page),
             'agenda' => Agenda::getUrl(),
             'appointments' => AppointmentResource::getUrl('index'),
             'appointments.create' => AppointmentResource::getUrl('create'),

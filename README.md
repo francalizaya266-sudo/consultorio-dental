@@ -15,7 +15,7 @@ php artisan migrate --seed
 php artisan serve
 ```
 
-En local, `--seed` crea datos de demostración. Panel: `/panel` con `admin@consultorio.test`, `recepcion@consultorio.test`, `dra.torres@consultorio.test` o `dr.ramos@consultorio.test` (clave `password`).
+En local, `--seed` crea datos de demostración, con 11 meses de historia para que Resumen y Ganancias tengan qué mostrar (tarda unos segundos). Panel: `/panel` con `admin@consultorio.test`, `recepcion@consultorio.test`, `dra.torres@consultorio.test` o `dr.ramos@consultorio.test` (clave `password`).
 
 Pruebas: `php artisan test` (usan SQLite en memoria; también pasan sobre MySQL).
 
@@ -43,6 +43,7 @@ Pruebas: `php artisan test` (usan SQLite en memoria; también pasan sobre MySQL)
 | `app/Services/WhatsApp` | Bandeja de avisos: hoy se envían con un clic desde el WhatsApp del consultorio; mañana, por la API oficial sin cambiar nada más. |
 | `app/Services/Billing` | Cargos y pagos: lo realizado se carga solo al terminar la atención y recepción cobra desde la cita. Saldo = cargos − pagos. |
 | `app/Services/Clinical` | Historia clínica: atención, odontograma, plan de tratamiento, recetas, radiografías y fotos (comprimidas) y consentimientos firmados en pantalla. |
+| `app/Services/Reports` | Ganancias (cobrado y realizado, por día, doctor, tratamiento y medio de pago) y los números del Resumen. Las mismas tablas alimentan el panel, la hoja para imprimir o guardar en PDF y el Excel (`app/Support/Spreadsheet`, sin librerías extra). |
 | `app/Livewire/Site`, `resources/views/site` | Web del paciente: reservar en 3 pasos (`/reservar`), Mi cuenta (`/mi-cuenta`) y cambiar el horario desde el enlace. |
 | `app/Http/Controllers/Site`, `app/Services/Web` | Páginas públicas: inicio con el próximo horario libre, tratamientos con precio "desde", equipo con COP, promociones, antes y después, opiniones, preguntas frecuentes y contacto. Datos para Google (schema.org `Dentist`, `FAQPage`), `sitemap.xml` y `robots.txt`. El contenido se edita en el panel, grupo **Web** (solo administrador). |
 | `public/css/sitio.css` | Estilos de la web, escritos a mano: el hosting no necesita Node ni compilar nada. |
@@ -59,6 +60,7 @@ Pruebas: `php artisan test` (usan SQLite en memoria; también pasan sobre MySQL)
 - **Doctores** solo manejan su propia agenda; cada cambio prepara el aviso al paciente y alerta a recepción.
 - **Datos clínicos** solo los ven los doctores y el administrador si es odontólogo (Ley N.º 29733).
 - **Cobros:** al terminar la atención se carga solo lo realizado: la sesión del procedimiento del plan (su parte del precio acordado; la última sesión, lo que falta) o el tratamiento de la cita a su precio, con el descuento de la promoción. Recepción lo revisa en "Cobrar", corrige o agrega conceptos y registra el pago (efectivo, tarjeta, Yape, Plin, transferencia). Los doctores no manejan dinero. Cargos y pagos no se borran: se anulan con motivo.
+- **Ganancias y gráficos:** los ve el administrador. Recepción no. Cada doctor puede ver solo los suyos si se activa en **Ajustes → Reportes** (apagado al inicio). Lo anulado nunca suma.
 - **Antes y después** solo se publica si el paciente lo autorizó por escrito; queda registrado quién lo confirmó y cuándo. Las opiniones se copian de Google tal cual: la web no inventa reseñas ni resultados.
 
 ## WhatsApp: etapa 1 y etapa 2
