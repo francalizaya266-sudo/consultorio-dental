@@ -9,7 +9,6 @@ use Filament\Support\Contracts\HasLabel;
 enum MessageStatus: string implements HasColor, HasLabel
 {
     case Pending = 'pending';
-    case Opened = 'opened';
     case Sent = 'sent';
     case Cancelled = 'cancelled';
     case Failed = 'failed';
@@ -18,7 +17,6 @@ enum MessageStatus: string implements HasColor, HasLabel
     {
         return match ($this) {
             self::Pending => 'Por enviar',
-            self::Opened => 'Abierto en WhatsApp',
             self::Sent => 'Enviado',
             self::Cancelled => 'Descartado',
             self::Failed => 'Falló',
@@ -29,7 +27,6 @@ enum MessageStatus: string implements HasColor, HasLabel
     {
         return match ($this) {
             self::Pending => 'warning',
-            self::Opened => 'info',
             self::Sent => 'success',
             self::Cancelled => 'gray',
             self::Failed => 'danger',

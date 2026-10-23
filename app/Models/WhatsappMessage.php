@@ -56,7 +56,7 @@ class WhatsappMessage extends Model
     #[Scope]
     protected function pending(Builder $query): Builder
     {
-        return $query->whereIn('status', [MessageStatus::Pending, MessageStatus::Opened]);
+        return $query->where('status', MessageStatus::Pending);
     }
 
     /** Avisos que ya toca enviar (los recordatorios esperan a su día). */

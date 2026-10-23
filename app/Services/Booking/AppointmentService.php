@@ -322,6 +322,44 @@ class AppointmentService
         }
     }
 
+    /** El paciente llegó y está en sala de espera. */
+    public function markArrived(Appointment $appointment, User $by): void
+    {
+        $this->transition($appointment, $by, AppointmentStatus::CheckedIn, [AppointmentStatus::Pending, AppointmentStatus::Confirmed], [
+            'checked_in_at' => now(),
+        ]);
+    }
+
+    /** Empieza la atención (se guarda la hora real para comparar con lo programado). */
+    public function markStarted(Appointment $appointment, User $by): void
+    {
+        $this->transition($appointment, $by, AppointmentStatus::InProgress, [AppointmentStatus::Pending, AppointmentStatus::Confirmed, AppointmentStatus::CheckedIn], [
+            'checked_in_at' => $appointment->checked_in_at ?? now(),
+            'started_at' => now(),
+        ]);
+    }
+
+    public function markCompleted(Appointment $appointment, User $by): void
+    {
+        $this->transition($appointment, $by, AppointmentStatus::Completed, [AppointmentStatus::Confirmed, AppointmentStatus::CheckedIn, AppointmentStatus::InProgress], [
+            'started_at' => $appointment->started_at ?? $appointment->checked_in_at ?? $appointment->starts_at,
+            'finished_at' => now(),
+        ]);
+
+        $patient = $appointment->patient;
+        $patient->forceFill([
+            'first_visit_at' => $patient->first_visit_at ?? $appointment->starts_at,
+            'last_visit_at' => $appointment->starts_at,
+        ])->save();
+    }
+
+    public function markNoShow(Appointment $appointment, User $by): void
+    {
+        $this->transition($appointment, $by, AppointmentStatus::NoShow, AppointmentStatus::changeable(), [
+            'no_show_at' => now(),
+        ]);
+    }
+
     /** Asegura que el doctor (o recepción) solo toque las agendas que le corresponden. */
     public function assertCanManage(User $user, Doctor $doctor): void
     {
@@ -366,6 +404,19 @@ class AppointmentService
 
             return $appointment->refresh();
         });
+    }
+
+    /** @param  list<AppointmentStatus>  $from */
+    private function transition(Appointment $appointment, User $by, AppointmentStatus $to, array $from, array $attributes): void
+    {
+        $this->assertCanManage($by, $appointment->doctor);
+
+        if (! in_array($appointment->status, $from, true)) {
+            throw BookingException::notChangeable();
+        }
+
+        $appointment->update(['status' => $to] + $attributes);
+        $appointment->logEvent($to->value, 'staff');
     }
 
     private function cancel(Appointment $appointment, CancelledBy $by, ?string $reason, ?User $user = null): void
