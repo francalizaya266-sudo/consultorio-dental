@@ -170,7 +170,7 @@ class TreatmentPlanPanelTest extends TestCase
         $this->get(ConsultationResource::prescriptionPrintUrl($prescription))
             ->assertOk()
             ->assertSee(['Rp.', 'Amoxicilina 500 mg', 'Dieta blanda por 2 días.', $patient->full_name])
-            ->assertSee(['Clínica Vega Implant', 'Jr. Apurímac 648, Juliaca', 'WhatsApp 990 467 757', 'C.O.P. '.$doctor->cop_number])
+            ->assertSee(['Clínica Vega Implant', 'Jr. Apurímac 648, Juliaca', 'WhatsApp 918 874 568', 'C.O.P. '.$doctor->cop_number])
             ->assertSee(['Teléfono', Phone::display($patient->account->phone), 'K02.1 Caries de la dentina (pieza 36)', 'Tu sonrisa, nuestra pasión']);
 
         $this->actingAs(User::factory()->reception()->create());

@@ -165,7 +165,7 @@ class PublicPagesTest extends TestCase
             ->assertSee('Av. Larco 123, Miraflores')
             ->assertSee('Lunes a sábado')
             ->assertSee("3:00\u{A0}p.\u{A0}m. – 7:00\u{A0}p.\u{A0}m.")
-            ->assertSee('https://wa.me/51990467757', false)
+            ->assertSee('https://wa.me/51918874568', false)
             ->assertSee('"@type":"Dentist"', false)
             ->assertSee('"addressLocality":"Miraflores"', false);
     }

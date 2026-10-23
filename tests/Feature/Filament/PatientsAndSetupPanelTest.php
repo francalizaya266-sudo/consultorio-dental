@@ -181,7 +181,7 @@ class PatientsAndSetupPanelTest extends TestCase
         Livewire::test(Settings::class)
             // Los datos del recetario de la clínica ya vienen puestos.
             ->assertSchemaStateSet(fn (array $state) => $this->assertSame(
-                ['Clínica Vega Implant', '+51990467757', 'Jr. Apurímac 648', 'Juliaca', 'Tu sonrisa, nuestra pasión'],
+                ['Clínica Vega Implant', '+51918874568', 'Jr. Apurímac 648', 'Juliaca', 'Tu sonrisa, nuestra pasión'],
                 [$state['clinic']['name'], $state['clinic']['whatsapp'], $state['clinic']['address'], $state['clinic']['district'], $state['clinic']['slogan']],
             ) ?? [])
             ->fillForm(['booking' => ['max_web_appointments_per_patient' => 3], 'clinic' => ['whatsapp' => '912 345 678', 'slogan' => 'Sonríe sin miedo']])

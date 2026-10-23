@@ -10,7 +10,7 @@ return [
     'defaults' => [
         'clinic' => [
             'name' => env('APP_NAME', 'Clínica Vega Implant'),
-            'whatsapp' => env('CLINIC_WHATSAPP', '+51990467757'),
+            'whatsapp' => env('CLINIC_WHATSAPP', '+51918874568'),
             'address' => 'Jr. Apurímac 648',
             // Distrito o ciudad: Google lo usa para "dentista en …".
             'district' => 'Juliaca',
