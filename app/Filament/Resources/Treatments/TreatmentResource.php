@@ -156,7 +156,7 @@ class TreatmentResource extends Resource
                     ->description(fn (Treatment $record) => '+'.$record->bufferMinutes().' de esterilización'),
                 TextColumn::make('price_from')
                     ->label('Desde')
-                    ->money('PEN')
+                    ->money('PEN', locale: 'es_PE')
                     ->placeholder('—'),
                 IconColumn::make('online_bookable')
                     ->label('Reserva web')

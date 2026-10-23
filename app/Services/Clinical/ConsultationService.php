@@ -11,6 +11,7 @@ use App\Models\Doctor;
 use App\Models\Patient;
 use App\Models\Treatment;
 use App\Models\User;
+use App\Services\Billing\BillingService;
 use App\Services\Booking\AppointmentService;
 use Illuminate\Support\Facades\DB;
 
@@ -31,6 +32,7 @@ final class ConsultationService
         private readonly AppointmentService $appointments,
         private readonly TreatmentPlanService $plans,
         private readonly PrescriptionService $prescriptions,
+        private readonly BillingService $billing,
     ) {}
 
     /** Abre la atención de una cita (o retoma la que ya estaba abierta). */
@@ -79,7 +81,7 @@ final class ConsultationService
         });
     }
 
-    /** Termina la atención: queda cerrada, la cita pasa a "atendida" y avanza el plan de tratamiento. */
+    /** Termina la atención: queda cerrada, la cita pasa a "atendida", avanza el plan y se carga lo realizado. */
     public function close(Consultation $consultation, User $by): void
     {
         $this->assertWritable($consultation, $by);
@@ -93,6 +95,8 @@ final class ConsultationService
             if ($appointment && in_array($appointment->status, [AppointmentStatus::Confirmed, AppointmentStatus::CheckedIn, AppointmentStatus::InProgress], true)) {
                 $this->appointments->markCompleted($appointment, $by);
             }
+
+            $this->billing->chargeConsultation($consultation, $by);
         });
     }
 

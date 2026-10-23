@@ -3,15 +3,20 @@
 namespace App\Models;
 
 use App\Models\Concerns\Auditable;
+use Database\Factories\ChargeFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
+use Illuminate\Database\Eloquent\Attributes\Scope;
+use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 /** Cargo al paciente por lo realizado. No se borra: se anula. */
-#[Fillable(['patient_id', 'appointment_id', 'treatment_plan_item_id', 'treatment_id', 'doctor_id', 'description', 'amount', 'discount', 'discount_reason', 'campaign_id', 'charged_at', 'created_by_user_id', 'voided_at', 'voided_by_user_id', 'void_reason'])]
+#[Fillable(['patient_id', 'appointment_id', 'consultation_id', 'treatment_plan_item_id', 'treatment_id', 'doctor_id', 'description', 'amount', 'discount', 'discount_reason', 'campaign_id', 'charged_at', 'created_by_user_id', 'voided_at', 'voided_by_user_id', 'void_reason'])]
 class Charge extends Model
 {
-    use Auditable;
+    /** @use HasFactory<ChargeFactory> */
+    use Auditable, HasFactory;
 
     protected function casts(): array
     {
@@ -31,6 +36,11 @@ class Charge extends Model
     public function appointment(): BelongsTo
     {
         return $this->belongsTo(Appointment::class);
+    }
+
+    public function consultation(): BelongsTo
+    {
+        return $this->belongsTo(Consultation::class);
     }
 
     public function planItem(): BelongsTo
@@ -56,5 +66,23 @@ class Charge extends Model
     public function createdBy(): BelongsTo
     {
         return $this->belongsTo(User::class, 'created_by_user_id');
+    }
+
+    public function voidedBy(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'voided_by_user_id');
+    }
+
+    /** Lo que cuenta para el saldo: sin los anulados. */
+    #[Scope]
+    protected function valid(Builder $query): Builder
+    {
+        return $query->whereNull('voided_at');
+    }
+
+    /** Monto a pagar: precio menos descuento. */
+    public function net(): float
+    {
+        return round((float) $this->amount - (float) $this->discount, 2);
     }
 }

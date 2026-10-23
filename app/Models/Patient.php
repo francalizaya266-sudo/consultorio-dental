@@ -40,6 +40,7 @@ class Patient extends Model
             'birth_date' => 'date',
             'first_visit_at' => 'datetime',
             'last_visit_at' => 'datetime',
+            'balance_due' => 'decimal:2',
         ];
     }
 
@@ -138,13 +139,37 @@ class Patient extends Model
             ->exists();
     }
 
-    /** Saldo pendiente en soles: cargos menos pagos (sin contar anulados). */
+    /** Saldo pendiente en soles: cargos menos pagos (sin contar anulados). Negativo = a favor del paciente. */
     public function balance(): float
     {
-        $charged = (float) $this->charges()->whereNull('voided_at')->sum(DB::raw('amount - discount'));
+        $charged = (float) $this->charges()->valid()->sum(DB::raw('amount - discount'));
         $paid = (float) $this->payments()->whereNull('voided_at')->sum('amount');
 
         return round($charged - $paid, 2);
+    }
+
+    /** El saldo calculado en la misma consulta (columna balance_due), para listas y orden. */
+    #[Scope]
+    protected function withBalance(Builder $query): Builder
+    {
+        if ($query->getQuery()->columns === null) {
+            $query->select($query->qualifyColumn('*'));
+        }
+
+        return $query->selectRaw(self::balanceSql().' as balance_due');
+    }
+
+    /** Pacientes que deben algo. */
+    #[Scope]
+    protected function owing(Builder $query): Builder
+    {
+        return $query->whereRaw(self::balanceSql().' > 0');
+    }
+
+    private static function balanceSql(): string
+    {
+        return '((select coalesce(sum(c.amount - c.discount), 0) from charges c where c.patient_id = patients.id and c.voided_at is null)'
+            .' - (select coalesce(sum(p.amount), 0) from payments p where p.patient_id = patients.id and p.voided_at is null))';
     }
 
     public function latestOdontogram(): HasOne

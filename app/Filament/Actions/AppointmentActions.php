@@ -32,6 +32,7 @@ final class AppointmentActions
             self::start(),
             self::continueConsultation(),
             self::complete(),
+            CheckoutAction::make(),
             ActionGroup::make([
                 self::viewConsultation(),
                 self::whatsapp(),

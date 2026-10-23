@@ -23,6 +23,7 @@ use App\Models\User;
 use App\Models\WaitlistEntry;
 use App\Services\Access\MagicLinkService;
 use App\Services\Agenda\AvailabilityService;
+use App\Services\Billing\BillingService;
 use App\Services\StaffAlerts;
 use App\Services\WhatsApp\WhatsAppOutbox;
 use App\Support\Phone;
@@ -42,6 +43,7 @@ class AppointmentService
         private readonly WhatsAppOutbox $outbox,
         private readonly StaffAlerts $alerts,
         private readonly MagicLinkService $links,
+        private readonly BillingService $billing,
     ) {}
 
     /**
@@ -357,6 +359,9 @@ class AppointmentService
             'first_visit_at' => $patient->first_visit_at ?? $appointment->starts_at,
             'last_visit_at' => $appointment->starts_at,
         ])->save();
+
+        // Sin atención escrita (la cerró recepción), se carga el tratamiento de la cita.
+        $this->billing->chargeAppointment($appointment, $by);
     }
 
     public function markNoShow(Appointment $appointment, User $by): void

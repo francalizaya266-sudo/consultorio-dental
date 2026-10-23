@@ -100,6 +100,16 @@ class Appointment extends Model
         return $this->hasMany(WhatsappMessage::class);
     }
 
+    public function charges(): HasMany
+    {
+        return $this->hasMany(Charge::class);
+    }
+
+    public function payments(): HasMany
+    {
+        return $this->hasMany(Payment::class);
+    }
+
     public function consultation(): HasOne
     {
         return $this->hasOne(Consultation::class);

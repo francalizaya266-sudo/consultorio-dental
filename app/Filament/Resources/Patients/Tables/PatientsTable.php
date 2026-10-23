@@ -3,7 +3,9 @@
 namespace App\Filament\Resources\Patients\Tables;
 
 use App\Enums\AppointmentStatus;
+use App\Models\Charge;
 use App\Models\Patient;
+use App\Support\Money;
 use App\Support\Phone;
 use Filament\Actions\EditAction;
 use Filament\Actions\ViewAction;
@@ -18,10 +20,12 @@ class PatientsTable
     public static function configure(Table $table): Table
     {
         return $table
-            ->modifyQueryUsing(fn (Builder $query) => $query->withMin(
-                ['appointments as next_appointment_at' => fn (Builder $a) => $a->where('starts_at', '>=', now())->whereIn('status', AppointmentStatus::changeable())],
-                'starts_at',
-            ))
+            ->modifyQueryUsing(fn (Builder $query) => $query
+                ->withMin(
+                    ['appointments as next_appointment_at' => fn (Builder $a) => $a->where('starts_at', '>=', now())->whereIn('status', AppointmentStatus::changeable())],
+                    'starts_at',
+                )
+                ->when(self::seesBalances(), fn (Builder $q) => $q->withBalance()))
             ->columns([
                 TextColumn::make('last_name')
                     ->label('Paciente')
@@ -48,6 +52,14 @@ class PatientsTable
                     ->date('d/m/Y')
                     ->placeholder('Aún no viene')
                     ->sortable(),
+                TextColumn::make('balance_due')
+                    ->label('Saldo')
+                    ->formatStateUsing(fn ($state) => (float) $state == 0 ? '—' : Money::balance($state))
+                    ->color(fn ($state) => (float) $state > 0 ? 'danger' : null)
+                    ->weight(fn ($state) => (float) $state > 0 ? 'bold' : null)
+                    ->sortable(query: fn (Builder $query, string $direction) => $query->orderBy('balance_due', $direction))
+                    ->alignEnd()
+                    ->visible(fn () => self::seesBalances()),
             ])
             ->defaultSort('last_name')
             ->filters([
@@ -64,5 +76,10 @@ class PatientsTable
             ])
             ->emptyStateHeading('Aún no hay pacientes')
             ->emptyStateDescription('Se crean solos al reservar en la web, o desde "Nuevo paciente".');
+    }
+
+    private static function seesBalances(): bool
+    {
+        return auth()->user()->can('viewAny', Charge::class);
     }
 }
