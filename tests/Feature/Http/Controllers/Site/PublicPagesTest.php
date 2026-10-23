@@ -2,6 +2,7 @@
 
 namespace Tests\Feature\Http\Controllers\Site;
 
+use App\Enums\DiscountType;
 use App\Models\Campaign;
 use App\Models\Faq;
 use App\Models\Review;
@@ -147,6 +148,33 @@ class PublicPagesTest extends TestCase
         $package->update(['is_active' => false]);
 
         $this->get(route('site.promotion', 'sonrisa-verano'))->assertOk()->assertDontSee('Qué incluye');
+    }
+
+    public function test_a_campaign_shows_its_price_on_the_treatment_and_the_promotion_and_books_with_it(): void
+    {
+        $this->freezeMonday();
+        $cleaning = Treatment::factory()->create(['name' => 'Limpieza dental', 'slug' => 'limpieza-dental', 'price_from' => 150]);
+        $whitening = Treatment::factory()->create(['name' => 'Blanqueamiento', 'slug' => 'blanqueamiento', 'price_from' => 480]);
+        $this->doctorOffering($cleaning, $whitening);
+        $this->campaign(['treatment_id' => $cleaning->id, 'discount_type' => DiscountType::Percent, 'discount_value' => 20]);
+
+        $this->get(route('site.treatment', 'limpieza-dental'))
+            ->assertOk()
+            ->assertSeeInOrder(['Precio con la campaña', 'desde S/ 150', 'desde S/ 120'])
+            ->assertSeeInOrder(['Campaña', 'Limpieza de verano', '· hasta el 2 de diciembre.'])
+            ->assertSee(['Reservar con la campaña', route('site.booking', ['tratamiento' => 'limpieza-dental', 'promo' => 'limpieza-verano'])])
+            ->assertSee('Pagas en el consultorio con Yape, Plin, tarjeta o efectivo.');
+
+        // Otro tratamiento no tiene la campaña.
+        $this->get(route('site.treatment', 'blanqueamiento'))
+            ->assertOk()
+            ->assertDontSee('Precio con la campaña')
+            ->assertSee(route('site.booking', ['tratamiento' => 'blanqueamiento']));
+
+        $this->get(route('site.promotion', 'limpieza-verano'))
+            ->assertOk()
+            ->assertSeeInOrder(['Precio normal desde S/ 150', 'desde S/ 120', 'Pagas en el consultorio con Yape, Plin, tarjeta o efectivo.'])
+            ->assertSee(route('site.booking', ['tratamiento' => 'limpieza-dental', 'promo' => 'limpieza-verano', 'origen' => 'campaign']));
     }
 
     public function test_a_promotion_counts_one_visit_per_person_and_an_ended_one_offers_the_current_ones(): void

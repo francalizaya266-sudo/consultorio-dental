@@ -9,9 +9,11 @@
     $clinic = app(ClinicInfo::class);
     $discount = CampaignText::discount($campaign);
     $package = CampaignText::package($campaign);
+    $campaignPrice = $campaign->treatment ? $campaign->priceFor($campaign->treatment) : null;
     $bookingUrl = route('site.booking', array_filter([
         'tratamiento' => $campaign->treatment?->online_bookable ? $campaign->treatment->slug : null,
         'codigo' => $campaign->promo_code,
+        'promo' => $campaign->promo_code ? null : $campaign->slug,
         'origen' => 'campaign',
     ]));
 @endphp
@@ -32,6 +34,16 @@
                 <p class="lead">{{ $campaign->summary }}</p>
             @endif
             <p class="until">{{ CampaignText::until($campaign) }}@if ($campaign->treatment) · <a href="{{ route('site.treatment', $campaign->treatment->slug) }}">{{ $campaign->treatment->name }}</a>@endif</p>
+
+            @if ($campaignPrice !== null)
+                <div class="promo-package">
+                    <p class="prices">
+                        <s>Precio normal {{ $campaign->treatment->webPrice() }}</s>
+                        <strong>{{ $campaignPrice > 0 ? 'desde '.Money::short($campaignPrice) : 'Gratis' }}</strong>
+                    </p>
+                    <p>{{ CampaignText::HOW_TO_PAY }}</p>
+                </div>
+            @endif
 
             @if ($package)
                 <section class="promo-package" aria-labelledby="incluye">

@@ -13,6 +13,7 @@ use App\Models\Setting;
 use App\Models\User;
 use App\Models\WhatsappMessage;
 use App\Services\Access\MagicLinkService;
+use App\Support\CampaignText;
 use App\Support\Phone;
 use Carbon\CarbonInterface;
 
@@ -33,7 +34,7 @@ class WhatsAppOutbox
         ?CarbonInterface $dueAt = null,
         array $extra = [],
     ): ?WhatsappMessage {
-        $appointment->loadMissing('patient.account', 'doctor', 'treatment');
+        $appointment->loadMissing('patient.account', 'doctor', 'treatment', 'campaign');
         $account = $appointment->patient->account;
 
         if ($account === null) {
@@ -108,7 +109,10 @@ class WhatsAppOutbox
 
         $replacements = collect($params)->mapWithKeys(fn ($v, $k) => ['{'.$k.'}' => (string) $v])->all();
 
-        return ['body' => strtr($body, $replacements), 'params' => $params];
+        // Un dato vacío (como {precio} si el tratamiento no muestra su precio) no deja líneas en blanco de más.
+        $body = preg_replace("/\n{3,}/", "\n\n", strtr($body, $replacements));
+
+        return ['body' => $body, 'params' => $params];
     }
 
     /**
@@ -157,6 +161,8 @@ class WhatsAppOutbox
             'hora' => $appointment->starts_at->format('g:i a'),
             'doctor' => $appointment->doctor->name,
             'tratamiento' => mb_strtolower($appointment->treatment->name),
+            // "Precio con la campaña …: desde S/ 120 (normal desde S/ 150). Pagas en el consultorio con …", o nada.
+            'precio' => ($price = CampaignText::price($appointment->treatment, $appointment->campaign)) ? $price.' '.CampaignText::HOW_TO_PAY : '',
             'consultorio' => (string) Setting::get('clinic.name'),
             'direccion' => (string) Setting::get('clinic.address'),
         ];

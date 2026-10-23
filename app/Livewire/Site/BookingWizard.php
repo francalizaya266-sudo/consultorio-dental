@@ -69,6 +69,10 @@ class BookingWizard extends Component
 
     public string $promoCode = '';
 
+    /** La campaña desde cuya página llegó, si no tiene código. */
+    #[Locked]
+    public ?string $campaignSlug = null;
+
     public string $note = '';
 
     #[Locked]
@@ -84,10 +88,11 @@ class BookingWizard extends Component
     public function mount(): void
     {
         $this->promoCode = strtoupper(substr((string) request('codigo'), 0, 30));
+        $this->campaignSlug = filled(request('promo')) ? substr((string) request('promo'), 0, 120) : null;
         $this->origin = AppointmentOrigin::tryFrom((string) request('origen'))?->value;
 
         $this->preferredDoctorId = filled(request('doctor')) ? Doctor::query()->where('slug', (string) request('doctor'))->value('id') : null;
-        $campaign = $this->promoCode ? Campaign::query()->published()->where('promo_code', $this->promoCode)->first() : null;
+        $campaign = $this->campaign;
         $treatment = $this->treatments->firstWhere('slug', (string) request('tratamiento'))
             ?? ($campaign ? $this->treatments->firstWhere('id', $campaign->treatment_id) : null);
 
@@ -115,6 +120,19 @@ class BookingWizard extends Component
         return app(WebAvailability::class)->treatments();
     }
 
+    /** La campaña con que reserva: por el código que escribió o por la página de la que llegó. */
+    #[Computed]
+    public function campaign(): ?Campaign
+    {
+        $campaign = match (true) {
+            filled($this->promoCode) => Campaign::query()->published()->where('promo_code', strtoupper(trim($this->promoCode)))->first(),
+            filled($this->campaignSlug) => Campaign::query()->published()->where('slug', $this->campaignSlug)->first(),
+            default => null,
+        };
+
+        return $campaign?->hasSlotsLeft() ? $campaign : null;
+    }
+
     #[Computed]
     public function device(): ?RememberedDevice
     {
@@ -131,7 +149,7 @@ class BookingWizard extends Component
     #[Computed]
     public function appointment(): ?Appointment
     {
-        return $this->appointmentId ? Appointment::with(['patient', 'doctor', 'treatment'])->find($this->appointmentId) : null;
+        return $this->appointmentId ? Appointment::with(['patient', 'doctor', 'treatment', 'campaign'])->find($this->appointmentId) : null;
     }
 
     /** Hay un titular registrado en el celular recordado: "otra persona" es un familiar. */
@@ -238,6 +256,7 @@ class BookingWizard extends Component
                 origin: AppointmentOrigin::tryFrom((string) $this->origin),
                 promoCode: filled($this->promoCode) ? $this->promoCode : null,
                 note: filled($this->note) ? $this->note : null,
+                campaignSlug: $this->campaignSlug,
             ), $this->device);
         } catch (BookingException $e) {
             $e->getMessage() === BookingException::slotTaken()->getMessage()

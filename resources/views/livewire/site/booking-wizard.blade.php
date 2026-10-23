@@ -1,5 +1,6 @@
 @php
     use App\Enums\PatientRelationship;
+    use App\Support\CampaignText;
     use App\Support\Dates;
     use App\Support\Money;
     use App\Support\Phone;
@@ -30,7 +31,9 @@
                     <li>
                         <button type="button" wire:click="chooseTreatment({{ $treatment->id }})" @class(['choice', 'featured' => $treatment->is_evaluation])>
                             <strong>{{ $treatment->is_evaluation ? 'No sé qué necesito: '.mb_strtolower($treatment->name) : $treatment->name }}</strong>
-                            @if ($treatment->show_price && $treatment->price_from)
+                            @if ($campaignPrice = $this->campaign?->priceFor($treatment))
+                                <span class="price"><s>{{ Money::short($treatment->price_from) }}</s> desde {{ Money::short($campaignPrice) }}</span>
+                            @elseif ($treatment->show_price && $treatment->price_from)
                                 <span class="price">desde {{ Money::format($treatment->price_from) }}</span>
                             @else
                                 <span></span>
@@ -84,6 +87,9 @@
                 @php($chosen = $this->daySlots->firstWhere('time', $time))
                 @if ($chosen)
                     <p class="muted" style="margin: 2px 0 0">con {{ $this->doctors->firstWhere('id', $chosen['doctor_id'])?->name }}</p>
+                @endif
+                @if ($price = CampaignText::price($this->treatment, $this->campaign))
+                    <p class="price-line">{{ $price }}</p>
                 @endif
             </div>
 
@@ -201,7 +207,7 @@
                     <span wire:loading.remove wire:target="book">Reservar cita</span>
                     <span wire:loading wire:target="book">Reservando…</span>
                 </button>
-                <p class="muted small" style="margin-top: 8px">No se cobra nada ahora: pagas en el consultorio.</p>
+                <p class="muted small" style="margin-top: 8px">No se cobra nada ahora. {{ CampaignText::HOW_TO_PAY }}</p>
             </form>
         </section>
     @endif
@@ -215,6 +221,9 @@
                 <p class="what">{{ $appointment->treatment->name }}</p>
                 <p style="margin: 4px 0 0">{{ Dates::day($appointment->starts_at->toImmutable()) }}, {{ Dates::time($appointment->starts_at->format('H:i')) }}</p>
                 <p class="muted" style="margin: 2px 0 0">{{ $appointment->patient->full_name }} · con {{ $appointment->doctor->name }}</p>
+                @if ($price = CampaignText::price($appointment->treatment, $appointment->campaign))
+                    <p class="price-line">{{ $price }} {{ CampaignText::HOW_TO_PAY }}</p>
+                @endif
             </div>
 
             @if ($this->device)

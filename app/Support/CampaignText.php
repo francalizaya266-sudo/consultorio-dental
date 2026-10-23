@@ -4,11 +4,16 @@ namespace App\Support;
 
 use App\Enums\DiscountType;
 use App\Models\Campaign;
+use App\Models\Treatment;
 use App\Models\TreatmentPackage;
+use Illuminate\Support\Str;
 
 /** Cómo se anuncia una promoción en la web. */
 final class CampaignText
 {
+    /** Cómo se paga: siempre en el consultorio, nunca en la web. */
+    public const HOW_TO_PAY = 'Pagas en el consultorio con Yape, Plin, tarjeta o efectivo.';
+
     /** "20 % de descuento", "S/ 50 de descuento", "2x1 · ahorras S/ 300" (si ofrece un paquete) o null. */
     public static function discount(Campaign $campaign): ?string
     {
@@ -36,6 +41,22 @@ final class CampaignText
         $package = $campaign->package;
 
         return $package && ! $package->trashed() && $package->is_active ? $package : null;
+    }
+
+    /**
+     * El precio de la cita en una línea: "Precio con la campaña Sonrisa de verano: desde S/ 120 (normal desde S/ 150)."
+     * o "Precio: desde S/ 150.". Null si el tratamiento no muestra su precio.
+     */
+    public static function price(Treatment $treatment, ?Campaign $campaign = null): ?string
+    {
+        $webPrice = $treatment->webPrice();
+        $withCampaign = $campaign?->priceFor($treatment);
+
+        return match (true) {
+            $withCampaign !== null => 'Precio con la campaña '.$campaign->name.': '.($withCampaign > 0 ? 'desde '.Money::short($withCampaign) : 'gratis').' (normal '.$webPrice.').',
+            $webPrice !== null => 'Precio: '.Str::lcfirst($webPrice).'.',
+            default => null,
+        };
     }
 
     /** Hasta cuándo vale, en palabras: "Hasta el 30 de noviembre". */

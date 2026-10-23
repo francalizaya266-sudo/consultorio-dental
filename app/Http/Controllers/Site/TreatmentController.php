@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Site;
 
 use App\Http\Controllers\Controller;
+use App\Models\Campaign;
 use App\Models\Faq;
 use App\Models\Review;
 use App\Models\SmileCase;
@@ -31,8 +32,13 @@ class TreatmentController extends Controller
         // Si no se reserva solo, se empieza por la evaluación.
         $bookAs = $bookable->contains('id', $treatment->getKey()) ? $treatment : $bookable->firstWhere('is_evaluation', true);
 
+        // La campaña vigente que baja su precio, para mostrarlo y reservar con ella.
+        $campaign = Campaign::query()->published()->whereBelongsTo($treatment)->oldest('ends_at')->get()
+            ->first(fn (Campaign $campaign) => $campaign->hasSlotsLeft() && $campaign->priceFor($treatment) !== null);
+
         return view('site.treatments.show', [
             'treatment' => $treatment,
+            'campaign' => $campaign,
             'bookAs' => $bookAs,
             'nextFree' => $bookAs ? $availability->nextFree($bookAs) : null,
             'doctors' => $treatment->doctors()->active()->where('is_public', true)->orderBy('sort_order')->get(),

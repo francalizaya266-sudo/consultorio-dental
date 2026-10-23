@@ -102,9 +102,11 @@ class AppointmentService
                 'last_seen_at' => now(),
             ])->save();
 
-            $campaign = $data->promoCode
-                ? Campaign::query()->published()->where('promo_code', strtoupper(trim($data->promoCode)))->first()
-                : null;
+            $campaign = match (true) {
+                filled($data->promoCode) => Campaign::query()->published()->where('promo_code', strtoupper(trim($data->promoCode)))->first(),
+                filled($data->campaignSlug) => Campaign::query()->published()->where('slug', $data->campaignSlug)->first(),
+                default => null,
+            };
 
             $appointment = Appointment::create([
                 'patient_id' => $patient->getKey(),
