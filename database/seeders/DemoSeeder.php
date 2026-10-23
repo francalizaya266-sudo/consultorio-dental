@@ -2,6 +2,7 @@
 
 namespace Database\Seeders;
 
+use App\Enums\AppointmentOrigin;
 use App\Enums\AppointmentStatus;
 use App\Enums\BookingChannel;
 use App\Enums\ClinicalFileType;
@@ -240,7 +241,123 @@ class DemoSeeder extends Seeder
             'whatsapp_text' => 'Hola, quiero la promoción de blanqueamiento 20%',
         ]);
 
+        $this->history([$torres, $ramos], $treatments->all(), $reception);
+
         $this->command?->info("Demo lista. Entra a /panel con {$admin->email} / password");
+    }
+
+    /**
+     * Un año de consultorio en marcha, para que Resumen y Ganancias tengan qué mostrar.
+     * Siempre salen los mismos datos (semilla fija) y no toca hoy ni los días que vienen.
+     *
+     * @param  list<Doctor>  $doctors  [general, ortodoncista]
+     * @param  array<string, Treatment>  $treatments
+     */
+    private function history(array $doctors, array $treatments, User $reception): void
+    {
+        mt_srand(2026);
+
+        $pick = fn (array $weighted) => $this->weighted($weighted);
+        $menus = [
+            [['limpieza-dental', 5], ['curacion-con-resina', 4], ['extraccion-simple', 1], ['blanqueamiento', 1], ['endodoncia', 1]],
+            [['control-de-ortodoncia', 8], ['limpieza-dental', 1], ['colocacion-de-brackets', 1]],
+        ];
+        $hours = [[9, 2], [10, 4], [11, 4], [12, 2], [15, 2], [16, 3], [17, 4], [18, 3]];
+        $origins = [[AppointmentOrigin::Google, 5], [AppointmentOrigin::Recommendation, 4], [AppointmentOrigin::Instagram, 3], [AppointmentOrigin::Facebook, 2], [AppointmentOrigin::WalkIn, 1], [AppointmentOrigin::Referral, 1], [null, 2]];
+        $methods = [[PaymentMethod::Yape, 4], [PaymentMethod::Cash, 3], [PaymentMethod::Card, 2], [PaymentMethod::Plin, 2], [PaymentMethod::Transfer, 1]];
+
+        /** @var array<int, list<Patient>> $regulars Pacientes que ya vinieron, por doctor. */
+        $regulars = [[], []];
+        $today = CarbonImmutable::today();
+        $start = $today->subMonthsNoOverflow(11)->startOfMonth();
+
+        for ($day = $start; $day->lt($today); $day = $day->addDay()) {
+            if ($day->isSunday()) {
+                continue;
+            }
+
+            // El consultorio crece: cada mes, un poco más de citas.
+            $month = (int) $start->diffInMonths($day);
+
+            foreach ($doctors as $d => $doctor) {
+                $taken = [];
+
+                for ($i = mt_rand(1, $day->isSaturday() ? 3 : 3 + intdiv($month, 4)); $i > 0; $i--) {
+                    $hour = $pick($hours);
+                    $at = $day->setTime($hour, 0);
+
+                    if (isset($taken[$hour]) || Appointment::query()->whereBelongsTo($doctor)->where('starts_at', $at)->exists()) {
+                        continue;
+                    }
+
+                    $taken[$hour] = true;
+                    $isNew = $regulars[$d] === [] || mt_rand(1, 100) <= 30;
+                    $origin = $pick($origins);
+                    $patient = $isNew
+                        ? Patient::factory()->create(['origin' => $origin])
+                        : $regulars[$d][mt_rand(0, count($regulars[$d]) - 1)];
+                    $treatment = $treatments[$isNew ? 'evaluacion-o-primera-consulta' : $pick($menus[$d])];
+                    $roll = mt_rand(1, 100);
+                    $status = match (true) {
+                        $roll <= 8 => AppointmentStatus::NoShow,
+                        $roll <= 12 => AppointmentStatus::Cancelled,
+                        default => AppointmentStatus::Completed,
+                    };
+
+                    $appointment = $this->appointment($patient, $doctor, $treatment, $at, $status, mt_rand(1, 100) <= 55 ? BookingChannel::Web : BookingChannel::Reception);
+                    $appointment->update(['origin' => $isNew ? $origin : null, 'is_new_patient' => $isNew]);
+
+                    if ($status !== AppointmentStatus::Completed) {
+                        continue;
+                    }
+
+                    if ($isNew) {
+                        $regulars[$d][] = $patient;
+                    }
+
+                    $patient->forceFill(['first_visit_at' => $patient->first_visit_at ?? $at, 'last_visit_at' => $at])->save();
+                    $price = (float) $treatment->price_from;
+                    Charge::create([
+                        'patient_id' => $patient->id, 'appointment_id' => $appointment->id, 'treatment_id' => $treatment->id, 'doctor_id' => $doctor->id,
+                        'description' => $treatment->name, 'amount' => $price, 'charged_at' => $at->addMinutes(40), 'created_by_user_id' => $reception->id,
+                    ]);
+
+                    // Casi todos pagan al salir; algunos dejan una parte y unos pocos, todo para después.
+                    $paid = match (true) {
+                        mt_rand(1, 100) <= 4 => 0,
+                        $price >= 400 && mt_rand(1, 100) <= 50 => round($price / 2, 2),
+                        mt_rand(1, 100) <= 8 => round($price * 0.6, 2),
+                        default => $price,
+                    };
+
+                    if ($paid > 0) {
+                        Payment::create([
+                            'patient_id' => $patient->id, 'appointment_id' => $appointment->id, 'treatment_id' => $treatment->id, 'doctor_id' => $doctor->id,
+                            'amount' => $paid, 'method' => $pick($methods), 'paid_at' => $at->addMinutes(50), 'received_by_user_id' => $reception->id,
+                        ]);
+                    }
+                }
+            }
+        }
+    }
+
+    /**
+     * @template T
+     *
+     * @param  list<array{0: T, 1: int}>  $options  [valor, peso]
+     * @return T
+     */
+    private function weighted(array $options): mixed
+    {
+        $roll = mt_rand(1, array_sum(array_column($options, 1)));
+
+        foreach ($options as [$value, $weight]) {
+            if (($roll -= $weight) <= 0) {
+                return $value;
+            }
+        }
+
+        return $options[0][0];
     }
 
     /** Una "radiografía" de muestra: fondo oscuro con dos piezas claras. */

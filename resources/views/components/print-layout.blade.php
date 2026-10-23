@@ -1,4 +1,4 @@
-@props(['title', 'size' => 'A4', 'doctor' => null, 'patient', 'date' => null])
+@props(['title', 'size' => 'A4', 'doctor' => null, 'patient' => null, 'date' => null])
 @php
     $clinic = \App\Models\Setting::get('clinic.name');
     $contact = collect([\App\Models\Setting::get('clinic.address'), \App\Models\Setting::get('clinic.phone')])->filter()->implode(' · ');
@@ -9,7 +9,7 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <meta name="robots" content="noindex">
-    <title>{{ $title }} · {{ $patient->full_name }}</title>
+    <title>{{ $title }}{{ $patient ? ' · '.$patient->full_name : '' }}</title>
     <style>
         @page { size: {{ $size }}; margin: 12mm; }
         :root { --brand: #0f766e; --ink: #0f172a; --muted: #475569; --line: #cbd5e1; --gray-600: #4b5563; --primary-100: #ccfbf1; }
@@ -72,6 +72,7 @@
 
     <h1>{{ $title }}</h1>
 
+    @if ($patient)
     <div class="patient">
         <div><span>Paciente</span>{{ $patient->full_name }}</div>
         @if ($patient->age !== null)
@@ -82,6 +83,7 @@
         @endif
         <div><span>Fecha</span>{{ ($date ?? now())->format('d/m/Y') }}</div>
     </div>
+    @endif
 
     <main>{{ $slot }}</main>
 

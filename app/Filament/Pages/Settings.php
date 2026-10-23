@@ -9,6 +9,7 @@ use BackedEnum;
 use Filament\Actions\Action;
 use Filament\Forms\Components\Textarea;
 use Filament\Forms\Components\TextInput;
+use Filament\Forms\Components\Toggle;
 use Filament\Notifications\Notification;
 use Filament\Pages\Page;
 use Filament\Schemas\Components\Actions;
@@ -54,6 +55,7 @@ class Settings extends Page
         'booking.self_reschedule_min_hours' => 'int',
         'booking.self_cancel_min_hours' => 'int',
         'booking.max_reschedule_options' => 'int',
+        'reports.doctors_see_own' => 'bool',
     ];
 
     protected static ?string $title = 'Ajustes';
@@ -185,6 +187,12 @@ class Settings extends Page
                         self::number('booking.self_cancel_min_hours', 'El paciente puede cancelar solo hasta', 0, 168, 'horas antes'),
                         self::number('booking.max_reschedule_options', 'Horarios que puede proponer el paciente', 1, 5, 'opciones'),
                     ]),
+                Section::make('Reportes')
+                    ->schema([
+                        Toggle::make('reports.doctors_see_own')
+                            ->label('Cada doctor ve sus propias ganancias y gráficos')
+                            ->helperText('Solo lo suyo: lo que atendió y lo que se cobró de sus citas. Recepción no ve reportes.'),
+                    ]),
             ])
             ->statePath('data');
     }
@@ -213,6 +221,7 @@ class Settings extends Page
 
             Setting::set($key, match ($type) {
                 'int' => (int) $value,
+                'bool' => (bool) $value,
                 'phone' => Phone::normalize((string) $value),
                 default => filled($value) ? (string) $value : null,
             });

@@ -71,6 +71,11 @@ return [
             'elevated_minutes' => 15,
         ],
 
+        'reports' => [
+            // Si los doctores ven sus propias ganancias y gráficos (la administración siempre ve todo).
+            'doctors_see_own' => false,
+        ],
+
         'links' => [
             'appointment_link_days_after' => 2,
             'access_link_hours' => 72,
