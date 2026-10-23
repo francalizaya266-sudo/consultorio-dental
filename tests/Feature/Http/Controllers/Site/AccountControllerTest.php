@@ -59,7 +59,8 @@ class AccountControllerTest extends TestCase
     {
         $upcoming = Appointment::factory()->for($this->child)->at('2026-11-04 10:00')->confirmed()->create();
         Appointment::factory()->for($this->mother)->at('2026-10-20 10:00')->create(['status' => AppointmentStatus::Completed]);
-        $stranger = Appointment::factory()->at('2026-11-04 11:00')->create();
+        // Un nombre que el generador de datos nunca da, para no confundirlo con el del doctor.
+        Appointment::factory()->for(Patient::factory()->state(['first_name' => 'Hermenegilda']))->at('2026-11-04 11:00')->create();
 
         $this->rememberDevice()
             ->get(route('site.account'))
@@ -67,7 +68,7 @@ class AccountControllerTest extends TestCase
             ->assertSee('Miércoles 4 de noviembre')
             ->assertSee($upcoming->treatment->name)
             ->assertSee('Mateo')
-            ->assertDontSee($stranger->patient->first_name)
+            ->assertDontSee('Hermenegilda')
             ->assertSee('Para cuidar tus datos')
             ->assertDontSee('40123456')
             ->assertDontSee('20/10/2026');

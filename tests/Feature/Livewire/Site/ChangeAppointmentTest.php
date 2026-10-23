@@ -92,9 +92,11 @@ class ChangeAppointmentTest extends TestCase
     {
         $this->freezeMonday();
         [$appointment] = $this->appointmentWithLink('2026-11-04 10:00');
+        // Un nombre que el generador de datos nunca da: la otra cita (paciente y doctor) usa nombres al azar.
+        $appointment->patient->update(['first_name' => 'Hermenegilda']);
         [, $otherToken] = $this->appointmentWithLink('2026-11-04 11:00');
 
-        $this->get(route('patient.link.change', $otherToken))->assertOk()->assertDontSee($appointment->patient->first_name);
+        $this->get(route('patient.link.change', $otherToken))->assertOk()->assertDontSee('Hermenegilda');
         $this->get(route('site.account.change', $appointment))->assertForbidden();
     }
 }
