@@ -1,0 +1,32 @@
+<?php
+
+namespace App\Enums;
+
+use Filament\Support\Contracts\HasColor;
+use Filament\Support\Contracts\HasLabel;
+
+/** Estado del referido. */
+enum ReferralStatus: string implements HasColor, HasLabel
+{
+    case Pending = 'pending';
+    case Qualified = 'qualified';
+    case Redeemed = 'redeemed';
+
+    public function getLabel(): string
+    {
+        return match ($this) {
+            self::Pending => 'Por asistir',
+            self::Qualified => 'Beneficio ganado',
+            self::Redeemed => 'Beneficio usado',
+        };
+    }
+
+    public function getColor(): string
+    {
+        return match ($this) {
+            self::Pending => 'warning',
+            self::Qualified => 'success',
+            self::Redeemed => 'gray',
+        };
+    }
+}
