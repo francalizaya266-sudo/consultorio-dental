@@ -8,6 +8,7 @@ use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\HasOne;
 use Illuminate\Database\Eloquent\SoftDeletes;
@@ -61,5 +62,17 @@ class Consultation extends Model
     public function prescriptions(): HasMany
     {
         return $this->hasMany(Prescription::class);
+    }
+
+    /** La receta de esta atención (una sola, con varios medicamentos). */
+    public function prescription(): HasOne
+    {
+        return $this->hasOne(Prescription::class)->latestOfMany();
+    }
+
+    /** Procedimientos del plan de tratamiento que se trabajaron en esta atención. */
+    public function planItems(): BelongsToMany
+    {
+        return $this->belongsToMany(TreatmentPlanItem::class, 'consultation_plan_items')->withTimestamps();
     }
 }

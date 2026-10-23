@@ -9,6 +9,7 @@ use App\Models\Doctor;
 use App\Models\Patient;
 use App\Models\Treatment;
 use App\Services\Booking\AppointmentService;
+use App\Services\Clinical\TreatmentPlanService;
 use Filament\Actions\Action;
 use Filament\Notifications\Notification;
 use Filament\Resources\Pages\CreateRecord;
@@ -28,10 +29,15 @@ class CreateAppointment extends CreateRecord
     /** La cita se crea con la misma lógica que la web: nunca se cruzan dos citas. */
     protected function handleRecordCreation(array $data): Model
     {
+        $patient = Patient::findOrFail($data['patient_id']);
+        $planItem = filled($data['treatment_plan_item_id'] ?? null)
+            ? app(TreatmentPlanService::class)->workableItems($patient)->firstWhere('id', (int) $data['treatment_plan_item_id'])
+            : null;
+
         try {
-            return app(AppointmentService::class)->bookFromStaff(
+            $appointment = app(AppointmentService::class)->bookFromStaff(
                 auth()->user(),
-                Patient::findOrFail($data['patient_id']),
+                $patient,
                 Doctor::findOrFail($data['doctor_id']),
                 Treatment::findOrFail($data['treatment_id']),
                 SlotPicker::startsAt($data),
@@ -39,8 +45,16 @@ class CreateAppointment extends CreateRecord
                     'origin' => $data['origin'] ?? null,
                     'fixed_date' => (bool) ($data['fixed_date'] ?? false),
                     'internal_notes' => $data['internal_notes'] ?? null,
+                    'treatment_plan_item_id' => $planItem?->getKey(),
                 ],
             );
+
+            // Si agenda una sesión del plan, el paciente lo aceptó.
+            if ($planItem) {
+                app(TreatmentPlanService::class)->accept($planItem->plan);
+            }
+
+            return $appointment;
         } catch (BookingException|AuthorizationException $e) {
             Notification::make()->danger()->title($e->getMessage())->send();
             $this->halt();

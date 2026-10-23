@@ -4,6 +4,7 @@ namespace App\Filament\Resources\Patients\Pages;
 
 use App\Filament\Resources\Patients\PatientResource;
 use App\Filament\Resources\Patients\RelationManagers\ConsultationsRelationManager;
+use App\Filament\Resources\Patients\RelationManagers\TreatmentPlansRelationManager;
 use App\Filament\Resources\Patients\Schemas\ClinicalRecordInfolist;
 use App\Models\Patient;
 use Filament\Actions\Action;
@@ -12,7 +13,7 @@ use Filament\Schemas\Schema;
 use Filament\Support\Icons\Heroicon;
 use Illuminate\Contracts\Support\Htmlable;
 
-/** Historia clínica del paciente: alertas, antecedentes, odontograma y atenciones. */
+/** Historia clínica del paciente: alertas, antecedentes, odontograma, atenciones y planes de tratamiento. */
 class ViewClinicalRecord extends ViewRecord
 {
     protected static string $resource = PatientResource::class;
@@ -51,7 +52,7 @@ class ViewClinicalRecord extends ViewRecord
 
     protected function getAllRelationManagers(): array
     {
-        return [ConsultationsRelationManager::class];
+        return [ConsultationsRelationManager::class, TreatmentPlansRelationManager::class];
     }
 
     protected function getHeaderActions(): array

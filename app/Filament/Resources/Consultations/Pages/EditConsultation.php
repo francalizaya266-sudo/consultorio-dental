@@ -9,6 +9,7 @@ use App\Filament\Resources\Patients\PatientResource;
 use App\Models\ClinicalTemplate;
 use App\Models\Consultation;
 use App\Services\Clinical\ConsultationService;
+use App\Services\Clinical\PrescriptionService;
 use Filament\Actions\Action;
 use Filament\Forms\Components\Select;
 use Filament\Notifications\Notification;
@@ -16,6 +17,7 @@ use Filament\Resources\Pages\EditRecord;
 use Filament\Support\Icons\Heroicon;
 use Illuminate\Contracts\Support\Htmlable;
 use Illuminate\Http\Exceptions\HttpResponseException;
+use Illuminate\Support\Arr;
 
 /** Pantalla donde el doctor escribe mientras atiende. */
 class EditConsultation extends EditRecord
@@ -33,6 +35,9 @@ class EditConsultation extends EditRecord
 
         parent::mount($record);
     }
+
+    /** Medicamentos del formulario: se guardan aparte, en la receta de la atención. */
+    private array $prescriptionItems = [];
 
     public function getTitle(): string|Htmlable
     {
@@ -75,6 +80,23 @@ class EditConsultation extends EditRecord
             $this->getSaveFormAction()->label('Guardar'),
             $this->closeAction(),
         ];
+    }
+
+    protected function mutateFormDataBeforeFill(array $data): array
+    {
+        return [...$data, 'prescription_items' => app(PrescriptionService::class)->itemsOf($this->getConsultation())];
+    }
+
+    protected function mutateFormDataBeforeSave(array $data): array
+    {
+        $this->prescriptionItems = Arr::pull($data, 'prescription_items') ?? [];
+
+        return $data;
+    }
+
+    protected function afterSave(): void
+    {
+        app(PrescriptionService::class)->syncForConsultation($this->getConsultation(), $this->prescriptionItems);
     }
 
     protected function getSavedNotificationTitle(): ?string
@@ -147,7 +169,11 @@ class EditConsultation extends EditRecord
                 $template = ClinicalTemplate::find($data['template']);
 
                 if ($template) {
-                    $this->data = [...$this->data, ...ConsultationService::mergeTemplate($this->data, $template)];
+                    $this->data = [
+                        ...$this->data,
+                        ...ConsultationService::mergeTemplate($this->data, $template),
+                        'prescription_items' => PrescriptionService::merge($this->data['prescription_items'] ?? [], app(PrescriptionService::class)->fromTemplate($template)),
+                    ];
                     Notification::make()->success()->title('Plantilla aplicada. Revisa y guarda.')->send();
                 }
             });

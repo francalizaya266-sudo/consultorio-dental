@@ -16,6 +16,7 @@ enum MessageTemplateKey: string implements HasLabel
     case RescheduleRejected = 'reschedule_rejected';
     case AccessLink = 'access_link';
     case Prescription = 'prescription';
+    case TreatmentPlan = 'treatment_plan';
     case WaitlistOffer = 'waitlist_offer';
 
     public function getLabel(): string
@@ -30,6 +31,7 @@ enum MessageTemplateKey: string implements HasLabel
             self::RescheduleRejected => 'Solicitud de cambio no aprobada',
             self::AccessLink => 'Enlace de acceso a Mi cuenta',
             self::Prescription => 'Receta e indicaciones',
+            self::TreatmentPlan => 'Plan de tratamiento (presupuesto)',
             self::WaitlistOffer => 'Horario libre para lista de espera',
         };
     }
@@ -47,6 +49,7 @@ enum MessageTemplateKey: string implements HasLabel
             self::RescheduleRejected => 'Hola {nombre}, no pudimos mover tu cita a los horarios que propusiste. Tu cita sigue el {fecha} a las {hora}. Escríbenos y buscamos otra opción.',
             self::AccessLink => "Hola, este es tu enlace para entrar a Mi cuenta en {consultorio}:\n{enlace}\n\nNo lo compartas con nadie.",
             self::Prescription => "Hola {nombre}, te enviamos tu receta e indicaciones de {doctor}:\n\n{receta}",
+            self::TreatmentPlan => "Hola {nombre}, te enviamos tu plan de tratamiento con {doctor}:\n\n{plan}\n\nTotal: {total}\nEs un presupuesto referencial: si en el camino el tratamiento cambia, te lo explicamos antes. Cualquier duda, escríbenos.",
             self::WaitlistOffer => 'Hola {nombre}, se liberó un horario para {tratamiento} el {fecha} a las {hora} con {doctor}. ¿Lo quieres? Respóndenos y te lo reservamos.',
         };
     }

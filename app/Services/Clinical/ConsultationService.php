@@ -29,6 +29,8 @@ final class ConsultationService
     public function __construct(
         private readonly OdontogramService $odontograms,
         private readonly AppointmentService $appointments,
+        private readonly TreatmentPlanService $plans,
+        private readonly PrescriptionService $prescriptions,
     ) {}
 
     /** Abre la atención de una cita (o retoma la que ya estaba abierta). */
@@ -68,16 +70,23 @@ final class ConsultationService
     {
         $this->assertWritable($consultation);
 
-        $consultation->update($this->templateValues($consultation, $template));
+        DB::transaction(function () use ($consultation, $template) {
+            $consultation->update($this->templateValues($consultation, $template));
+
+            if ($medications = $this->prescriptions->fromTemplate($template)) {
+                $this->prescriptions->syncForConsultation($consultation, PrescriptionService::merge($this->prescriptions->itemsOf($consultation), $medications));
+            }
+        });
     }
 
-    /** Termina la atención: queda cerrada y la cita pasa a "atendida". */
+    /** Termina la atención: queda cerrada, la cita pasa a "atendida" y avanza el plan de tratamiento. */
     public function close(Consultation $consultation, User $by): void
     {
         $this->assertWritable($consultation, $by);
 
         DB::transaction(function () use ($consultation, $by) {
             $consultation->update(['closed_at' => now()]);
+            $this->plans->syncConsultation($consultation);
 
             $appointment = $consultation->appointment;
 
@@ -98,7 +107,10 @@ final class ConsultationService
             throw ClinicalException::reopenExpired();
         }
 
-        $consultation->update(['closed_at' => null]);
+        DB::transaction(function () use ($consultation) {
+            $consultation->update(['closed_at' => null]);
+            $this->plans->syncConsultation($consultation);
+        });
     }
 
     public function canStillReopen(Consultation $consultation): bool
@@ -144,6 +156,12 @@ final class ConsultationService
 
         if ($template = $this->templateFor($treatment, $by)) {
             $consultation->update($this->templateValues($consultation, $template));
+            $this->prescriptions->syncForConsultation($consultation, $this->prescriptions->fromTemplate($template));
+        }
+
+        // Si la cita es una sesión del plan, ya queda marcada como lo que se trabaja hoy.
+        if ($appointment?->planItem?->isOpen() && $appointment->planItem->plan->isOpen()) {
+            $consultation->planItems()->attach($appointment->treatment_plan_item_id);
         }
 
         $this->odontograms->forConsultation($consultation);
