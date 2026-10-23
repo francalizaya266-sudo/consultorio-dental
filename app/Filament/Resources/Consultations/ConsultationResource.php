@@ -10,8 +10,10 @@ use App\Filament\Resources\Consultations\Schemas\ConsultationForm;
 use App\Filament\Resources\Consultations\Schemas\ConsultationInfolist;
 use App\Filament\Resources\Consultations\Tables\ConsultationsTable;
 use App\Models\Consultation;
+use App\Models\Prescription;
 use App\Models\User;
 use BackedEnum;
+use Filament\Facades\Filament;
 use Filament\Resources\Resource;
 use Filament\Schemas\Schema;
 use Filament\Support\Icons\Heroicon;
@@ -99,6 +101,11 @@ class ConsultationResource extends Resource
     public static function urlFor(Consultation $consultation): string
     {
         return static::getUrl(auth()->user()->can('update', $consultation) ? 'edit' : 'view', ['record' => $consultation]);
+    }
+
+    public static function prescriptionPrintUrl(Prescription $prescription): string
+    {
+        return Filament::getPanel('admin')->route('print.prescription', ['prescription' => $prescription]);
     }
 
     public static function getPages(): array

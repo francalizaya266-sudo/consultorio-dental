@@ -60,7 +60,7 @@ final class SlotPicker
                     ->when($get('doctor_id'), fn ($q, $doctorId) => $q->whereHas('doctors', fn ($d) => $d->whereKey($doctorId)))
                     ->orderBy('sort_order')
                     ->pluck('name', 'id'))
-                ->default($moving?->treatment_id)
+                ->default($moving?->treatment_id ?? (request()->integer('treatment') ?: null))
                 ->hidden($moving !== null)
                 ->dehydrated($moving === null)
                 ->required($moving === null)

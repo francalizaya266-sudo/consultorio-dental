@@ -3,12 +3,14 @@
 namespace App\Filament\Resources\Consultations\Pages;
 
 use App\Exceptions\ClinicalException;
+use App\Filament\Actions\SendWhatsAppAction;
 use App\Filament\Resources\Appointments\AppointmentResource;
 use App\Filament\Resources\Consultations\ConsultationResource;
 use App\Filament\Resources\Patients\PatientResource;
 use App\Models\Appointment;
 use App\Models\Consultation;
 use App\Services\Clinical\ConsultationService;
+use App\Services\Clinical\PrescriptionService;
 use Filament\Actions\Action;
 use Filament\Notifications\Notification;
 use Filament\Resources\Pages\ViewRecord;
@@ -55,6 +57,16 @@ class ViewConsultation extends ViewRecord
 
                     $this->redirect(ConsultationResource::getUrl('edit', ['record' => $this->getConsultation()]));
                 }),
+            Action::make('printPrescription')
+                ->label('Imprimir receta')
+                ->icon(Heroicon::OutlinedPrinter)
+                ->color('gray')
+                ->visible(fn () => $this->getConsultation()->prescription !== null)
+                ->url(fn () => ConsultationResource::prescriptionPrintUrl($this->getConsultation()->prescription))
+                ->openUrlInNewTab(),
+            SendWhatsAppAction::compose('sendPrescription', fn () => app(PrescriptionService::class)->whatsappDraft($this->getConsultation()->prescription))
+                ->label('Enviar receta por WhatsApp')
+                ->visible(fn () => $this->getConsultation()->prescription !== null && $this->getConsultation()->patient->account_id !== null),
             Action::make('book')
                 ->label('Programar cita')
                 ->icon(Heroicon::OutlinedCalendarDays)

@@ -47,6 +47,51 @@ final class SendWhatsAppAction
             });
     }
 
+    /**
+     * Mensaje que no estaba en la bandeja (receta, presupuesto): se arma al abrir, se puede
+     * retocar y recién al abrir WhatsApp queda registrado como enviado.
+     *
+     * @param  Closure  $draft  Devuelve el aviso sin guardar, o null (después de avisar por qué) si no hay nada que enviar. Recibe $record, $livewire, etc.
+     */
+    public static function compose(string $name, Closure $draft): Action
+    {
+        return Action::make($name)
+            ->label('Enviar por WhatsApp')
+            ->icon(Heroicon::OutlinedChatBubbleLeftEllipsis)
+            ->color('success')
+            ->modalHeading('Enviar por WhatsApp')
+            ->modalDescription('Revisa el mensaje. Se abrirá WhatsApp con el texto listo: solo presiona Enviar.')
+            ->modalSubmitActionLabel('Abrir WhatsApp')
+            ->fillForm(function (Action $action) use ($draft) {
+                $message = $action->evaluate($draft);
+
+                if (! $message) {
+                    $action->cancel();
+                }
+
+                return ['body' => app(WhatsAppOutbox::class)->render($message, auth()->user())];
+            })
+            ->schema([
+                Textarea::make('body')
+                    ->label('Mensaje')
+                    ->rows(12)
+                    ->required(),
+            ])
+            ->action(function (array $data, Action $action, Component $livewire) use ($draft) {
+                /** @var WhatsappMessage|null $message */
+                $message = $action->evaluate($draft);
+
+                if (! $message) {
+                    $action->halt();
+                }
+
+                $message->save();
+                $url = app(WhatsAppOutbox::class)->clickToChatUrl($message, auth()->user(), $data['body']);
+
+                $livewire->js('window.open('.json_encode($url).', "_blank")');
+            });
+    }
+
     /** Descartar un aviso que ya no hace falta enviar. */
     public static function discard(): Action
     {

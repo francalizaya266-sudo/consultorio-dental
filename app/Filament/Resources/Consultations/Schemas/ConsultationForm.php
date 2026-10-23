@@ -3,28 +3,46 @@
 namespace App\Filament\Resources\Consultations\Schemas;
 
 use App\Enums\DiagnosisType;
+use App\Enums\PlanItemStatus;
 use App\Enums\SnippetField;
+use App\Enums\SnippetStatus;
 use App\Enums\ToothState;
+use App\Filament\Actions\SendWhatsAppAction;
 use App\Filament\Forms\QuickTextarea;
+use App\Filament\Resources\Consultations\ConsultationResource;
+use App\Filament\Resources\Consultations\Pages\EditConsultation;
+use App\Filament\Resources\Patients\PatientResource;
 use App\Filament\Support\ClinicalAlerts;
 use App\Livewire\OdontogramChart;
 use App\Models\Consultation;
 use App\Models\Icd10Code;
 use App\Models\OdontogramEntry;
+use App\Models\Prescription;
+use App\Models\TextSnippet;
+use App\Models\TreatmentPlanItem;
+use App\Models\User;
+use App\Services\Clinical\PrescriptionService;
+use App\Services\Clinical\TreatmentPlanService;
+use App\Support\Money;
 use Filament\Actions\Action;
+use Filament\Forms\Components\CheckboxList;
 use Filament\Forms\Components\Repeater;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\TextInput;
 use Filament\Forms\Components\ToggleButtons;
 use Filament\Notifications\Notification;
+use Filament\Schemas\Components\Actions;
 use Filament\Schemas\Components\Grid;
 use Filament\Schemas\Components\Group;
 use Filament\Schemas\Components\Livewire;
 use Filament\Schemas\Components\Section;
+use Filament\Schemas\Components\Text;
 use Filament\Schemas\Components\Utilities\Get;
 use Filament\Schemas\Components\Utilities\Set;
 use Filament\Schemas\Schema;
 use Filament\Support\Icons\Heroicon;
+use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Support\Collection;
 
 /** Pantalla de la atención: todo lo que el doctor escribe mientras atiende, de arriba hacia abajo. */
 class ConsultationForm
@@ -130,6 +148,37 @@ class ConsultationForm
                             ->snippets(SnippetField::Diagnosis),
                     ]),
 
+                Section::make('Plan de tratamiento')
+                    ->key('plan')
+                    ->icon(Heroicon::OutlinedClipboardDocumentList)
+                    ->description('Marca lo que se trabajó hoy. Al terminar la atención, el avance del plan se actualiza solo.')
+                    ->headerActions([self::draftPlanAction()])
+                    ->schema([
+                        CheckboxList::make('planItems')
+                            ->label('Lo que se trabajó hoy')
+                            ->hiddenLabel()
+                            ->relationship('planItems', 'description', modifyQueryUsing: fn (Builder $query, ?Consultation $record) => $query
+                                ->with('plan')
+                                ->whereHas('plan', fn (Builder $plan) => $plan->open()->where('patient_id', $record?->patient_id))
+                                ->where(fn (Builder $items) => $items
+                                    ->whereIn('treatment_plan_items.status', [PlanItemStatus::Pending, PlanItemStatus::InProgress])
+                                    ->when($record, fn (Builder $items) => $items->orWhereHas('consultations', fn (Builder $c) => $c->whereKey($record->getKey()))))
+                                ->reorder()
+                                ->orderBy('treatment_plan_items.treatment_plan_id')
+                                ->orderBy('treatment_plan_items.sort_order'))
+                            ->getOptionLabelFromRecordUsing(fn (TreatmentPlanItem $record) => $record->label())
+                            ->getOptionDescriptionFromRecordUsing(fn (TreatmentPlanItem $record) => collect([
+                                $record->sessions_planned > 1 ? "Sesiones hechas: {$record->sessions_done} de {$record->sessions_planned}" : null,
+                                $record->plan->title,
+                            ])->filter()->implode(' · '))
+                            ->columns(2)
+                            ->bulkToggleable(false)
+                            ->visible(fn (?Consultation $record) => $record && self::workableItems($record)->isNotEmpty()),
+                        Text::make('El paciente no tiene un plan de tratamiento vigente. Ármalo con un toque desde lo que está en rojo en el odontograma.')
+                            ->color('gray')
+                            ->visible(fn (?Consultation $record) => ! $record || self::workableItems($record)->isEmpty()),
+                    ]),
+
                 Section::make('Evolución')
                     ->icon(Heroicon::OutlinedWrenchScrewdriver)
                     ->description('Qué se hizo hoy.')
@@ -152,7 +201,165 @@ class ConsultationForm
                             ->placeholder('Ej.: resina en 36 la próxima sesión')
                             ->snippets(SnippetField::Any),
                     ]),
+
+                Section::make('Receta')
+                    ->key('prescription')
+                    ->icon(Heroicon::OutlinedBeaker)
+                    ->description('Se imprime o se envía por WhatsApp junto con las indicaciones.')
+                    ->headerActions([self::printPrescriptionAction(), self::sendPrescriptionAction()])
+                    ->schema([
+                        Repeater::make('prescription_items')
+                            ->hiddenLabel()
+                            ->addActionLabel('Agregar medicamento')
+                            ->defaultItems(0)
+                            ->columns(5)
+                            ->extraItemActions([self::saveMedicationAction()])
+                            ->schema([
+                                TextInput::make('medication')
+                                    ->label('Medicamento')
+                                    ->placeholder('Ibuprofeno 400 mg')
+                                    ->datalist(fn () => self::medicationSnippets()->map(fn (TextSnippet $snippet) => app(PrescriptionService::class)->fromSnippet($snippet)['medication'])->unique()->values()->all())
+                                    ->maxLength(255)
+                                    ->columnSpan(2),
+                                TextInput::make('instructions')
+                                    ->label('Cómo tomarlo')
+                                    ->placeholder('1 tableta cada 8 horas por 3 días')
+                                    ->maxLength(255)
+                                    ->columnSpan(3),
+                            ]),
+                        Actions::make(fn () => self::medicationSnippets()
+                            ->map(fn (TextSnippet $snippet) => Action::make('addMedication'.$snippet->getKey())
+                                ->label($snippet->label)
+                                ->icon(Heroicon::OutlinedPlus)
+                                ->size('sm')
+                                ->color('gray')
+                                ->outlined()
+                                ->action(function (Get $get, Set $set) use ($snippet) {
+                                    $set('prescription_items', PrescriptionService::merge($get('prescription_items') ?? [], [app(PrescriptionService::class)->fromSnippet($snippet)]));
+                                    $snippet->recordUse(auth()->user());
+                                }))
+                            ->all()),
+                    ]),
             ]);
+    }
+
+    /** Medicamentos frecuentes (compartidos y propios), los más usados primero. */
+    private static function medicationSnippets(): Collection
+    {
+        /** @var User $user */
+        $user = auth()->user();
+
+        return TextSnippet::query()
+            ->availableFor($user, SnippetField::Prescription)
+            ->where('field', SnippetField::Prescription)
+            ->limit(QuickTextarea::VISIBLE_OPTIONS)
+            ->get();
+    }
+
+    /** @return Collection<int, TreatmentPlanItem> */
+    private static function workableItems(Consultation $consultation): Collection
+    {
+        return app(TreatmentPlanService::class)->workableItems($consultation->patient, $consultation);
+    }
+
+    /** Arma (o completa) el borrador del plan con lo que está en rojo en el odontograma de hoy. */
+    private static function draftPlanAction(): Action
+    {
+        return Action::make('draftPlan')
+            ->label('Armar plan desde el odontograma')
+            ->icon(Heroicon::OutlinedSparkles)
+            ->link()
+            ->visible(fn (?Consultation $record) => $record && auth()->user()->can('update', $record))
+            ->action(function (Consultation $record) {
+                [$plan, $added] = app(TreatmentPlanService::class)->draftFromConsultation($record, auth()->user());
+
+                if (! $plan) {
+                    Notification::make()->info()->title('No hay hallazgos nuevos en rojo para el plan.')->body('Lo que ya está en un plan vigente no se repite.')->send();
+
+                    return;
+                }
+
+                Notification::make()
+                    ->success()
+                    ->title("Se agregaron {$added} procedimientos al plan, por ".Money::format($plan->load('items')->total()).' en total.')
+                    ->body('Quedó como borrador. Revísalo, imprímelo o envíalo por WhatsApp desde la historia clínica.')
+                    ->actions([
+                        Action::make('open')
+                            ->label('Ver el plan')
+                            ->url(PatientResource::getUrl('clinical', ['record' => $record->patient_id]))
+                            ->openUrlInNewTab(),
+                    ])
+                    ->send();
+            });
+    }
+
+    /** Guarda y abre la receta lista para imprimir (o guardar en PDF). */
+    private static function printPrescriptionAction(): Action
+    {
+        return Action::make('printPrescription')
+            ->label('Imprimir')
+            ->icon(Heroicon::OutlinedPrinter)
+            ->color('gray')
+            ->link()
+            ->action(function (Consultation $record, EditConsultation $livewire) {
+                if (! $prescription = self::savedPrescription($record, $livewire)) {
+                    return;
+                }
+
+                $livewire->js('window.open('.json_encode(ConsultationResource::prescriptionPrintUrl($prescription)).', "_blank")');
+            });
+    }
+
+    private static function sendPrescriptionAction(): Action
+    {
+        return SendWhatsAppAction::compose('sendPrescription', function (Consultation $record, EditConsultation $livewire) {
+            $prescription = self::savedPrescription($record, $livewire);
+
+            return $prescription ? app(PrescriptionService::class)->whatsappDraft($prescription) : null;
+        })
+            ->label('WhatsApp')
+            ->link()
+            ->visible(fn (?Consultation $record) => $record?->patient->account_id !== null);
+    }
+
+    /** Guarda lo escrito y devuelve la receta; avisa si todavía no tiene medicamentos. */
+    private static function savedPrescription(Consultation $record, EditConsultation $livewire): ?Prescription
+    {
+        $livewire->save(shouldRedirect: false, shouldSendSavedNotification: false);
+
+        $prescription = $record->refresh()->prescription;
+
+        if (! $prescription) {
+            Notification::make()->warning()->title('Agrega al menos un medicamento a la receta.')->send();
+        }
+
+        return $prescription;
+    }
+
+    /** Guarda el medicamento del renglón como opción propia para la próxima vez. */
+    private static function saveMedicationAction(): Action
+    {
+        return Action::make('saveMedication')
+            ->icon(Heroicon::OutlinedBookmark)
+            ->tooltip('Guardar como opción')
+            ->color('gray')
+            ->action(function (array $arguments, Repeater $component) {
+                $item = $component->getRawItemState($arguments['item']);
+                $medication = trim((string) ($item['medication'] ?? ''));
+
+                if ($medication === '') {
+                    Notification::make()->warning()->title('Escribe primero el medicamento.')->send();
+
+                    return;
+                }
+
+                TextSnippet::updateOrCreate(
+                    ['user_id' => auth()->id(), 'field' => SnippetField::Prescription, 'label' => $medication],
+                    ['body' => collect([$medication, trim((string) ($item['instructions'] ?? ''))])->filter()->implode(': '), 'status' => SnippetStatus::Active],
+                );
+
+                Notification::make()->success()->title("Listo: {$medication} aparecerá entre tus medicamentos frecuentes.")->send();
+            });
     }
 
     /** Agrega a la lista los hallazgos en rojo del odontograma de hoy que todavía no tienen diagnóstico. */

@@ -7,6 +7,9 @@ use App\Filament\Support\ClinicalAlerts;
 use App\Livewire\OdontogramChart;
 use App\Models\Consultation;
 use App\Models\ConsultationDiagnosis;
+use App\Models\PrescriptionItem;
+use App\Models\TreatmentPlanItem;
+use App\Services\Clinical\PrescriptionService;
 use Filament\Infolists\Components\RepeatableEntry;
 use Filament\Infolists\Components\TextEntry;
 use Filament\Schemas\Components\Group;
@@ -57,8 +60,22 @@ class ConsultationInfolist
                             ]),
                         TextEntry::make('diagnosis_notes')->label('Notas del diagnóstico')->placeholder('—')->columnSpanFull(),
                         TextEntry::make('procedures')->label('Evolución (qué se hizo)')->placeholder('—')->columnSpanFull(),
+                        TextEntry::make('planItems')
+                            ->label('Del plan de tratamiento se trabajó')
+                            ->state(fn (Consultation $record) => $record->planItems->map(fn (TreatmentPlanItem $item) => $item->label())->all())
+                            ->listWithLineBreaks()
+                            ->bulleted()
+                            ->placeholder('—')
+                            ->columnSpanFull(),
                         TextEntry::make('indications')->label('Indicaciones')->placeholder('—'),
                         TextEntry::make('next_steps')->label('Próximos pasos')->placeholder('—'),
+                        TextEntry::make('prescription')
+                            ->label('Receta')
+                            ->state(fn (Consultation $record) => $record->prescription?->items->map(fn (PrescriptionItem $item) => $item->medication.(($instructions = app(PrescriptionService::class)->instructionsOf($item)) ? ': '.$instructions : ''))->all() ?? [])
+                            ->listWithLineBreaks()
+                            ->bulleted()
+                            ->placeholder('Sin receta')
+                            ->columnSpanFull(),
                     ]),
 
                 Section::make('Datos')
