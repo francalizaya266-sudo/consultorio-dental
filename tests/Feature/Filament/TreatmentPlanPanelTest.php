@@ -13,6 +13,7 @@ use App\Filament\Resources\Patients\Pages\ViewClinicalRecord;
 use App\Filament\Resources\Patients\RelationManagers\TreatmentPlansRelationManager;
 use App\Models\Appointment;
 use App\Models\Doctor;
+use App\Models\Icd10Code;
 use App\Models\OdontogramCondition;
 use App\Models\Patient;
 use App\Models\TextSnippet;
@@ -22,6 +23,7 @@ use App\Models\User;
 use App\Models\WhatsappMessage;
 use App\Services\Clinical\ConsultationService;
 use App\Services\Clinical\OdontogramService;
+use App\Support\Phone;
 use Database\Seeders\CatalogSeeder;
 use Filament\Actions\Testing\TestAction;
 use Illuminate\Foundation\Testing\LazilyRefreshDatabase;
@@ -162,9 +164,14 @@ class TreatmentPlanPanelTest extends TestCase
 
         $this->assertSame([MessageTemplateKey::Prescription, MessageStatus::Sent], [WhatsappMessage::sole()->template_key, WhatsappMessage::sole()->status]);
 
+        $consultation->diagnoses()->create(['icd10_code_id' => Icd10Code::where('code', 'K02.1')->value('id'), 'tooth' => '36']);
+
+        // Con los datos del recetario de la clínica: teléfono del paciente, diagnóstico y lema al pie.
         $this->get(ConsultationResource::prescriptionPrintUrl($prescription))
             ->assertOk()
-            ->assertSee(['Rp.', 'Amoxicilina 500 mg', 'Dieta blanda por 2 días.', $patient->full_name]);
+            ->assertSee(['Rp.', 'Amoxicilina 500 mg', 'Dieta blanda por 2 días.', $patient->full_name])
+            ->assertSee(['Clínica Vega Implant', 'Jr. Apurímac 648, Juliaca', 'WhatsApp 990 467 757', 'C.O.P. '.$doctor->cop_number])
+            ->assertSee(['Teléfono', Phone::display($patient->account->phone), 'K02.1 Caries de la dentina (pieza 36)', 'Tu sonrisa, nuestra pasión']);
 
         $this->actingAs(User::factory()->reception()->create());
         $this->get(ConsultationResource::prescriptionPrintUrl($prescription))->assertForbidden();

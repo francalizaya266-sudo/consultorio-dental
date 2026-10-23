@@ -1,5 +1,6 @@
 @php
     use App\Services\Web\PublicImages;
+    use App\Support\Initials;
     use App\Support\Markdown;
     use Illuminate\Support\Str;
 @endphp
@@ -11,7 +12,7 @@
                 <img src="{{ PublicImages::url($doctor->photo_path) }}" alt="{{ $doctor->name }}" class="portrait" loading="lazy" width="320" height="320">
             @else
                 {{-- Sin foto: sus iniciales, nunca una foto de banco. --}}
-                <span class="portrait monogram" aria-hidden="true">{{ Str::of($doctor->name)->replaceMatches('/^(Dra?\.|Dr\(a\)\.)\s*/u', '')->explode(' ')->take(2)->map(fn ($w) => mb_substr($w, 0, 1))->join('') }}</span>
+                <span class="portrait monogram" aria-hidden="true">{{ Initials::of($doctor->name) }}</span>
             @endif
             <div class="who">
                 <h3>{{ $doctor->name }}</h3>

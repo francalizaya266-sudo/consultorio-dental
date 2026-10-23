@@ -1,7 +1,13 @@
-@props(['title', 'size' => 'A4', 'doctor' => null, 'patient' => null, 'date' => null])
+{{-- details: más datos del paciente para la hoja, como ['Teléfono' => '987 654 321']. --}}
+@props(['title', 'size' => 'A4', 'doctor' => null, 'patient' => null, 'date' => null, 'details' => []])
 @php
-    $clinic = \App\Models\Setting::get('clinic.name');
-    $contact = collect([\App\Models\Setting::get('clinic.address'), \App\Models\Setting::get('clinic.phone')])->filter()->implode(' · ');
+    $info = app(\App\Services\Web\ClinicInfo::class);
+    $clinic = $info->name();
+    $contact = collect([
+        $info->fullAddress(),
+        $info->whatsapp() ? 'WhatsApp '.\App\Support\Phone::display($info->whatsapp()) : null,
+        $info->phone() ? 'Tel. '.$info->phone() : null,
+    ])->filter();
 @endphp
 <!DOCTYPE html>
 <html lang="es">
@@ -12,7 +18,7 @@
     <title>{{ $title }}{{ $patient ? ' · '.$patient->full_name : '' }}</title>
     <style>
         @page { size: {{ $size }}; margin: 12mm; }
-        :root { --brand: #0f766e; --ink: #0f172a; --muted: #475569; --line: #cbd5e1; --gray-600: #4b5563; --primary-100: #ccfbf1; }
+        :root { --brand: #1e4f91; --ink: #0f172a; --muted: #475569; --line: #cbd5e1; --gray-600: #4b5563; --primary-100: #dbe6f4; }
         * { box-sizing: border-box; }
         /* Que salgan los colores (puntos rojo / azul, fondos) también al imprimir. */
         html { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
@@ -21,6 +27,7 @@
         header { display: flex; justify-content: space-between; gap: 16px; border-bottom: 2px solid var(--brand); padding-bottom: 10px; margin-bottom: 14px; }
         .clinic { font-size: 1.25rem; font-weight: 800; color: var(--brand); }
         .muted { color: var(--muted); font-size: .85rem; }
+        .nowrap { white-space: nowrap; }
         .doctor { text-align: right; }
         .doctor strong { display: block; }
         h1 { font-size: 1.1rem; margin: 0 0 10px; text-transform: uppercase; letter-spacing: .04em; }
@@ -35,7 +42,7 @@
         th { font-size: .75rem; text-transform: uppercase; color: var(--muted); }
         td.num, th.num { text-align: right; white-space: nowrap; }
         .toolbar { position: sticky; top: 0; display: flex; justify-content: center; gap: 12px; padding: 12px; background: #0f172a; }
-        .toolbar button { font: inherit; font-weight: 700; padding: 10px 18px; border-radius: 8px; border: 0; cursor: pointer; background: #14b8a6; color: #042f2e; }
+        .toolbar button { font: inherit; font-weight: 700; padding: 10px 18px; border-radius: 8px; border: 0; cursor: pointer; background: #1e4f91; color: #fff; }
         .toolbar button.secondary { background: #334155; color: #fff; }
         @media print {
             body { background: #fff; }
@@ -53,8 +60,13 @@
     <header>
         <div>
             <div class="clinic">{{ $clinic }}</div>
-            @if ($contact)
-                <div class="muted">{{ $contact }}</div>
+            @if ($contact->isNotEmpty())
+                {{-- Si no entra en una línea, se corta entre un dato y otro: nunca a mitad del WhatsApp. --}}
+                <div class="muted">
+                    @foreach ($contact as $part)
+                        <span class="nowrap">{{ $part }}</span>@unless ($loop->last) · @endunless
+                    @endforeach
+                </div>
             @endif
         </div>
         @if ($doctor)
@@ -82,6 +94,9 @@
             <div><span>{{ $patient->document_type?->getLabel() ?? 'Documento' }}</span>{{ $patient->document_number }}</div>
         @endif
         <div><span>Fecha</span>{{ ($date ?? now())->format('d/m/Y') }}</div>
+        @foreach (array_filter($details) as $label => $value)
+            <div><span>{{ $label }}</span>{{ $value }}</div>
+        @endforeach
     </div>
     @endif
 

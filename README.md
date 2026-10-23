@@ -1,5 +1,7 @@
 # Sistema web para consultorio dental
 
+Hecho para **Clínica Vega Implant** (Jr. Apurímac 648, Juliaca). Su nombre, dirección, WhatsApp y lema vienen ya puestos en `config/consultorio.php` y se cambian desde **Ajustes**.
+
 Reservas online verificadas por WhatsApp, agenda inteligente, historia clínica con odontograma y paneles para administrador, recepción y doctores. Pagos solo informativos (se cobra en el consultorio).
 
 **Stack:** Laravel 13 (PHP 8.3+) · MySQL · Filament 5 para los paneles · Blade + Livewire para la web pública. Pensado para hosting compartido con PHP: sin Node en producción y con un solo cron.
@@ -15,7 +17,7 @@ php artisan migrate --seed
 php artisan serve
 ```
 
-En local, `--seed` crea datos de demostración, con 11 meses de historia para que Resumen y Ganancias tengan qué mostrar (tarda unos segundos). Panel: `/panel` con `admin@consultorio.test`, `recepcion@consultorio.test`, `dra.torres@consultorio.test` o `dr.ramos@consultorio.test` (clave `password`).
+En local, `--seed` crea datos de demostración, con 11 meses de historia para que Resumen y Ganancias tengan qué mostrar (tarda unos segundos). Panel: `/panel` con `admin@consultorio.test` (el Dr. Vega: administrador y único doctor) o `recepcion@consultorio.test` (clave `password`).
 
 Pruebas: `php artisan test` (usan SQLite en memoria; también pasan sobre MySQL).
 
@@ -30,7 +32,7 @@ Pruebas: `php artisan test` (usan SQLite en memoria; también pasan sobre MySQL)
 5. PHP con la extensión **GD** (casi todos los hostings la traen): comprime radiografías y fotos al subirlas. Esos archivos y las firmas quedan en `storage/app/private/clinica`, fuera de `public/`; inclúyanlo en las copias de seguridad junto con la base de datos.
 6. Las fotos de la web (doctores, tratamientos, promociones, antes y después) se guardan en `public/media`, achicadas y sin datos de ubicación. También van en las copias de seguridad.
 7. **Copias de seguridad:** cada día a las 3:00 a. m. se guarda una copia de la base de datos en `storage/app/private/respaldos` (se conservan las últimas 14; `BACKUPS_KEEP` lo cambia). El administrador odontólogo las descarga desde **Configuración → Copias de seguridad** para guardarlas fuera del hosting. Se restauran importándolas en phpMyAdmin o con `php artisan respaldo:restaurar` (sin nombre, la más reciente). Las radiografías y fotos de los puntos 5 y 6 van en la copia de archivos del hosting.
-8. En **Ajustes → Web** se completan la dirección, el distrito, el correo, las redes y los textos del inicio. El horario de atención que muestra la web sale solo de los horarios de los doctores.
+8. En **Ajustes** se revisan los datos de la clínica (vienen los del recetario) y se agregan el correo, las redes y los textos del inicio. El horario de atención que muestra la web sale solo de los horarios de los doctores.
 
 ## Cómo está organizado
 
