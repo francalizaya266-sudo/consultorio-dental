@@ -156,7 +156,7 @@ h3 { font-size: 1.1rem; font-weight: 700; letter-spacing: -.01em; }
 
 dl.facts { display: grid; grid-template-columns: auto 1fr; gap: 6px 16px; margin: 0; }
 dl.facts dt { color: var(--muted); }
-dl.facts dd { margin: 0; font-weight: 650; }
+dl.facts dd { margin: 0; font-weight: 650; min-width: 0; overflow-wrap: anywhere; }
 
 /* Reserva: pasos */
 
@@ -242,6 +242,19 @@ details.more > summary::-webkit-details-marker { display: none; }
 .appointment { background: var(--surface); border-radius: var(--radius); padding: 18px; display: grid; gap: 12px; }
 .appointment .when { font-size: 1.25rem; font-weight: 800; letter-spacing: -.01em; line-height: 1.2; }
 .appointment .actions { display: flex; flex-wrap: wrap; gap: 8px; }
+
+.plan-card { background: var(--surface); border-radius: var(--radius); padding: 18px; display: grid; gap: 12px; }
+.plan-card h3 { font-size: 1.125rem; margin: 0; line-height: 1.25; }
+.plan-card p { margin: 0; }
+.plan-card .badge { flex: none; white-space: nowrap; }
+.plan-card dd .small { display: block; font-weight: 400; }
+.plan-card .meter { height: 8px; border-radius: 999px; background: var(--surface-strong); overflow: hidden; }
+.plan-card .meter span { display: block; height: 100%; border-radius: 999px; background: var(--accent); }
+.plan-items { list-style: none; margin: 10px 0 0; padding: 0; display: grid; gap: 8px; }
+.plan-items li { display: flex; justify-content: space-between; gap: 12px; }
+.plan-items li.done > span:first-child { text-decoration: line-through; color: var(--muted); }
+.plan-items li > span:last-child { flex: none; font-size: .9375rem; }
+.owed { color: var(--bad); }
 
 /* Web pública: inicio y páginas de contenido */
 

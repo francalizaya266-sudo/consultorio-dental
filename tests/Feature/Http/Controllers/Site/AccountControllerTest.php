@@ -6,15 +6,22 @@ use App\Enums\AppointmentStatus;
 use App\Enums\MagicLinkPurpose;
 use App\Enums\MessageStatus;
 use App\Enums\MessageTemplateKey;
+use App\Enums\PlanItemStatus;
+use App\Enums\PlanPaymentMode;
+use App\Enums\TreatmentPlanStatus;
 use App\Filament\Resources\Accounts\Pages\ViewAccount;
 use App\Models\Account;
 use App\Models\Appointment;
+use App\Models\Doctor;
 use App\Models\Patient;
+use App\Models\Payment;
 use App\Models\RememberedDevice;
+use App\Models\TreatmentPlan;
 use App\Models\User;
 use App\Models\WhatsappMessage;
 use App\Services\Access\DeviceService;
 use App\Services\Access\MagicLinkService;
+use App\Services\Billing\BillingService;
 use Illuminate\Foundation\Testing\LazilyRefreshDatabase;
 use Livewire\Livewire;
 use Tests\Concerns\CreatesAgenda;
@@ -100,6 +107,41 @@ class AccountControllerTest extends TestCase
             ->assertSee('Hola, Rosa')
             ->assertSee('Para cuidar tus datos')
             ->assertDontSee('40123456');
+    }
+
+    public function test_after_checking_it_is_them_the_family_sees_its_plans_what_was_done_paid_and_the_next_cuota(): void
+    {
+        $doctor = Doctor::factory()->create(['name' => 'Dra. Vega']);
+        $plan = TreatmentPlan::create(['patient_id' => $this->mother->id, 'doctor_id' => $doctor->id, 'title' => 'Ortodoncia', 'status' => TreatmentPlanStatus::InProgress, 'payment_mode' => PlanPaymentMode::Installments, 'accepted_at' => now()->subMonth()]);
+        $plan->items()->createMany([
+            ['description' => 'Colocación de brackets', 'unit_price' => 1500, 'status' => PlanItemStatus::Done, 'accepted_at' => now()->subMonth(), 'in_payment_schedule' => true],
+            ['description' => 'Control de ortodoncia', 'unit_price' => 500, 'sessions_planned' => 10, 'sessions_done' => 3, 'status' => PlanItemStatus::InProgress, 'accepted_at' => now()->subMonth(), 'in_payment_schedule' => true],
+        ]);
+        $plan->installments()->createMany([
+            ['number' => 0, 'due_on' => '2026-10-02', 'amount' => 800],
+            ['number' => 1, 'due_on' => '2026-11-02', 'amount' => 600],
+            ['number' => 2, 'due_on' => '2026-12-02', 'amount' => 600],
+        ]);
+        app(BillingService::class)->chargeDueInstallments();
+        Payment::factory()->for($this->mother)->create(['amount' => 800]);
+        $companion = TreatmentPlan::create(['patient_id' => $this->child->id, 'doctor_id' => $doctor->id, 'included_in_plan_id' => $plan->id, 'title' => 'Sonrisa en familia (2x1)', 'status' => TreatmentPlanStatus::Accepted, 'payment_mode' => PlanPaymentMode::PerSession, 'accepted_at' => now()]);
+        $companion->items()->create(['description' => 'Limpieza dental', 'unit_price' => 120, 'discount' => 120, 'accepted_at' => now()]);
+        TreatmentPlan::create(['patient_id' => $this->mother->id, 'doctor_id' => $doctor->id, 'title' => 'Carillas por aceptar', 'status' => TreatmentPlanStatus::Proposed]);
+
+        $this->rememberDevice()
+            ->get(route('site.account'))
+            ->assertSee('Planes, pagos, citas anteriores y datos')
+            ->assertDontSee('Ortodoncia');
+
+        $this->withSession(['patient.elevated_until' => now()->addMinutes(10)->getTimestamp()])
+            ->get(route('site.account'))
+            ->assertOk()
+            ->assertSeeInOrder(['Planes y pagos', 'Ortodoncia', 'Por pagar', 'Rosa · Dra. Vega', 'Pagado S/ 800.00 de S/ 2,000.00'])
+            ->assertSeeInOrder(['Falta pagar', 'S/ 1,200.00', 'Para pagar ya', 'S/ 600.00', 'Próximo pago', 'S/ 600.00 · Miércoles 2 de diciembre', 'Cuota 2 de 2'])
+            ->assertSeeInOrder(['Tratamientos: 1 de 2 hechos', 'Colocación de brackets', 'Hecho', 'Control de ortodoncia', '3 de 10 sesiones'])
+            ->assertSeeInOrder(['Sonrisa en familia (2x1)', 'Incluido en el 2x1', 'Va incluido en el 2x1 de Rosa: no tiene costo.'])
+            ->assertSeeInOrder(['Saldo de '.$this->mother->full_name, 'S/ 600.00 por pagar'])
+            ->assertDontSee('Carillas por aceptar');
     }
 
     public function test_asking_for_access_leaves_one_link_ready_for_reception_without_revealing_numbers(): void

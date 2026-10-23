@@ -20,6 +20,11 @@ Schedule::command('cuotas:cargar')
     ->dailyAt('06:00')
     ->withoutOverlapping();
 
+// Unos días antes de cada cuota, su aviso queda listo en la bandeja de WhatsApp.
+Schedule::command('cuotas:preparar-avisos')
+    ->dailyAt(config('consultorio.defaults.reminders.day_before_at', '09:00'))
+    ->withoutOverlapping();
+
 Schedule::command('whatsapp:enviar')
     ->everyFiveMinutes()
     ->withoutOverlapping();
