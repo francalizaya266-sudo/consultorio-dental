@@ -23,16 +23,18 @@ class ListPatients extends ListRecords
 
     public function getTabs(): array
     {
-        if (! auth()->user()->can('viewAny', Charge::class)) {
-            return [];
-        }
-
-        return [
+        return array_filter([
             'all' => Tab::make('Todos'),
-            'owing' => Tab::make('Con saldo pendiente')
-                ->badge(fn () => Patient::query()->owing()->count() ?: null)
-                ->badgeColor('danger')
-                ->modifyQueryUsing(fn (Builder $query) => $query->owing()),
-        ];
+            'checkup' => Tab::make('Sin venir hace 6 meses')
+                ->badge(fn () => Patient::query()->dueForCheckup()->count() ?: null)
+                ->badgeColor('gray')
+                ->modifyQueryUsing(fn (Builder $query) => $query->dueForCheckup()),
+            'owing' => auth()->user()->can('viewAny', Charge::class)
+                ? Tab::make('Con saldo pendiente')
+                    ->badge(fn () => Patient::query()->owing()->count() ?: null)
+                    ->badgeColor('danger')
+                    ->modifyQueryUsing(fn (Builder $query) => $query->owing())
+                : null,
+        ]);
     }
 }

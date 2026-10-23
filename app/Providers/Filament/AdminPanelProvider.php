@@ -5,6 +5,7 @@ namespace App\Providers\Filament;
 use App\Filament\Pages\Dashboard;
 use App\Filament\Resources\Patients\PatientResource;
 use App\Filament\Support\InitialsAvatarProvider;
+use App\Http\Controllers\Backup\BackupDownloadController;
 use App\Http\Controllers\Clinical\ClinicalFileController;
 use App\Http\Controllers\Clinical\PrintController;
 use App\Http\Controllers\Reports\EarningsExportController;
@@ -93,6 +94,7 @@ class AdminPanelProvider extends PanelProvider
                 Route::get('archivos/{file}', [ClinicalFileController::class, 'show'])->name('clinical-files.show');
                 Route::get('reportes/ganancias/imprimir', [EarningsExportController::class, 'print'])->name('reports.earnings.print');
                 Route::get('reportes/ganancias/excel', [EarningsExportController::class, 'excel'])->name('reports.earnings.excel');
+                Route::get('copias-de-seguridad/{file}', BackupDownloadController::class)->name('backups.download');
             });
     }
 }

@@ -3,6 +3,7 @@
 namespace Tests\Feature\Filament;
 
 use App\Filament\Pages\Agenda;
+use App\Filament\Pages\Backups;
 use App\Filament\Pages\Dashboard;
 use App\Filament\Pages\Earnings;
 use App\Filament\Pages\Settings;
@@ -89,6 +90,7 @@ class PanelAccessTest extends TestCase
             'opiniones' => ['reviews', [true, false, false]],
             'antes y después' => ['cases', [true, false, false]],
             'ajustes' => ['settings', [true, false, false]],
+            'copias de seguridad' => ['backups', [true, false, false]],
         ];
     }
 
@@ -143,6 +145,7 @@ class PanelAccessTest extends TestCase
             'reviews' => ReviewResource::getUrl('index'),
             'cases' => SmileCaseResource::getUrl('index'),
             'settings' => Settings::getUrl(),
+            'backups' => Backups::getUrl(),
         };
 
         $users = [

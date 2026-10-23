@@ -9,6 +9,7 @@ use App\Filament\Pages\Settings;
 use App\Filament\Resources\Accounts\Pages\ViewAccount;
 use App\Filament\Resources\Doctors\Pages\EditDoctor;
 use App\Filament\Resources\Patients\Pages\CreatePatient;
+use App\Filament\Resources\Patients\Pages\ListPatients;
 use App\Filament\Resources\Payments\Pages\ManagePayments;
 use App\Filament\Resources\ScheduleBlocks\Pages\ManageScheduleBlocks;
 use App\Filament\Resources\TextSnippets\Pages\ManageTextSnippets;
@@ -200,5 +201,22 @@ class PatientsAndSetupPanelTest extends TestCase
             ->assertHasNoFormErrors();
 
         $this->assertSame(2, $doctor->schedules()->where('weekday', 1)->count());
+    }
+
+    public function test_patients_away_for_six_months_can_be_listed_to_call_them_back(): void
+    {
+        $this->freezeMonday();
+        $away = Patient::factory()->create(['first_visit_at' => '2025-01-10', 'last_visit_at' => '2026-04-20']);
+        $alreadyBooked = Patient::factory()->create(['first_visit_at' => '2025-01-10', 'last_visit_at' => '2026-03-02']);
+        $recent = Patient::factory()->create(['first_visit_at' => '2025-01-10', 'last_visit_at' => '2026-09-15']);
+        $neverCame = Patient::factory()->create(['first_visit_at' => null, 'last_visit_at' => null]);
+        Appointment::factory()->for($alreadyBooked)->for(Treatment::factory())->confirmed()->at('2026-11-05 10:00')->create();
+        $this->actingAs(User::factory()->reception()->create());
+
+        Livewire::test(ListPatients::class)
+            ->assertSee('Sin venir hace 6 meses')
+            ->set('activeTab', 'checkup')
+            ->assertCanSeeTableRecords([$away])
+            ->assertCanNotSeeTableRecords([$alreadyBooked, $recent, $neverCame]);
     }
 }

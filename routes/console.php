@@ -25,3 +25,8 @@ Schedule::command('queue:work --stop-when-empty --max-time=50')
     ->withoutOverlapping();
 
 Schedule::command('model:prune')->daily();
+
+// Copia de la base de datos de madrugada, cuando nadie está usando el sistema.
+Schedule::command('respaldo:crear')
+    ->dailyAt('03:00')
+    ->withoutOverlapping();
