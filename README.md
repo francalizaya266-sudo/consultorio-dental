@@ -1,58 +1,57 @@
-<p align="center"><a href="https://laravel.com" target="_blank"><img src="https://raw.githubusercontent.com/laravel/art/master/logo-lockup/5%20SVG/2%20CMYK/1%20Full%20Color/laravel-logolockup-cmyk-red.svg" width="400" alt="Laravel Logo"></a></p>
+# Sistema web para consultorio dental
 
-<p align="center">
-<a href="https://github.com/laravel/framework/actions"><img src="https://github.com/laravel/framework/workflows/tests/badge.svg" alt="Build Status"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/dt/laravel/framework" alt="Total Downloads"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/v/laravel/framework" alt="Latest Stable Version"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/l/laravel/framework" alt="License"></a>
-</p>
+Reservas online verificadas por WhatsApp, agenda inteligente, historia clínica con odontograma y paneles para administrador, recepción y doctores. Pagos solo informativos (se cobra en el consultorio).
 
-## About Laravel
+**Stack:** Laravel 13 (PHP 8.3+) · MySQL · Filament 5 para los paneles · Blade + Livewire para la web pública. Pensado para hosting compartido con PHP: sin Node en producción y con un solo cron.
 
-Laravel is a web application framework with expressive, elegant syntax. We believe development must be an enjoyable and creative experience to be truly fulfilling. Laravel takes the pain out of development by easing common tasks used in many web projects, such as:
-
-- [Simple, fast routing engine](https://laravel.com/docs/routing).
-- [Powerful dependency injection container](https://laravel.com/docs/container).
-- Multiple back-ends for [session](https://laravel.com/docs/session) and [cache](https://laravel.com/docs/cache) storage.
-- Expressive, intuitive [database ORM](https://laravel.com/docs/eloquent).
-- Database agnostic [schema migrations](https://laravel.com/docs/migrations).
-- [Robust background job processing](https://laravel.com/docs/queues).
-- [Real-time event broadcasting](https://laravel.com/docs/broadcasting).
-
-Laravel is accessible, powerful, and provides tools required for large, robust applications.
-
-## Learning Laravel
-
-Laravel has the most extensive and thorough [documentation](https://laravel.com/docs) and video tutorial library of all modern web application frameworks, making it a breeze to get started with the framework.
-
-In addition, [Laracasts](https://laracasts.com) contains thousands of video tutorials on a range of topics including Laravel, modern PHP, unit testing, and JavaScript. Boost your skills by digging into our comprehensive video library.
-
-You can also watch bite-sized lessons with real-world projects on [Laravel Learn](https://laravel.com/learn), where you will be guided through building a Laravel application from scratch while learning PHP fundamentals.
-
-## Agentic Development
-
-Laravel's predictable structure and conventions make it ideal for AI coding agents like Claude Code, Cursor, and GitHub Copilot. Install [Laravel Boost](https://laravel.com/docs/ai) to supercharge your AI workflow:
+## Puesta en marcha local
 
 ```bash
-composer require laravel/boost --dev
-
-php artisan boost:install
+composer install
+cp .env.example .env
+php artisan key:generate
+# crear la base de datos MySQL y completar DB_* en .env
+php artisan migrate --seed
+php artisan serve
 ```
 
-Boost provides your agent 15+ tools and skills that help agents build Laravel applications while following best practices.
+En local, `--seed` crea datos de demostración. Panel: `/admin` con `admin@consultorio.test`, `recepcion@consultorio.test`, `dra.torres@consultorio.test` o `dr.ramos@consultorio.test` (clave `password`).
 
-## Contributing
+Pruebas: `php artisan test` (usan SQLite en memoria; también pasan sobre MySQL).
 
-Thank you for considering contributing to the Laravel framework! The contribution guide can be found in the [Laravel documentation](https://laravel.com/docs/contributions).
+## Publicación en hosting compartido
 
-## Code of Conduct
+1. La raíz pública del dominio apunta a la carpeta `public/`.
+2. `.env` con `APP_ENV=production`, `APP_DEBUG=false`, los datos de MySQL y `APP_URL` con `https://`.
+3. `composer install --no-dev --optimize-autoloader`, `php artisan migrate --force` y `php artisan db:seed --class=CatalogSeeder --force` (solo catálogos, sin datos de prueba).
+4. Un único cron cada minuto:
+   `* * * * * php /ruta/al/proyecto/artisan schedule:run >> /dev/null 2>&1`
+   Ese cron prepara los recordatorios del día anterior, marca las citas sin confirmar, procesa la cola y limpia enlaces vencidos.
 
-In order to ensure that the Laravel community is welcoming to all, please review and abide by the [Code of Conduct](https://laravel.com/docs/contributions#code-of-conduct).
+## Cómo está organizado
 
-## Security Vulnerabilities
+| Carpeta | Qué hay |
+| --- | --- |
+| `app/Models` | Modelos. Los datos clínicos, citas y pagos registran cada cambio (`Concerns/Auditable`) y no se borran. |
+| `app/Enums` | Estados y opciones con su texto en español (estado de la cita, medio de pago, parentesco…). |
+| `app/Services/Agenda` | Agenda inteligente: horarios donde cabe la duración completa más la esterilización, con prioridad a los pegados a otras citas. |
+| `app/Services/Booking` | Reservas, confirmación, cambios de horario en dos niveles y cancelaciones. Toda escritura en la agenda pasa por aquí. |
+| `app/Services/Access` | Enlaces personales por WhatsApp y dispositivos recordados (sin contraseñas ni códigos). |
+| `app/Services/WhatsApp` | Bandeja de avisos: hoy se envían con un clic desde el WhatsApp del consultorio; mañana, por la API oficial sin cambiar nada más. |
+| `config/consultorio.php` | Valores por defecto (plazos, topes, tiempos). Se pueden cambiar desde el panel (tabla `settings`). |
 
-If you discover a security vulnerability within Laravel, please send an e-mail to Taylor Otwell via [taylor@laravel.com](mailto:taylor@laravel.com). All security vulnerabilities will be promptly addressed.
+## Reglas del negocio que implementa
 
-## License
+- **Familias:** un celular (`accounts`) puede tener varios pacientes a cargo; cada uno con su propia historia y odontograma.
+- **Reserva web al instante** si el horario está libre. Queda *pendiente* hasta que el paciente confirma con su enlace; el día anterior, si no confirmó, se marca *sin confirmar* para que recepción llame.
+- **Topes:** 2 citas web futuras por paciente y un tope por celular (configurable). Recepción puede bloquear números.
+- **Primera cita** en la web (evaluación o tratamiento simple). Las siguientes las programa el doctor; un paciente con plan en curso no reserva sesiones solo.
+- **Cambios de horario:** con más de 24 h, mismo doctor y tratamiento, el cambio es automático; si no (o la sesión tiene *fecha fija*), el paciente propone hasta 3 horarios y recepción o el doctor aprueba uno.
+- **Cancelación** directa hasta el plazo que define el consultorio; después, debe comunicarse.
+- **Doctores** solo manejan su propia agenda; cada cambio prepara el aviso al paciente y alerta a recepción.
+- **Datos clínicos** solo los ven los doctores y el administrador si es odontólogo (Ley N.º 29733).
 
-The Laravel framework is open-sourced software licensed under the [MIT license](https://opensource.org/licenses/MIT).
+## WhatsApp: etapa 1 y etapa 2
+
+- **Etapa 1 (`WHATSAPP_DRIVER=click_to_chat`):** el panel arma el mensaje con un enlace personal nuevo y abre WhatsApp ya escrito; recepción solo presiona Enviar. Sin programas no oficiales.
+- **Etapa 2 (`WHATSAPP_DRIVER=cloud_api`):** con el trámite de Meta listo, se completan `WHATSAPP_CLOUD_TOKEN` y `WHATSAPP_PHONE_NUMBER_ID`, y en cada texto del panel el nombre de su plantilla aprobada. `whatsapp:enviar` los manda solos cada 5 minutos.
