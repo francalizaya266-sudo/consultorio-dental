@@ -129,13 +129,13 @@ class TreatmentPlansRelationManager extends RelationManager
                     ->visible(fn () => auth()->user()->can('updateClinical', $patient))
                     ->mutateDataUsing(fn (array $data) => [...$data, 'doctor_id' => auth()->user()->doctorId(), 'status' => TreatmentPlanStatus::Draft])
                     ->successNotificationTitle('Plan guardado. Imprímelo o envíalo por WhatsApp al paciente.')
-                    ->after(fn (TreatmentPlan $record, CreateAction $action) => self::addCompanion($record, $action->getRawData()['companion_patient_id'] ?? null)),
+                    ->after(fn (TreatmentPlan $record, CreateAction $action) => self::afterSaving($record, $action->getRawData()['companion_patient_id'] ?? null)),
             ])
             ->recordActions([
                 EditAction::make()
                     ->modalHeading('Plan de tratamiento')
                     ->modalWidth(Width::FiveExtraLarge)
-                    ->after(fn (TreatmentPlan $record, EditAction $action) => self::addCompanion($record, $action->getRawData()['companion_patient_id'] ?? null)),
+                    ->after(fn (TreatmentPlan $record, EditAction $action) => self::afterSaving($record, $action->getRawData()['companion_patient_id'] ?? null)),
                 ViewAction::make()
                     ->modalHeading('Plan de tratamiento')
                     ->modalWidth(Width::FiveExtraLarge)
@@ -170,9 +170,12 @@ class TreatmentPlansRelationManager extends RelationManager
         return Filament::getPanel('admin')->route('print.plan', ['plan' => $plan]);
     }
 
-    /** 2x1: si se eligió a la otra persona, se le arma su plan con lo del paquete y sin costo. */
-    private static function addCompanion(TreatmentPlan $plan, mixed $companionId): void
+    /** Al guardar: el plan queda a cuenta de la campaña de su paquete y, en un 2x1, se arma el plan de la otra persona. */
+    private static function afterSaving(TreatmentPlan $plan, mixed $companionId): void
     {
+        // Si vino por una campaña con este paquete, el plan cuenta para ella.
+        app(TreatmentPlanService::class)->linkCampaign($plan);
+
         $companion = filled($companionId) ? Patient::find($companionId) : null;
         $package = $companion ? $plan->twoForOnePackage() : null;
 

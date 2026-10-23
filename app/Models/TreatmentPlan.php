@@ -16,7 +16,7 @@ use Illuminate\Database\Eloquent\SoftDeletes;
 use Illuminate\Support\Collection;
 
 /** Plan de tratamiento con costos (presupuesto informativo). */
-#[Fillable(['patient_id', 'doctor_id', 'consultation_id', 'included_in_plan_id', 'title', 'status', 'payment_mode', 'notes', 'accepted_at', 'completed_at'])]
+#[Fillable(['patient_id', 'doctor_id', 'consultation_id', 'included_in_plan_id', 'campaign_id', 'title', 'status', 'payment_mode', 'notes', 'accepted_at', 'completed_at'])]
 class TreatmentPlan extends Model
 {
     use Auditable, SoftDeletes;
@@ -53,6 +53,12 @@ class TreatmentPlan extends Model
     public function includedIn(): BelongsTo
     {
         return $this->belongsTo(self::class, 'included_in_plan_id')->withTrashed();
+    }
+
+    /** La campaña por la que vino, si el plan se armó con su paquete. */
+    public function campaign(): BelongsTo
+    {
+        return $this->belongsTo(Campaign::class)->withTrashed();
     }
 
     /** En un 2x1, el plan de la otra persona, que va incluido en este. */
