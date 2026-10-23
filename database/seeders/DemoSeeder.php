@@ -43,12 +43,13 @@ class DemoSeeder extends Seeder
     {
         Setting::set('clinic.name', 'Consultorio Dental Sonrisas');
         Setting::set('clinic.address', 'Av. Larco 123, Miraflores');
+        Setting::set('clinic.phone', '(01) 445 1234');
 
         $admin = User::factory()->admin(isDentist: true)->create(['name' => 'Administrador', 'email' => 'admin@consultorio.test']);
         $reception = User::factory()->reception()->create(['name' => 'Recepción', 'email' => 'recepcion@consultorio.test']);
 
-        $torres = $this->doctor('Dra. Ana Torres', 'dra.torres@consultorio.test', 'Odontología general', '#0ea5e9');
-        $ramos = $this->doctor('Dr. Luis Ramos', 'dr.ramos@consultorio.test', 'Ortodoncia', '#a855f7');
+        $torres = $this->doctor('Dra. Ana Torres', 'dra.torres@consultorio.test', 'Odontología general', '#0ea5e9', '24581');
+        $ramos = $this->doctor('Dr. Luis Ramos', 'dr.ramos@consultorio.test', 'Ortodoncia', '#a855f7', '19873');
 
         $treatments = Treatment::all()->keyBy('slug');
         $prices = [
@@ -107,6 +108,14 @@ class DemoSeeder extends Seeder
             'clinical_exam' => 'Extraoral: sin alteraciones. Intraoral: caries profunda en 36, restauración antigua en 46.',
             'procedures' => 'Evaluación completa. Se toma radiografía periapical de 36.',
             'indications' => 'Evitar masticar del lado izquierdo hasta el tratamiento.',
+            'next_steps' => 'Endodoncia de 36 en dos sesiones y luego resina.',
+            'closed_at' => $past->starts_at->addMinutes(40),
+        ]);
+        $rosa->medicalBackground()->create([
+            'conditions' => ['hypertension'],
+            'allergies' => 'Penicilina',
+            'medications' => 'Losartán 50 mg cada mañana',
+            'updated_by_user_id' => $torres->user_id,
         ]);
         $consultation->diagnoses()->create(['icd10_code_id' => Icd10Code::where('code', 'K02.1')->value('id'), 'tooth' => '36']);
 
@@ -121,19 +130,36 @@ class DemoSeeder extends Seeder
             ['tooth' => 36, 'surface' => 'O', 'odontogram_condition_id' => $conditions['caries']->id, 'state' => ToothState::Bad, 'abbreviation' => 'CD'],
             ['tooth' => 46, 'surface' => 'O', 'odontogram_condition_id' => $conditions['restauracion']->id, 'state' => ToothState::Good, 'abbreviation' => 'AM'],
             ['tooth' => 18, 'odontogram_condition_id' => $conditions['ausente']->id, 'state' => ToothState::Good],
+            ['tooth' => 26, 'odontogram_condition_id' => $conditions['corona']->id, 'state' => ToothState::Good, 'abbreviation' => 'CM'],
+            ['tooth' => 21, 'odontogram_condition_id' => $conditions['tratamiento_pulpar']->id, 'state' => ToothState::Good, 'abbreviation' => 'TC'],
+            ['tooth' => 38, 'odontogram_condition_id' => $conditions['remanente_radicular']->id, 'state' => ToothState::Bad, 'abbreviation' => 'RR'],
+            ['tooth' => 14, 'surface' => 'M', 'odontogram_condition_id' => $conditions['caries']->id, 'state' => ToothState::Bad, 'abbreviation' => 'CE'],
         ]);
 
         $plan = $rosa->treatmentPlans()->create([
             'doctor_id' => $torres->id,
             'consultation_id' => $consultation->id,
             'title' => 'Plan inicial',
-            'status' => TreatmentPlanStatus::InProgress,
+            'status' => TreatmentPlanStatus::Accepted,
             'accepted_at' => now()->subDays(7),
         ]);
-        $plan->items()->createMany([
-            ['treatment_id' => $treatments['endodoncia']->id, 'description' => 'Endodoncia', 'tooth' => '36', 'unit_price' => 600, 'sessions_planned' => 2, 'status' => PlanItemStatus::Pending],
-            ['treatment_id' => $resin->id, 'description' => 'Curación con resina', 'tooth' => '36', 'unit_price' => 150, 'status' => PlanItemStatus::Pending],
+        [$endodontics] = $plan->items()->createMany([
+            ['treatment_id' => $treatments['endodoncia']->id, 'description' => 'Endodoncia', 'tooth' => '36', 'unit_price' => 600, 'sessions_planned' => 2, 'status' => PlanItemStatus::Pending, 'sort_order' => 1],
+            ['treatment_id' => $resin->id, 'description' => 'Curación con resina', 'tooth' => '36', 'surfaces' => 'O', 'unit_price' => 150, 'status' => PlanItemStatus::Pending, 'sort_order' => 2],
+            ['treatment_id' => $treatments['extraccion-simple']->id, 'description' => 'Extracción simple', 'tooth' => '38', 'unit_price' => 150, 'status' => PlanItemStatus::Pending, 'sort_order' => 3],
         ]);
+
+        // Primera sesión de la endodoncia, ya agendada desde el plan.
+        $this->appointment($rosa, $torres, $treatments['endodoncia'], $workday(1)->setTime(11, 0), AppointmentStatus::Confirmed, BookingChannel::Reception)
+            ->update(['treatment_plan_item_id' => $endodontics->id]);
+
+        $prescription = $consultation->prescriptions()->create([
+            'patient_id' => $rosa->id,
+            'doctor_id' => $torres->id,
+            'issued_at' => $consultation->closed_at,
+            'indications' => $consultation->indications,
+        ]);
+        $prescription->items()->create(['medication' => 'Paracetamol 500 mg', 'instructions' => '1 tableta cada 8 horas por 3 días, si hay dolor']);
 
         Charge::create([
             'patient_id' => $rosa->id, 'appointment_id' => $past->id, 'treatment_id' => $evaluation->id, 'doctor_id' => $torres->id,
@@ -161,13 +187,13 @@ class DemoSeeder extends Seeder
         $this->command?->info("Demo lista. Entra a /panel con {$admin->email} / password");
     }
 
-    private function doctor(string $name, string $email, string $specialty, string $color): Doctor
+    private function doctor(string $name, string $email, string $specialty, string $color, string $cop): Doctor
     {
         $user = User::factory()->create(['name' => $name, 'email' => $email, 'role' => UserRole::Doctor]);
 
         return Doctor::factory()
             ->withSchedule()
-            ->create(['user_id' => $user->id, 'name' => $name, 'specialty' => $specialty, 'agenda_color' => $color]);
+            ->create(['user_id' => $user->id, 'name' => $name, 'specialty' => $specialty, 'agenda_color' => $color, 'cop_number' => $cop]);
     }
 
     private function appointment(

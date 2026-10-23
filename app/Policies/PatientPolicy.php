@@ -43,10 +43,23 @@ class PatientPolicy
         return false;
     }
 
-    /** Recepción y administración atienden a todos; el doctor, a quienes tienen cita con él. */
+    /** Historia clínica (Ley 29733): doctores de sus pacientes y el administrador solo si es odontólogo. */
+    public function viewClinical(User $user, Patient $model): bool
+    {
+        return $user->canSeeClinical() && ($user->isAdmin() || $this->treats($user, $model));
+    }
+
+    /** Antecedentes y nuevas atenciones: un doctor (con perfil) que atiende al paciente. */
+    public function updateClinical(User $user, Patient $model): bool
+    {
+        return $user->canSeeClinical() && $user->doctorId() !== null && $this->treats($user, $model);
+    }
+
+    /** Recepción y administración atienden a todos; el doctor, a quienes tienen cita o atención con él. */
     private function treats(User $user, Patient $patient): bool
     {
         return $user->managesAllAgendas()
-            || $patient->appointments()->where('doctor_id', $user->doctorId())->exists();
+            || $patient->appointments()->where('doctor_id', $user->doctorId())->exists()
+            || $patient->consultations()->where('doctor_id', $user->doctorId())->exists();
     }
 }

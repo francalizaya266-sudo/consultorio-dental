@@ -7,6 +7,7 @@ use App\Models\Concerns\Auditable;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 
 /** Procedimiento del plan, con su costo y sesiones. */
@@ -37,5 +38,27 @@ class TreatmentPlanItem extends Model
     public function appointments(): HasMany
     {
         return $this->hasMany(Appointment::class);
+    }
+
+    /** Atenciones en las que se trabajó este procedimiento. */
+    public function consultations(): BelongsToMany
+    {
+        return $this->belongsToMany(Consultation::class, 'consultation_plan_items')->withTimestamps();
+    }
+
+    public function subtotal(): float
+    {
+        return round($this->quantity * (float) $this->unit_price - (float) $this->discount, 2);
+    }
+
+    /** "Curación con resina · pieza 36 (MO)". */
+    public function label(bool $withTooth = true): string
+    {
+        return $this->description.($withTooth && filled($this->tooth) ? ' · pieza '.$this->tooth.(filled($this->surfaces) ? " ({$this->surfaces})" : '') : '');
+    }
+
+    public function isOpen(): bool
+    {
+        return in_array($this->status, [PlanItemStatus::Pending, PlanItemStatus::InProgress], true);
     }
 }

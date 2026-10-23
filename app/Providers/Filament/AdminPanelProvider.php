@@ -4,6 +4,7 @@ namespace App\Providers\Filament;
 
 use App\Filament\Pages\Dashboard;
 use App\Filament\Support\InitialsAvatarProvider;
+use App\Http\Controllers\Clinical\PrintController;
 use App\Models\Setting;
 use Filament\Http\Middleware\Authenticate;
 use Filament\Http\Middleware\AuthenticateSession;
@@ -18,6 +19,7 @@ use Illuminate\Cookie\Middleware\EncryptCookies;
 use Illuminate\Foundation\Http\Middleware\PreventRequestForgery;
 use Illuminate\Routing\Middleware\SubstituteBindings;
 use Illuminate\Session\Middleware\StartSession;
+use Illuminate\Support\Facades\Route;
 use Illuminate\View\Middleware\ShareErrorsFromSession;
 
 /** Panel interno único: lo que ve cada persona depende de su rol (políticas en app/Policies). */
@@ -29,6 +31,7 @@ class AdminPanelProvider extends PanelProvider
             ->default()
             ->id('admin')
             ->path('panel')
+            ->unsavedChangesAlerts()
             ->login()
             ->brandName(fn () => Setting::get('clinic.name'))
             ->colors([
@@ -64,6 +67,10 @@ class AdminPanelProvider extends PanelProvider
             ])
             ->authMiddleware([
                 Authenticate::class,
-            ]);
+            ])
+            ->authenticatedRoutes(function () {
+                Route::get('imprimir/receta/{prescription}', [PrintController::class, 'prescription'])->name('print.prescription');
+                Route::get('imprimir/plan/{plan}', [PrintController::class, 'plan'])->name('print.plan');
+            });
     }
 }

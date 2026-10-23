@@ -56,10 +56,17 @@ class WhatsAppOutbox
         ]);
     }
 
-    public function queueForAccount(Account $account, MessageTemplateKey $key, array $params = []): WhatsappMessage
+    public function queueForAccount(Account $account, MessageTemplateKey $key, array $params = [], ?int $patientId = null): WhatsappMessage
     {
-        return WhatsappMessage::create([
+        return tap($this->draftForAccount($account, $key, $params, $patientId))->save();
+    }
+
+    /** Aviso armado pero sin guardar: se muestra para retocarlo y se guarda recién al enviarlo. */
+    public function draftForAccount(Account $account, MessageTemplateKey $key, array $params = [], ?int $patientId = null): WhatsappMessage
+    {
+        return new WhatsappMessage([
             'account_id' => $account->getKey(),
+            'patient_id' => $patientId,
             'template_key' => $key,
             'phone' => $account->phone,
             'params' => $params + ['consultorio' => Setting::get('clinic.name')],

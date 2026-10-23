@@ -3,6 +3,7 @@
 namespace App\Filament\Support;
 
 use App\Exceptions\BookingException;
+use App\Exceptions\ClinicalException;
 use Closure;
 use Filament\Actions\Action;
 use Filament\Notifications\Notification;
@@ -15,7 +16,7 @@ final class Notify
     {
         try {
             $callback();
-        } catch (BookingException|AuthorizationException $e) {
+        } catch (BookingException|ClinicalException|AuthorizationException $e) {
             Notification::make()->danger()->title($e->getMessage())->send();
             $action?->halt();
 
