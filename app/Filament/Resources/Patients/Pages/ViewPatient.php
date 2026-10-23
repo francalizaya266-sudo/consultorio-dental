@@ -16,6 +16,11 @@ class ViewPatient extends ViewRecord
     protected function getHeaderActions(): array
     {
         return [
+            Action::make('clinicalRecord')
+                ->label('Historia clínica')
+                ->icon(Heroicon::OutlinedFolderOpen)
+                ->visible(fn () => auth()->user()->can('viewClinical', $this->getRecord()))
+                ->url(fn () => PatientResource::getUrl('clinical', ['record' => $this->getRecord()])),
             Action::make('book')
                 ->label('Nueva cita')
                 ->icon(Heroicon::OutlinedCalendarDays)

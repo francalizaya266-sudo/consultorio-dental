@@ -4,11 +4,15 @@ namespace App\Filament\Actions;
 
 use App\Enums\AppointmentStatus;
 use App\Enums\MessageTemplateKey;
+use App\Filament\Resources\Consultations\ConsultationResource;
 use App\Filament\Support\Notify;
 use App\Filament\Support\SlotPicker;
 use App\Models\Appointment;
+use App\Models\Consultation;
 use App\Models\Doctor;
+use App\Models\User;
 use App\Services\Booking\AppointmentService;
+use App\Services\Clinical\ConsultationService;
 use App\Services\WhatsApp\WhatsAppOutbox;
 use Filament\Actions\Action;
 use Filament\Actions\ActionGroup;
@@ -26,8 +30,10 @@ final class AppointmentActions
             self::confirm(),
             self::arrived(),
             self::start(),
+            self::continueConsultation(),
             self::complete(),
             ActionGroup::make([
+                self::viewConsultation(),
                 self::whatsapp(),
                 self::move(),
                 self::noShow(),
@@ -64,18 +70,59 @@ final class AppointmentActions
             ));
     }
 
+    /** El doctor de la cita abre la atención clínica (con su plantilla y odontograma); recepción solo cambia el estado. */
     public static function start(): Action
     {
         return Action::make('start')
             ->label('Atender')
             ->icon(Heroicon::OutlinedPlay)
             ->color('primary')
-            ->visible(fn (Appointment $record) => $record->status === AppointmentStatus::CheckedIn)
+            ->visible(fn (Appointment $record) => self::attendsClinically($record)
+                ? ($record->starts_at->isToday() && in_array($record->status, [AppointmentStatus::Pending, AppointmentStatus::Confirmed, AppointmentStatus::CheckedIn], true))
+                    || ($record->status === AppointmentStatus::InProgress && $record->loadMissing('consultation')->consultation === null)
+                : $record->status === AppointmentStatus::CheckedIn)
             ->authorize('update')
-            ->action(fn (Appointment $record) => Notify::run(
-                fn () => app(AppointmentService::class)->markStarted($record, auth()->user()),
-                'Atención iniciada',
-            ));
+            ->action(function (Appointment $record, Action $action) {
+                if (! self::attendsClinically($record)) {
+                    Notify::run(fn () => app(AppointmentService::class)->markStarted($record, auth()->user()), 'Atención iniciada');
+
+                    return;
+                }
+
+                $consultation = null;
+                Notify::run(function () use ($record, &$consultation) {
+                    $consultation = app(ConsultationService::class)->startFromAppointment($record, auth()->user());
+                }, 'Atención iniciada');
+
+                if ($consultation) {
+                    $action->redirect(ConsultationResource::getUrl('edit', ['record' => $consultation]));
+                }
+            });
+    }
+
+    /** Vuelve a la atención que el doctor dejó abierta. */
+    public static function continueConsultation(): Action
+    {
+        return Action::make('continueConsultation')
+            ->label('Continuar atención')
+            ->icon(Heroicon::OutlinedPencilSquare)
+            ->color('primary')
+            ->visible(fn (Appointment $record) => $record->status === AppointmentStatus::InProgress
+                && self::attendsClinically($record)
+                && self::openConsultation($record) !== null)
+            ->url(fn (Appointment $record) => ConsultationResource::getUrl('edit', ['record' => $record->consultation]));
+    }
+
+    public static function viewConsultation(): Action
+    {
+        return Action::make('viewConsultation')
+            ->label('Ver atención')
+            ->icon(Heroicon::OutlinedClipboardDocumentList)
+            ->visible(fn (Appointment $record) => in_array($record->status, [AppointmentStatus::InProgress, AppointmentStatus::Completed], true)
+                && auth()->user()->canSeeClinical()
+                && $record->loadMissing('consultation')->consultation !== null
+                && auth()->user()->can('view', $record->consultation))
+            ->url(fn (Appointment $record) => ConsultationResource::urlFor($record->consultation));
     }
 
     public static function complete(): Action
@@ -84,7 +131,8 @@ final class AppointmentActions
             ->label('Atendido')
             ->icon(Heroicon::OutlinedCheckBadge)
             ->color('gray')
-            ->visible(fn (Appointment $record) => in_array($record->status, [AppointmentStatus::CheckedIn, AppointmentStatus::InProgress], true))
+            ->visible(fn (Appointment $record) => in_array($record->status, [AppointmentStatus::CheckedIn, AppointmentStatus::InProgress], true)
+                && ! self::attendsClinically($record))
             ->authorize('update')
             ->action(fn (Appointment $record) => Notify::run(
                 fn () => app(AppointmentService::class)->markCompleted($record, auth()->user()),
@@ -154,6 +202,22 @@ final class AppointmentActions
                 fn () => app(AppointmentService::class)->cancelByStaff($record, auth()->user(), $data['reason'] ?? null, (bool) $data['notify']),
                 'Cita cancelada',
             ));
+    }
+
+    private static function openConsultation(Appointment $record): ?Consultation
+    {
+        $consultation = $record->loadMissing('consultation')->consultation;
+
+        return $consultation?->closed_at === null ? $consultation : null;
+    }
+
+    /** El usuario es el doctor de la cita y escribe la historia. */
+    private static function attendsClinically(Appointment $record): bool
+    {
+        /** @var User $user */
+        $user = auth()->user();
+
+        return $user->canSeeClinical() && $user->doctorId() === $record->doctor_id;
     }
 
     /** Abre el aviso pendiente de la cita o, si no hay, uno nuevo con sus datos y su enlace. */

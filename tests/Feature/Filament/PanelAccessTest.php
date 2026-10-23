@@ -8,6 +8,7 @@ use App\Filament\Pages\Settings;
 use App\Filament\Resources\Accounts\AccountResource;
 use App\Filament\Resources\Appointments\AppointmentResource;
 use App\Filament\Resources\Campaigns\CampaignResource;
+use App\Filament\Resources\Consultations\ConsultationResource;
 use App\Filament\Resources\Doctors\DoctorResource;
 use App\Filament\Resources\Doctors\Pages\EditDoctor;
 use App\Filament\Resources\Doctors\RelationManagers\TreatmentsRelationManager;
@@ -56,6 +57,8 @@ class PanelAccessTest extends TestCase
             'pacientes' => ['patients', [true, true, true]],
             'nuevo paciente' => ['patients.create', [true, true, true]],
             'ficha de paciente' => ['patients.view', [true, true, false]],
+            'historia clínica' => ['patients.clinical', [true, false, false]],
+            'atenciones' => ['consultations', [true, false, true]],
             'celulares' => ['accounts', [true, true, false]],
             'ficha de celular' => ['accounts.view', [true, true, false]],
             'pagos' => ['payments', [true, true, false]],
@@ -101,6 +104,8 @@ class PanelAccessTest extends TestCase
             'patients' => PatientResource::getUrl('index'),
             'patients.create' => PatientResource::getUrl('create'),
             'patients.view' => PatientResource::getUrl('view', ['record' => $patient]),
+            'patients.clinical' => PatientResource::getUrl('clinical', ['record' => $patient]),
+            'consultations' => ConsultationResource::getUrl('index'),
             'accounts' => AccountResource::getUrl('index'),
             'accounts.view' => AccountResource::getUrl('view', ['record' => Account::sole()]),
             'payments' => PaymentResource::getUrl('index'),

@@ -6,6 +6,7 @@ use App\Filament\Concerns\HasSpanishLabels;
 use App\Filament\Resources\Patients\Pages\CreatePatient;
 use App\Filament\Resources\Patients\Pages\EditPatient;
 use App\Filament\Resources\Patients\Pages\ListPatients;
+use App\Filament\Resources\Patients\Pages\ViewClinicalRecord;
 use App\Filament\Resources\Patients\Pages\ViewPatient;
 use App\Filament\Resources\Patients\RelationManagers\AppointmentsRelationManager;
 use App\Filament\Resources\Patients\Schemas\PatientForm;
@@ -59,7 +60,7 @@ class PatientResource extends Resource
         return PatientsTable::configure($table);
     }
 
-    /** Recepción y administración ven a todos; cada doctor, a los pacientes que atiende. */
+    /** Recepción y administración ven a todos; cada doctor, a los pacientes que atiende (con cita o atención). */
     public static function getEloquentQuery(): Builder
     {
         /** @var User $user */
@@ -67,7 +68,9 @@ class PatientResource extends Resource
 
         return parent::getEloquentQuery()
             ->with('account')
-            ->when(! $user->managesAllAgendas(), fn (Builder $q) => $q->whereHas('appointments', fn (Builder $a) => $a->where('doctor_id', $user->doctorId())));
+            ->when(! $user->managesAllAgendas(), fn (Builder $q) => $q->where(fn (Builder $mine) => $mine
+                ->whereHas('appointments', fn (Builder $a) => $a->where('doctor_id', $user->doctorId()))
+                ->orWhereHas('consultations', fn (Builder $c) => $c->where('doctor_id', $user->doctorId()))));
     }
 
     public static function getRelations(): array
@@ -84,6 +87,7 @@ class PatientResource extends Resource
             'create' => CreatePatient::route('/nuevo'),
             'view' => ViewPatient::route('/{record}'),
             'edit' => EditPatient::route('/{record}/editar'),
+            'clinical' => ViewClinicalRecord::route('/{record}/historia'),
         ];
     }
 
