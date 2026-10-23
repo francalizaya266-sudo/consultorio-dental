@@ -184,8 +184,12 @@ class AvailabilityService
         return $windows;
     }
 
-    /** @return Collection<int, array{start: CarbonImmutable, end: CarbonImmutable}> */
-    protected function workingRanges(Doctor $doctor, CarbonInterface $date): Collection
+    /**
+     * Tramos de atención del doctor ese día, según su horario semanal.
+     *
+     * @return Collection<int, array{start: CarbonImmutable, end: CarbonImmutable}>
+     */
+    public function workingRanges(Doctor $doctor, CarbonInterface $date): Collection
     {
         $day = CarbonImmutable::instance($date)->startOfDay();
 

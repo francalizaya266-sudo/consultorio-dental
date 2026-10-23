@@ -151,7 +151,7 @@ class AppointmentService
             $this->lockAgenda($doctor);
 
             if (! $this->availability->isFree($doctor, $startsAt, $duration, $buffer, requireWorkingHours: false)) {
-                throw BookingException::slotTaken();
+                throw BookingException::overlaps();
             }
 
             $appointment = Appointment::create([
@@ -265,6 +265,10 @@ class AppointmentService
 
         if (! $appointment->status->isChangeable()) {
             throw BookingException::notChangeable();
+        }
+
+        if ($doctor->isNot($appointment->doctor)) {
+            $this->assertDoctorOffers($doctor, $appointment->treatment);
         }
 
         $appointment = $this->move($appointment, $doctor, $startsAt, requireWorkingHours: false, actor: 'staff');
@@ -384,7 +388,7 @@ class AppointmentService
             $this->lockAgenda($doctor);
 
             if (! $this->availability->isFree($doctor, $startsAt, $duration, $buffer, $appointment->getKey(), $requireWorkingHours)) {
-                throw BookingException::slotTaken();
+                throw $actor === 'patient' ? BookingException::slotTaken() : BookingException::overlaps();
             }
 
             $from = $appointment->starts_at;

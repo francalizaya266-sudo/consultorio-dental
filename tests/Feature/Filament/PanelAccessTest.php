@@ -2,6 +2,7 @@
 
 namespace Tests\Feature\Filament;
 
+use App\Filament\Pages\Agenda;
 use App\Filament\Pages\Dashboard;
 use App\Filament\Pages\Settings;
 use App\Filament\Resources\Accounts\AccountResource;
@@ -46,6 +47,7 @@ class PanelAccessTest extends TestCase
     {
         return [
             'hoy' => ['dashboard', [true, true, true]],
+            'agenda' => ['agenda', [true, true, true]],
             'citas' => ['appointments', [true, true, true]],
             'nueva cita' => ['appointments.create', [true, true, true]],
             'avisos' => ['messages', [true, true, true]],
@@ -90,6 +92,7 @@ class PanelAccessTest extends TestCase
 
         $url = match ($page) {
             'dashboard' => Dashboard::getUrl(),
+            'agenda' => Agenda::getUrl(),
             'appointments' => AppointmentResource::getUrl('index'),
             'appointments.create' => AppointmentResource::getUrl('create'),
             'messages' => WhatsappMessageResource::getUrl('index'),

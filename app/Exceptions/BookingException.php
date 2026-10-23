@@ -12,6 +12,12 @@ class BookingException extends RuntimeException
         return new self('Ese horario se acaba de ocupar. Por favor elige otro.');
     }
 
+    /** Para el personal, que ve la agenda completa: el horario elegido choca con algo. */
+    public static function overlaps(): self
+    {
+        return new self('Ese horario se cruza con otra cita o con un bloqueo de la agenda. Elige otro.');
+    }
+
     public static function outsideWorkingHours(): self
     {
         return new self('Ese horario está fuera de la atención del doctor.');

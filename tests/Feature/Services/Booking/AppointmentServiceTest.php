@@ -252,7 +252,7 @@ class AppointmentServiceTest extends TestCase
         $late = $this->service()->bookFromStaff($reception, Patient::factory()->create(), $doctor, $treatment, CarbonImmutable::parse('2026-11-03 19:00'));
         $this->assertSame('19:30', $late->ends_at->format('H:i'));
 
-        $this->expectExceptionObject(BookingException::slotTaken());
+        $this->expectExceptionObject(BookingException::overlaps());
         $this->service()->bookFromStaff($reception, Patient::factory()->create(), $doctor, $treatment, CarbonImmutable::parse('2026-11-03 19:15'));
     }
 
