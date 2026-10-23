@@ -104,15 +104,20 @@ class WhatsAppOutbox
         return ['body' => strtr($body, $replacements), 'params' => $params];
     }
 
-    /** Enlace wa.me con el mensaje escrito; queda marcado como abierto por quien lo envía. */
-    public function clickToChatUrl(WhatsappMessage $message, User $by): string
+    /**
+     * Enlace wa.me con el mensaje ya escrito. Quien lo abre es quien lo envía:
+     * en WhatsApp solo falta presionar Enviar.
+     */
+    public function clickToChatUrl(WhatsappMessage $message, User $by, ?string $body = null): string
     {
-        $body = $this->render($message, $by);
+        $body ??= $this->render($message, $by);
 
         $message->forceFill([
-            'status' => MessageStatus::Opened,
+            'status' => MessageStatus::Sent,
             'opened_at' => now(),
             'opened_by_user_id' => $by->getKey(),
+            'sent_at' => now(),
+            'sent_by_user_id' => $by->getKey(),
         ])->save();
 
         return 'https://wa.me/'.Phone::forWhatsApp($message->phone).'?text='.rawurlencode($body);

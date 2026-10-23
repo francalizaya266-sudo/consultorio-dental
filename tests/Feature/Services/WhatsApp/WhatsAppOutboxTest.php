@@ -34,8 +34,8 @@ class WhatsAppOutboxTest extends TestCase
         $this->assertStringContainsString('Hola María', $text);
         $this->assertStringContainsString('miércoles 4 de noviembre a las 10:30 am', $text);
         $this->assertMatchesRegularExpression('#/c/[A-Za-z0-9]{32}#', $text, 'Lleva el enlace personal.');
-        $this->assertSame(MessageStatus::Opened, $message->fresh()->status);
-        $this->assertTrue($message->fresh()->openedBy->is($reception));
+        $this->assertSame(MessageStatus::Sent, $message->fresh()->status);
+        $this->assertTrue($message->fresh()->sentBy->is($reception));
     }
 
     public function test_uses_the_text_edited_by_the_clinic(): void

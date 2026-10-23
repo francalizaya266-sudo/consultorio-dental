@@ -61,13 +61,13 @@ class DemoSeeder extends Seeder
             $treatments[$slug]?->update(['price_from' => $price]);
         }
 
-        $torres->treatments()->sync($treatments->only([
+        $ids = fn (array $slugs) => array_map(fn (string $slug) => $treatments[$slug]->id, $slugs);
+
+        $torres->treatments()->sync($ids([
             'evaluacion-o-primera-consulta', 'limpieza-dental', 'curacion-con-resina', 'extraccion-simple', 'blanqueamiento', 'endodoncia', 'implante',
-        ])->pluck('id'));
-        $ramos->treatments()->sync([
-            ...$treatments->only(['evaluacion-o-primera-consulta', 'limpieza-dental', 'colocacion-de-brackets'])->pluck('id'),
-            $treatments['control-de-ortodoncia']->id => ['duration_minutes' => 20],
-        ]);
+        ]));
+        $ramos->treatments()->sync($ids(['evaluacion-o-primera-consulta', 'limpieza-dental', 'colocacion-de-brackets']));
+        $ramos->treatments()->attach($treatments['control-de-ortodoncia']->id, ['duration_minutes' => 20]);
 
         // Una familia: la mamá tiene el celular y tiene a cargo a su hijo y a su madre.
         $quispe = Account::factory()->verified()->create(['phone' => '+51987654321', 'accepts_promotions' => true]);
@@ -158,7 +158,7 @@ class DemoSeeder extends Seeder
             'whatsapp_text' => 'Hola, quiero la promoción de blanqueamiento 20%',
         ]);
 
-        $this->command?->info("Demo lista. Entra a /admin con {$admin->email} / password");
+        $this->command?->info("Demo lista. Entra a /panel con {$admin->email} / password");
     }
 
     private function doctor(string $name, string $email, string $specialty, string $color): Doctor
