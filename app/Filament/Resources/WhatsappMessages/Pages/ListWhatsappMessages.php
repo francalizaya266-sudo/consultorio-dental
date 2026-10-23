@@ -12,6 +12,8 @@ class ListWhatsappMessages extends ListRecords
 {
     protected static string $resource = WhatsappMessageResource::class;
 
+    protected static ?string $title = 'Avisos por enviar';
+
     public function getSubheading(): ?string
     {
         return 'Presiona "Enviar por WhatsApp": se abre el chat del paciente con el mensaje listo y solo tienes que tocar Enviar.';

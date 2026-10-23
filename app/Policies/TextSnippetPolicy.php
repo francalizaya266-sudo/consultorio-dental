@@ -2,6 +2,7 @@
 
 namespace App\Policies;
 
+use App\Enums\SnippetStatus;
 use App\Models\TextSnippet;
 use App\Models\User;
 
@@ -31,6 +32,12 @@ class TextSnippetPolicy
     public function delete(User $user, TextSnippet $model): bool
     {
         return $this->manages($user, $model);
+    }
+
+    /** El administrador convierte en compartida una opción que un doctor propuso. */
+    public function approve(User $user, TextSnippet $model): bool
+    {
+        return $user->isAdmin() && $model->status === SnippetStatus::Proposed;
     }
 
     private function manages(User $user, TextSnippet $snippet): bool

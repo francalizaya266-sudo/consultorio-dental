@@ -62,6 +62,8 @@ class WhatsappMessagesTable
                     ->visible(fn (WhatsappMessage $record) => $record->status !== MessageStatus::Cancelled)
                     ->authorize('update'),
                 SendWhatsAppAction::discard()
+                    ->iconButton()
+                    ->tooltip('Descartar')
                     ->authorize('update'),
             ])
             ->poll('30s')

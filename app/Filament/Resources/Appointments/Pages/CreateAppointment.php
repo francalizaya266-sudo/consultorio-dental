@@ -9,6 +9,7 @@ use App\Models\Doctor;
 use App\Models\Patient;
 use App\Models\Treatment;
 use App\Services\Booking\AppointmentService;
+use Filament\Actions\Action;
 use Filament\Notifications\Notification;
 use Filament\Resources\Pages\CreateRecord;
 use Illuminate\Auth\Access\AuthorizationException;
@@ -17,6 +18,10 @@ use Illuminate\Database\Eloquent\Model;
 class CreateAppointment extends CreateRecord
 {
     protected static string $resource = AppointmentResource::class;
+
+    protected static ?string $title = 'Nueva cita';
+
+    protected static ?string $breadcrumb = 'Nueva';
 
     protected static bool $canCreateAnother = false;
 
@@ -40,6 +45,11 @@ class CreateAppointment extends CreateRecord
             Notification::make()->danger()->title($e->getMessage())->send();
             $this->halt();
         }
+    }
+
+    protected function getCreateFormAction(): Action
+    {
+        return parent::getCreateFormAction()->label('Agendar cita');
     }
 
     protected function getCreatedNotificationTitle(): ?string

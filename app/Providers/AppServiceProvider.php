@@ -4,7 +4,9 @@ namespace App\Providers;
 
 use Carbon\Carbon;
 use Carbon\CarbonImmutable;
+use Illuminate\Auth\Events\Login;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Support\Facades\Event;
 use Illuminate\Support\ServiceProvider;
 
 class AppServiceProvider extends ServiceProvider
@@ -28,5 +30,7 @@ class AppServiceProvider extends ServiceProvider
 
         // En desarrollo, avisar de consultas N+1 y atributos inexistentes.
         Model::shouldBeStrict(! $this->app->isProduction());
+
+        Event::listen(Login::class, fn (Login $event) => $event->user->forceFill(['last_login_at' => now()])->saveQuietly());
     }
 }

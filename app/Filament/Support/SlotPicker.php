@@ -63,6 +63,10 @@ final class SlotPicker
 
             DatePicker::make('date')
                 ->label('Día')
+                ->native(false)
+                ->displayFormat('D d/m/Y')
+                ->firstDayOfWeek(1)
+                ->closeOnDateSelection()
                 ->default(today())
                 ->minDate(today())
                 ->required()

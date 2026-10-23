@@ -2,6 +2,7 @@
 
 namespace App\Filament\Resources\Appointments;
 
+use App\Filament\Concerns\HasSpanishLabels;
 use App\Filament\Resources\Appointments\Pages\CreateAppointment;
 use App\Filament\Resources\Appointments\Pages\ListAppointments;
 use App\Filament\Resources\Appointments\Pages\ViewAppointment;
@@ -20,6 +21,10 @@ use UnitEnum;
 
 class AppointmentResource extends Resource
 {
+    use HasSpanishLabels;
+
+    protected static ?string $slug = 'citas';
+
     protected static ?string $model = Appointment::class;
 
     protected static ?string $modelLabel = 'cita';
@@ -62,7 +67,7 @@ class AppointmentResource extends Resource
     {
         return [
             'index' => ListAppointments::route('/'),
-            'create' => CreateAppointment::route('/create'),
+            'create' => CreateAppointment::route('/nueva'),
             'view' => ViewAppointment::route('/{record}'),
         ];
     }

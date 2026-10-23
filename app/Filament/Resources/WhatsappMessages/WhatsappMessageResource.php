@@ -2,6 +2,7 @@
 
 namespace App\Filament\Resources\WhatsappMessages;
 
+use App\Filament\Concerns\HasSpanishLabels;
 use App\Filament\Resources\WhatsappMessages\Pages\ListWhatsappMessages;
 use App\Filament\Resources\WhatsappMessages\Tables\WhatsappMessagesTable;
 use App\Models\User;
@@ -16,6 +17,10 @@ use UnitEnum;
 /** Bandeja de avisos: el sistema los prepara y recepción los envía con un clic. */
 class WhatsappMessageResource extends Resource
 {
+    use HasSpanishLabels;
+
+    protected static ?string $slug = 'avisos';
+
     protected static ?string $model = WhatsappMessage::class;
 
     protected static ?string $modelLabel = 'aviso';

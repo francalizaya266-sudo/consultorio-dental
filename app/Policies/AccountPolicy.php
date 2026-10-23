@@ -18,9 +18,10 @@ class AccountPolicy
         return $user->managesAllAgendas();
     }
 
+    /** Las cuentas nacen solas al registrar un paciente con su celular. */
     public function create(User $user): bool
     {
-        return $user->managesAllAgendas();
+        return false;
     }
 
     public function update(User $user, Account $model): bool

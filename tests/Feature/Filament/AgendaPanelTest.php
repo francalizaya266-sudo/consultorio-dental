@@ -12,7 +12,9 @@ use App\Filament\Resources\Appointments\Pages\CreateAppointment;
 use App\Filament\Resources\Appointments\Pages\ListAppointments;
 use App\Filament\Resources\Appointments\Pages\ViewAppointment;
 use App\Filament\Resources\RescheduleRequests\Pages\ListRescheduleRequests;
+use App\Filament\Resources\RescheduleRequests\RescheduleRequestResource;
 use App\Filament\Resources\WhatsappMessages\Pages\ListWhatsappMessages;
+use App\Filament\Resources\WhatsappMessages\WhatsappMessageResource;
 use App\Filament\Widgets\TodayAppointments;
 use App\Filament\Widgets\TodayStats;
 use App\Models\Appointment;
@@ -56,8 +58,8 @@ class AgendaPanelTest extends TestCase
             Livewire::test(TodayAppointments::class)->assertOk();
             $this->get(AppointmentResource::getUrl('index'))->assertOk();
             $this->get(AppointmentResource::getUrl('create'))->assertOk();
-            $this->get(route('filament.admin.resources.whatsapp-messages.index'))->assertOk();
-            $this->get(route('filament.admin.resources.reschedule-requests.index'))->assertOk();
+            $this->get(WhatsappMessageResource::getUrl('index'))->assertOk();
+            $this->get(RescheduleRequestResource::getUrl('index'))->assertOk();
         }
     }
 

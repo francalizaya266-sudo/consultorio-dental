@@ -3,6 +3,7 @@
 namespace App\Filament\Resources\RescheduleRequests;
 
 use App\Enums\RescheduleRequestStatus;
+use App\Filament\Concerns\HasSpanishLabels;
 use App\Filament\Resources\RescheduleRequests\Pages\ListRescheduleRequests;
 use App\Filament\Resources\RescheduleRequests\Tables\RescheduleRequestsTable;
 use App\Models\RescheduleRequest;
@@ -17,6 +18,10 @@ use UnitEnum;
 /** Pacientes que proponen otros horarios: se aprueba uno con un clic. */
 class RescheduleRequestResource extends Resource
 {
+    use HasSpanishLabels;
+
+    protected static ?string $slug = 'solicitudes-de-cambio';
+
     protected static ?string $model = RescheduleRequest::class;
 
     protected static ?string $modelLabel = 'solicitud de cambio';

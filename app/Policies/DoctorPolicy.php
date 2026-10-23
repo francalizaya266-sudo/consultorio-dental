@@ -37,4 +37,9 @@ class DoctorPolicy
     {
         return $user->isAdmin();
     }
+
+    public function reorder(User $user): bool
+    {
+        return $user->isAdmin();
+    }
 }

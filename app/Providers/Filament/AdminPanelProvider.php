@@ -3,6 +3,7 @@
 namespace App\Providers\Filament;
 
 use App\Filament\Pages\Dashboard;
+use App\Filament\Support\InitialsAvatarProvider;
 use App\Models\Setting;
 use Filament\Http\Middleware\Authenticate;
 use Filament\Http\Middleware\AuthenticateSession;
@@ -27,12 +28,13 @@ class AdminPanelProvider extends PanelProvider
         return $panel
             ->default()
             ->id('admin')
-            ->path('admin')
+            ->path('panel')
             ->login()
             ->brandName(fn () => Setting::get('clinic.name'))
             ->colors([
                 'primary' => Color::Teal,
             ])
+            ->defaultAvatarProvider(InitialsAvatarProvider::class)
             ->strictAuthorization()
             ->databaseNotifications()
             ->databaseNotificationsPolling('30s')

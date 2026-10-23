@@ -8,6 +8,7 @@ use App\Filament\Support\SlotPicker;
 use App\Models\Patient;
 use App\Services\Patients\PatientRegistrar;
 use App\Support\Phone;
+use Filament\Actions\Action;
 use Filament\Forms\Components\DatePicker;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\Textarea;
@@ -56,6 +57,7 @@ class AppointmentForm
             ->placeholder('Busca por nombre, DNI o celular')
             ->searchable()
             ->required()
+            ->default(fn () => request()->integer('patient') ?: null)
             ->getSearchResultsUsing(fn (string $search) => Patient::query()
                 ->search($search)
                 ->with('account')
@@ -64,6 +66,7 @@ class AppointmentForm
                 ->mapWithKeys(fn (Patient $p) => [$p->id => $p->selectLabel()]))
             ->getOptionLabelUsing(fn ($value) => Patient::with('account')->find($value)?->selectLabel())
             ->createOptionModalHeading('Paciente nuevo')
+            ->createOptionAction(fn (Action $action) => $action->modalSubmitActionLabel('Guardar paciente')->tooltip('Paciente nuevo'))
             ->createOptionForm([
                 Grid::make(2)->schema([
                     TextInput::make('first_name')->label('Nombres')->required(),
