@@ -42,7 +42,10 @@ final class SignPlanAction
             ->label(fn (TreatmentPlan $record) => self::isFirst($record) ? 'El paciente acepta y firma' : 'Firmar lo agregado')
             ->icon(Heroicon::OutlinedPencil)
             ->color('success')
-            ->visible(fn (TreatmentPlan $record) => $record->isOpen() && (self::isFirst($record) || $record->itemsToAccept()->isNotEmpty()))
+            // El plan que va incluido en un 2x1 queda aceptado cuando firma quien paga.
+            ->visible(fn (TreatmentPlan $record) => $record->isOpen()
+                && ($record->included_in_plan_id === null || $record->accepted_at !== null)
+                && (self::isFirst($record) || $record->itemsToAccept()->isNotEmpty()))
             ->authorize('update')
             ->modalHeading(fn (TreatmentPlan $record) => self::isFirst($record) ? 'Aceptar el plan' : 'Aceptar lo agregado al plan')
             ->modalDescription('Revisa con el paciente lo que acepta y cómo lo pagará, y entrégale la tablet para que firme. Con la firma, el precio ya no cambia.')
@@ -74,6 +77,9 @@ final class SignPlanAction
                     ->implode(' '))
                     ->color('success')
                     ->visible(fn () => self::isFirst($record) && $record->packageSummaries() !== []),
+                Text::make(fn () => '2x1: con este plan se atiende también a '.$record->companionNames().', sin costo.')
+                    ->color('success')
+                    ->visible(fn () => self::isFirst($record) && $record->companionNames() !== null),
                 Section::make('Forma de pago')
                     ->compact()
                     ->visible(self::isFirst($record))

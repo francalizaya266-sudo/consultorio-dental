@@ -6,21 +6,28 @@ use App\Enums\DiagnosisType;
 use App\Enums\PlanItemStatus;
 use App\Enums\SnippetField;
 use App\Enums\SnippetStatus;
+use App\Exceptions\ClinicalException;
 use App\Filament\Actions\SendWhatsAppAction;
 use App\Filament\Actions\UploadClinicalFilesAction;
 use App\Filament\Forms\QuickTextarea;
 use App\Filament\Resources\Consultations\ConsultationResource;
 use App\Filament\Resources\Consultations\Pages\EditConsultation;
+use App\Filament\Resources\Patients\Schemas\TreatmentPlanForm;
 use App\Filament\Support\ClinicalAlerts;
 use App\Livewire\OdontogramChart;
+use App\Models\Campaign;
 use App\Models\Consultation;
 use App\Models\Icd10Code;
+use App\Models\Patient;
 use App\Models\Prescription;
 use App\Models\TextSnippet;
+use App\Models\TreatmentPackage;
 use App\Models\TreatmentPlanItem;
 use App\Models\User;
 use App\Services\Clinical\PrescriptionService;
 use App\Services\Clinical\TreatmentPlanService;
+use App\Support\CampaignText;
+use App\Support\Money;
 use Filament\Actions\Action;
 use Filament\Forms\Components\CheckboxList;
 use Filament\Forms\Components\Repeater;
@@ -38,6 +45,7 @@ use Filament\Schemas\Components\Utilities\Get;
 use Filament\Schemas\Components\Utilities\Set;
 use Filament\Schemas\Components\View;
 use Filament\Schemas\Schema;
+use Filament\Support\Enums\Width;
 use Filament\Support\Icons\Heroicon;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Collection;
@@ -137,6 +145,7 @@ class ConsultationForm
                     ->key('plan')
                     ->icon(Heroicon::OutlinedClipboardDocumentList)
                     ->description('Marca lo que se trabajó hoy. Al terminar la atención, el avance del plan se actualiza solo.')
+                    ->headerActions([self::addPackageAction()])
                     ->schema([
                         CheckboxList::make('planItems')
                             ->label('Lo que se trabajó hoy')
@@ -259,6 +268,72 @@ class ConsultationForm
     private static function workableItems(Consultation $consultation): Collection
     {
         return app(TreatmentPlanService::class)->workableItems($consultation->patient, $consultation);
+    }
+
+    /** Suma un paquete al plan del paciente. Si vino por una campaña que ofrece un paquete, ya viene elegido. */
+    private static function addPackageAction(): Action
+    {
+        return Action::make('addPackage')
+            ->label('Agregar paquete')
+            ->icon(Heroicon::OutlinedGift)
+            ->color('gray')
+            ->link()
+            ->visible(fn (?Consultation $record) => $record && auth()->user()->can('update', $record) && TreatmentPackage::query()->active()->exists())
+            ->modalHeading('Agregar un paquete al plan')
+            ->modalDescription(fn (Consultation $record) => ($campaign = self::campaignWithPackage($record))
+                ? 'Viene por la campaña '.$campaign->name.'.'
+                : 'Sus tratamientos se suman al borrador del plan, con el precio del paquete repartido.')
+            ->modalWidth(Width::TwoExtraLarge)
+            ->modalSubmitActionLabel('Agregar al plan')
+            ->fillForm(fn (Consultation $record) => ['package_id' => self::campaignWithPackage($record)?->treatment_package_id])
+            ->schema(fn (Consultation $record) => [
+                Select::make('package_id')
+                    ->label('Paquete')
+                    ->options(fn () => TreatmentPackage::query()->active()->orderBy('name')->get()
+                        ->mapWithKeys(fn (TreatmentPackage $package) => [$package->getKey() => $package->name.' · '.Money::format($package->price)]))
+                    ->required()
+                    ->live(),
+                Text::make(function (Get $get) {
+                    $package = TreatmentPackage::query()->active()->find($get('package_id'));
+
+                    return $package ? collect([
+                        'Incluye: '.$package->contents().'.',
+                        'Precio normal '.Money::format($package->normalPrice()).', en el paquete '.Money::format($package->price).($package->savings() > 0 ? ' (ahorra '.Money::format($package->savings()).')' : '').'.',
+                        ...TreatmentPlanService::packagePaymentOptions($package),
+                    ])->implode(' ') : '';
+                })
+                    ->visible(fn (Get $get) => filled($get('package_id'))),
+                TreatmentPlanForm::companionSelect($record->patient)
+                    ->visible(fn (Get $get) => (bool) TreatmentPackage::query()->active()->find($get('package_id'))?->for_two),
+            ])
+            ->action(function (Consultation $record, array $data) {
+                /** @var User $user */
+                $user = auth()->user();
+                $package = TreatmentPackage::query()->active()->findOrFail($data['package_id']);
+                $companion = filled($data['companion_patient_id'] ?? null) ? Patient::find($data['companion_patient_id']) : null;
+
+                try {
+                    [, $companionPlan] = app(TreatmentPlanService::class)->addPackageToDraft($record, $user, $package, $companion);
+                } catch (ClinicalException $e) {
+                    Notification::make()->danger()->title($e->getMessage())->send();
+
+                    return;
+                }
+
+                Notification::make()
+                    ->success()
+                    ->title('Se agregó '.$package->name.' al plan ('.Money::format($package->price).').')
+                    ->body($companionPlan ? '2x1: se armó el plan de '.$companion->full_name.', sin costo.' : null)
+                    ->send();
+            });
+    }
+
+    /** La campaña por la que vino a la cita, si ofrece un paquete que se sigue ofreciendo. */
+    private static function campaignWithPackage(Consultation $consultation): ?Campaign
+    {
+        $campaign = $consultation->appointment?->campaign;
+
+        return $campaign && CampaignText::package($campaign) ? $campaign : null;
     }
 
     /** Guarda y abre la receta lista para imprimir (o guardar en PDF). */

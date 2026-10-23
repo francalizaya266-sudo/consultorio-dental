@@ -99,7 +99,7 @@ class PrintController extends Controller
             $plans->markProposed($plan);
         }
 
-        $plan->load('patient', 'doctor', 'items.package', 'installments', 'signatures');
+        $plan->load('patient', 'doctor', 'items.package', 'installments', 'signatures', 'includedIn.patient', 'companionPlans.patient');
         $package = $plan->accepted_at ? null : $plan->offeredPackage();
 
         return view('print.plan', [
@@ -111,6 +111,9 @@ class PrintController extends Controller
             'packages' => $plan->packageSummaries(),
             // Antes de firmar, las formas de pago que ofrece el paquete.
             'packageOptions' => $package ? TreatmentPlanService::packagePaymentOptions($package) : [],
+            // 2x1: a quién más se atiende con este plan, o quién paga el de este paciente.
+            'companions' => $plan->companionNames(),
+            'payer' => $plan->includedIn?->patient?->full_name,
             'signatures' => $plan->signatures->map(fn (TreatmentPlanSignature $signature) => ['signature' => $signature, 'image' => Signatures::dataUri($signature->signature_path)]),
         ]);
     }

@@ -4,6 +4,7 @@ namespace App\Filament\Resources\Patients\RelationManagers;
 
 use App\Enums\PlanItemStatus;
 use App\Enums\TreatmentPlanStatus;
+use App\Exceptions\ClinicalException;
 use App\Filament\Actions\SendWhatsAppAction;
 use App\Filament\Actions\SignPlanAction;
 use App\Filament\Resources\Appointments\AppointmentResource;
@@ -68,7 +69,7 @@ class TreatmentPlansRelationManager extends RelationManager
         /** @var Patient $patient */
         $patient = $this->getOwnerRecord();
 
-        return TreatmentPlanForm::configure($schema, fn () => app(OdontogramSuggestions::class)->planItems($patient->latestOdontogram));
+        return TreatmentPlanForm::configure($schema, fn () => app(OdontogramSuggestions::class)->planItems($patient->latestOdontogram), $patient);
     }
 
     public function table(Table $table): Table
@@ -77,7 +78,7 @@ class TreatmentPlansRelationManager extends RelationManager
         $patient = $this->getOwnerRecord();
 
         return $table
-            ->modifyQueryUsing(fn (Builder $query) => $query->with(['doctor', 'items', 'patient.account', 'installments']))
+            ->modifyQueryUsing(fn (Builder $query) => $query->with(['doctor', 'items', 'patient.account', 'installments', 'includedIn.patient', 'companionPlans.patient']))
             ->defaultSort('created_at', 'desc')
             ->columns([
                 TextColumn::make('created_at')
@@ -127,12 +128,14 @@ class TreatmentPlansRelationManager extends RelationManager
                     ->createAnother(false)
                     ->visible(fn () => auth()->user()->can('updateClinical', $patient))
                     ->mutateDataUsing(fn (array $data) => [...$data, 'doctor_id' => auth()->user()->doctorId(), 'status' => TreatmentPlanStatus::Draft])
-                    ->successNotificationTitle('Plan guardado. Imprímelo o envíalo por WhatsApp al paciente.'),
+                    ->successNotificationTitle('Plan guardado. Imprímelo o envíalo por WhatsApp al paciente.')
+                    ->after(fn (TreatmentPlan $record, CreateAction $action) => self::addCompanion($record, $action->getRawData()['companion_patient_id'] ?? null)),
             ])
             ->recordActions([
                 EditAction::make()
                     ->modalHeading('Plan de tratamiento')
-                    ->modalWidth(Width::FiveExtraLarge),
+                    ->modalWidth(Width::FiveExtraLarge)
+                    ->after(fn (TreatmentPlan $record, EditAction $action) => self::addCompanion($record, $action->getRawData()['companion_patient_id'] ?? null)),
                 ViewAction::make()
                     ->modalHeading('Plan de tratamiento')
                     ->modalWidth(Width::FiveExtraLarge)
@@ -167,6 +170,31 @@ class TreatmentPlansRelationManager extends RelationManager
         return Filament::getPanel('admin')->route('print.plan', ['plan' => $plan]);
     }
 
+    /** 2x1: si se eligió a la otra persona, se le arma su plan con lo del paquete y sin costo. */
+    private static function addCompanion(TreatmentPlan $plan, mixed $companionId): void
+    {
+        $companion = filled($companionId) ? Patient::find($companionId) : null;
+        $package = $companion ? $plan->twoForOnePackage() : null;
+
+        if (! $package || $plan->companionPlans()->exists()) {
+            return;
+        }
+
+        try {
+            app(TreatmentPlanService::class)->addCompanion($plan, $package, $companion);
+        } catch (ClinicalException $e) {
+            Notification::make()->danger()->title($e->getMessage())->send();
+
+            return;
+        }
+
+        Notification::make()
+            ->success()
+            ->title('2x1: se armó el plan de '.$companion->full_name)
+            ->body('Sin costo. Queda aceptado cuando '.$plan->patient->first_name.' firme el suyo.')
+            ->send();
+    }
+
     /**
      * Cómo va el pago del plan, para verlo en la lista sin abrirlo.
      *
@@ -176,13 +204,23 @@ class TreatmentPlansRelationManager extends RelationManager
     {
         $pending = $plan->accepted_at ? $plan->itemsToAccept()->count() : 0;
         $toSign = $pending ? $pending.' agregado'.($pending > 1 ? 's' : '').' por firmar' : null;
+        $companions = $plan->companionNames();
+        $twoForOne = $companions ? '2x1 con '.$companions : null;
+
+        if ($plan->included_in_plan_id !== null) {
+            return [
+                'state' => 'Incluido en el 2x1',
+                'detail' => collect(['Lo paga '.$plan->includedIn?->patient?->full_name, $plan->accepted_at ? null : 'se acepta cuando firme', $toSign])->filter()->implode(' · '),
+                'color' => 'success',
+            ];
+        }
 
         if ($plan->accepted_at === null) {
-            return ['state' => 'Por aceptar', 'detail' => null, 'color' => 'gray'];
+            return ['state' => 'Por aceptar', 'detail' => $twoForOne, 'color' => 'gray'];
         }
 
         if (! $plan->hasSchedule()) {
-            return ['state' => $plan->payment_mode?->getLabel() ?? 'Por sesión', 'detail' => $toSign, 'color' => null];
+            return ['state' => $plan->payment_mode?->getLabel() ?? 'Por sesión', 'detail' => collect([$twoForOne, $toSign])->filter()->implode(' · ') ?: null, 'color' => null];
         }
 
         $states = collect(app(BillingService::class)->installmentStates($plan));
@@ -198,6 +236,7 @@ class TreatmentPlansRelationManager extends RelationManager
             },
             'detail' => collect([
                 $next ? 'Próximo: '.$next['installment']->due_on->format('d/m/Y').' · '.Money::format($next['due']) : null,
+                $twoForOne,
                 $toSign,
             ])->filter()->implode(' · ') ?: null,
             'color' => $states->contains('state', 'late') ? 'danger' : ($owed > 0 ? 'warning' : 'success'),

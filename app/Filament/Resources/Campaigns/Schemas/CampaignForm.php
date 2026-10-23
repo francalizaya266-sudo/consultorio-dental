@@ -5,6 +5,8 @@ namespace App\Filament\Resources\Campaigns\Schemas;
 use App\Enums\DiscountType;
 use App\Filament\Forms\WebPhotoUpload;
 use App\Models\Treatment;
+use App\Models\TreatmentPackage;
+use App\Support\Money;
 use Filament\Forms\Components\DateTimePicker;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\Textarea;
@@ -42,6 +44,13 @@ class CampaignForm
                         Select::make('treatment_id')
                             ->label('Tratamiento')
                             ->options(fn () => Treatment::query()->active()->orderBy('sort_order')->pluck('name', 'id'))
+                            ->searchable(),
+                        Select::make('treatment_package_id')
+                            ->label('Paquete que ofrece')
+                            ->helperText('En la web se ve qué incluye, el precio y cómo se paga. En la consulta ya viene elegido.')
+                            ->options(fn () => TreatmentPackage::query()->active()->orderBy('name')->get()
+                                ->mapWithKeys(fn (TreatmentPackage $package) => [$package->getKey() => $package->name.' · '.Money::format($package->price)]))
+                            ->getOptionLabelUsing(fn ($value) => TreatmentPackage::withTrashed()->find($value)?->name)
                             ->searchable(),
                         TextInput::make('promo_code')
                             ->label('Código')

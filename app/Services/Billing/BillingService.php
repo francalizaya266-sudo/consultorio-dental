@@ -270,7 +270,7 @@ final class BillingService
      */
     public function estimateFor(Appointment $appointment, bool $withTooth = false): array
     {
-        $appointment->loadMissing(['patient', 'treatment', 'campaign', 'planItem.plan.installments']);
+        $appointment->loadMissing(['patient', 'treatment', 'campaign', 'planItem.plan.installments', 'planItem.plan.includedIn.patient']);
         $patient = $appointment->patient;
         $lines = [];
 
@@ -306,9 +306,12 @@ final class BillingService
             $session = min($item->sessions_done + 1, max(1, $item->sessions_planned));
             $label = $item->label($withTooth).($item->sessions_planned > 1 ? " · sesión {$session} de {$item->sessions_planned}" : '');
 
-            $lines[] = $item->in_payment_schedule
-                ? ['label' => $label.' · incluida en el plan ('.mb_strtolower($item->plan->payment_mode->getLabel()).')', 'amount' => null]
-                : ['label' => $label, 'amount' => $this->nextSession($item)[0]];
+            $lines[] = match (true) {
+                $item->in_payment_schedule => ['label' => $label.' · incluida en el plan ('.mb_strtolower($item->plan->payment_mode->getLabel()).')', 'amount' => null],
+                // Lo del paquete en un 2x1 lo paga la otra persona; lo que se agregue aparte sí se cobra.
+                $item->plan->included_in_plan_id !== null && $item->treatment_package_id !== null && $item->subtotal() <= 0 => ['label' => $label.' · incluida en el 2x1 de '.$item->plan->includedIn?->patient?->full_name, 'amount' => null],
+                default => ['label' => $label, 'amount' => $this->nextSession($item)[0]],
+            };
         } elseif ((float) $appointment->treatment?->price_from > 0) {
             $price = (float) $appointment->treatment->price_from;
             $discount = $appointment->campaign?->discountOn($price, $appointment->treatment_id) ?? 0.0;

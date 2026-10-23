@@ -69,6 +69,14 @@
         </p>
     @endforeach
 
+    @if ($companions)
+        <p class="package"><strong>2x1:</strong> con este plan se atiende también a {{ $companions }}, sin costo.</p>
+    @endif
+
+    @if ($payer)
+        <p class="package"><strong>Incluido en el 2x1 de {{ $payer }}:</strong> lo que viene del paquete no tiene costo.</p>
+    @endif
+
     @if ($packageOptions !== [])
         <div class="payment">
             <h3>Formas de pago del paquete</h3>

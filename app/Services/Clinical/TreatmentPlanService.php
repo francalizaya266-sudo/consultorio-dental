@@ -138,6 +138,60 @@ final class TreatmentPlanService
     }
 
     /**
+     * 2x1: el plan de la otra persona, con lo del paquete y sin costo, incluido en el plan de quien
+     * paga. Si quien paga ya aceptó, el de la otra persona queda aceptado también.
+     */
+    public function addCompanion(TreatmentPlan $plan, TreatmentPackage $package, Patient $companion): TreatmentPlan
+    {
+        if (! $package->for_two || $companion->getKey() === $plan->patient_id) {
+            throw ClinicalException::invalidCompanion();
+        }
+
+        return DB::transaction(function () use ($plan, $package, $companion) {
+            $companionPlan = TreatmentPlan::create([
+                'patient_id' => $companion->getKey(),
+                'doctor_id' => $plan->doctor_id,
+                'included_in_plan_id' => $plan->getKey(),
+                'title' => $package->name.' (2x1)',
+                'status' => $plan->status === TreatmentPlanStatus::Draft ? TreatmentPlanStatus::Draft : TreatmentPlanStatus::Proposed,
+            ]);
+
+            foreach ($this->itemsFromPackage($package) as $index => $item) {
+                $companionPlan->items()->create([...$item, 'discount' => round($item['quantity'] * $item['unit_price'], 2), 'sort_order' => $index]);
+            }
+
+            if ($plan->accepted_at !== null) {
+                $this->accept($companionPlan);
+            }
+
+            return $companionPlan;
+        });
+    }
+
+    /**
+     * Desde la atención: suma el paquete al borrador del plan y, si es 2x1, arma el plan de la otra persona.
+     *
+     * @return array{0: TreatmentPlan|null, 1: TreatmentPlan|null} El plan y el de la otra persona del 2x1.
+     */
+    public function addPackageToDraft(Consultation $consultation, User $by, TreatmentPackage $package, ?Patient $companion = null): array
+    {
+        return DB::transaction(function () use ($consultation, $by, $package, $companion) {
+            [$plan] = $this->addToDraft($consultation, $by, $this->itemsFromPackage($package));
+
+            if ($plan && $plan->title === 'Plan de tratamiento' && $plan->items()->whereNull('treatment_package_id')->doesntExist()) {
+                $plan->update(['title' => $package->name]);
+            }
+
+            // Un 2x1 por plan: si ya tiene a la otra persona, el paquete solo se suma.
+            $companionPlan = $plan && $package->for_two && $companion && $plan->companionPlans()->open()->doesntExist()
+                ? $this->addCompanion($plan, $package, $companion)
+                : null;
+
+            return [$plan, $companionPlan];
+        });
+    }
+
+    /**
      * Agrega procedimientos al borrador del plan del doctor (lo crea si no hay uno), desde la atención.
      *
      * @param  list<array<string, mixed>>  $items
@@ -154,10 +208,12 @@ final class TreatmentPlanService
         }
 
         return DB::transaction(function () use ($consultation, $items) {
+            // El plan que va incluido en un 2x1 queda como se armó: lo nuevo va en un plan aparte.
             $plan = TreatmentPlan::query()
                 ->where('patient_id', $consultation->patient_id)
                 ->where('doctor_id', $consultation->doctor_id)
                 ->where('status', TreatmentPlanStatus::Draft)
+                ->whereNull('included_in_plan_id')
                 ->latest('id')
                 ->first()
                 ?? TreatmentPlan::create([
@@ -240,6 +296,9 @@ final class TreatmentPlanService
                 foreach ($schedule as $row) {
                     $plan->installments()->create($row);
                 }
+
+                // En un 2x1, la otra persona queda aceptada con la firma de quien paga.
+                $plan->companionPlans()->get()->each(fn (TreatmentPlan $companionPlan) => $this->accept($companionPlan));
             }
 
             $this->lockItems($plan, $items, $firstTime && $mode->hasSchedule());
@@ -423,6 +482,10 @@ final class TreatmentPlanService
                 'status' => TreatmentPlanStatus::Cancelled,
                 'notes' => trim(collect([$plan->notes, $reason ? 'Cancelado: '.$reason : null])->filter()->implode("\n")) ?: null,
             ]);
+
+            // Sin el plan de quien paga, el 2x1 ya no corre para la otra persona.
+            $plan->companionPlans()->open()->get()
+                ->each(fn (TreatmentPlan $companionPlan) => $this->cancel($companionPlan, 'se canceló el 2x1 de '.$plan->patient->full_name));
         });
     }
 

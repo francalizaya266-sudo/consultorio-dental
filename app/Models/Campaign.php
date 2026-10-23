@@ -14,7 +14,7 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\SoftDeletes;
 
 /** Campaña o promoción; se publica y se retira sola según sus fechas. */
-#[Fillable(['name', 'slug', 'summary', 'description', 'image_path', 'treatment_id', 'discount_type', 'discount_value', 'starts_at', 'ends_at', 'promo_code', 'max_redemptions', 'show_on_home', 'whatsapp_text', 'views_count', 'is_active'])]
+#[Fillable(['name', 'slug', 'summary', 'description', 'image_path', 'treatment_id', 'treatment_package_id', 'discount_type', 'discount_value', 'starts_at', 'ends_at', 'promo_code', 'max_redemptions', 'show_on_home', 'whatsapp_text', 'views_count', 'is_active'])]
 class Campaign extends Model
 {
     use Auditable, SoftDeletes;
@@ -34,6 +34,12 @@ class Campaign extends Model
     public function treatment(): BelongsTo
     {
         return $this->belongsTo(Treatment::class);
+    }
+
+    /** El paquete que ofrece la campaña, si ofrece uno. */
+    public function package(): BelongsTo
+    {
+        return $this->belongsTo(TreatmentPackage::class, 'treatment_package_id')->withTrashed();
     }
 
     public function appointments(): HasMany

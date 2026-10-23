@@ -18,7 +18,7 @@ use Illuminate\Database\Eloquent\SoftDeletes;
  * Paquete que arma el doctor: varios tratamientos a un precio y cómo se puede pagar
  * (todo junto, con un descuento, o una inicial y cuotas mensuales).
  */
-#[Fillable(['name', 'description', 'price', 'allows_upfront', 'upfront_discount', 'allows_installments', 'down_payment', 'installments', 'monthly_amount', 'is_active', 'created_by_user_id'])]
+#[Fillable(['name', 'description', 'price', 'for_two', 'allows_upfront', 'upfront_discount', 'allows_installments', 'down_payment', 'installments', 'monthly_amount', 'is_active', 'created_by_user_id'])]
 class TreatmentPackage extends Model
 {
     /** @use HasFactory<TreatmentPackageFactory> */
@@ -28,6 +28,7 @@ class TreatmentPackage extends Model
     {
         return [
             'price' => 'decimal:2',
+            'for_two' => 'boolean',
             'allows_upfront' => 'boolean',
             'upfront_discount' => 'decimal:2',
             'allows_installments' => 'boolean',
@@ -65,6 +66,14 @@ class TreatmentPackage extends Model
     public function savings(): float
     {
         return max(0, round($this->normalPrice() - (float) $this->price, 2));
+    }
+
+    /** Lo que incluye en una línea: "Colocación de brackets · Control de ortodoncia × 18". */
+    public function contents(): string
+    {
+        $this->loadMissing('items.treatment');
+
+        return $this->items->map(fn (TreatmentPackageItem $item) => $item->label())->implode(' · ');
     }
 
     /** La forma de pago con que llega el plan a la firma: en cuotas si el paquete las ofrece. */

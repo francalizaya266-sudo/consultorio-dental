@@ -77,6 +77,11 @@ class ClinicalException extends RuntimeException
         return new self('Este plan no tiene nada nuevo que aceptar.');
     }
 
+    public static function invalidCompanion(): self
+    {
+        return new self('En un 2x1, la otra persona tiene que ser otro paciente, y el paquete tiene que ser 2x1.');
+    }
+
     public static function invalidPaymentTerms(): self
     {
         return new self('Revisa la forma de pago: la inicial debe ser menor que el total y las cuotas, entre 1 y 24.');

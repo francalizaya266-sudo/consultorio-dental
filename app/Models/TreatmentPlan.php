@@ -16,7 +16,7 @@ use Illuminate\Database\Eloquent\SoftDeletes;
 use Illuminate\Support\Collection;
 
 /** Plan de tratamiento con costos (presupuesto informativo). */
-#[Fillable(['patient_id', 'doctor_id', 'consultation_id', 'title', 'status', 'payment_mode', 'notes', 'accepted_at', 'completed_at'])]
+#[Fillable(['patient_id', 'doctor_id', 'consultation_id', 'included_in_plan_id', 'title', 'status', 'payment_mode', 'notes', 'accepted_at', 'completed_at'])]
 class TreatmentPlan extends Model
 {
     use Auditable, SoftDeletes;
@@ -47,6 +47,18 @@ class TreatmentPlan extends Model
     public function consultation(): BelongsTo
     {
         return $this->belongsTo(Consultation::class);
+    }
+
+    /** En un 2x1, el plan de quien paga; este plan no tiene costo. */
+    public function includedIn(): BelongsTo
+    {
+        return $this->belongsTo(self::class, 'included_in_plan_id')->withTrashed();
+    }
+
+    /** En un 2x1, el plan de la otra persona, que va incluido en este. */
+    public function companionPlans(): HasMany
+    {
+        return $this->hasMany(self::class, 'included_in_plan_id');
     }
 
     public function items(): HasMany
@@ -100,6 +112,10 @@ class TreatmentPlan extends Model
     /** El paquete con que se armó el plan: de él sale la forma de pago que se ofrece al firmar. */
     public function offeredPackage(): ?TreatmentPackage
     {
+        if ($this->included_in_plan_id !== null) {
+            return null;
+        }
+
         $this->loadMissing('items.package');
 
         return $this->items->first(fn (TreatmentPlanItem $item) => $item->treatment_package_id !== null && $item->status !== PlanItemStatus::Cancelled)?->package;
@@ -112,6 +128,11 @@ class TreatmentPlan extends Model
      */
     public function packageSummaries(): array
     {
+        // En el plan que va incluido en un 2x1 no hay precio de paquete que mostrar.
+        if ($this->included_in_plan_id !== null) {
+            return [];
+        }
+
         $this->loadMissing('items.package');
 
         return $this->items
@@ -125,5 +146,29 @@ class TreatmentPlan extends Model
             ])
             ->values()
             ->all();
+    }
+
+    /** El paquete 2x1 del plan, si tiene uno: con el mismo pago se atiende también a otra persona. */
+    public function twoForOnePackage(): ?TreatmentPackage
+    {
+        if ($this->included_in_plan_id !== null) {
+            return null;
+        }
+
+        $this->loadMissing('items.package');
+
+        return $this->items->first(fn (TreatmentPlanItem $item) => $item->package?->for_two && $item->status !== PlanItemStatus::Cancelled)?->package;
+    }
+
+    /** En un 2x1, a quién más se atiende con este plan: "Ana Pérez". Null si no tiene. */
+    public function companionNames(): ?string
+    {
+        $this->loadMissing('companionPlans.patient');
+
+        $names = $this->companionPlans
+            ->reject(fn (TreatmentPlan $plan) => $plan->status === TreatmentPlanStatus::Cancelled)
+            ->map(fn (TreatmentPlan $plan) => $plan->patient->full_name);
+
+        return $names->isEmpty() ? null : $names->join(', ', ' y ');
     }
 }
