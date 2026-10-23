@@ -18,6 +18,8 @@ enum MessageTemplateKey: string implements HasLabel
     case Prescription = 'prescription';
     case TreatmentPlan = 'treatment_plan';
     case WaitlistOffer = 'waitlist_offer';
+    case InstallmentReminder = 'installment_reminder';
+    case InstallmentOverdue = 'installment_overdue';
 
     public function getLabel(): string
     {
@@ -33,6 +35,8 @@ enum MessageTemplateKey: string implements HasLabel
             self::Prescription => 'Receta e indicaciones',
             self::TreatmentPlan => 'Plan de tratamiento (presupuesto)',
             self::WaitlistOffer => 'Horario libre para lista de espera',
+            self::InstallmentReminder => 'Aviso de cuota por vencer',
+            self::InstallmentOverdue => 'Cuota atrasada',
         };
     }
 
@@ -51,6 +55,8 @@ enum MessageTemplateKey: string implements HasLabel
             self::Prescription => "Hola {nombre}, te enviamos tu receta e indicaciones de {doctor}:\n\n{receta}",
             self::TreatmentPlan => "Hola {nombre}, te enviamos tu plan de tratamiento con {doctor}:\n\n{plan}\n\nTotal: {total}\nEs un presupuesto referencial: si en el camino el tratamiento cambia, te lo explicamos antes. Cualquier duda, escríbenos.",
             self::WaitlistOffer => 'Hola {nombre}, se liberó un horario para {tratamiento} el {fecha} a las {hora} con {doctor}. ¿Lo quieres? Respóndenos y te lo reservamos.',
+            self::InstallmentReminder => "Hola {nombre}, te escribimos de {consultorio}.\nEl {fecha} vence tu {cuota} de {plan}: {monto}.\n\nPuedes pagarla en el consultorio con Yape, Plin, tarjeta o efectivo. Si ya la pagaste, no te preocupes.",
+            self::InstallmentOverdue => "Hola {nombre}, te escribimos de {consultorio}.\nTu {cuota} de {plan} venció el {fecha} y queda {monto} por pagar.\n\nPuedes pagarla en el consultorio con Yape, Plin, tarjeta o efectivo. Si ya la pagaste, avísanos y lo revisamos.",
         };
     }
 }

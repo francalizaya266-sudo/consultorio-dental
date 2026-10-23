@@ -549,6 +549,29 @@ final class TreatmentPlanService
         ], $plan->patient_id);
     }
 
+    /**
+     * Aviso de una cuota para el celular del paciente (o del titular): que está por vencer o que venció.
+     * Null si no tiene celular.
+     */
+    public function installmentDraft(TreatmentPlanInstallment $installment, MessageTemplateKey $key, float $amount): ?WhatsappMessage
+    {
+        $installment->loadMissing('plan.patient.account', 'plan.installments');
+        $plan = $installment->plan;
+
+        if (! $plan->patient->account) {
+            return null;
+        }
+
+        return $this->outbox->draftForAccount($plan->patient->account, $key, [
+            'nombre' => $plan->patient->first_name,
+            'paciente' => $plan->patient->full_name,
+            'cuota' => mb_strtolower($installment->label()),
+            'plan' => mb_strtolower($plan->title ?: 'Plan de tratamiento'),
+            'fecha' => $installment->due_on->translatedFormat('l j \d\e F'),
+            'monto' => Money::format($amount),
+        ], $plan->patient_id);
+    }
+
     /** Procedimientos que se pueden trabajar en una atención: los pendientes de los planes vigentes. */
     public function workableItems(Patient $patient, ?Consultation $consultation = null): Collection
     {

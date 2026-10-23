@@ -9,7 +9,7 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 /** Un pago del cronograma del plan: la inicial (número 0), el pago único o una cuota. Se carga al vencer. */
-#[Fillable(['treatment_plan_id', 'number', 'due_on', 'amount', 'discount', 'charge_id'])]
+#[Fillable(['treatment_plan_id', 'number', 'due_on', 'amount', 'discount', 'charge_id', 'reminded_at'])]
 class TreatmentPlanInstallment extends Model
 {
     use Auditable;
@@ -18,6 +18,7 @@ class TreatmentPlanInstallment extends Model
     {
         return [
             'due_on' => 'date',
+            'reminded_at' => 'datetime',
             'amount' => 'decimal:2',
             'discount' => 'decimal:2',
         ];

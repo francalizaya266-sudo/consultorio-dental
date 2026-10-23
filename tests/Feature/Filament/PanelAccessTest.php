@@ -17,6 +17,7 @@ use App\Filament\Resources\Doctors\DoctorResource;
 use App\Filament\Resources\Doctors\Pages\EditDoctor;
 use App\Filament\Resources\Doctors\RelationManagers\TreatmentsRelationManager;
 use App\Filament\Resources\Faqs\FaqResource;
+use App\Filament\Resources\Installments\InstallmentResource;
 use App\Filament\Resources\MessageTemplates\MessageTemplateResource;
 use App\Filament\Resources\Patients\PatientResource;
 use App\Filament\Resources\Payments\PaymentResource;
@@ -74,6 +75,7 @@ class PanelAccessTest extends TestCase
             'celulares' => ['accounts', [true, true, false]],
             'ficha de celular' => ['accounts.view', [true, true, false]],
             'pagos' => ['payments', [true, true, false]],
+            'cuotas por cobrar' => ['installments', [true, true, false]],
             'ganancias para imprimir' => ['earnings.print', [true, false, false]],
             'ganancias en Excel' => ['earnings.excel', [true, false, false]],
             'opciones rápidas' => ['snippets', [true, false, true]],
@@ -132,6 +134,7 @@ class PanelAccessTest extends TestCase
             'accounts' => AccountResource::getUrl('index'),
             'accounts.view' => AccountResource::getUrl('view', ['record' => Account::sole()]),
             'payments' => PaymentResource::getUrl('index'),
+            'installments' => InstallmentResource::getUrl('index'),
             'snippets' => TextSnippetResource::getUrl('index'),
             'treatments' => TreatmentResource::getUrl('index'),
             'packages' => TreatmentPackageResource::getUrl('index'),
