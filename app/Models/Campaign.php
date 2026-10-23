@@ -4,6 +4,7 @@ namespace App\Models;
 
 use App\Enums\AppointmentStatus;
 use App\Enums\DiscountType;
+use App\Enums\TreatmentPlanStatus;
 use App\Models\Concerns\Auditable;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Attributes\Scope;
@@ -42,6 +43,12 @@ class Campaign extends Model
         return $this->belongsTo(TreatmentPackage::class, 'treatment_package_id')->withTrashed();
     }
 
+    /** Los planes que se armaron con el paquete de la campaña. */
+    public function plans(): HasMany
+    {
+        return $this->hasMany(TreatmentPlan::class);
+    }
+
     public function appointments(): HasMany
     {
         return $this->hasMany(Appointment::class);
@@ -77,7 +84,19 @@ class Campaign extends Model
 
     public function hasSlotsLeft(): bool
     {
-        return $this->max_redemptions === null
-            || $this->appointments()->whereNot('status', AppointmentStatus::Cancelled)->count() < $this->max_redemptions;
+        return $this->max_redemptions === null || $this->usedSlots() < $this->max_redemptions;
+    }
+
+    /**
+     * Cupos usados. Si ofrece un paquete, cuentan las personas que lo aceptaron (en un 2x1, las dos);
+     * si no, las citas reservadas.
+     */
+    public function usedSlots(): int
+    {
+        if ($this->treatment_package_id !== null) {
+            return $this->plans()->whereNotNull('accepted_at')->whereNot('status', TreatmentPlanStatus::Cancelled)->count();
+        }
+
+        return $this->appointments()->whereNot('status', AppointmentStatus::Cancelled)->count();
     }
 }

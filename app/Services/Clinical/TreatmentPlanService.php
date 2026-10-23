@@ -2,12 +2,14 @@
 
 namespace App\Services\Clinical;
 
+use App\Enums\AppointmentStatus;
 use App\Enums\MessageTemplateKey;
 use App\Enums\PatientRelationship;
 use App\Enums\PlanItemStatus;
 use App\Enums\PlanPaymentMode;
 use App\Enums\TreatmentPlanStatus;
 use App\Exceptions\ClinicalException;
+use App\Models\Appointment;
 use App\Models\Consultation;
 use App\Models\Patient;
 use App\Models\Treatment;
@@ -152,6 +154,7 @@ final class TreatmentPlanService
                 'patient_id' => $companion->getKey(),
                 'doctor_id' => $plan->doctor_id,
                 'included_in_plan_id' => $plan->getKey(),
+                'campaign_id' => $plan->campaign_id,
                 'title' => $package->name.' (2x1)',
                 'status' => $plan->status === TreatmentPlanStatus::Draft ? TreatmentPlanStatus::Draft : TreatmentPlanStatus::Proposed,
             ]);
@@ -182,6 +185,10 @@ final class TreatmentPlanService
                 $plan->update(['title' => $package->name]);
             }
 
+            if ($plan) {
+                $this->linkCampaign($plan);
+            }
+
             // Un 2x1 por plan: si ya tiene a la otra persona, el paquete solo se suma.
             $companionPlan = $plan && $package->for_two && $companion && $plan->companionPlans()->open()->doesntExist()
                 ? $this->addCompanion($plan, $package, $companion)
@@ -189,6 +196,31 @@ final class TreatmentPlanService
 
             return [$plan, $companionPlan];
         });
+    }
+
+    /**
+     * Si el paciente vino por una campaña que ofrece uno de los paquetes del plan, el plan queda a cuenta
+     * de esa campaña (y el de la otra persona del 2x1 también): así cuenta en sus cupos y en su reporte.
+     */
+    public function linkCampaign(TreatmentPlan $plan): void
+    {
+        if ($plan->campaign_id !== null || $plan->included_in_plan_id !== null) {
+            return;
+        }
+
+        $packageIds = $plan->items()->whereNotNull('treatment_package_id')->distinct()->pluck('treatment_package_id');
+
+        $campaignId = $packageIds->isEmpty() ? null : Appointment::query()
+            ->where('patient_id', $plan->patient_id)
+            ->whereNot('status', AppointmentStatus::Cancelled)
+            ->whereHas('campaign', fn ($campaign) => $campaign->whereIn('treatment_package_id', $packageIds))
+            ->latest('starts_at')
+            ->value('campaign_id');
+
+        if ($campaignId !== null) {
+            $plan->update(['campaign_id' => $campaignId]);
+            $plan->companionPlans()->whereNull('campaign_id')->update(['campaign_id' => $campaignId]);
+        }
     }
 
     /**
