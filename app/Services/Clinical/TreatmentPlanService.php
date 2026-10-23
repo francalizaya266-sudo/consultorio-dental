@@ -4,12 +4,9 @@ namespace App\Services\Clinical;
 
 use App\Enums\MessageTemplateKey;
 use App\Enums\PlanItemStatus;
-use App\Enums\ToothState;
 use App\Enums\TreatmentPlanStatus;
 use App\Exceptions\ClinicalException;
 use App\Models\Consultation;
-use App\Models\Odontogram;
-use App\Models\OdontogramEntry;
 use App\Models\Patient;
 use App\Models\Treatment;
 use App\Models\TreatmentPlan;
@@ -22,68 +19,15 @@ use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 
 /**
- * Plan de tratamiento con costos: se arma solo desde los hallazgos en rojo del odontograma,
- * el paciente lo acepta y su avance se actualiza con cada atención en que se trabaja.
+ * Plan de tratamiento con costos: se arma desde lo que el doctor elige de las sugerencias del
+ * odontograma, el paciente lo acepta y su avance se actualiza con cada atención en que se trabaja.
  */
 final class TreatmentPlanService
 {
-    /** Hallazgo en rojo del odontograma → tratamiento que se propone (por el slug del catálogo). */
-    public const TREATMENT_FOR = [
-        'caries' => 'curacion-con-resina',
-        'restauracion' => 'curacion-con-resina',
-        'restauracion_temporal' => 'curacion-con-resina',
-        'defecto_esmalte' => 'curacion-con-resina',
-        'fractura' => 'curacion-con-resina',
-        'extraccion_indicada' => 'extraccion-simple',
-        'remanente_radicular' => 'extraccion-simple',
-        'tratamiento_pulpar' => 'endodoncia',
-    ];
-
     /** Orden habitual para escribir las superficies: MOD, luego V y P/L. */
-    private const SURFACE_ORDER = ['M', 'O', 'I', 'D', 'V', 'P', 'L'];
+    public const SURFACE_ORDER = ['M', 'O', 'I', 'D', 'V', 'P', 'L'];
 
     public function __construct(private readonly WhatsAppOutbox $outbox) {}
-
-    /**
-     * Procedimientos que sugiere el odontograma: uno por pieza y tratamiento, con sus superficies
-     * juntas y el precio del catálogo. No repite lo que ya está en un plan vigente del paciente.
-     *
-     * @return list<array<string, mixed>>
-     */
-    public function suggestFromOdontogram(?Odontogram $odontogram): array
-    {
-        if (! $odontogram) {
-            return [];
-        }
-
-        $treatments = Treatment::query()->whereIn('slug', array_unique(self::TREATMENT_FOR))->get()->keyBy('slug');
-        $planned = $this->plannedKeys($odontogram->patient_id);
-
-        return $odontogram->entries()
-            ->with('condition')
-            ->where('state', ToothState::Bad)
-            ->orderBy('tooth')
-            ->get()
-            ->map(fn (OdontogramEntry $entry) => ['entry' => $entry, 'treatment' => $treatments[self::TREATMENT_FOR[$entry->condition->code] ?? ''] ?? null])
-            ->filter(fn (array $pair) => $pair['treatment'] !== null)
-            ->groupBy(fn (array $pair) => $pair['treatment']->getKey().'-'.$pair['entry']->tooth)
-            ->reject(fn (Collection $group, string $key) => in_array($key, $planned, true))
-            ->map(function (Collection $group) {
-                /** @var Treatment $treatment */
-                $treatment = $group->first()['treatment'];
-                $surfaces = $group->pluck('entry.surface')->filter()->unique()
-                    ->sortBy(fn (string $surface) => array_search($surface, self::SURFACE_ORDER, true))
-                    ->implode('');
-
-                return [
-                    ...$this->itemFor($treatment),
-                    'tooth' => (string) $group->first()['entry']->tooth,
-                    'surfaces' => $surfaces ?: null,
-                ];
-            })
-            ->values()
-            ->all();
-    }
 
     /** @return array<string, mixed> Renglón del plan para un tratamiento del catálogo. */
     public function itemFor(Treatment $treatment): array
@@ -101,17 +45,16 @@ final class TreatmentPlanService
     }
 
     /**
-     * Arma (o completa) el borrador del plan del doctor con lo que sugiere el odontograma de la atención.
+     * Agrega procedimientos al borrador del plan del doctor (lo crea si no hay uno), desde la atención.
      *
+     * @param  list<array<string, mixed>>  $items
      * @return array{0: TreatmentPlan|null, 1: int} El plan y cuántos procedimientos se agregaron.
      */
-    public function draftFromConsultation(Consultation $consultation, User $by): array
+    public function addToDraft(Consultation $consultation, User $by, array $items): array
     {
         if ($by->doctorId() !== $consultation->doctor_id) {
             throw ClinicalException::notAuthor();
         }
-
-        $items = $this->suggestFromOdontogram($consultation->odontogram);
 
         if ($items === []) {
             return [null, 0];
@@ -265,7 +208,7 @@ final class TreatmentPlanService
     }
 
     /** @return list<string> "tratamiento-pieza" de lo que ya está en planes vigentes. */
-    private function plannedKeys(int $patientId): array
+    public function plannedKeys(int $patientId): array
     {
         return TreatmentPlanItem::query()
             ->whereHas('plan', fn ($query) => $query->open()->where('patient_id', $patientId))

@@ -1,5 +1,7 @@
 @use('App\Enums\Sex')
 @use('App\Enums\ToothState')
+@use('App\Livewire\OdontogramChart')
+@use('App\Support\OdontogramAbbreviations')
 @use('App\Models\MedicalBackground')
 @use('App\Support\Money')
 @use('App\Support\Teeth')
@@ -59,6 +61,15 @@
         <div class="odontogram">
             <x-odontogram-drawing :odontogram="$odontogram" :rows="$rows" :teeth="$teeth" :spans="$spans" />
         </div>
+        @php
+            $siglas = $findings
+                ->filter(fn ($entry) => OdontogramAbbreviations::full($entry->condition->code, $entry->abbreviation))
+                ->map(fn ($entry) => $entry->abbreviation.': '.OdontogramAbbreviations::full($entry->condition->code, $entry->abbreviation))
+                ->unique();
+        @endphp
+        @if ($siglas->isNotEmpty())
+            <p class="muted" style="margin: 4px 0 0">Siglas: {{ $siglas->implode(' · ') }}</p>
+        @endif
         @if ($findings->isNotEmpty())
             <table style="margin-top: 8px">
                 <thead><tr><th>Pieza</th><th>Hallazgo</th><th>Estado</th></tr></thead>
@@ -66,7 +77,7 @@
                     @foreach ($findings as $entry)
                         <tr>
                             <td>{{ $entry->tooth }}{{ $entry->to_tooth ? ' a '.$entry->to_tooth : '' }}{{ $entry->surface ? ' · '.Teeth::surfaceName($entry->surface) : '' }}</td>
-                            <td>{{ $entry->condition->name }}{{ $entry->abbreviation ? " ({$entry->abbreviation})" : '' }}</td>
+                            <td>{{ OdontogramChart::findingName($entry) }}</td>
                             <td><span class="dot" style="background: {{ $entry->state === ToothState::Good ? '#2563eb' : '#dc2626' }}"></span>{{ $entry->state === ToothState::Good ? 'Tratado' : 'Por tratar' }}</td>
                         </tr>
                     @endforeach

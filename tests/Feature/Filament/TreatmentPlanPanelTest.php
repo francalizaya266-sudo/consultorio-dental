@@ -11,6 +11,7 @@ use App\Filament\Resources\Consultations\ConsultationResource;
 use App\Filament\Resources\Consultations\Pages\EditConsultation;
 use App\Filament\Resources\Patients\Pages\ViewClinicalRecord;
 use App\Filament\Resources\Patients\RelationManagers\TreatmentPlansRelationManager;
+use App\Livewire\OdontogramChart;
 use App\Models\Appointment;
 use App\Models\Doctor;
 use App\Models\Icd10Code;
@@ -23,6 +24,7 @@ use App\Models\User;
 use App\Models\WhatsappMessage;
 use App\Services\Clinical\ConsultationService;
 use App\Services\Clinical\OdontogramService;
+use App\Services\Clinical\OdontogramSuggestions;
 use App\Support\Phone;
 use Database\Seeders\CatalogSeeder;
 use Filament\Actions\Testing\TestAction;
@@ -121,19 +123,57 @@ class TreatmentPlanPanelTest extends TestCase
         $this->assertSame(TreatmentPlanStatus::Completed, $plan->fresh()->status);
     }
 
-    public function test_the_doctor_drafts_the_plan_from_the_consultation(): void
+    public function test_the_doctor_adds_the_odontogram_suggestions_to_the_diagnosis_and_the_plan(): void
     {
         [$doctor, $patient] = $this->patientWithCariesIn36();
         $consultation = $patient->consultations()->sole();
         $this->actingAs($doctor->user);
 
-        Livewire::test(EditConsultation::class, ['record' => $consultation->getRouteKey()])
-            ->assertSee('no tiene un plan de tratamiento vigente')
-            ->callAction(TestAction::make('draftPlan')->schemaComponent('plan'))
-            ->assertNotified('Se agregaron 1 procedimientos al plan, por S/ 150.00 en total.')
-            ->assertSee('Curación con resina · pieza 36 (O)');
+        $chart = Livewire::test(OdontogramChart::class, ['record' => $consultation, 'editable' => true])
+            ->assertSee(['Para el diagnóstico y el plan', 'Curación con resina', 'K02.1 Caries de la dentina', 'S/ 150.00']);
 
-        $this->assertSame(TreatmentPlanStatus::Draft, TreatmentPlan::sole()->status);
+        $key = app(OdontogramSuggestions::class)->rows($consultation->odontogram, $consultation)[0]['key'];
+        $chart->call('applySuggestions', [$key])
+            ->assertDispatched('odontogram-suggestions-applied', diagnoses: [['icd10_code_id' => Icd10Code::where('code', 'K02.1')->value('id'), 'tooth' => '36']], planned: 1, plannedTotal: 'S/ 150.00')
+            ->assertSee('Ya agregado');
+
+        $this->assertSame([['Curación con resina', '36', 'O']], TreatmentPlan::sole()->items->map(fn ($item) => [$item->description, $item->tooth, $item->surfaces])->all());
+
+        // La atención guarda el diagnóstico y lo suma a su lista; guardar después no lo duplica.
+        $page = Livewire::test(EditConsultation::class, ['record' => $consultation->getRouteKey()])
+            ->dispatch('odontogram-suggestions-applied', diagnoses: [['icd10_code_id' => Icd10Code::where('code', 'K02.1')->value('id'), 'tooth' => '36']], planned: 1, plannedTotal: 'S/ 150.00')
+            ->assertNotified('Se agregaron 1 procedimiento al plan (S/ 150.00) y 1 diagnóstico.')
+            ->assertSee('Curación con resina · pieza 36 (O)')
+            ->call('save')
+            ->assertHasNoFormErrors();
+
+        $this->assertSame(['K02.1'], $consultation->diagnoses()->with('icd10Code')->get()->pluck('icd10Code.code')->all());
+
+        $page->dispatch('odontogram-suggestions-applied', diagnoses: [['icd10_code_id' => Icd10Code::where('code', 'K02.1')->value('id'), 'tooth' => '36']])
+            ->assertNotified('Eso ya estaba agregado.');
+        $this->assertSame(1, $consultation->diagnoses()->count());
+    }
+
+    public function test_marking_a_planned_finding_treated_marks_it_worked_today(): void
+    {
+        [$doctor, $patient] = $this->patientWithCariesIn36();
+        $consultation = $patient->consultations()->sole();
+        $this->actingAs($doctor->user);
+        app(OdontogramSuggestions::class)->apply($consultation, $doctor->user, array_column(app(OdontogramSuggestions::class)->rows($consultation->odontogram), 'key'));
+        $item = TreatmentPlan::sole()->items()->sole();
+
+        Livewire::test(OdontogramChart::class, ['record' => $consultation, 'editable' => true])
+            ->call('markTreated', $consultation->odontogram->entries()->sole()->id, 'R')
+            ->assertDispatched('odontogram-plan-items-worked', items: [$item->id]);
+
+        Livewire::test(EditConsultation::class, ['record' => $consultation->getRouteKey()])
+            ->assertSchemaStateSet(['planItems' => []])
+            ->dispatch('odontogram-plan-items-worked', items: [$item->id])
+            ->assertSchemaStateSet(['planItems' => [(string) $item->id]])
+            ->assertNotified('Marcado como trabajado hoy: Curación con resina · pieza 36 (O).')
+            ->callAction('close');
+
+        $this->assertSame(1, $item->fresh()->sessions_done);
     }
 
     public function test_the_doctor_writes_a_prescription_prints_it_and_sends_it(): void

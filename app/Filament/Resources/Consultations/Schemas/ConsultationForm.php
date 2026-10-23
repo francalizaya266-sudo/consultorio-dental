@@ -6,25 +6,21 @@ use App\Enums\DiagnosisType;
 use App\Enums\PlanItemStatus;
 use App\Enums\SnippetField;
 use App\Enums\SnippetStatus;
-use App\Enums\ToothState;
 use App\Filament\Actions\SendWhatsAppAction;
 use App\Filament\Actions\UploadClinicalFilesAction;
 use App\Filament\Forms\QuickTextarea;
 use App\Filament\Resources\Consultations\ConsultationResource;
 use App\Filament\Resources\Consultations\Pages\EditConsultation;
-use App\Filament\Resources\Patients\PatientResource;
 use App\Filament\Support\ClinicalAlerts;
 use App\Livewire\OdontogramChart;
 use App\Models\Consultation;
 use App\Models\Icd10Code;
-use App\Models\OdontogramEntry;
 use App\Models\Prescription;
 use App\Models\TextSnippet;
 use App\Models\TreatmentPlanItem;
 use App\Models\User;
 use App\Services\Clinical\PrescriptionService;
 use App\Services\Clinical\TreatmentPlanService;
-use App\Support\Money;
 use Filament\Actions\Action;
 use Filament\Forms\Components\CheckboxList;
 use Filament\Forms\Components\Repeater;
@@ -49,19 +45,6 @@ use Illuminate\Support\Collection;
 /** Pantalla de la atención: todo lo que el doctor escribe mientras atiende, de arriba hacia abajo. */
 class ConsultationForm
 {
-    /** Hallazgo en rojo del odontograma → diagnóstico CIE-10 que se sugiere. */
-    public const DIAGNOSIS_FOR = [
-        'caries' => 'K02.1',
-        'remanente_radicular' => 'K08.3',
-        'fractura' => 'S02.5',
-        'impactacion' => 'K01.1',
-        'superficie_desgastada' => 'K03.0',
-        'defecto_esmalte' => 'K00.4',
-        'posicion' => 'K07.3',
-        'giroversion' => 'K07.3',
-        'migracion' => 'K07.3',
-    ];
-
     public static function configure(Schema $schema): Schema
     {
         return $schema
@@ -116,7 +99,7 @@ class ConsultationForm
                 Section::make('Diagnóstico')
                     ->key('diagnosis')
                     ->icon(Heroicon::OutlinedClipboardDocumentCheck)
-                    ->headerActions([self::suggestDiagnosesAction()])
+                    ->description('Los del odontograma se agregan desde las sugerencias, debajo del dibujo.')
                     ->schema([
                         Repeater::make('diagnoses')
                             ->hiddenLabel()
@@ -154,7 +137,6 @@ class ConsultationForm
                     ->key('plan')
                     ->icon(Heroicon::OutlinedClipboardDocumentList)
                     ->description('Marca lo que se trabajó hoy. Al terminar la atención, el avance del plan se actualiza solo.')
-                    ->headerActions([self::draftPlanAction()])
                     ->schema([
                         CheckboxList::make('planItems')
                             ->label('Lo que se trabajó hoy')
@@ -176,7 +158,7 @@ class ConsultationForm
                             ->columns(2)
                             ->bulkToggleable(false)
                             ->visible(fn (?Consultation $record) => $record && self::workableItems($record)->isNotEmpty()),
-                        Text::make('El paciente no tiene un plan de tratamiento vigente. Ármalo con un toque desde lo que está en rojo en el odontograma.')
+                        Text::make('El paciente no tiene un plan de tratamiento vigente. Ármalo desde las sugerencias que salen debajo del odontograma.')
                             ->color('gray')
                             ->visible(fn (?Consultation $record) => ! $record || self::workableItems($record)->isEmpty()),
                     ]),
@@ -279,37 +261,6 @@ class ConsultationForm
         return app(TreatmentPlanService::class)->workableItems($consultation->patient, $consultation);
     }
 
-    /** Arma (o completa) el borrador del plan con lo que está en rojo en el odontograma de hoy. */
-    private static function draftPlanAction(): Action
-    {
-        return Action::make('draftPlan')
-            ->label('Armar plan desde el odontograma')
-            ->icon(Heroicon::OutlinedSparkles)
-            ->link()
-            ->visible(fn (?Consultation $record) => $record && auth()->user()->can('update', $record))
-            ->action(function (Consultation $record) {
-                [$plan, $added] = app(TreatmentPlanService::class)->draftFromConsultation($record, auth()->user());
-
-                if (! $plan) {
-                    Notification::make()->info()->title('No hay hallazgos nuevos en rojo para el plan.')->body('Lo que ya está en un plan vigente no se repite.')->send();
-
-                    return;
-                }
-
-                Notification::make()
-                    ->success()
-                    ->title("Se agregaron {$added} procedimientos al plan, por ".Money::format($plan->load('items')->total()).' en total.')
-                    ->body('Quedó como borrador. Revísalo, imprímelo o envíalo por WhatsApp desde la historia clínica.')
-                    ->actions([
-                        Action::make('open')
-                            ->label('Ver el plan')
-                            ->url(PatientResource::getUrl('clinical', ['record' => $record->patient_id]))
-                            ->openUrlInNewTab(),
-                    ])
-                    ->send();
-            });
-    }
-
     /** Guarda y abre la receta lista para imprimir (o guardar en PDF). */
     private static function printPrescriptionAction(): Action
     {
@@ -376,42 +327,6 @@ class ConsultationForm
                 );
 
                 Notification::make()->success()->title("Listo: {$medication} aparecerá entre tus medicamentos frecuentes.")->send();
-            });
-    }
-
-    /** Agrega a la lista los hallazgos en rojo del odontograma de hoy que todavía no tienen diagnóstico. */
-    private static function suggestDiagnosesAction(): Action
-    {
-        return Action::make('suggestDiagnoses')
-            ->label('Sugerir desde el odontograma')
-            ->icon(Heroicon::OutlinedSparkles)
-            ->link()
-            ->action(function (?Consultation $record, Get $get, Set $set) {
-                $codes = Icd10Code::query()->whereIn('code', array_unique(self::DIAGNOSIS_FOR))->pluck('id', 'code');
-                $current = collect($get('diagnoses') ?? []);
-                $added = 0;
-
-                $entries = $record?->odontogram?->entries()->with('condition')->where('state', ToothState::Bad)->orderBy('tooth')->get() ?? collect();
-
-                foreach ($entries as $entry) {
-                    /** @var OdontogramEntry $entry */
-                    $codeId = $codes[self::DIAGNOSIS_FOR[$entry->condition->code] ?? ''] ?? null;
-                    $exists = $current->contains(fn (array $row) => (int) ($row['icd10_code_id'] ?? 0) === $codeId && (string) ($row['tooth'] ?? '') === (string) $entry->tooth);
-
-                    if (! $codeId || $exists) {
-                        continue;
-                    }
-
-                    $current->put('suggested-'.$entry->getKey(), ['icd10_code_id' => $codeId, 'tooth' => (string) $entry->tooth, 'type' => DiagnosisType::Definitive->value]);
-                    $added++;
-                }
-
-                $set('diagnoses', $current->all());
-
-                Notification::make()
-                    ->title($added ? "Se agregaron {$added} diagnósticos. Revísalos y guarda." : 'No hay hallazgos nuevos en rojo para diagnosticar.')
-                    ->status($added ? 'success' : 'info')
-                    ->send();
             });
     }
 }

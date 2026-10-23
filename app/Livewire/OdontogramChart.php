@@ -10,7 +10,11 @@ use App\Models\Odontogram;
 use App\Models\OdontogramCondition;
 use App\Models\OdontogramEntry;
 use App\Models\Patient;
+use App\Services\Clinical\FindingsDictation;
 use App\Services\Clinical\OdontogramService;
+use App\Services\Clinical\OdontogramSuggestions;
+use App\Support\Money;
+use App\Support\OdontogramAbbreviations;
 use App\Support\Teeth;
 use Filament\Notifications\Notification;
 use Illuminate\Contracts\View\View;
@@ -25,7 +29,8 @@ use Livewire\Component;
  * Rojo = por tratar, azul = tratado. En modo lectura permite ver versiones anteriores.
  *
  * El hallazgo, el color y la sigla elegidos viven en el navegador, y el dibujo se pinta apenas se
- * toca: al servidor solo va cada marca, con todo lo necesario para guardarla.
+ * toca: al servidor solo va cada marca, con todo lo necesario para guardarla. Debajo, lo que está en
+ * rojo se sugiere para el diagnóstico y el plan, y los hallazgos también se pueden escribir o dictar.
  */
 class OdontogramChart extends Component
 {
@@ -55,6 +60,12 @@ class OdontogramChart extends Component
     public string $specifications = '';
 
     public string $observations = '';
+
+    /** Hallazgos escritos o dictados que esperan "Agregar". */
+    public string $dictation = '';
+
+    /** Sugerencias ya agregadas en esta pantalla, mientras la atención guarda sus diagnósticos. */
+    public array $applied = [];
 
     /** Recibe la atención (odontograma de esa consulta) o el paciente (su último odontograma). */
     public function mount(?Model $record = null, ?int $odontogramId = null, bool $editable = false): void
@@ -115,13 +126,87 @@ class OdontogramChart extends Component
         ));
     }
 
-    /** De la lista: la caries pasa a restauración, la extracción a pieza ausente y lo demás a azul. */
+    /**
+     * De la lista: la caries pasa a restauración, la extracción a pieza ausente y lo demás a azul.
+     * Si con eso queda hecho un procedimiento del plan, la atención lo marca como trabajado hoy.
+     */
     public function markTreated(int $entryId, ?string $abbreviation = null): void
     {
         $entry = $this->canEdit() ? $this->odontogram->entries->firstWhere('id', $entryId) : null;
 
-        if ($entry) {
-            $this->attempt(fn () => app(OdontogramService::class)->markTreated($entry, $abbreviation));
+        if (! $entry) {
+            return;
+        }
+
+        [$tooth, $code, $was] = [$entry->tooth, $entry->condition->code, $entry->abbreviation];
+        $this->attempt(fn () => app(OdontogramService::class)->markTreated($entry, $abbreviation));
+
+        $finished = app(OdontogramSuggestions::class)->finishedItems($this->odontogram->consultation, $tooth, $code, $was);
+
+        if ($finished->isNotEmpty()) {
+            $this->dispatch('odontogram-plan-items-worked', items: $finished->modelKeys());
+        }
+    }
+
+    /**
+     * Agrega las sugerencias elegidas: los procedimientos van al plan y los diagnósticos a la atención.
+     *
+     * @param  list<string>  $keys
+     */
+    public function applySuggestions(array $keys): void
+    {
+        if (! $this->canEdit() || $keys === []) {
+            return;
+        }
+
+        $result = app(OdontogramSuggestions::class)->apply($this->odontogram->consultation, auth()->user(), $keys);
+        $this->applied = array_values(array_unique([...$this->applied, ...$keys]));
+
+        $this->dispatch(
+            'odontogram-suggestions-applied',
+            diagnoses: $result['diagnoses'],
+            planned: $result['added'],
+            plannedTotal: $result['added'] ? Money::format($result['total']) : '',
+        );
+    }
+
+    /** Marca lo escrito o dictado que se entendió; lo que no, queda en el cuadro para corregirlo. */
+    public function addDictated(?string $text = null): void
+    {
+        if (! $this->canEdit()) {
+            return;
+        }
+
+        $this->dictation = $text ?? $this->dictation;
+        $odontogram = $this->odontogram;
+        $pending = [];
+        $marked = 0;
+
+        foreach ($this->dictated as $finding) {
+            if ($finding['error']) {
+                $pending[] = $finding['text'];
+
+                continue;
+            }
+
+            foreach ($finding['marks'] as $mark) {
+                $condition = $this->conditions->firstWhere('code', $mark['code']);
+
+                try {
+                    app(OdontogramService::class)->place($odontogram, $condition, ToothState::from($mark['state']), $mark['tooth'], $mark['surface'], $mark['toTooth'], $mark['abbreviation']);
+                    $marked++;
+                } catch (ClinicalException $e) {
+                    $pending[] = $finding['text'];
+                    Notification::make()->warning()->title("{$finding['text']}: {$e->getMessage()}")->send();
+                }
+            }
+        }
+
+        $this->dictation = implode(', ', array_unique($pending));
+        unset($this->odontogram, $this->dictated);
+
+        if ($marked) {
+            Notification::make()->success()->title($marked === 1 ? 'Se marcó 1 hallazgo.' : "Se marcaron {$marked} hallazgos.")->send();
         }
     }
 
@@ -169,6 +254,46 @@ class OdontogramChart extends Component
         return OdontogramCondition::query()->where('is_active', true)->orderBy('sort_order')->get();
     }
 
+    /**
+     * Lo que se entendió de lo escrito o dictado, para revisarlo antes de marcar.
+     *
+     * @return list<array{text: string, summary: string|null, error: string|null, marks: list<array<string, mixed>>}>
+     */
+    #[Computed]
+    public function dictated(): array
+    {
+        return $this->odontogram && trim($this->dictation) !== ''
+            ? app(FindingsDictation::class)->parse($this->dictation, $this->odontogram->dentition, $this->conditions)
+            : [];
+    }
+
+    /**
+     * Otros hallazgos que el doctor marca seguido (en dos pacientes o más): se sugieren junto a los botones.
+     *
+     * @return Collection<int, OdontogramCondition>
+     */
+    #[Computed]
+    public function favorites(): Collection
+    {
+        $doctorId = $this->odontogram?->doctor_id;
+
+        if (! $doctorId) {
+            return collect();
+        }
+
+        $ids = OdontogramEntry::query()
+            ->join('odontograms', 'odontograms.id', '=', 'odontogram_entries.odontogram_id')
+            ->where('odontograms.doctor_id', $doctorId)
+            ->whereIn('odontogram_condition_id', $this->conditions->whereNotIn('code', self::FREQUENT)->modelKeys())
+            ->groupBy('odontogram_condition_id')
+            ->havingRaw('count(distinct odontograms.patient_id) >= 2')
+            ->orderByRaw('count(distinct odontograms.patient_id) desc')
+            ->limit(3)
+            ->pluck('odontogram_condition_id');
+
+        return $ids->map(fn (int $id) => $this->conditions->firstWhere('id', $id))->filter()->values();
+    }
+
     /** @return Collection<int, Odontogram> */
     #[Computed]
     public function versions(): Collection
@@ -189,6 +314,7 @@ class OdontogramChart extends Component
     {
         $odontogram = $this->odontogram;
         $entries = $odontogram?->entries ?? collect();
+        $canEdit = $this->canEdit();
 
         return view('livewire.odontogram-chart', [
             'odontogram' => $odontogram,
@@ -201,15 +327,17 @@ class OdontogramChart extends Component
                 ->values(),
             'frequent' => $this->conditions->whereIn('code', self::FREQUENT)->sortBy(fn ($c) => array_search($c->code, self::FREQUENT))->values(),
             'others' => $this->conditions->whereNotIn('code', self::FREQUENT)->values(),
-            'canEdit' => $this->canEdit(),
+            'canEdit' => $canEdit,
             'catalog' => $this->catalog(),
+            'suggestions' => $canEdit ? $this->suggestions() : [],
+            'surfaceNames' => collect(['V', 'P', 'L', 'M', 'D', 'O', 'I'])->mapWithKeys(fn (string $s) => [$s => Teeth::surfaceName($s)])->all(),
         ]);
     }
 
     /**
      * Lo que el navegador necesita de cada hallazgo para elegirlo y pintar sin preguntar al servidor.
      *
-     * @return array<string, array{name: string, appliesTo: string, good: bool, bad: bool, abbreviations: list<string>, treatedAs: string}>
+     * @return array<string, array{name: string, appliesTo: string, good: bool, bad: bool, abbreviations: list<string>, meanings: array<string, array{0: string, 1: string}>, treatedAs: string}>
      */
     private function catalog(): array
     {
@@ -219,8 +347,22 @@ class OdontogramChart extends Component
             'good' => $condition->allows_good_state,
             'bad' => $condition->allows_bad_state,
             'abbreviations' => $condition->abbreviations ?? [],
+            'meanings' => array_intersect_key(OdontogramAbbreviations::MEANINGS[$condition->code] ?? [], array_flip($condition->abbreviations ?? [])),
             'treatedAs' => OdontogramService::TREATED_AS[$condition->code] ?? $condition->code,
         ]])->all();
+    }
+
+    /**
+     * Sugerencias para el diagnóstico y el plan; lo agregado en esta pantalla se ve como hecho.
+     *
+     * @return list<array<string, mixed>>
+     */
+    private function suggestions(): array
+    {
+        return array_map(
+            fn (array $row) => in_array($row['key'], $this->applied, true) ? [...$row, 'done' => true, 'suggested' => false] : $row,
+            app(OdontogramSuggestions::class)->rows($this->odontogram, $this->odontogram?->consultation),
+        );
     }
 
     public static function label(OdontogramEntry $entry): string
@@ -228,11 +370,17 @@ class OdontogramChart extends Component
         return $entry->abbreviation ?? $entry->condition->abbreviation ?? self::SHORT[$entry->condition->code] ?? '';
     }
 
+    /** "Caries (CD · dentina)": el hallazgo con su sigla y lo que significa. */
+    public static function findingName(OdontogramEntry $entry): string
+    {
+        return $entry->condition->name.($entry->abbreviation ? ' ('.OdontogramAbbreviations::withWord($entry->condition->code, $entry->abbreviation).')' : '');
+    }
+
     /**
      * Por pieza: color de cada superficie, hallazgos de pieza completa y siglas.
      *
      * @param  Collection<int, OdontogramEntry>  $entries
-     * @return array<int, array{surfaces: array<string, string>, marks: array<string, string>, labels: list<array{text: string, state: string}>}>
+     * @return array<int, array{surfaces: array<string, string>, marks: array<string, string>, labels: list<array{text: string, state: string, meaning: string}>}>
      */
     public static function teethData(Collection $entries): array
     {
@@ -249,7 +397,7 @@ class OdontogramChart extends Component
             }
 
             if ($entry->to_tooth === null && ($text = self::label($entry)) !== '') {
-                $data['labels'][] = ['text' => $text, 'state' => $state];
+                $data['labels'][] = ['text' => $text, 'state' => $state, 'meaning' => OdontogramAbbreviations::full($entry->condition->code, $entry->abbreviation) ?? $entry->condition->name];
             }
 
             $teeth[$entry->tooth] = $data;

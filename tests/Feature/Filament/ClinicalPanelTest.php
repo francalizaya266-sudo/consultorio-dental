@@ -134,9 +134,9 @@ class ClinicalPanelTest extends TestCase
 
         // El navegador manda cada toque con el hallazgo, el color y la sigla elegidos.
         Livewire::test(OdontogramChart::class, ['record' => $consultation, 'editable' => true])
-            ->assertSee(['Caries', 'Prótesis fija', 'Otros hallazgos…'])
+            ->assertSee(['Caries', 'Prótesis fija', 'Buscar otro hallazgo…'])
             ->call('mark', 36, 'O', 'caries', 'bad', 'CD')
-            ->assertSee('Caries (CD)')
+            ->assertSee('Caries (CD · dentina)')
             ->call('mark', 14, null, 'protesis_fija', 'good', null, 16)
             ->assertSee('14 a 16')
             ->call('mark', 36, null, 'caries')
@@ -148,7 +148,7 @@ class ClinicalPanelTest extends TestCase
         $this->actingAs(User::factory()->admin(isDentist: true)->create());
 
         Livewire::test(OdontogramChart::class, ['record' => $consultation, 'editable' => true])
-            ->assertDontSee('Otros hallazgos…')
+            ->assertDontSee('Buscar otro hallazgo…')
             ->call('mark', 11, 'V', 'caries')
             ->assertSet('selectedTooth', 11);
 
@@ -169,13 +169,33 @@ class ClinicalPanelTest extends TestCase
         $caries = $consultation->odontogram->entries()->sole();
 
         $chart->call('markTreated', $caries->id, 'R')
-            ->assertSee('Restauración definitiva (R)')
+            ->assertSee('Restauración definitiva (R · resina)')
             ->assertDontSee('✓ Tratado');
 
         $this->assertSame(
             [['restauracion', 36, 'O', ToothState::Good, 'R']],
             $consultation->odontogram->entries()->with('condition')->get()->map(fn ($e) => [$e->condition->code, $e->tooth, $e->surface, $e->state, $e->abbreviation])->all(),
         );
+    }
+
+    public function test_findings_written_or_dictated_are_shown_before_being_marked(): void
+    {
+        [$doctor, $appointment] = $this->appointmentToday();
+        $consultation = app(ConsultationService::class)->startFromAppointment($appointment, $doctor->user);
+
+        $this->actingAs($doctor->user);
+
+        Livewire::test(OdontogramChart::class, ['record' => $consultation, 'editable' => true])
+            ->set('dictation', '36 MO CD, 18 ausente, 46 algo')
+            ->assertSee(['36 · mesial y oclusal — Caries (CD · dentina), por tratar', '18 — Pieza dentaria ausente, tratado', '«46 algo»: No reconocí el hallazgo.'])
+            ->call('addDictated', '36 MO CD, 18 ausente, 46 algo')
+            ->assertNotified('Se marcaron 3 hallazgos.')
+            ->assertSet('dictation', '46 algo')
+            // Lo que ya estaba no se quita al dictarlo otra vez.
+            ->call('addDictated', '18 ausente')
+            ->assertSet('dictation', '');
+
+        $this->assertSame([[18, null], [36, 'M'], [36, 'O']], $consultation->odontogram->entries()->orderBy('tooth')->orderBy('surface')->get()->map(fn ($e) => [$e->tooth, $e->surface])->all());
     }
 
     public function test_quick_writing_records_use_and_saves_new_options(): void

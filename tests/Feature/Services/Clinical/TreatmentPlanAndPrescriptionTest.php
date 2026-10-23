@@ -9,6 +9,7 @@ use App\Models\Appointment;
 use App\Models\AuditLog;
 use App\Models\Consultation;
 use App\Models\Doctor;
+use App\Models\Icd10Code;
 use App\Models\OdontogramCondition;
 use App\Models\Patient;
 use App\Models\Prescription;
@@ -16,6 +17,7 @@ use App\Models\Treatment;
 use App\Models\TreatmentPlan;
 use App\Services\Clinical\ConsultationService;
 use App\Services\Clinical\OdontogramService;
+use App\Services\Clinical\OdontogramSuggestions;
 use App\Services\Clinical\PrescriptionService;
 use App\Services\Clinical\TreatmentPlanService;
 use App\Services\WhatsApp\WhatsAppOutbox;
@@ -39,29 +41,72 @@ class TreatmentPlanAndPrescriptionTest extends TestCase
         Treatment::where('slug', 'extraccion-simple')->update(['price_from' => 120]);
     }
 
-    public function test_the_odontogram_drafts_a_plan_grouping_surfaces_with_catalog_prices(): void
+    public function test_the_odontogram_suggests_diagnoses_and_procedures_by_abbreviation_with_catalog_prices(): void
     {
         $doctor = $this->doctorOffering(Treatment::factory()->create());
         $consultation = app(ConsultationService::class)->startWithoutAppointment(Patient::factory()->create(), $doctor->user);
         $odontogram = $consultation->odontogram;
 
-        $this->odontograms()->toggle($odontogram, $this->condition('caries'), ToothState::Bad, 36, 'O');
-        $this->odontograms()->toggle($odontogram, $this->condition('caries'), ToothState::Bad, 36, 'M');
+        $this->odontograms()->toggle($odontogram, $this->condition('caries'), ToothState::Bad, 36, 'O', abbreviation: 'CD');
+        $this->odontograms()->toggle($odontogram, $this->condition('caries'), ToothState::Bad, 36, 'M', abbreviation: 'CD');
+        $this->odontograms()->toggle($odontogram, $this->condition('caries'), ToothState::Bad, 24, 'O', abbreviation: 'MB');
+        $this->odontograms()->toggle($odontogram, $this->condition('caries'), ToothState::Bad, 46, 'O', abbreviation: 'CDP');
         $this->odontograms()->toggle($odontogram, $this->condition('extraccion_indicada'), ToothState::Bad, 48);
-        $this->odontograms()->toggle($odontogram, $this->condition('restauracion'), ToothState::Good, 46, 'O');
+        $this->odontograms()->toggle($odontogram, $this->condition('ausente'), ToothState::Good, 18);
+        $this->odontograms()->toggle($odontogram, $this->condition('restauracion'), ToothState::Good, 26, 'O');
 
-        [$plan, $added] = $this->plans()->draftFromConsultation($consultation, $doctor->user);
+        $rows = collect($this->suggestions()->rows($odontogram, $consultation));
 
-        $this->assertSame(2, $added);
-        $this->assertSame(TreatmentPlanStatus::Draft, $plan->status);
+        // Mancha blanca solo se diagnostica; con compromiso pulpar se propone también la endodoncia; la pieza ausente, un implante opcional.
         $this->assertSame(
-            [['Curación con resina', '36', 'MO', '150.00'], ['Extracción simple', '48', null, '120.00']],
-            $plan->items->map(fn ($item) => [$item->description, $item->tooth, $item->surfaces, $item->unit_price])->all(),
+            [
+                ['24', 'O', null, ['K02.0'], true],
+                ['36', 'MO', 'Curación con resina', ['K02.1'], true],
+                ['46', 'O', 'Curación con resina', ['K02.1'], true],
+                ['46', 'O', 'Endodoncia', ['K04.0'], true],
+                ['48', null, 'Extracción simple', [], true],
+                ['18', null, 'Implante', ['K08.1'], false],
+            ],
+            $rows->map(fn (array $row) => [$row['tooth'], $row['surfaces'], $row['treatment']?->name, $row['diagnoses']->pluck('code')->all(), $row['suggested']])->all(),
         );
-        $this->assertSame(270.0, $plan->total());
 
-        // Lo que ya está en el plan no se vuelve a agregar.
-        $this->assertSame([null, 0], $this->plans()->draftFromConsultation($consultation, $doctor->user));
+        $result = $this->suggestions()->apply($consultation, $doctor->user, $rows->where('suggested', true)->pluck('key')->all());
+
+        $this->assertSame(4, $result['added']);
+        $this->assertSame(TreatmentPlanStatus::Draft, $result['plan']->status);
+        $this->assertSame(
+            [['Curación con resina', '36', 'MO', '150.00'], ['Curación con resina', '46', 'O', '150.00'], ['Endodoncia', '46', 'O', '0.00'], ['Extracción simple', '48', null, '120.00']],
+            $result['plan']->items->map(fn ($item) => [$item->description, $item->tooth, $item->surfaces, $item->unit_price])->all(),
+        );
+        $this->assertSame(420.0, $result['total']);
+        $this->assertSame([['24', 'K02.0'], ['36', 'K02.1'], ['46', 'K02.1'], ['46', 'K04.0']], collect($result['diagnoses'])->map(fn ($d) => [$d['tooth'], Icd10Code::find($d['icd10_code_id'])->code])->all());
+
+        // Con los diagnósticos guardados por la atención, todo queda hecho y nada se vuelve a agregar; el implante sigue esperando al doctor.
+        foreach ($result['diagnoses'] as $diagnosis) {
+            $consultation->diagnoses()->create([...$diagnosis, 'type' => 'definitive']);
+        }
+
+        $again = collect($this->suggestions()->rows($odontogram, $consultation));
+        $this->assertSame([], $again->where('suggested', true)->pluck('tooth')->all());
+        $this->assertSame(['24', '36', '46', '46', '48'], $again->where('done', true)->pluck('tooth')->all());
+        $this->assertSame(['added' => 0, 'diagnoses' => []], collect($this->suggestions()->apply($consultation, $doctor->user, $again->where('optional', false)->pluck('key')->all()))->only(['added', 'diagnoses'])->all());
+    }
+
+    public function test_marking_treated_finishes_the_plan_procedure_once_nothing_red_is_left_on_the_tooth(): void
+    {
+        $doctor = $this->doctorOffering(Treatment::factory()->create());
+        $consultation = app(ConsultationService::class)->startWithoutAppointment(Patient::factory()->create(), $doctor->user);
+        $odontogram = $consultation->odontogram;
+        $occlusal = $this->odontograms()->toggle($odontogram, $this->condition('caries'), ToothState::Bad, 36, 'O');
+        $mesial = $this->odontograms()->toggle($odontogram, $this->condition('caries'), ToothState::Bad, 36, 'M');
+        $this->suggestions()->apply($consultation, $doctor->user, array_column($this->suggestions()->rows($odontogram, $consultation), 'key'));
+        $item = TreatmentPlan::sole()->items()->sole();
+
+        $this->odontograms()->markTreated($occlusal);
+        $this->assertSame([], $this->suggestions()->finishedItems($consultation->fresh(), 36, 'caries', null)->modelKeys(), 'Falta la mesial.');
+
+        $this->odontograms()->markTreated($mesial);
+        $this->assertSame([$item->id], $this->suggestions()->finishedItems($consultation->fresh(), 36, 'caries', null)->modelKeys());
     }
 
     public function test_the_plan_advances_when_its_sessions_are_attended_and_goes_back_if_reopened(): void
@@ -172,6 +217,11 @@ class TreatmentPlanAndPrescriptionTest extends TestCase
     private function odontograms(): OdontogramService
     {
         return app(OdontogramService::class);
+    }
+
+    private function suggestions(): OdontogramSuggestions
+    {
+        return app(OdontogramSuggestions::class);
     }
 
     private function plans(): TreatmentPlanService
