@@ -37,20 +37,21 @@ class CatalogSeeder extends Seeder
     private function seedTreatments(): void
     {
         $treatments = [
-            ['Evaluación o primera consulta', 30, '1', true, true],
-            ['Control de ortodoncia', 30, 'Mensual', false, false],
-            ['Limpieza dental', 45, '1', false, true],
-            ['Curación con resina', 60, '1', false, false],
-            ['Extracción simple', 45, '1', false, false],
-            ['Blanqueamiento', 90, '1 – 2', false, false],
-            ['Endodoncia', 90, '1 – 3', false, false],
-            ['Colocación de brackets', 120, '1', false, false],
-            ['Implante', 120, 'Varias', false, false],
+            ['Evaluación o primera consulta', 30, '1', true, true, 'Revisión completa, diagnóstico y presupuesto. Si no sabes qué necesitas, empieza aquí.'],
+            ['Control de ortodoncia', 30, 'Una vez al mes', false, false, 'Ajuste y seguimiento de tus brackets o alineadores.'],
+            ['Limpieza dental', 45, '1', false, true, 'Retiro de sarro y placa, y pulido. Lo ideal es hacerla cada seis meses.'],
+            ['Curación con resina', 60, '1', false, false, 'Repara caries o dientes rotos con resina del color de tu diente.'],
+            ['Extracción simple', 45, '1', false, false, 'Retiro de una pieza dañada, con anestesia local.'],
+            ['Blanqueamiento', 90, '1 – 2', false, false, 'Aclara el color de tus dientes en el consultorio, con control del dentista.'],
+            ['Endodoncia', 90, '1 – 3', false, false, 'Tratamiento de conducto para salvar un diente con el nervio dañado.'],
+            ['Colocación de brackets', 120, '1', false, false, 'Inicio de tu ortodoncia para alinear los dientes y la mordida.'],
+            ['Implante', 120, 'Varias sesiones', false, false, 'Reemplaza un diente perdido con una raíz de titanio y una corona.'],
         ];
 
-        foreach ($treatments as $i => [$name, $minutes, $sessions, $isEvaluation, $onlineBookable]) {
+        foreach ($treatments as $i => [$name, $minutes, $sessions, $isEvaluation, $onlineBookable, $summary]) {
             Treatment::firstOrCreate(['slug' => Str::slug($name)], [
                 'name' => $name,
+                'summary' => $summary,
                 'duration_minutes' => $minutes,
                 'sessions_label' => $sessions,
                 'is_evaluation' => $isEvaluation,

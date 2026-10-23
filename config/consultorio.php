@@ -12,7 +12,25 @@ return [
             'name' => env('APP_NAME', 'Consultorio Dental'),
             'whatsapp' => env('CLINIC_WHATSAPP', '+51900000000'),
             'address' => null,
+            // Distrito o ciudad: Google lo usa para "dentista en …".
+            'district' => null,
             'phone' => null,
+            'email' => null,
+            // Enlace de Google Maps del consultorio ("Cómo llegar") y de sus opiniones en Google.
+            'maps_url' => null,
+            'reviews_url' => null,
+            'instagram' => null,
+            'facebook' => null,
+            'tiktok' => null,
+            // Feriados, horario de verano u otra aclaración bajo el horario de atención.
+            'hours_note' => null,
+        ],
+
+        // Textos de la página de inicio.
+        'web' => [
+            'headline' => 'Atención dental sin esperas',
+            'intro' => 'Evaluaciones, limpiezas, ortodoncia y más. Elige tu horario aquí mismo y te confirmamos por WhatsApp.',
+            'about' => null,
         ],
 
         'agenda' => [

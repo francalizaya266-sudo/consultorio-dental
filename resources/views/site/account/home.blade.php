@@ -1,6 +1,6 @@
 @php
     use App\Enums\AppointmentStatus;
-    use App\Livewire\Site\BookingWizard;
+    use App\Support\Dates;
     use App\Support\Phone;
 
     $holder = $patients->firstWhere('relationship', \App\Enums\PatientRelationship::Self);
@@ -22,7 +22,7 @@
                 @php($status = $appointment->status)
                 <article class="appointment">
                     <div class="spread">
-                        <span class="when">{{ BookingWizard::dayLabel($appointment->starts_at->toImmutable()) }}, {{ BookingWizard::timeLabel($appointment->starts_at->format('H:i')) }}</span>
+                        <span class="when">{{ Dates::day($appointment->starts_at->toImmutable()) }}, {{ Dates::time($appointment->starts_at->format('H:i')) }}</span>
                         <span @class(['badge', 'ok' => $status === AppointmentStatus::Confirmed, 'quiet' => ! in_array($status, [AppointmentStatus::Pending, AppointmentStatus::Confirmed], true)])>{{ $status->getLabel() }}</span>
                     </div>
                     <p><strong>{{ $appointment->patient->first_name }}</strong> · {{ $appointment->treatment->name }} · {{ $appointment->doctor->name }}</p>

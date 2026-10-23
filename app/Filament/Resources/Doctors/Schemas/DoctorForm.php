@@ -3,6 +3,7 @@
 namespace App\Filament\Resources\Doctors\Schemas;
 
 use App\Enums\UserRole;
+use App\Filament\Forms\WebPhotoUpload;
 use App\Models\Doctor;
 use App\Models\User;
 use Filament\Forms\Components\ColorPicker;
@@ -39,7 +40,7 @@ class DoctorForm
                             ->afterStateUpdated(fn (Set $set, ?string $state, string $operation) => $operation === 'create' ? $set('slug', Str::slug($state)) : null),
                         TextInput::make('slug')
                             ->label('Dirección en la web')
-                            ->prefix('/doctores/')
+                            ->prefix('/equipo#')
                             ->required()
                             ->alphaDash()
                             ->unique(ignoreRecord: true),
@@ -62,9 +63,21 @@ class DoctorForm
                             ->label('RNE (especialista)'),
                         ColorPicker::make('agenda_color')
                             ->label('Color en la agenda'),
+                        WebPhotoUpload::make('photo_path', 'equipo')
+                            ->label('Foto para la web')
+                            ->avatar()
+                            ->imageEditor()
+                            ->circleCropper()
+                            ->helperText('De frente, con buena luz. Si no hay foto, la web muestra sus iniciales.'),
                         Textarea::make('bio')
                             ->label('Presentación para la web')
+                            ->rows(4)
+                            ->helperText('En primera persona y cercana: a quién atiende y cómo trabaja.'),
+                        Textarea::make('education')
+                            ->label('Formación')
                             ->rows(3)
+                            ->placeholder("Cirujano dentista, Universidad …\nEspecialidad en …")
+                            ->helperText('Una línea por estudio.')
                             ->columnSpanFull(),
                         Toggle::make('accepts_online_booking')
                             ->label('Recibe reservas desde la web')

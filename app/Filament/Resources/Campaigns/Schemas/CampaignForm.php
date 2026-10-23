@@ -3,6 +3,7 @@
 namespace App\Filament\Resources\Campaigns\Schemas;
 
 use App\Enums\DiscountType;
+use App\Filament\Forms\WebPhotoUpload;
 use App\Models\Treatment;
 use Filament\Forms\Components\DateTimePicker;
 use Filament\Forms\Components\Select;
@@ -81,6 +82,10 @@ class CampaignForm
                 Section::make('En la web')
                     ->columns(2)
                     ->schema([
+                        WebPhotoUpload::make('image_path', 'promociones')
+                            ->label('Imagen')
+                            ->helperText('Horizontal. Sale en el inicio y en la página de la promoción.')
+                            ->columnSpanFull(),
                         Textarea::make('summary')
                             ->label('Resumen')
                             ->rows(2)

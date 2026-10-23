@@ -1,6 +1,6 @@
 @php
     use App\Enums\AppointmentStatus;
-    use App\Livewire\Site\BookingWizard;
+    use App\Support\Dates;
 
     $status = $appointment->status;
 @endphp
@@ -10,7 +10,7 @@
             <h1>Hola, {{ $appointment->patient->first_name }}</h1>
             <div class="appointment">
                 <div class="spread">
-                    <span class="when">{{ BookingWizard::dayLabel($appointment->starts_at->toImmutable()) }}, {{ BookingWizard::timeLabel($appointment->starts_at->format('H:i')) }}</span>
+                    <span class="when">{{ Dates::day($appointment->starts_at->toImmutable()) }}, {{ Dates::time($appointment->starts_at->format('H:i')) }}</span>
                 </div>
                 <dl class="facts">
                     <dt>Tratamiento</dt>
@@ -30,7 +30,7 @@
         @if ($pendingRequest)
             <div class="flash info">
                 Pediste cambiar esta cita a:
-                {{ $pendingRequest->options->map(fn ($o) => mb_strtolower(BookingWizard::dayLabel($o->starts_at->toImmutable())).' a las '.BookingWizard::timeLabel($o->starts_at->format('H:i')))->join('; ', ' o ') }}
+                {{ $pendingRequest->options->map(fn ($o) => mb_strtolower(Dates::day($o->starts_at->toImmutable())).' a las '.Dates::time($o->starts_at->format('H:i')))->join('; ', ' o ') }}
                 Te avisaremos por WhatsApp cuál quedó.
             </div>
         @endif

@@ -2,14 +2,32 @@
 
 use App\Http\Controllers\Patient\AppointmentLinkController;
 use App\Http\Controllers\Site\AccountController;
+use App\Http\Controllers\Site\HomeController;
+use App\Http\Controllers\Site\PageController;
+use App\Http\Controllers\Site\PromotionController;
+use App\Http\Controllers\Site\SitemapController;
+use App\Http\Controllers\Site\TreatmentController;
 use Illuminate\Support\Facades\Route;
 
-Route::get('/', function () {
-    return view('welcome');
+// Web pública.
+Route::get('/', HomeController::class)->name('site.home');
+Route::get('tratamientos', [TreatmentController::class, 'index'])->name('site.treatments');
+Route::get('tratamientos/{slug}', [TreatmentController::class, 'show'])->name('site.treatment');
+Route::get('promociones', [PromotionController::class, 'index'])->name('site.promotions');
+Route::get('promociones/{slug}', [PromotionController::class, 'show'])->name('site.promotion');
+
+Route::controller(PageController::class)->group(function () {
+    Route::get('equipo', 'team')->name('site.team');
+    Route::get('antes-y-despues', 'cases')->name('site.cases');
+    Route::get('opiniones', 'reviews')->name('site.reviews');
+    Route::get('preguntas-frecuentes', 'faq')->name('site.faq');
+    Route::get('contacto', 'contact')->name('site.contact');
 });
 
 Route::view('reservar', 'site.booking')->name('site.booking');
 Route::view('privacidad', 'site.privacy')->name('site.privacy');
+Route::get('sitemap.xml', [SitemapController::class, 'sitemap'])->name('site.sitemap');
+Route::get('robots.txt', [SitemapController::class, 'robots'])->name('site.robots');
 
 // Mi cuenta: entra con el celular recordado (sin contraseña).
 Route::controller(AccountController::class)

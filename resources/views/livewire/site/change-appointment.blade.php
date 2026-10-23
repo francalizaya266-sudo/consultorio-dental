@@ -1,5 +1,5 @@
 @php
-    use App\Livewire\Site\ChangeAppointment;
+    use App\Support\Dates;
     use App\Services\Booking\RescheduleMode;
     use Carbon\CarbonImmutable;
 
@@ -13,7 +13,7 @@
         <h1 id="cambiar">Cambiar el horario</h1>
         <div class="summary">
             <p class="what">{{ $appointment->treatment->name }} · {{ $appointment->patient->first_name }}</p>
-            <p style="margin: 4px 0 0">Ahora: {{ ChangeAppointment::dayLabel($appointment->starts_at->toImmutable()) }}, {{ ChangeAppointment::timeLabel($appointment->starts_at->format('H:i')) }}</p>
+            <p style="margin: 4px 0 0">Ahora: {{ Dates::day($appointment->starts_at->toImmutable()) }}, {{ Dates::time($appointment->starts_at->format('H:i')) }}</p>
             <p class="muted" style="margin: 2px 0 0">con {{ $appointment->doctor->name }}</p>
         </div>
 
@@ -30,7 +30,7 @@
                 @if ($this->pendingRequest)
                     <div class="flash info">
                         Ya pediste cambiarla a:
-                        {{ $this->pendingRequest->options->map(fn ($o) => mb_strtolower(ChangeAppointment::dayLabel($o->starts_at->toImmutable())).' a las '.ChangeAppointment::timeLabel($o->starts_at->format('H:i')))->join('; ', ' o ') }}
+                        {{ $this->pendingRequest->options->map(fn ($o) => mb_strtolower(Dates::day($o->starts_at->toImmutable())).' a las '.Dates::time($o->starts_at->format('H:i')))->join('; ', ' o ') }}
                         Si envías otro pedido, reemplaza al anterior.
                     </div>
                 @endif
@@ -51,7 +51,7 @@
                         @foreach ($chosen as $key)
                             @php($start = CarbonImmutable::parse($key))
                             <li class="spread">
-                                <strong>{{ ChangeAppointment::dayLabel($start) }}, {{ ChangeAppointment::timeLabel($start->format('H:i')) }}</strong>
+                                <strong>{{ Dates::day($start) }}, {{ Dates::time($start->format('H:i')) }}</strong>
                                 @unless ($automatic)
                                     <button type="button" class="link-btn" wire:click="remove('{{ $key }}')">Quitar</button>
                                 @endunless

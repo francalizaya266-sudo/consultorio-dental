@@ -7,6 +7,7 @@ use App\Models\User;
 use App\Support\Phone;
 use BackedEnum;
 use Filament\Actions\Action;
+use Filament\Forms\Components\Textarea;
 use Filament\Forms\Components\TextInput;
 use Filament\Notifications\Notification;
 use Filament\Pages\Page;
@@ -33,6 +34,17 @@ class Settings extends Page
         'clinic.whatsapp' => 'phone',
         'clinic.phone' => 'string',
         'clinic.address' => 'string',
+        'clinic.district' => 'string',
+        'clinic.email' => 'string',
+        'clinic.maps_url' => 'string',
+        'clinic.reviews_url' => 'string',
+        'clinic.instagram' => 'string',
+        'clinic.facebook' => 'string',
+        'clinic.tiktok' => 'string',
+        'clinic.hours_note' => 'string',
+        'web.headline' => 'string',
+        'web.intro' => 'string',
+        'web.about' => 'string',
         'agenda.buffer_minutes' => 'int',
         'agenda.slot_step_minutes' => 'int',
         'booking.min_lead_minutes' => 'int',
@@ -100,7 +112,58 @@ class Settings extends Page
                             ->label('Teléfono fijo'),
                         TextInput::make('clinic.address')
                             ->label('Dirección')
-                            ->helperText('Sale en los avisos como {direccion}.'),
+                            ->helperText('Sale en los avisos como {direccion}, en la web y en el mapa.'),
+                        TextInput::make('clinic.district')
+                            ->label('Distrito')
+                            ->placeholder('Miraflores')
+                            ->helperText('Para aparecer en Google como "dentista en …".'),
+                        TextInput::make('clinic.email')
+                            ->label('Correo')
+                            ->email(),
+                    ]),
+                Section::make('Web')
+                    ->description('Textos del inicio y enlaces del consultorio. El horario de atención sale solo de los horarios de los doctores.')
+                    ->columns(2)
+                    ->collapsed()
+                    ->schema([
+                        TextInput::make('web.headline')
+                            ->label('Título del inicio')
+                            ->required()
+                            ->maxLength(60)
+                            ->helperText('Corto: que entre en dos líneas en el celular.'),
+                        Textarea::make('web.intro')
+                            ->label('Frase bajo el título')
+                            ->required()
+                            ->rows(2)
+                            ->maxLength(220),
+                        Textarea::make('web.about')
+                            ->label('Sobre el consultorio')
+                            ->rows(4)
+                            ->maxLength(1200)
+                            ->helperText('Quiénes son y cómo atienden. Sale en el inicio.')
+                            ->columnSpanFull(),
+                        TextInput::make('clinic.maps_url')
+                            ->label('Enlace de Google Maps')
+                            ->url()
+                            ->helperText('Para el botón "Cómo llegar". Vacío = se busca la dirección.'),
+                        TextInput::make('clinic.reviews_url')
+                            ->label('Enlace a sus opiniones en Google')
+                            ->url(),
+                        TextInput::make('clinic.instagram')
+                            ->label('Instagram')
+                            ->url()
+                            ->placeholder('https://instagram.com/…'),
+                        TextInput::make('clinic.facebook')
+                            ->label('Facebook')
+                            ->url()
+                            ->placeholder('https://facebook.com/…'),
+                        TextInput::make('clinic.tiktok')
+                            ->label('TikTok')
+                            ->url()
+                            ->placeholder('https://tiktok.com/@…'),
+                        TextInput::make('clinic.hours_note')
+                            ->label('Nota sobre el horario')
+                            ->placeholder('Feriados: con cita previa'),
                     ]),
                 Section::make('Agenda')
                     ->columns(2)

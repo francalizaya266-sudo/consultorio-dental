@@ -120,18 +120,4 @@ trait PicksSlots
 
         return $slot ? [CarbonImmutable::parse($date.' '.$time), $this->doctors->firstWhere('id', $slot['doctor_id'])] : null;
     }
-
-    /** "Lunes 3 de noviembre". */
-    public static function dayLabel(CarbonImmutable|string $date): string
-    {
-        return ucfirst(CarbonImmutable::parse($date)->translatedFormat('l j \d\e F'));
-    }
-
-    /** "10:30 a. m." como lo lee el paciente, con espacios que no se cortan al final de la línea. */
-    public static function timeLabel(string $time): string
-    {
-        $time = CarbonImmutable::parse($time);
-
-        return $time->format('g:i')."\u{00A0}".($time->hour < 12 ? "a.\u{00A0}m." : "p.\u{00A0}m.");
-    }
 }

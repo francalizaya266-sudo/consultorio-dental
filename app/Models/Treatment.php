@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use App\Models\Concerns\Auditable;
+use App\Support\Money;
 use Database\Factories\TreatmentFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Attributes\Scope;
@@ -50,6 +51,37 @@ class Treatment extends Model
     public function campaigns(): HasMany
     {
         return $this->hasMany(Campaign::class);
+    }
+
+    public function smileCases(): HasMany
+    {
+        return $this->hasMany(SmileCase::class);
+    }
+
+    /** Precio para la web: "desde S/ 150", "Gratis" o null si no se muestra. */
+    public function webPrice(): ?string
+    {
+        if (! $this->show_price || $this->price_from === null) {
+            return null;
+        }
+
+        return (float) $this->price_from === 0.0 ? 'Gratis' : 'desde '.Money::short($this->price_from);
+    }
+
+    /** "1 sesión", "1 – 3 sesiones" o el texto tal cual ("Una vez al mes"). */
+    public function sessionsText(): ?string
+    {
+        $label = trim((string) $this->sessions_label);
+
+        if ($label === '') {
+            return null;
+        }
+
+        return match (true) {
+            ctype_digit($label) => $label.((int) $label === 1 ? ' sesión' : ' sesiones'),
+            (bool) preg_match('/^\d+\s*[–-]\s*\d+$/u', $label) => preg_replace('/\s*[–-]\s*/u', ' – ', $label).' sesiones',
+            default => $label,
+        };
     }
 
     /** Minutos de limpieza y esterilización después de la cita. */

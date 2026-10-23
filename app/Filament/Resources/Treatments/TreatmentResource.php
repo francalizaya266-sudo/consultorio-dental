@@ -3,6 +3,7 @@
 namespace App\Filament\Resources\Treatments;
 
 use App\Filament\Concerns\HasSpanishLabels;
+use App\Filament\Forms\WebPhotoUpload;
 use App\Filament\Resources\Treatments\Pages\ManageTreatments;
 use App\Models\Setting;
 use App\Models\Treatment;
@@ -10,11 +11,14 @@ use BackedEnum;
 use Filament\Actions\DeleteAction;
 use Filament\Actions\EditAction;
 use Filament\Actions\RestoreAction;
+use Filament\Forms\Components\MarkdownEditor;
 use Filament\Forms\Components\Textarea;
 use Filament\Forms\Components\TextInput;
 use Filament\Forms\Components\Toggle;
 use Filament\Resources\Resource;
 use Filament\Schemas\Components\Fieldset;
+use Filament\Schemas\Components\Section;
+use Filament\Schemas\Components\Utilities\Get;
 use Filament\Schemas\Components\Utilities\Set;
 use Filament\Schemas\Schema;
 use Filament\Support\Icons\Heroicon;
@@ -94,7 +98,29 @@ class TreatmentResource extends Resource
                     ->label('Resumen para la web')
                     ->rows(2)
                     ->maxLength(500)
+                    ->helperText('Una o dos frases: sale en la lista de tratamientos.')
                     ->columnSpanFull(),
+                Section::make('Página del tratamiento')
+                    ->columnSpanFull()
+                    ->collapsed()
+                    ->schema([
+                        MarkdownEditor::make('description')
+                            ->label('Descripción')
+                            ->toolbarButtons([['bold', 'italic', 'link'], ['heading', 'bulletList', 'orderedList'], ['undo', 'redo']])
+                            ->helperText('En qué consiste, para quién es y cómo es cada sesión.'),
+                        WebPhotoUpload::make('image_path', 'tratamientos')
+                            ->label('Foto'),
+                        TextInput::make('seo_title')
+                            ->label('Título en Google')
+                            ->maxLength(70)
+                            ->placeholder(fn (Get $get) => $get('name').' en '.(Setting::get('clinic.district') ?: 'Lima'))
+                            ->helperText('Vacío = se arma solo con el nombre y el distrito.'),
+                        Textarea::make('seo_description')
+                            ->label('Descripción en Google')
+                            ->rows(2)
+                            ->maxLength(160)
+                            ->helperText('Vacío = se usa el resumen.'),
+                    ]),
                 Fieldset::make('Opciones')
                     ->columns(2)
                     ->schema([
