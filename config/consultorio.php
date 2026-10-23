@@ -64,6 +64,8 @@ return [
             'day_before_at' => env('REMINDERS_AT', '09:00'),
             // A qué hora del día anterior una cita sin confirmar pasa a "llamar".
             'flag_unconfirmed_at' => env('FLAG_UNCONFIRMED_AT', '16:00'),
+            // Cuántos días antes de que venza una cuota se prepara su aviso.
+            'installment_days_before' => (int) env('INSTALLMENT_REMINDER_DAYS', 3),
         ],
 
         'devices' => [

@@ -3,6 +3,7 @@
 namespace App\Services\Billing;
 
 use App\Enums\PaymentMethod;
+use App\Enums\PlanItemStatus;
 use App\Enums\TreatmentPlanStatus;
 use App\Models\Appointment;
 use App\Models\Charge;
@@ -14,6 +15,7 @@ use App\Models\TreatmentPlanInstallment;
 use App\Models\TreatmentPlanItem;
 use App\Models\User;
 use App\Support\Money;
+use Carbon\CarbonInterface;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 
@@ -260,6 +262,81 @@ final class BillingService
 
             return ['installment' => $installment, 'state' => $state, 'due' => $due];
         })->all();
+    }
+
+    /**
+     * Cómo va el pago de lo que el paciente aceptó del plan: lo pagado, lo que ya venció y se debe, lo que
+     * falta pagar y la próxima cuota. Lo del cronograma, según sus pagos; lo que va por sesión (todo el plan,
+     * o lo que se agregó después a un plan en cuotas), según lo cargado de sus procedimientos.
+     *
+     * @return array{total: float, paid: float, owed: float, remaining: float, late: bool, next: array{installment: TreatmentPlanInstallment, due: float}|null}
+     */
+    public function planProgress(TreatmentPlan $plan): array
+    {
+        $plan->loadMissing('items');
+        $unpaid = $this->unpaidCharges($plan->patient)->keyBy(fn (array $row) => $row['charge']->getKey());
+
+        $perSession = $plan->items->filter(fn (TreatmentPlanItem $item) => $item->accepted_at !== null
+            && $item->status !== PlanItemStatus::Cancelled
+            && ! ($plan->hasSchedule() && $item->in_payment_schedule));
+        $charges = Charge::query()->valid()->whereIn('treatment_plan_item_id', $perSession->modelKeys())->get();
+
+        $total = $perSession->sum(fn (TreatmentPlanItem $item) => $item->subtotal());
+        $owed = $charges->sum(fn (Charge $charge) => $unpaid->get($charge->getKey())['due'] ?? 0);
+        $paid = $charges->sum(fn (Charge $charge) => $charge->net()) - $owed;
+        $next = null;
+        $late = false;
+
+        if ($plan->hasSchedule()) {
+            $states = collect($this->installmentStates($plan));
+            $total += $states->sum(fn (array $row) => $row['installment']->net());
+            $paid += $states->sum(fn (array $row) => $row['installment']->charge_id !== null ? $row['installment']->net() - $row['due'] : 0);
+            $owed += $states->whereIn('state', ['due', 'late'])->sum('due');
+            $next = $states->firstWhere('state', 'upcoming');
+            $late = $states->contains('state', 'late');
+        }
+
+        return [
+            'total' => round($total, 2),
+            'paid' => round($paid, 2),
+            'owed' => round($owed, 2),
+            'remaining' => max(0, round($total - $paid, 2)),
+            'late' => $late,
+            'next' => $next ? ['installment' => $next['installment'], 'due' => $next['due']] : null,
+        ];
+    }
+
+    /**
+     * Los pagos del cronograma de los planes vigentes que están en esos estados ('late': la lista para
+     * llamar; 'due' y 'upcoming' hasta una fecha: lo que vence esta semana), con lo que falta pagar de cada uno.
+     *
+     * @param  list<'paid'|'due'|'late'|'upcoming'>  $states
+     * @return array<int, float> Lo que falta pagar, por id del pago.
+     */
+    public function installmentsIn(array $states, ?CarbonInterface $dueUntil = null): array
+    {
+        // Lo vencido sin pagar solo lo tienen los pacientes que deben algo, o los que tienen una cuota vencida que aún no se cargó.
+        $onlyOwed = array_diff($states, ['due', 'late']) === [];
+
+        $plans = TreatmentPlan::query()
+            ->whereNot('status', TreatmentPlanStatus::Cancelled)
+            ->whereHas('installments', fn ($query) => $query->when($dueUntil, fn ($query) => $query->whereDate('due_on', '<=', $dueUntil)))
+            ->when($onlyOwed, fn ($query) => $query->where(fn ($query) => $query
+                ->whereHas('patient', fn ($patient) => $patient->owing())
+                ->orWhereHas('installments', fn ($installments) => $installments->whereNull('charge_id')->whereDate('due_on', '<=', today()))))
+            ->with('patient')
+            ->get();
+        $due = [];
+
+        foreach ($plans as $plan) {
+            foreach ($this->installmentStates($plan) as ['installment' => $installment, 'state' => $state, 'due' => $amount]) {
+                if (in_array($state, $states, true) && ($dueUntil === null || $installment->due_on->lte($dueUntil))) {
+                    $due[$installment->getKey()] = $amount;
+                }
+            }
+        }
+
+        return $due;
     }
 
     /**

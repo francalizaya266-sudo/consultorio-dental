@@ -131,6 +131,18 @@ class TreatmentPlanPaymentsTest extends TestCase
             [['Inicial', 'paid', 0.0], ['Cuota 1 de 3', 'paid', 0.0], ['Cuota 2 de 3', 'late', 467.0], ['Cuota 3 de 3', 'upcoming', 466.0]],
             collect($this->billing()->installmentStates($plan->fresh()))->map(fn (array $row) => [$row['installment']->label(), $row['state'], $row['due']])->all(),
         );
+
+        // Lo que ve el paciente en Mi cuenta.
+        $progress = $this->billing()->planProgress($plan->fresh());
+        $this->assertSame([2000.0, 1067.0, 467.0, 933.0, true], [$progress['total'], $progress['paid'], $progress['owed'], $progress['remaining'], $progress['late']]);
+        $this->assertSame(['Cuota 3 de 3', 466.0], [$progress['next']['installment']->label(), $progress['next']['due']]);
+
+        // Para recepción: la cuota atrasada, y la que vence hasta fin de mes.
+        $late = $plan->installments()->where('number', 2)->sole();
+        $last = $plan->installments()->where('number', 3)->sole();
+        $this->assertSame([$late->id => 467.0], $this->billing()->installmentsIn(['late']));
+        $this->assertSame([], $this->billing()->installmentsIn(['due', 'upcoming'], today()->addWeek()));
+        $this->assertSame([$last->id => 466.0], $this->billing()->installmentsIn(['due', 'upcoming'], CarbonImmutable::parse('2027-02-02')));
     }
 
     public function test_upfront_charges_everything_today_with_the_discount_for_paying_at_once(): void
@@ -158,6 +170,27 @@ class TreatmentPlanPaymentsTest extends TestCase
         $this->consultations()->close($consultation, $this->doctor->user);
 
         $this->assertSame([['Endodoncia · pieza 26', '450.00']], $this->charges());
+
+        // En Mi cuenta suma a lo del plan, y se va pagando por sesión.
+        $this->pay(200);
+        $progress = $this->billing()->planProgress($plan->fresh());
+        $this->assertSame([3450.0, 200.0, 250.0, 3250.0, false], [$progress['total'], $progress['paid'], $progress['owed'], $progress['remaining'], $progress['late']]);
+        $this->assertSame('Cuota 1 de 6', $progress['next']['installment']->label());
+    }
+
+    public function test_a_plan_paid_per_session_shows_what_was_charged_and_what_is_left(): void
+    {
+        $plan = $this->plan([['Curación con resina', 'curacion-con-resina', 150, 1], ['Endodoncia', 'endodoncia', 450, 1]]);
+        $this->plans()->sign($plan, ['payment_mode' => PlanPaymentMode::PerSession], $this->signer(), $this->signature(), $this->doctor->user);
+
+        $consultation = $this->consultations()->startWithoutAppointment($this->patient, $this->doctor->user);
+        $consultation->planItems()->attach($plan->items->first());
+        $this->consultations()->close($consultation, $this->doctor->user);
+        $this->pay(100);
+
+        $progress = $this->billing()->planProgress($plan->fresh());
+
+        $this->assertSame([600.0, 100.0, 50.0, 500.0, false, null], [$progress['total'], $progress['paid'], $progress['owed'], $progress['remaining'], $progress['late'], $progress['next']]);
     }
 
     public function test_cancelling_a_plan_in_installments_stops_its_cuotas_and_can_charge_what_was_done(): void
