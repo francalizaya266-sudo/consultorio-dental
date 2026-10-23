@@ -4,6 +4,7 @@ namespace Tests\Feature\Filament;
 
 use App\Enums\AppointmentStatus;
 use App\Enums\SnippetField;
+use App\Enums\ToothState;
 use App\Filament\Resources\Consultations\ConsultationResource;
 use App\Filament\Resources\Consultations\Pages\EditConsultation;
 use App\Filament\Resources\Consultations\Pages\ListConsultations;
@@ -131,30 +132,50 @@ class ClinicalPanelTest extends TestCase
 
         $this->actingAs($doctor->user);
 
+        // El navegador manda cada toque con el hallazgo, el color y la sigla elegidos.
         Livewire::test(OdontogramChart::class, ['record' => $consultation, 'editable' => true])
-            ->call('selectTool', 'caries')
-            ->set('abbreviation', 'CD')
-            ->call('mark', 36, 'O')
+            ->assertSee(['Caries', 'Prótesis fija', 'Otros hallazgos…'])
+            ->call('mark', 36, 'O', 'caries', 'bad', 'CD')
             ->assertSee('Caries (CD)')
-            ->call('selectTool', 'protesis_fija')
-            ->call('mark', 14)
-            ->assertSee('Ahora toca la última pieza')
-            ->call('mark', 16)
-            ->call('selectTool', 'caries')
-            ->call('mark', 36)
+            ->call('mark', 14, null, 'protesis_fija', 'good', null, 16)
+            ->assertSee('14 a 16')
+            ->call('mark', 36, null, 'caries')
             ->assertNotified('Este hallazgo se marca en una superficie de la pieza.');
 
         $this->assertSame(2, $consultation->odontogram->entries()->count());
 
-        // Un admin odontólogo lo ve, pero no lo puede cambiar.
+        // Un admin odontólogo lo ve, pero no lo puede cambiar: el toque solo muestra lo que tiene la pieza.
         $this->actingAs(User::factory()->admin(isDentist: true)->create());
 
         Livewire::test(OdontogramChart::class, ['record' => $consultation, 'editable' => true])
-            ->call('selectTool', 'caries')
-            ->call('mark', 11, 'V')
+            ->assertDontSee('Otros hallazgos…')
+            ->call('mark', 11, 'V', 'caries')
             ->assertSet('selectedTooth', 11);
 
         $this->assertSame(2, $consultation->odontogram->entries()->count());
+    }
+
+    public function test_a_red_finding_is_marked_treated_from_the_list(): void
+    {
+        [$doctor, $appointment] = $this->appointmentToday();
+        $consultation = app(ConsultationService::class)->startFromAppointment($appointment, $doctor->user);
+
+        $this->actingAs($doctor->user);
+
+        $chart = Livewire::test(OdontogramChart::class, ['record' => $consultation, 'editable' => true])
+            ->call('mark', 36, 'O', 'caries', 'bad', 'CD')
+            ->assertSee('✓ Tratado');
+
+        $caries = $consultation->odontogram->entries()->sole();
+
+        $chart->call('markTreated', $caries->id, 'R')
+            ->assertSee('Restauración definitiva (R)')
+            ->assertDontSee('✓ Tratado');
+
+        $this->assertSame(
+            [['restauracion', 36, 'O', ToothState::Good, 'R']],
+            $consultation->odontogram->entries()->with('condition')->get()->map(fn ($e) => [$e->condition->code, $e->tooth, $e->surface, $e->state, $e->abbreviation])->all(),
+        );
     }
 
     public function test_quick_writing_records_use_and_saves_new_options(): void

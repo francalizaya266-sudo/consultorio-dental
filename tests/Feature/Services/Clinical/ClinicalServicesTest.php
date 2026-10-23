@@ -11,6 +11,7 @@ use App\Models\Appointment;
 use App\Models\AuditLog;
 use App\Models\Consultation;
 use App\Models\OdontogramCondition;
+use App\Models\OdontogramEntry;
 use App\Models\Patient;
 use App\Models\Treatment;
 use App\Models\User;
@@ -142,6 +143,35 @@ class ClinicalServicesTest extends TestCase
 
         $this->assertNull($this->odontograms()->toggle($odontogram, $caries, ToothState::Bad, 36, 'O', abbreviation: 'CE'));
         $this->assertSame(0, $odontogram->entries()->count());
+    }
+
+    public function test_marking_a_finding_treated_leaves_what_the_treatment_leaves(): void
+    {
+        $consultation = $this->consultations()->startWithoutAppointment(Patient::factory()->create(), $this->doctorOffering(Treatment::factory()->create())->user);
+        $odontogram = $consultation->odontogram;
+        $marks = fn () => $odontogram->entries()->with('condition')->orderBy('tooth')->get()
+            ->map(fn (OdontogramEntry $e) => [$e->condition->code, $e->tooth, $e->surface, $e->state->value])->all();
+
+        // La caries pasa a restauración azul en la misma superficie.
+        $caries = $this->odontograms()->toggle($odontogram, $this->condition('caries'), ToothState::Bad, 36, 'O');
+        $this->odontograms()->markTreated($caries);
+
+        // La pieza extraída queda ausente y sin sus otras marcas.
+        $this->odontograms()->toggle($odontogram, $this->condition('caries'), ToothState::Bad, 18, 'D');
+        $extraction = $this->odontograms()->toggle($odontogram, $this->condition('extraccion_indicada'), ToothState::Bad, 18);
+        $this->odontograms()->markTreated($extraction);
+
+        // Lo que tiene versión azul (una corona en mal estado, rehecha) solo cambia de color.
+        $crown = $this->odontograms()->toggle($odontogram, $this->condition('corona'), ToothState::Bad, 46);
+        $this->odontograms()->markTreated($crown);
+
+        $this->assertSame([['ausente', 18, null, 'good'], ['restauracion', 36, 'O', 'good'], ['corona', 46, null, 'good']], $marks());
+
+        // Una fractura no tiene "tratada": se quita y se marca lo que corresponda.
+        $fracture = $this->odontograms()->toggle($odontogram, $this->condition('fractura'), ToothState::Bad, 11);
+        $this->assertFalse(OdontogramService::canMarkTreated($fracture->load('condition')));
+        $this->expectExceptionObject(ClinicalException::cannotMarkTreated());
+        $this->odontograms()->markTreated($fracture);
     }
 
     public function test_the_odontogram_validates_teeth_surfaces_spans_and_colors(): void
