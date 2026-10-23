@@ -11,6 +11,7 @@ use App\Models\Appointment;
 use App\Models\Patient;
 use App\Models\TreatmentPlan;
 use App\Models\TreatmentPlanItem;
+use App\Services\Clinical\OdontogramSuggestions;
 use App\Services\Clinical\TreatmentPlanService;
 use App\Support\Money;
 use Filament\Actions\Action;
@@ -63,7 +64,7 @@ class TreatmentPlansRelationManager extends RelationManager
         /** @var Patient $patient */
         $patient = $this->getOwnerRecord();
 
-        return TreatmentPlanForm::configure($schema, fn () => app(TreatmentPlanService::class)->suggestFromOdontogram($patient->latestOdontogram));
+        return TreatmentPlanForm::configure($schema, fn () => app(OdontogramSuggestions::class)->planItems($patient->latestOdontogram));
     }
 
     public function table(Table $table): Table

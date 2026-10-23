@@ -73,6 +73,9 @@
 
                 {{-- Al editar, el toque lo recibe el editor del navegador (pinta al instante); si no, va directo al servidor. --}}
                 <g @if ($interactive) class="od-hit" @if ($editing) x-on:click="tap({{ $tooth }})" @else wire:click="mark({{ $tooth }})" @endif @endif>
+                    @if ($data['labels'])
+                        <title>Pieza {{ $tooth }}: {{ collect($data['labels'])->map(fn ($label) => "{$label['text']} {$label['meaning']}")->implode(', ') }}</title>
+                    @endif
                     <text x="{{ $cx }}" y="{{ $numY }}" class="od-num">{{ $tooth }}</text>
                     <rect x="{{ $x0 }}" y="{{ $boxY }}" width="{{ $D }}" height="14" rx="2" class="od-box" />
                     <text x="{{ $cx }}" y="{{ $boxY + 10.5 }}" class="od-label">
@@ -87,7 +90,7 @@
                     <polygon
                         points="{{ $points }}"
                         @class(['od-surface', 'od-hit' => $interactive, 'is-'.($data['surfaces'][$surface] ?? 'none')])
-                        @if ($interactive) data-tooth="{{ $tooth }}" data-surface="{{ $surface }}" @if ($editing) x-on:click="tap({{ $tooth }}, '{{ $surface }}')" @else wire:click="mark({{ $tooth }}, '{{ $surface }}')" @endif @endif
+                        @if ($interactive) data-tooth="{{ $tooth }}" data-surface="{{ $surface }}" data-zone="{{ $zone }}" @if ($editing) x-on:click="tap({{ $tooth }}, '{{ $surface }}')" @else wire:click="mark({{ $tooth }}, '{{ $surface }}')" @endif @endif
                     ><title>{{ $tooth }} {{ Teeth::surfaceName($surface) }}</title></polygon>
                 @endforeach
 

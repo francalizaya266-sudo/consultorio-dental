@@ -57,44 +57,30 @@ final class OdontogramService
         ?int $toTooth = null,
         ?string $abbreviation = null,
     ): ?OdontogramEntry {
-        $this->assertTooth($odontogram, $tooth);
+        [$attributes, $existing] = $this->prepare($odontogram, $condition, $state, $tooth, $surface, $toTooth, $abbreviation);
 
-        [$surface, $toTooth] = match ($condition->applies_to) {
-            'surface' => [$this->surfaceFor($tooth, $surface), null],
-            'span' => [null, $this->spanEnd($odontogram, $tooth, $toTooth)],
-            default => [null, null],
-        };
-
-        $state = $this->allowedState($condition, $state);
-        $abbreviation = in_array($abbreviation, $condition->abbreviations ?? [], true) ? $abbreviation : null;
-
-        $existing = $odontogram->entries()
-            ->where('odontogram_condition_id', $condition->getKey())
-            ->where('tooth', $tooth)
-            ->where('surface', $surface)
-            ->where('to_tooth', $toTooth)
-            ->first();
-
-        if ($existing && $existing->state === $state && $existing->abbreviation === $abbreviation) {
+        if ($existing && $existing->state === $attributes['state'] && $existing->abbreviation === $attributes['abbreviation']) {
             $existing->delete();
 
             return null;
         }
 
-        if ($existing) {
-            $existing->update(['state' => $state, 'abbreviation' => $abbreviation]);
+        return $this->save($odontogram, $attributes, $existing);
+    }
 
-            return $existing;
-        }
+    /** Marca un hallazgo sin quitar nada (al dictar): si ya estaba igual, lo deja como está. */
+    public function place(
+        Odontogram $odontogram,
+        OdontogramCondition $condition,
+        ToothState $state,
+        int $tooth,
+        ?string $surface = null,
+        ?int $toTooth = null,
+        ?string $abbreviation = null,
+    ): OdontogramEntry {
+        [$attributes, $existing] = $this->prepare($odontogram, $condition, $state, $tooth, $surface, $toTooth, $abbreviation);
 
-        return $odontogram->entries()->create([
-            'odontogram_condition_id' => $condition->getKey(),
-            'tooth' => $tooth,
-            'surface' => $surface,
-            'to_tooth' => $toTooth,
-            'state' => $state,
-            'abbreviation' => $abbreviation,
-        ]);
+        return $this->save($odontogram, $attributes, $existing);
     }
 
     /** Si una marca roja se puede pasar a tratada de un toque. */
@@ -163,6 +149,52 @@ final class OdontogramService
         }
 
         $odontogram->update(['dentition' => $dentition]);
+    }
+
+    /**
+     * Valida la marca y busca si ya estaba (mismo hallazgo en la misma pieza, superficie o tramo).
+     *
+     * @return array{0: array<string, mixed>, 1: OdontogramEntry|null}
+     */
+    private function prepare(Odontogram $odontogram, OdontogramCondition $condition, ToothState $state, int $tooth, ?string $surface, ?int $toTooth, ?string $abbreviation): array
+    {
+        $this->assertTooth($odontogram, $tooth);
+
+        [$surface, $toTooth] = match ($condition->applies_to) {
+            'surface' => [$this->surfaceFor($tooth, $surface), null],
+            'span' => [null, $this->spanEnd($odontogram, $tooth, $toTooth)],
+            default => [null, null],
+        };
+
+        $attributes = [
+            'odontogram_condition_id' => $condition->getKey(),
+            'tooth' => $tooth,
+            'surface' => $surface,
+            'to_tooth' => $toTooth,
+            'state' => $this->allowedState($condition, $state),
+            'abbreviation' => in_array($abbreviation, $condition->abbreviations ?? [], true) ? $abbreviation : null,
+        ];
+
+        $existing = $odontogram->entries()
+            ->where('odontogram_condition_id', $condition->getKey())
+            ->where('tooth', $tooth)
+            ->where('surface', $surface)
+            ->where('to_tooth', $toTooth)
+            ->first();
+
+        return [$attributes, $existing];
+    }
+
+    /** @param  array<string, mixed>  $attributes */
+    private function save(Odontogram $odontogram, array $attributes, ?OdontogramEntry $existing): OdontogramEntry
+    {
+        if ($existing) {
+            $existing->update(['state' => $attributes['state'], 'abbreviation' => $attributes['abbreviation']]);
+
+            return $existing;
+        }
+
+        return $odontogram->entries()->create($attributes);
     }
 
     /** Si el hallazgo solo existe en un color (ej. ausente = azul), se usa ese. */
