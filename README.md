@@ -15,7 +15,7 @@ php artisan migrate --seed
 php artisan serve
 ```
 
-En local, `--seed` crea datos de demostración. Panel: `/admin` con `admin@consultorio.test`, `recepcion@consultorio.test`, `dra.torres@consultorio.test` o `dr.ramos@consultorio.test` (clave `password`).
+En local, `--seed` crea datos de demostración. Panel: `/panel` con `admin@consultorio.test`, `recepcion@consultorio.test`, `dra.torres@consultorio.test` o `dr.ramos@consultorio.test` (clave `password`).
 
 Pruebas: `php artisan test` (usan SQLite en memoria; también pasan sobre MySQL).
 

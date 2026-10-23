@@ -9,8 +9,11 @@ use App\Enums\PatientRelationship;
 use App\Enums\Sex;
 use App\Enums\TreatmentPlanStatus;
 use App\Models\Concerns\Auditable;
+use App\Support\Phone;
 use Database\Factories\PatientFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
+use Illuminate\Database\Eloquent\Attributes\Scope;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Casts\Attribute;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
@@ -147,5 +150,36 @@ class Patient extends Model
     public function latestOdontogram(): HasOne
     {
         return $this->hasOne(Odontogram::class)->latestOfMany();
+    }
+
+    /** Busca por nombre, apellido, documento o celular. */
+    #[Scope]
+    protected function search(Builder $query, string $term): Builder
+    {
+        $term = trim($term);
+        $digits = preg_replace('/\D+/', '', $term);
+
+        return $query->where(function (Builder $q) use ($term, $digits) {
+            $q->where(function (Builder $name) use ($term) {
+                foreach (preg_split('/\s+/', $term) as $word) {
+                    $name->where(fn (Builder $w) => $w->where('first_name', 'like', "%{$word}%")->orWhere('last_name', 'like', "%{$word}%"));
+                }
+            });
+
+            if (strlen($digits) >= 4) {
+                $q->orWhere('document_number', 'like', "{$digits}%")
+                    ->orWhereHas('account', fn (Builder $a) => $a->where('phone', 'like', "%{$digits}%"));
+            }
+        });
+    }
+
+    /** "María Quispe · DNI 12345678 · 987 654 321" para buscadores. */
+    public function selectLabel(): string
+    {
+        return collect([
+            $this->full_name,
+            $this->document_number ? ($this->document_type?->getLabel() ?? 'Doc.').' '.$this->document_number : null,
+            $this->account ? Phone::display($this->account->phone) : null,
+        ])->filter()->implode(' · ');
     }
 }
