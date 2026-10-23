@@ -13,6 +13,16 @@ class ConsentTemplate extends Model
 {
     use Auditable;
 
+    /** Cada cambio del texto es una versión nueva; lo ya firmado guarda su propio texto. */
+    protected static function booted(): void
+    {
+        static::updating(function (ConsentTemplate $template) {
+            if ($template->isDirty('body')) {
+                $template->version = $template->getOriginal('version') + 1;
+            }
+        });
+    }
+
     protected function casts(): array
     {
         return [

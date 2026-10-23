@@ -8,6 +8,7 @@ use App\Filament\Pages\Settings;
 use App\Filament\Resources\Accounts\AccountResource;
 use App\Filament\Resources\Appointments\AppointmentResource;
 use App\Filament\Resources\Campaigns\CampaignResource;
+use App\Filament\Resources\ConsentTemplates\ConsentTemplateResource;
 use App\Filament\Resources\Consultations\ConsultationResource;
 use App\Filament\Resources\Doctors\DoctorResource;
 use App\Filament\Resources\Doctors\Pages\EditDoctor;
@@ -30,6 +31,7 @@ use App\Models\Treatment;
 use App\Models\User;
 use Database\Seeders\CatalogSeeder;
 use Illuminate\Foundation\Testing\LazilyRefreshDatabase;
+use Illuminate\Support\Facades\Validator;
 use Livewire\Livewire;
 use PHPUnit\Framework\Attributes\DataProvider;
 use Tests\Concerns\CreatesAgenda;
@@ -69,6 +71,7 @@ class PanelAccessTest extends TestCase
             'editar doctor' => ['doctors.edit', [true, false, false]],
             'usuarios' => ['users', [true, false, false]],
             'textos de WhatsApp' => ['templates', [true, false, false]],
+            'textos de consentimiento' => ['consents', [true, false, true]],
             'campañas' => ['campaigns', [true, false, false]],
             'nueva campaña' => ['campaigns.create', [true, false, false]],
             'editar campaña' => ['campaigns.edit', [true, false, false]],
@@ -116,6 +119,7 @@ class PanelAccessTest extends TestCase
             'doctors.edit' => DoctorResource::getUrl('edit', ['record' => $doctor]),
             'users' => UserResource::getUrl('index'),
             'templates' => MessageTemplateResource::getUrl('index'),
+            'consents' => ConsentTemplateResource::getUrl('index'),
             'campaigns' => CampaignResource::getUrl('index'),
             'campaigns.create' => CampaignResource::getUrl('create'),
             'campaigns.edit' => CampaignResource::getUrl('edit', ['record' => $campaign]),
@@ -137,6 +141,13 @@ class PanelAccessTest extends TestCase
                 array_keys($users)[$i]." en {$page}: respuesta {$response->getStatusCode()}",
             );
         }
+    }
+
+    public function test_validation_messages_are_in_spanish(): void
+    {
+        $errors = Validator::make(['document' => str_repeat('1', 21)], ['name' => 'required', 'document' => 'max:20'], attributes: ['name' => 'Nombre', 'document' => 'Documento'])->errors();
+
+        $this->assertSame(['Completa el campo Nombre.', 'Documento no puede tener más de 20 caracteres.'], $errors->all());
     }
 
     public function test_inactive_users_cannot_enter(): void

@@ -27,6 +27,7 @@ Pruebas: `php artisan test` (usan SQLite en memoria; también pasan sobre MySQL)
 4. Un único cron cada minuto:
    `* * * * * php /ruta/al/proyecto/artisan schedule:run >> /dev/null 2>&1`
    Ese cron prepara los recordatorios del día anterior, marca las citas sin confirmar, procesa la cola y limpia enlaces vencidos.
+5. PHP con la extensión **GD** (casi todos los hostings la traen): comprime radiografías y fotos al subirlas. Esos archivos y las firmas quedan en `storage/app/private/clinica`, fuera de `public/`; inclúyanlo en las copias de seguridad junto con la base de datos.
 
 ## Cómo está organizado
 
@@ -38,6 +39,7 @@ Pruebas: `php artisan test` (usan SQLite en memoria; también pasan sobre MySQL)
 | `app/Services/Booking` | Reservas, confirmación, cambios de horario en dos niveles y cancelaciones. Toda escritura en la agenda pasa por aquí. |
 | `app/Services/Access` | Enlaces personales por WhatsApp y dispositivos recordados (sin contraseñas ni códigos). |
 | `app/Services/WhatsApp` | Bandeja de avisos: hoy se envían con un clic desde el WhatsApp del consultorio; mañana, por la API oficial sin cambiar nada más. |
+| `app/Services/Clinical` | Historia clínica: atención, odontograma, plan de tratamiento, recetas, radiografías y fotos (comprimidas) y consentimientos firmados en pantalla. |
 | `config/consultorio.php` | Valores por defecto (plazos, topes, tiempos). Se pueden cambiar desde el panel (tabla `settings`). |
 
 ## Reglas del negocio que implementa

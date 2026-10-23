@@ -56,4 +56,9 @@ class ClinicalException extends RuntimeException
     {
         return new self('Hay marcas en piezas que no existen en esa dentición. Quítalas antes de cambiarla.');
     }
+
+    public static function invalidSignature(): self
+    {
+        return new self('No se pudo leer la firma. Pide que vuelva a firmar.');
+    }
 }

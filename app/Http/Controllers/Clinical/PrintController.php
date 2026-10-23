@@ -4,14 +4,20 @@ namespace App\Http\Controllers\Clinical;
 
 use App\Enums\PlanItemStatus;
 use App\Http\Controllers\Controller;
+use App\Livewire\OdontogramChart;
+use App\Models\Consent;
+use App\Models\OdontogramEntry;
+use App\Models\Patient;
 use App\Models\Prescription;
 use App\Models\TreatmentPlan;
 use App\Models\TreatmentPlanItem;
+use App\Services\Clinical\ConsentService;
 use App\Services\Clinical\PrescriptionService;
 use App\Services\Clinical\TreatmentPlanService;
+use App\Support\Teeth;
 use Illuminate\View\View;
 
-/** Receta y presupuesto listos para imprimir o guardar en PDF desde el navegador. */
+/** Receta, presupuesto, consentimiento e historia listos para imprimir o guardar en PDF desde el navegador. */
 class PrintController extends Controller
 {
     public function prescription(Prescription $prescription, PrescriptionService $prescriptions): View
@@ -25,6 +31,52 @@ class PrintController extends Controller
             'patient' => $prescription->patient,
             'doctor' => $prescription->doctor,
             'items' => $prescription->items->map(fn ($item) => ['medication' => $item->medication, 'instructions' => $prescriptions->instructionsOf($item)]),
+        ]);
+    }
+
+    public function consent(Consent $consent, ConsentService $consents): View
+    {
+        abort_unless(auth()->user()->can('view', $consent), 403);
+
+        $consent->load('patient', 'doctor');
+
+        return view('print.consent', [
+            'consent' => $consent,
+            'patient' => $consent->patient,
+            'doctor' => $consent->doctor,
+            'signature' => $consents->signatureDataUri($consent),
+        ]);
+    }
+
+    /** Historia clínica completa para imprimir o guardar en PDF. Queda registrado quién la sacó. */
+    public function history(Patient $patient, PrescriptionService $prescriptions): View
+    {
+        abort_unless(auth()->user()->can('viewClinical', $patient), 403);
+
+        $patient->load([
+            'account',
+            'medicalBackground',
+            'latestOdontogram.entries.condition',
+            'consultations' => fn ($query) => $query->oldest('attended_at')->with(['doctor', 'diagnoses.icd10Code', 'planItems', 'prescription.items', 'appointment.treatment']),
+            'treatmentPlans' => fn ($query) => $query->oldest()->with(['doctor', 'items']),
+            'consents' => fn ($query) => $query->oldest('signed_at')->with('doctor'),
+            'clinicalFiles' => fn ($query) => $query->oldest('taken_at'),
+        ]);
+
+        $patient->auditEvent('printed');
+
+        $odontogram = $patient->latestOdontogram;
+        $entries = $odontogram?->entries ?? collect();
+
+        return view('print.history', [
+            'patient' => $patient,
+            'doctor' => auth()->user()->doctor,
+            'odontogram' => $odontogram,
+            'rows' => $odontogram ? Teeth::rows($odontogram->dentition) : [],
+            'teeth' => OdontogramChart::teethData($entries),
+            'spans' => $entries->filter(fn (OdontogramEntry $entry) => $entry->to_tooth !== null)->values(),
+            'findings' => $entries->sortBy([['tooth', 'asc'], ['id', 'asc']])->values(),
+            'prescriptions' => $prescriptions,
         ]);
     }
 

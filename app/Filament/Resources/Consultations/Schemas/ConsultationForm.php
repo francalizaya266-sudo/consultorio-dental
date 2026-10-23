@@ -8,6 +8,7 @@ use App\Enums\SnippetField;
 use App\Enums\SnippetStatus;
 use App\Enums\ToothState;
 use App\Filament\Actions\SendWhatsAppAction;
+use App\Filament\Actions\UploadClinicalFilesAction;
 use App\Filament\Forms\QuickTextarea;
 use App\Filament\Resources\Consultations\ConsultationResource;
 use App\Filament\Resources\Consultations\Pages\EditConsultation;
@@ -39,6 +40,7 @@ use Filament\Schemas\Components\Section;
 use Filament\Schemas\Components\Text;
 use Filament\Schemas\Components\Utilities\Get;
 use Filament\Schemas\Components\Utilities\Set;
+use Filament\Schemas\Components\View;
 use Filament\Schemas\Schema;
 use Filament\Support\Icons\Heroicon;
 use Illuminate\Database\Eloquent\Builder;
@@ -177,6 +179,21 @@ class ConsultationForm
                         Text::make('El paciente no tiene un plan de tratamiento vigente. Ármalo con un toque desde lo que está en rojo en el odontograma.')
                             ->color('gray')
                             ->visible(fn (?Consultation $record) => ! $record || self::workableItems($record)->isEmpty()),
+                    ]),
+
+                Section::make('Radiografías y fotos')
+                    ->key('files')
+                    ->icon(Heroicon::OutlinedPhoto)
+                    ->collapsible()
+                    ->headerActions([
+                        UploadClinicalFilesAction::make(fn (Consultation $record) => $record->patient, fn (Consultation $record) => $record)
+                            ->label('Subir')
+                            ->link()
+                            ->visible(fn (?Consultation $record) => $record && auth()->user()->can('update', $record)),
+                    ])
+                    ->schema([
+                        View::make('filament.clinical.files-grid')
+                            ->viewData(fn (?Consultation $record) => ['files' => $record?->files()->latest('id')->get() ?? collect()]),
                     ]),
 
                 Section::make('Evolución')

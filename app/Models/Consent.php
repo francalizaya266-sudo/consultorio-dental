@@ -43,6 +43,11 @@ class Consent extends Model
         return $this->belongsTo(Doctor::class);
     }
 
+    public function isActive(): bool
+    {
+        return $this->revoked_at === null;
+    }
+
     public function file(): BelongsTo
     {
         return $this->belongsTo(ClinicalFile::class, 'clinical_file_id');

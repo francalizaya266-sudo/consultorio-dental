@@ -252,7 +252,9 @@ class CatalogSeeder extends Seeder
     {
         ConsentTemplate::firstOrCreate(['name' => 'Consentimiento informado general'], [
             'body' => <<<'TXT'
-                Yo, {paciente}, identificado(a) con {documento}, autorizo a {doctor} a realizar el tratamiento de {tratamiento}.
+                Paciente: {paciente}.
+
+                Yo, {firmante}, identificado(a) con {documento}, {calidad}, autorizo a {doctor} a realizar el tratamiento de {tratamiento}.
 
                 Se me explicó en un lenguaje claro en qué consiste el tratamiento, sus beneficios, los riesgos y molestias más frecuentes, y las alternativas disponibles. Pude hacer preguntas y fueron respondidas.
 
