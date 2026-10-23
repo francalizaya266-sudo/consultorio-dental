@@ -14,6 +14,7 @@ class ViewAccount extends ViewRecord
     protected function getHeaderActions(): array
     {
         return [
+            AccountActions::sendAccessLink(),
             AccountActions::block(),
             AccountActions::unblock(),
             EditAction::make()->color('gray'),

@@ -65,6 +65,19 @@ class DeviceService
         return $device;
     }
 
+    /** "Salir en este celular": deja de estar recordado. */
+    public function forget(Request $request): void
+    {
+        $token = $request->cookie(self::COOKIE);
+
+        if (is_string($token) && $token !== '') {
+            RememberedDevice::query()->where('token_hash', hash('sha256', $token))->update(['revoked_at' => now()]);
+        }
+
+        session()->forget(self::ELEVATED_SESSION_KEY);
+        Cookie::queue(Cookie::forget(self::COOKIE));
+    }
+
     /** "Cerrar sesión en todos mis dispositivos". */
     public function forgetAll(Account $account): void
     {
@@ -72,14 +85,14 @@ class DeviceService
         Cookie::queue(Cookie::forget(self::COOKIE));
     }
 
-    public function elevate(Request $request): void
+    public function elevate(): void
     {
         $minutes = (int) Setting::get('devices.elevated_minutes', 15);
-        $request->session()->put(self::ELEVATED_SESSION_KEY, now()->addMinutes($minutes)->getTimestamp());
+        session()->put(self::ELEVATED_SESSION_KEY, now()->addMinutes($minutes)->getTimestamp());
     }
 
-    public function isElevated(Request $request): bool
+    public function isElevated(): bool
     {
-        return (int) $request->session()->get(self::ELEVATED_SESSION_KEY, 0) > now()->getTimestamp();
+        return (int) session()->get(self::ELEVATED_SESSION_KEY, 0) > now()->getTimestamp();
     }
 }
