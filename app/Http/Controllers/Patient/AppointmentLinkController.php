@@ -2,11 +2,12 @@
 
 namespace App\Http\Controllers\Patient;
 
+use App\Enums\RescheduleRequestStatus;
 use App\Exceptions\BookingException;
 use App\Http\Controllers\Controller;
 use App\Models\MagicLink;
-use App\Services\Access\DeviceService;
 use App\Services\Access\MagicLinkService;
+use App\Services\Access\PatientAccess;
 use App\Services\Booking\AppointmentService;
 use App\Services\Booking\PatientChangePolicy;
 use Illuminate\Http\RedirectResponse;
@@ -14,15 +15,15 @@ use Illuminate\Http\Request;
 use Illuminate\View\View;
 
 /**
- * Enlace personal que llega por WhatsApp: el paciente ve su cita y la
- * confirma o cancela con un toque. Abrir el enlace no cambia nada (la vista
- * previa de WhatsApp también lo abre); solo los botones actúan.
+ * Enlace personal que llega por WhatsApp. El de una cita la muestra para confirmarla,
+ * cambiarla o cancelarla; el de acceso abre Mi cuenta. Abrir el enlace no cambia nada
+ * (la vista previa de WhatsApp también lo abre): solo los botones actúan.
  */
 class AppointmentLinkController extends Controller
 {
     public function __construct(
         private readonly MagicLinkService $links,
-        private readonly DeviceService $devices,
+        private readonly PatientAccess $access,
         private readonly AppointmentService $appointments,
         private readonly PatientChangePolicy $policy,
     ) {}
@@ -31,8 +32,12 @@ class AppointmentLinkController extends Controller
     {
         $link = $this->links->find($token);
 
-        if ($link?->appointment === null) {
+        if ($link === null) {
             return view('patient.link-expired');
+        }
+
+        if ($link->appointment === null) {
+            return view('site.account.enter', ['token' => $token]);
         }
 
         $appointment = $link->appointment->load(['patient', 'doctor', 'treatment']);
@@ -43,6 +48,7 @@ class AppointmentLinkController extends Controller
             'canChange' => $this->policy->canChange($appointment),
             'canCancel' => $this->policy->canSelfCancel($appointment),
             'cancelLimitHours' => $this->policy->selfCancelMinHours(),
+            'pendingRequest' => $appointment->rescheduleRequests()->where('status', RescheduleRequestStatus::Pending)->with('options')->latest('id')->first(),
         ]);
     }
 
@@ -67,19 +73,31 @@ class AppointmentLinkController extends Controller
         return to_route('patient.link', $token)->with('status', 'Tu cita fue cancelada. Cuando quieras, puedes reservar otra.');
     }
 
-    /** El paciente tocó un botón: se verifica el celular y se recuerda este dispositivo. */
+    public function change(string $token): View
+    {
+        $link = $this->links->find($token);
+        abort_if($link?->appointment === null, 404);
+
+        return view('site.change', ['appointment' => $link->appointment, 'token' => $token]);
+    }
+
+    /** Enlace de acceso: el paciente tocó "Entrar" y este celular queda recordado. */
+    public function enter(Request $request, string $token): RedirectResponse
+    {
+        $link = $this->links->find($token);
+        abort_if($link === null || $link->appointment_id !== null, 404);
+
+        $this->access->actWithLink($request, $link);
+
+        return to_route('site.account')->with('status', '¡Listo! Ya puedes ver tus citas. Este celular quedará recordado.');
+    }
+
     private function act(Request $request, string $token): MagicLink
     {
         $link = $this->links->find($token);
         abort_if($link?->appointment === null, 404);
 
-        $this->links->consume($link);
-
-        if ($this->devices->current($request)?->account_id !== $link->account_id) {
-            $this->devices->remember($link->account, $request);
-        }
-
-        $this->devices->elevate($request);
+        $this->access->actWithLink($request, $link);
 
         return $link;
     }

@@ -65,6 +65,15 @@ class MagicLinkService
         }
     }
 
+    /** La cita cambió de horario: su enlace vale hasta unos días después del nuevo horario. */
+    public function extendForAppointment(Appointment $appointment): void
+    {
+        MagicLink::query()
+            ->where('appointment_id', $appointment->getKey())
+            ->whereNull('revoked_at')
+            ->update(['expires_at' => $appointment->starts_at->copy()->addDays((int) Setting::get('links.appointment_link_days_after', 2))]);
+    }
+
     public function revokeForAppointment(Appointment $appointment): void
     {
         MagicLink::query()

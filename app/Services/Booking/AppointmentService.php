@@ -21,6 +21,7 @@ use App\Models\Setting;
 use App\Models\Treatment;
 use App\Models\User;
 use App\Models\WaitlistEntry;
+use App\Services\Access\MagicLinkService;
 use App\Services\Agenda\AvailabilityService;
 use App\Services\StaffAlerts;
 use App\Services\WhatsApp\WhatsAppOutbox;
@@ -40,6 +41,7 @@ class AppointmentService
         private readonly PatientChangePolicy $policy,
         private readonly WhatsAppOutbox $outbox,
         private readonly StaffAlerts $alerts,
+        private readonly MagicLinkService $links,
     ) {}
 
     /**
@@ -403,10 +405,12 @@ class AppointmentService
 
             $appointment->logEvent('rescheduled', $actor, ['from_starts_at' => $from, 'to_starts_at' => $startsAt]);
 
-            // El recordatorio del horario anterior ya no sirve.
+            // El recordatorio del horario anterior ya no sirve; el enlace sigue sirviendo para el nuevo.
             $this->outbox->discardPending($appointment, MessageTemplateKey::Reminder);
+            $appointment->refresh();
+            $this->links->extendForAppointment($appointment);
 
-            return $appointment->refresh();
+            return $appointment;
         });
     }
 

@@ -40,6 +40,8 @@ Pruebas: `php artisan test` (usan SQLite en memoria; también pasan sobre MySQL)
 | `app/Services/Access` | Enlaces personales por WhatsApp y dispositivos recordados (sin contraseñas ni códigos). |
 | `app/Services/WhatsApp` | Bandeja de avisos: hoy se envían con un clic desde el WhatsApp del consultorio; mañana, por la API oficial sin cambiar nada más. |
 | `app/Services/Clinical` | Historia clínica: atención, odontograma, plan de tratamiento, recetas, radiografías y fotos (comprimidas) y consentimientos firmados en pantalla. |
+| `app/Livewire/Site`, `resources/views/site` | Web del paciente: reservar en 3 pasos (`/reservar`), Mi cuenta (`/mi-cuenta`) y cambiar el horario desde el enlace. |
+| `public/css/sitio.css` | Estilos de la web, escritos a mano: el hosting no necesita Node ni compilar nada. |
 | `config/consultorio.php` | Valores por defecto (plazos, topes, tiempos). Se pueden cambiar desde el panel (tabla `settings`). |
 
 ## Reglas del negocio que implementa

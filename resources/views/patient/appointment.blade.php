@@ -1,48 +1,69 @@
 @php
     use App\Enums\AppointmentStatus;
+    use App\Livewire\Site\BookingWizard;
+
     $status = $appointment->status;
 @endphp
-<x-patient-layout title="Tu cita">
-    <div class="card">
-        <h1>Hola, {{ $appointment->patient->first_name }}</h1>
+<x-site-layout title="Tu cita" :noindex="true">
+    <section class="stack-lg">
+        <div class="stack">
+            <h1>Hola, {{ $appointment->patient->first_name }}</h1>
+            <div class="appointment">
+                <div class="spread">
+                    <span class="when">{{ BookingWizard::dayLabel($appointment->starts_at->toImmutable()) }}, {{ BookingWizard::timeLabel($appointment->starts_at->format('H:i')) }}</span>
+                </div>
+                <dl class="facts">
+                    <dt>Tratamiento</dt>
+                    <dd>{{ $appointment->treatment->name }}</dd>
+                    <dt>Doctor</dt>
+                    <dd>{{ $appointment->doctor->name }}</dd>
+                    <dt>Estado</dt>
+                    <dd>
+                        <span @class(['badge', 'ok' => $status === AppointmentStatus::Confirmed, 'bad' => $status === AppointmentStatus::Cancelled, 'quiet' => in_array($status, [AppointmentStatus::Completed, AppointmentStatus::NoShow], true)])>
+                            {{ $status->getLabel() }}
+                        </span>
+                    </dd>
+                </dl>
+            </div>
+        </div>
 
-        <dl>
-            <dt>Tratamiento</dt>
-            <dd>{{ $appointment->treatment->name }}</dd>
-            <dt>Día y hora</dt>
-            <dd>{{ ucfirst($appointment->starts_at->translatedFormat('l j \d\e F')) }}, {{ $appointment->starts_at->format('g:i a') }}</dd>
-            <dt>Doctor</dt>
-            <dd>{{ $appointment->doctor->name }}</dd>
-            <dt>Estado</dt>
-            <dd>
-                <span @class(['badge', 'ok' => $status === AppointmentStatus::Confirmed, 'bad' => $status === AppointmentStatus::Cancelled])>
-                    {{ $status->getLabel() }}
-                </span>
-            </dd>
-        </dl>
+        @if ($pendingRequest)
+            <div class="flash info">
+                Pediste cambiar esta cita a:
+                {{ $pendingRequest->options->map(fn ($o) => mb_strtolower(BookingWizard::dayLabel($o->starts_at->toImmutable())).' a las '.BookingWizard::timeLabel($o->starts_at->format('H:i')))->join('; ', ' o ') }}
+                Te avisaremos por WhatsApp cuál quedó.
+            </div>
+        @endif
 
         @if ($canChange)
-            <div class="actions">
+            <div class="stack">
                 @if ($status === AppointmentStatus::Pending)
                     <form method="POST" action="{{ route('patient.link.confirm', $token) }}">
                         @csrf
-                        <button type="submit" class="primary">Confirmar mi asistencia</button>
+                        <button type="submit" class="btn block">Confirmar mi asistencia</button>
                     </form>
                 @endif
 
+                <a href="{{ route('patient.link.change', $token) }}" class="btn quiet block">Cambiar el horario</a>
+
                 @if ($canCancel)
-                    <details>
-                        <summary class="button danger">Cancelar la cita</summary>
-                        <form method="POST" action="{{ route('patient.link.cancel', $token) }}">
+                    <details class="more">
+                        <summary class="btn danger block">Cancelar la cita</summary>
+                        <form method="POST" action="{{ route('patient.link.cancel', $token) }}" class="stack" style="margin-top: 12px">
                             @csrf
-                            <textarea name="reason" rows="2" maxlength="250" placeholder="Motivo (opcional)"></textarea>
-                            <button type="submit" class="danger">Sí, cancelar mi cita</button>
+                            <div class="field">
+                                <label for="reason">Motivo (opcional)</label>
+                                <textarea id="reason" name="reason" class="input" rows="2" maxlength="250"></textarea>
+                            </div>
+                            <button type="submit" class="btn danger block">Sí, cancelar mi cita</button>
                         </form>
                     </details>
                 @else
-                    <p class="note">Faltan menos de {{ $cancelLimitHours }} horas para tu cita. Para cancelarla o moverla, escríbenos por WhatsApp.</p>
+                    <p class="muted">Faltan menos de {{ $cancelLimitHours }} horas para tu cita. Para cancelarla, escríbenos por WhatsApp.</p>
                 @endif
             </div>
         @endif
-    </div>
-</x-patient-layout>
+
+        <p class="muted small">¿Tienes más citas o familiares en este celular? Míralos en <a href="{{ route('site.account') }}">Mi cuenta</a>.</p>
+    </section>
+</x-site-layout>
