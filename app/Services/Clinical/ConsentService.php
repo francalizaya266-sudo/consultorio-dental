@@ -3,7 +3,6 @@
 namespace App\Services\Clinical;
 
 use App\Enums\PatientRelationship;
-use App\Exceptions\ClinicalException;
 use App\Models\Consent;
 use App\Models\ConsentTemplate;
 use App\Models\Doctor;
@@ -11,8 +10,8 @@ use App\Models\Patient;
 use App\Models\Setting;
 use App\Models\Treatment;
 use App\Models\User;
+use App\Support\Signatures;
 use Carbon\CarbonInterface;
-use GdImage;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
@@ -94,7 +93,7 @@ final class ConsentService
      */
     public function sign(Patient $patient, ConsentTemplate $template, ?Treatment $treatment, array $signer, string $signature, User $by): Consent
     {
-        $png = $this->signaturePng($signature);
+        $png = Signatures::png($signature);
         $doctor = $by->doctor;
         $now = now();
 
@@ -129,50 +128,7 @@ final class ConsentService
     /** Firma lista para mostrarla en la hoja impresa. */
     public function signatureDataUri(Consent $consent): ?string
     {
-        $disk = Storage::disk(ClinicalFileService::DISK);
-
-        return $consent->signature_path && $disk->exists($consent->signature_path)
-            ? 'data:image/png;base64,'.base64_encode((string) $disk->get($consent->signature_path))
-            : null;
-    }
-
-    /** La firma llega del navegador como imagen PNG; se vuelve a generar para guardar solo la imagen. */
-    private function signaturePng(string $dataUrl): string
-    {
-        $data = str_starts_with($dataUrl, 'data:image/png;base64,') ? base64_decode(substr($dataUrl, 22), true) : false;
-        $image = $data ? @imagecreatefromstring($data) : false;
-
-        if (! $image instanceof GdImage) {
-            throw ClinicalException::invalidSignature();
-        }
-
-        $image = $this->trim($image);
-        ob_start();
-        imagepng($image, null, 9);
-
-        return (string) ob_get_clean();
-    }
-
-    /** Se recorta el espacio vacío alrededor del trazo para que en la hoja impresa se vea del tamaño justo. */
-    private function trim(GdImage $image, int $padding = 8): GdImage
-    {
-        $cropped = imagecropauto($image, IMG_CROP_SIDES);
-
-        if (! $cropped instanceof GdImage) {
-            imagesavealpha($image, true);
-
-            return $image;
-        }
-
-        $width = imagesx($cropped) + 2 * $padding;
-        $height = imagesy($cropped) + 2 * $padding;
-        $canvas = imagecreatetruecolor($width, $height);
-        imagealphablending($canvas, false);
-        imagefill($canvas, 0, 0, imagecolorallocatealpha($canvas, 255, 255, 255, 127));
-        imagesavealpha($canvas, true);
-        imagecopy($canvas, $cropped, $padding, $padding, 0, 0, imagesx($cropped), imagesy($cropped));
-
-        return $canvas;
+        return Signatures::dataUri($consent->signature_path);
     }
 
     /** Si el paciente es "hijo" del titular, el titular es su "padre / madre", y así. */

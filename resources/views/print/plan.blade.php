@@ -5,6 +5,13 @@
         tfoot td { font-weight: 800; font-size: 1rem; border-bottom: 0; }
         .notes { margin-top: 16px; white-space: pre-line; }
         .fine { margin-top: 16px; font-size: .8rem; color: var(--muted); }
+        .payment { margin-top: 16px; }
+        .payment h3 { font-size: .95rem; margin: 0 0 6px; }
+        .tag { font-size: .75rem; font-weight: 700; color: #b45309; }
+        .signed { display: flex; justify-content: space-around; gap: 24px; margin-top: 32px; align-items: flex-end; flex-wrap: wrap; }
+        .signed figure { margin: 0; text-align: center; min-width: 220px; }
+        .signed img { display: block; max-width: 240px; max-height: 110px; margin: 0 auto -6px; }
+        .signed figcaption { border-top: 1px solid var(--ink); padding-top: 4px; font-size: .85rem; }
     </style>
 
     @if ($plan->title)
@@ -32,6 +39,9 @@
                         @if ($item->sessions_planned > 1)
                             <div class="muted">{{ $item->sessions_planned }} sesiones</div>
                         @endif
+                        @if ($plan->accepted_at && ! $item->accepted_at)
+                            <div class="tag">Agregado: falta la firma del paciente</div>
+                        @endif
                     </td>
                     <td>{{ collect([$item->tooth, $item->surfaces])->filter()->implode(' ') ?: '—' }}</td>
                     <td class="num">{{ $item->quantity }}</td>
@@ -49,18 +59,68 @@
         </tfoot>
     </table>
 
+    @if ($paymentText)
+        <div class="payment">
+            <h3>Forma de pago</h3>
+            <p>{{ $paymentText }}</p>
+            @if ($plan->installments->isNotEmpty())
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Pago</th>
+                            <th>Vence</th>
+                            <th class="num">Monto</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach ($plan->installments as $installment)
+                            <tr>
+                                <td>{{ $installment->label() }}</td>
+                                <td>{{ $installment->due_on->format('d/m/Y') }}</td>
+                                <td class="num">{{ Money::format($installment->net()) }}</td>
+                            </tr>
+                        @endforeach
+                    </tbody>
+                </table>
+            @endif
+        </div>
+    @endif
+
     @if (filled($plan->notes))
         <p class="notes">{{ $plan->notes }}</p>
     @endif
 
     <p class="fine">
-        Presupuesto referencial. Si durante el tratamiento cambia el diagnóstico, se informará al paciente antes de continuar.
+        @if ($plan->accepted_at)
+            Precio acordado el {{ $plan->accepted_at->format('d/m/Y') }}: no cambia aunque suba el precio de lista. Lo que se agregue después se firma aparte.
+        @else
+            Presupuesto referencial. Si durante el tratamiento cambia el diagnóstico, se informará al paciente antes de continuar.
+        @endif
     </p>
 
     <x-slot:footer>
-        <div class="signatures">
-            <div class="signature">Paciente o apoderado<br><span class="muted">Acepto el plan</span></div>
-            <div class="signature">{{ $doctor->name }}<br><span class="muted">{{ $doctor->cop_number ? 'C.O.P. '.$doctor->cop_number : 'Firma y sello' }}</span></div>
-        </div>
+        @if ($signatures->isNotEmpty())
+            <div class="signed">
+                @foreach ($signatures as ['signature' => $signature, 'image' => $image])
+                    <figure>
+                        @if ($image)
+                            <img src="{{ $image }}" alt="Firma de {{ $signature->signer_name }}">
+                        @endif
+                        <figcaption>
+                            {{ $signature->signer_name }}{{ $signature->signer_document ? ' · '.$signature->signer_document : '' }}<br>
+                            <span class="muted">{{ $loop->first ? 'Aceptó el plan' : 'Aceptó lo agregado' }} · {{ Money::format($signature->total) }} · {{ $signature->signed_at->format('d/m/Y H:i') }}</span>
+                        </figcaption>
+                    </figure>
+                @endforeach
+                <figure>
+                    <figcaption>{{ $doctor->name }}<br><span class="muted">{{ $doctor->cop_number ? 'C.O.P. '.$doctor->cop_number : 'Firma y sello' }}</span></figcaption>
+                </figure>
+            </div>
+        @else
+            <div class="signatures">
+                <div class="signature">Paciente o apoderado<br><span class="muted">Acepto el plan</span></div>
+                <div class="signature">{{ $doctor->name }}<br><span class="muted">{{ $doctor->cop_number ? 'C.O.P. '.$doctor->cop_number : 'Firma y sello' }}</span></div>
+            </div>
+        @endif
     </x-slot:footer>
 </x-print-layout>

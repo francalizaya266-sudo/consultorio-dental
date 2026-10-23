@@ -3,21 +3,27 @@
 namespace App\Services\Billing;
 
 use App\Enums\PaymentMethod;
+use App\Enums\TreatmentPlanStatus;
 use App\Models\Appointment;
 use App\Models\Charge;
 use App\Models\Consultation;
 use App\Models\Patient;
 use App\Models\Payment;
+use App\Models\TreatmentPlan;
+use App\Models\TreatmentPlanInstallment;
 use App\Models\TreatmentPlanItem;
 use App\Models\User;
+use App\Support\Money;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 
 /**
  * Cargos y pagos. Lo realizado se carga solo al terminar la atención (o al marcar la cita
  * como atendida): la sesión del procedimiento del plan, con el precio acordado, o el
- * tratamiento de la cita con su precio y la promoción. Recepción lo revisa al cobrar.
- * Saldo = cargos − pagos, sin los anulados. Nada se borra: se anula con motivo.
+ * tratamiento de la cita con su precio y la promoción. Lo que el paciente aceptó pagar con
+ * cronograma (pago único o cuotas) no se carga por sesión: se carga cada pago al vencer.
+ * Recepción lo revisa al cobrar. Saldo = cargos − pagos, sin los anulados; los pagos cubren
+ * primero los cargos más antiguos. Nada se borra: se anula con motivo.
  */
 final class BillingService
 {
@@ -51,8 +57,10 @@ final class BillingService
             }
 
             $appointment = $consultation->appointment;
+            $workedTreatments = $consultation->planItems->pluck('treatment_id')->filter()->all();
 
-            if ($appointment && $appointment->treatment_plan_item_id === null) {
+            // Si lo trabajado del plan es el mismo tratamiento de la cita, la cita ya está en el plan.
+            if ($appointment && $appointment->treatment_plan_item_id === null && ! in_array($appointment->treatment_id, $workedTreatments, true)) {
                 $add('treatment-'.$appointment->treatment_id, fn () => $this->chargeTreatment($appointment, $by, $consultation));
             }
 
@@ -84,17 +92,18 @@ final class BillingService
      */
     public function chargePlanSession(TreatmentPlanItem $item, User $by, ?Appointment $appointment = null, ?Consultation $consultation = null): ?Charge
     {
-        $total = $item->subtotal();
-        $previous = Charge::query()->valid()->where('treatment_plan_item_id', $item->getKey())->get(['amount', 'discount']);
-        $remaining = round($total - $previous->sum(fn (Charge $c) => $c->net()), 2);
+        // Ya se paga con el cronograma del plan.
+        if ($item->in_payment_schedule) {
+            return null;
+        }
 
-        if ($remaining <= 0) {
+        [$amount, $session] = $this->nextSession($item);
+
+        if ($amount <= 0) {
             return null;
         }
 
         $sessions = max(1, (int) $item->sessions_planned);
-        $session = $previous->count() + 1;
-        $amount = $session >= $sessions ? $remaining : min($remaining, round($total / $sessions, 2));
 
         return Charge::create([
             'patient_id' => $item->plan->patient_id,
@@ -157,6 +166,179 @@ final class BillingService
             'charged_at' => now(),
             'created_by_user_id' => $by->getKey(),
         ]);
+    }
+
+    /**
+     * Carga los pagos del cronograma que ya vencieron (la inicial, el pago único o la cuota del mes),
+     * con la fecha en que vencían. Los de un plan cancelado ya no se cargan.
+     *
+     * @return int Cuántos se cargaron.
+     */
+    public function chargeDueInstallments(?Patient $patient = null, ?User $by = null): int
+    {
+        $due = TreatmentPlanInstallment::query()
+            ->whereNull('charge_id')
+            ->whereDate('due_on', '<=', today())
+            ->whereHas('plan', fn ($query) => $query
+                ->whereNot('status', TreatmentPlanStatus::Cancelled)
+                ->when($patient, fn ($q) => $q->where('patient_id', $patient->getKey())))
+            ->with('plan.installments')
+            ->orderBy('due_on')
+            ->orderBy('number')
+            ->get();
+
+        foreach ($due as $installment) {
+            DB::transaction(function () use ($installment, $by) {
+                $plan = $installment->plan;
+                $charge = Charge::create([
+                    'patient_id' => $plan->patient_id,
+                    'doctor_id' => $plan->doctor_id,
+                    'description' => ($plan->title ?: 'Plan de tratamiento').' · '.mb_strtolower($installment->label()),
+                    'amount' => $installment->amount,
+                    'discount' => $installment->discount,
+                    'discount_reason' => (float) $installment->discount > 0 ? 'Por pagar todo junto' : null,
+                    'charged_at' => $installment->due_on->copy()->setTimeFrom(now())->min(now()),
+                    'created_by_user_id' => $by?->getKey(),
+                ]);
+
+                $installment->update(['charge_id' => $charge->getKey()]);
+            });
+        }
+
+        return $due->count();
+    }
+
+    /**
+     * Lo que el paciente todavía debe de cada cargo: los pagos cubren primero los más antiguos.
+     *
+     * @return Collection<int, array{charge: Charge, due: float}>
+     */
+    public function unpaidCharges(Patient $patient): Collection
+    {
+        $paid = (float) $patient->payments()->whereNull('voided_at')->sum('amount');
+        $unpaid = collect();
+
+        $charges = $patient->charges()->valid()->orderBy('charged_at')->orderBy('id')->get();
+
+        foreach ($charges as $charge) {
+            $covered = min($paid, max(0, $charge->net()));
+            $paid = round($paid - $covered, 2);
+            $due = round($charge->net() - $covered, 2);
+
+            if ($due > 0) {
+                $unpaid->push(['charge' => $charge, 'due' => $due]);
+            }
+        }
+
+        return $unpaid;
+    }
+
+    /**
+     * Estado de cada pago del cronograma: pagado, por pagar (ya venció), atrasado (venció antes de hoy) o por vencer.
+     *
+     * @return list<array{installment: TreatmentPlanInstallment, state: 'paid'|'due'|'late'|'upcoming', due: float}>
+     */
+    public function installmentStates(TreatmentPlan $plan): array
+    {
+        $plan->loadMissing('installments.plan.installments');
+        $unpaid = $this->unpaidCharges($plan->patient)->keyBy(fn (array $row) => $row['charge']->getKey());
+        $today = today();
+
+        return $plan->installments->map(function (TreatmentPlanInstallment $installment) use ($unpaid, $today) {
+            $isDue = $installment->due_on->lte($today);
+            $due = match (true) {
+                $installment->charge_id !== null => (float) ($unpaid->get($installment->charge_id)['due'] ?? 0),
+                default => $installment->net(),
+            };
+
+            $state = match (true) {
+                $installment->charge_id !== null && $due <= 0 => 'paid',
+                ! $isDue => 'upcoming',
+                $installment->due_on->lt($today) => 'late',
+                default => 'due',
+            };
+
+            return ['installment' => $installment, 'state' => $state, 'due' => $due];
+        })->all();
+    }
+
+    /**
+     * Lo que se espera cobrar el día de la cita: el saldo pendiente, las cuotas que vencen hasta ese día
+     * y la sesión o el tratamiento de la cita (o "incluida" si ya se paga con el plan).
+     *
+     * @return array{lines: list<array{label: string, amount: float|null}>, total: float}
+     */
+    public function estimateFor(Appointment $appointment, bool $withTooth = false): array
+    {
+        $appointment->loadMissing(['patient', 'treatment', 'campaign', 'planItem.plan.installments']);
+        $patient = $appointment->patient;
+        $lines = [];
+
+        $balance = $patient->balance();
+
+        if ($balance > 0) {
+            $owed = $this->unpaidCharges($patient)->map(fn (array $row) => $row['charge']->description);
+            $detail = $owed->take(3)->implode(', ').($owed->count() > 3 ? ' y '.($owed->count() - 3).' más' : '');
+
+            $lines[] = ['label' => 'Saldo pendiente'.($detail !== '' ? " ({$detail})" : ''), 'amount' => $balance];
+        } elseif ($balance < 0) {
+            $lines[] = ['label' => 'Tiene a favor', 'amount' => $balance];
+        }
+
+        $upcoming = TreatmentPlanInstallment::query()
+            ->whereNull('charge_id')
+            ->whereDate('due_on', '<=', $appointment->starts_at)
+            ->whereHas('plan', fn ($query) => $query->where('patient_id', $patient->getKey())->whereNot('status', TreatmentPlanStatus::Cancelled))
+            ->with('plan.installments')
+            ->orderBy('due_on')
+            ->get();
+
+        foreach ($upcoming as $installment) {
+            $lines[] = [
+                'label' => $installment->label().' · '.($installment->plan->title ?: 'Plan de tratamiento').' · vence '.$installment->due_on->format('d/m'),
+                'amount' => $installment->net(),
+            ];
+        }
+
+        $item = $appointment->planItem;
+
+        if ($item) {
+            $session = min($item->sessions_done + 1, max(1, $item->sessions_planned));
+            $label = $item->label($withTooth).($item->sessions_planned > 1 ? " · sesión {$session} de {$item->sessions_planned}" : '');
+
+            $lines[] = $item->in_payment_schedule
+                ? ['label' => $label.' · incluida en el plan ('.mb_strtolower($item->plan->payment_mode->getLabel()).')', 'amount' => null]
+                : ['label' => $label, 'amount' => $this->nextSession($item)[0]];
+        } elseif ((float) $appointment->treatment?->price_from > 0) {
+            $price = (float) $appointment->treatment->price_from;
+            $discount = $appointment->campaign?->discountOn($price, $appointment->treatment_id) ?? 0.0;
+
+            $lines[] = [
+                'label' => $appointment->treatment->name.($discount > 0 ? ' · precio normal '.Money::format($price).', con '.$appointment->campaign->name : ''),
+                'amount' => round($price - $discount, 2),
+            ];
+        }
+
+        return [
+            'lines' => $lines,
+            'total' => max(0, round(collect($lines)->sum(fn (array $line) => (float) $line['amount']), 2)),
+        ];
+    }
+
+    /**
+     * La parte del precio acordado que carga la próxima sesión y su número. La última carga lo que falta.
+     *
+     * @return array{0: float, 1: int}
+     */
+    private function nextSession(TreatmentPlanItem $item): array
+    {
+        $total = $item->subtotal();
+        $previous = Charge::query()->valid()->where('treatment_plan_item_id', $item->getKey())->get(['amount', 'discount']);
+        $remaining = round($total - $previous->sum(fn (Charge $c) => $c->net()), 2);
+        $sessions = max(1, (int) $item->sessions_planned);
+        $session = $previous->count() + 1;
+
+        return [max(0, $session >= $sessions ? $remaining : min($remaining, round($total / $sessions, 2))), $session];
     }
 
     public function void(Charge $charge, User $by, string $reason): void

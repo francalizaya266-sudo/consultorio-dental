@@ -4,6 +4,7 @@ namespace Tests\Feature\Filament;
 
 use App\Enums\MessageStatus;
 use App\Enums\MessageTemplateKey;
+use App\Enums\PlanPaymentMode;
 use App\Enums\ToothState;
 use App\Enums\TreatmentPlanStatus;
 use App\Filament\Resources\Appointments\Pages\CreateAppointment;
@@ -22,13 +23,16 @@ use App\Models\Treatment;
 use App\Models\TreatmentPlan;
 use App\Models\User;
 use App\Models\WhatsappMessage;
+use App\Services\Clinical\ClinicalFileService;
 use App\Services\Clinical\ConsultationService;
 use App\Services\Clinical\OdontogramService;
 use App\Services\Clinical\OdontogramSuggestions;
 use App\Support\Phone;
 use Database\Seeders\CatalogSeeder;
 use Filament\Actions\Testing\TestAction;
+use Filament\Forms\Components\Repeater;
 use Illuminate\Foundation\Testing\LazilyRefreshDatabase;
+use Illuminate\Support\Facades\Storage;
 use Livewire\Livewire;
 use Tests\Concerns\CreatesAgenda;
 use Tests\TestCase;
@@ -45,6 +49,7 @@ class TreatmentPlanPanelTest extends TestCase
         $this->freezeMonday();
 
         Treatment::where('slug', 'curacion-con-resina')->update(['price_from' => 150]);
+        Storage::fake(ClinicalFileService::DISK);
     }
 
     public function test_a_new_plan_comes_filled_from_the_odontogram_and_is_accepted_printed_and_sent(): void
@@ -66,15 +71,32 @@ class TreatmentPlanPanelTest extends TestCase
             ->assertSee(['Plan de tratamiento y presupuesto', 'Curación con resina', 'S/ 150.00']);
         $this->assertSame(TreatmentPlanStatus::Proposed, $plan->fresh()->status);
 
+        // El paciente lo acepta en dos cuotas y firma en la tablet: falta la firma, y luego queda.
         $component
-            ->callAction(TestAction::make('accept')->table($plan))
+            ->mountAction(TestAction::make('accept')->table($plan))
+            ->assertSchemaStateSet(['payment_mode' => PlanPaymentMode::PerSession, 'signer_name' => $patient->full_name])
+            ->fillForm(['payment_mode' => PlanPaymentMode::Installments->value, 'down_payment' => 50, 'installments' => 2, 'first_due_on' => '2026-12-02'])
+            ->assertMountedActionModalSee('Inicial de S/ 50.00 el 02/11/2026 y 2 cuotas de S/ 50.00, del 02/12/2026 al 02/01/2027.')
+            ->callMountedAction()
+            ->assertHasActionErrors(['signature' => 'required'])
+            ->fillForm(['signature' => $this->signature()])
+            ->callMountedAction()
+            ->assertHasNoActionErrors()
+            ->assertTableColumnStateSet('payment', 'En cuotas · por pagar S/ 50.00', $plan)
             ->mountAction(TestAction::make('sendWhatsApp')->table($plan))
             ->assertSchemaStateSet(fn (array $state) => $this->assertStringContainsString('Total: S/ 150.00', $state['body']) ?? [])
             ->callMountedAction();
 
-        $this->assertSame(TreatmentPlanStatus::Accepted, $plan->fresh()->status);
+        $plan->refresh();
+        $this->assertSame([TreatmentPlanStatus::Accepted, PlanPaymentMode::Installments], [$plan->status, $plan->payment_mode]);
+        $this->assertSame(['Inicial', 'Cuota 1 de 2', 'Cuota 2 de 2'], $plan->installments->map->label()->all());
+        $this->assertSame(['Plan inicial · inicial'], $patient->charges()->pluck('description')->all());
         $message = WhatsappMessage::sole();
         $this->assertSame([MessageTemplateKey::TreatmentPlan, MessageStatus::Sent, $patient->id], [$message->template_key, $message->status, $message->patient_id]);
+
+        $this->get(TreatmentPlansRelationManager::printUrl($plan))
+            ->assertOk()
+            ->assertSee(['Forma de pago', 'Cuota 2 de 2', '02/01/2027', 'Aceptó el plan', 'Precio acordado el 02/11/2026']);
 
         // Recepción no ve presupuestos clínicos.
         $this->actingAs(User::factory()->reception()->create());
@@ -86,6 +108,7 @@ class TreatmentPlanPanelTest extends TestCase
         $resin = Treatment::where('slug', 'curacion-con-resina')->firstOrFail();
         $doctor = $this->doctorOffering($resin);
         $patient = Patient::factory()->create();
+        app(ConsultationService::class)->startWithoutAppointment($patient, $doctor->user);
         $plan = TreatmentPlan::create(['patient_id' => $patient->id, 'doctor_id' => $doctor->id, 'status' => TreatmentPlanStatus::Proposed]);
         $item = $plan->items()->create(['treatment_id' => $resin->id, 'description' => 'Curación con resina', 'tooth' => '36', 'unit_price' => 150]);
 
@@ -215,6 +238,62 @@ class TreatmentPlanPanelTest extends TestCase
 
         $this->actingAs(User::factory()->reception()->create());
         $this->get(ConsultationResource::prescriptionPrintUrl($prescription))->assertForbidden();
+    }
+
+    public function test_a_signed_price_stays_as_agreed_and_what_is_added_later_is_signed_apart(): void
+    {
+        $resin = Treatment::where('slug', 'curacion-con-resina')->firstOrFail();
+        $doctor = $this->doctorOffering($resin);
+        $patient = Patient::factory()->create();
+        app(ConsultationService::class)->startWithoutAppointment($patient, $doctor->user);
+        $plan = TreatmentPlan::create(['patient_id' => $patient->id, 'doctor_id' => $doctor->id, 'status' => TreatmentPlanStatus::Proposed]);
+        $item = $plan->items()->create(['treatment_id' => $resin->id, 'description' => 'Curación con resina', 'tooth' => '36', 'unit_price' => 150]);
+        $this->actingAs($doctor->user);
+        Repeater::fake();
+
+        $component = Livewire::test(TreatmentPlansRelationManager::class, ['ownerRecord' => $patient, 'pageClass' => ViewClinicalRecord::class])
+            ->callAction(TestAction::make('accept')->table($plan), data: ['signature' => $this->signature()])
+            ->assertHasNoActionErrors()
+            ->assertTableColumnStateSet('payment', 'Por sesión', $plan)
+            ->assertActionHidden(TestAction::make('accept')->table($plan));
+
+        // En el plan ya firmado, el precio no se cambia aunque se intente; la pieza sí. Lo nuevo queda por firmar.
+        $component
+            ->mountAction(TestAction::make('edit')->table($plan))
+            ->assertFormFieldDisabled("items.record-{$item->id}.unit_price")
+            ->assertFormFieldEnabled("items.record-{$item->id}.tooth")
+            ->fillForm(['items' => [
+                "record-{$item->id}" => ['treatment_id' => $resin->id, 'description' => 'Curación con resina', 'tooth' => '46', 'surfaces' => 'O', 'quantity' => 1, 'unit_price' => 99, 'discount' => 0, 'sessions_planned' => 1, 'status' => 'pending'],
+                'nuevo' => ['treatment_id' => $resin->id, 'description' => 'Curación con resina', 'tooth' => '47', 'surfaces' => 'O', 'quantity' => 1, 'unit_price' => 150, 'discount' => 0, 'sessions_planned' => 1, 'status' => 'pending'],
+            ]])
+            ->callMountedAction()
+            ->assertHasNoActionErrors()
+            ->assertTableColumnStateSet('payment', 'Por sesión', $plan)
+            ->assertTableColumnHasDescription('payment', '1 agregado por firmar', $plan);
+
+        $this->assertSame(['46', '150.00'], [$item->fresh()->tooth, $item->fresh()->unit_price]);
+
+        $component
+            ->mountAction(TestAction::make('accept')->table($plan))
+            ->assertMountedActionModalSee(['Aceptar lo agregado al plan', 'Curación con resina · pieza 47 (O): S/ 150.00'])
+            ->assertMountedActionModalDontSee('Forma de pago')
+            ->fillForm(['signature' => $this->signature()])
+            ->callMountedAction()
+            ->assertHasNoActionErrors();
+
+        $this->assertSame([], $plan->fresh('items')->itemsToAccept()->all());
+        $this->assertCount(2, $plan->signatures()->get());
+    }
+
+    private function signature(): string
+    {
+        $image = imagecreatetruecolor(300, 120);
+        imagefill($image, 0, 0, imagecolorallocate($image, 255, 255, 255));
+        imageline($image, 20, 80, 280, 40, imagecolorallocate($image, 15, 23, 42));
+        ob_start();
+        imagepng($image);
+
+        return 'data:image/png;base64,'.base64_encode((string) ob_get_clean());
     }
 
     /** @return array{0: Doctor, 1: Patient} Paciente con una atención abierta y caries en la oclusal de 36. */

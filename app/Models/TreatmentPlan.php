@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use App\Enums\PlanItemStatus;
+use App\Enums\PlanPaymentMode;
 use App\Enums\TreatmentPlanStatus;
 use App\Models\Concerns\Auditable;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
@@ -12,9 +13,10 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\SoftDeletes;
+use Illuminate\Support\Collection;
 
 /** Plan de tratamiento con costos (presupuesto informativo). */
-#[Fillable(['patient_id', 'doctor_id', 'consultation_id', 'title', 'status', 'notes', 'accepted_at', 'completed_at'])]
+#[Fillable(['patient_id', 'doctor_id', 'consultation_id', 'title', 'status', 'payment_mode', 'notes', 'accepted_at', 'completed_at'])]
 class TreatmentPlan extends Model
 {
     use Auditable, SoftDeletes;
@@ -26,6 +28,7 @@ class TreatmentPlan extends Model
     {
         return [
             'status' => TreatmentPlanStatus::class,
+            'payment_mode' => PlanPaymentMode::class,
             'accepted_at' => 'datetime',
             'completed_at' => 'datetime',
         ];
@@ -51,6 +54,18 @@ class TreatmentPlan extends Model
         return $this->hasMany(TreatmentPlanItem::class, 'treatment_plan_id')->orderBy('sort_order')->orderBy('id');
     }
 
+    /** Cronograma de pagos: la inicial o el pago único, y las cuotas. */
+    public function installments(): HasMany
+    {
+        return $this->hasMany(TreatmentPlanInstallment::class, 'treatment_plan_id')->orderBy('number')->chaperone('plan');
+    }
+
+    /** Cada vez que el paciente firmó: al aceptarlo y al aceptar lo que se agregó. */
+    public function signatures(): HasMany
+    {
+        return $this->hasMany(TreatmentPlanSignature::class, 'treatment_plan_id')->orderBy('signed_at');
+    }
+
     #[Scope]
     protected function open(Builder $query): Builder
     {
@@ -68,5 +83,17 @@ class TreatmentPlan extends Model
         return round($this->items
             ->reject(fn (TreatmentPlanItem $item) => $item->status === PlanItemStatus::Cancelled)
             ->sum(fn (TreatmentPlanItem $item) => $item->subtotal()), 2);
+    }
+
+    /** Lo aceptado se paga con cronograma (pago único o cuotas), no sesión por sesión. */
+    public function hasSchedule(): bool
+    {
+        return $this->payment_mode?->hasSchedule() ?? false;
+    }
+
+    /** Procedimientos agregados después de aceptar el plan, que el paciente todavía no firmó. */
+    public function itemsToAccept(): Collection
+    {
+        return $this->items->filter(fn (TreatmentPlanItem $item) => $item->accepted_at === null && $item->status !== PlanItemStatus::Cancelled)->values();
     }
 }

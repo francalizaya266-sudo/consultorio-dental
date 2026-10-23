@@ -12,10 +12,12 @@ use App\Models\Prescription;
 use App\Models\Setting;
 use App\Models\TreatmentPlan;
 use App\Models\TreatmentPlanItem;
+use App\Models\TreatmentPlanSignature;
 use App\Services\Clinical\ConsentService;
 use App\Services\Clinical\PrescriptionService;
 use App\Services\Clinical\TreatmentPlanService;
 use App\Support\Phone;
+use App\Support\Signatures;
 use App\Support\Teeth;
 use Illuminate\View\View;
 
@@ -66,7 +68,7 @@ class PrintController extends Controller
             'medicalBackground',
             'latestOdontogram.entries.condition',
             'consultations' => fn ($query) => $query->oldest('attended_at')->with(['doctor', 'diagnoses.icd10Code', 'planItems', 'prescription.items', 'appointment.treatment']),
-            'treatmentPlans' => fn ($query) => $query->oldest()->with(['doctor', 'items']),
+            'treatmentPlans' => fn ($query) => $query->oldest()->with(['doctor', 'items', 'signatures']),
             'consents' => fn ($query) => $query->oldest('signed_at')->with('doctor'),
             'clinicalFiles' => fn ($query) => $query->oldest('taken_at'),
         ]);
@@ -97,13 +99,15 @@ class PrintController extends Controller
             $plans->markProposed($plan);
         }
 
-        $plan->load('patient', 'doctor', 'items');
+        $plan->load('patient', 'doctor', 'items', 'installments', 'signatures');
 
         return view('print.plan', [
             'plan' => $plan,
             'patient' => $plan->patient,
             'doctor' => $plan->doctor,
             'items' => $plan->items->reject(fn (TreatmentPlanItem $item) => $item->status === PlanItemStatus::Cancelled)->values(),
+            'paymentText' => $plan->accepted_at ? $plans->paymentText($plan) : null,
+            'signatures' => $plan->signatures->map(fn (TreatmentPlanSignature $signature) => ['signature' => $signature, 'image' => Signatures::dataUri($signature->signature_path)]),
         ]);
     }
 }

@@ -5,12 +5,15 @@ namespace App\Filament\Resources\Patients\RelationManagers;
 use App\Enums\PlanItemStatus;
 use App\Enums\TreatmentPlanStatus;
 use App\Filament\Actions\SendWhatsAppAction;
+use App\Filament\Actions\SignPlanAction;
 use App\Filament\Resources\Appointments\AppointmentResource;
 use App\Filament\Resources\Patients\Schemas\TreatmentPlanForm;
 use App\Models\Appointment;
 use App\Models\Patient;
 use App\Models\TreatmentPlan;
 use App\Models\TreatmentPlanItem;
+use App\Models\User;
+use App\Services\Billing\BillingService;
 use App\Services\Clinical\OdontogramSuggestions;
 use App\Services\Clinical\TreatmentPlanService;
 use App\Support\Money;
@@ -21,6 +24,7 @@ use Filament\Actions\EditAction;
 use Filament\Actions\ViewAction;
 use Filament\Facades\Filament;
 use Filament\Forms\Components\Textarea;
+use Filament\Forms\Components\Toggle;
 use Filament\Notifications\Notification;
 use Filament\Resources\RelationManagers\RelationManager;
 use Filament\Schemas\Schema;
@@ -73,7 +77,7 @@ class TreatmentPlansRelationManager extends RelationManager
         $patient = $this->getOwnerRecord();
 
         return $table
-            ->modifyQueryUsing(fn (Builder $query) => $query->with(['doctor', 'items', 'patient.account']))
+            ->modifyQueryUsing(fn (Builder $query) => $query->with(['doctor', 'items', 'patient.account', 'installments']))
             ->defaultSort('created_at', 'desc')
             ->columns([
                 TextColumn::make('created_at')
@@ -98,6 +102,12 @@ class TreatmentPlansRelationManager extends RelationManager
                 TextColumn::make('total')
                     ->label('Total')
                     ->state(fn (TreatmentPlan $record) => Money::format($record->total())),
+                TextColumn::make('payment')
+                    ->label('Pago')
+                    ->state(fn (TreatmentPlan $record) => self::payment($record)['state'])
+                    ->description(fn (TreatmentPlan $record) => self::payment($record)['detail'])
+                    ->color(fn (TreatmentPlan $record) => self::payment($record)['color'])
+                    ->wrap(),
                 TextColumn::make('doctor.name')
                     ->label('Doctor')
                     ->visibleFrom('md'),
@@ -127,9 +137,11 @@ class TreatmentPlansRelationManager extends RelationManager
                     ->modalHeading('Plan de tratamiento')
                     ->modalWidth(Width::FiveExtraLarge)
                     ->hidden(fn (TreatmentPlan $record) => auth()->user()->can('update', $record)),
+                // Firmar es el paso que falta: queda a la vista y no dentro del menú.
+                SignPlanAction::make(),
                 ActionGroup::make([
-                    $this->acceptAction(),
                     $this->bookAction(),
+                    $this->scheduleAction(),
                     Action::make('print')
                         ->label('Imprimir presupuesto')
                         ->icon(Heroicon::OutlinedPrinter)
@@ -155,22 +167,57 @@ class TreatmentPlansRelationManager extends RelationManager
         return Filament::getPanel('admin')->route('print.plan', ['plan' => $plan]);
     }
 
-    private function acceptAction(): Action
+    /**
+     * Cómo va el pago del plan, para verlo en la lista sin abrirlo.
+     *
+     * @return array{state: string, detail: ?string, color: ?string}
+     */
+    private static function payment(TreatmentPlan $plan): array
     {
-        return Action::make('accept')
-            ->label('El paciente aceptó')
-            ->icon(Heroicon::OutlinedHandThumbUp)
-            ->color('success')
-            ->visible(fn (TreatmentPlan $record) => in_array($record->status, [TreatmentPlanStatus::Draft, TreatmentPlanStatus::Proposed], true))
-            ->authorize('update')
-            ->requiresConfirmation()
-            ->modalHeading('¿El paciente aceptó el plan?')
-            ->modalDescription('Queda como aceptado con la fecha de hoy. Sus sesiones se pueden agendar desde aquí.')
-            ->modalSubmitActionLabel('Sí, aceptó')
-            ->action(function (TreatmentPlan $record) {
-                app(TreatmentPlanService::class)->accept($record);
-                Notification::make()->success()->title('Plan aceptado')->send();
-            });
+        $pending = $plan->accepted_at ? $plan->itemsToAccept()->count() : 0;
+        $toSign = $pending ? $pending.' agregado'.($pending > 1 ? 's' : '').' por firmar' : null;
+
+        if ($plan->accepted_at === null) {
+            return ['state' => 'Por aceptar', 'detail' => null, 'color' => 'gray'];
+        }
+
+        if (! $plan->hasSchedule()) {
+            return ['state' => $plan->payment_mode?->getLabel() ?? 'Por sesión', 'detail' => $toSign, 'color' => null];
+        }
+
+        $states = collect(app(BillingService::class)->installmentStates($plan));
+        $owed = round($states->whereIn('state', ['due', 'late'])->sum('due'), 2);
+        $next = $states->firstWhere('state', 'upcoming');
+
+        return [
+            'state' => $plan->payment_mode->getLabel().' · '.match (true) {
+                $states->contains('state', 'late') => 'atrasado '.Money::format($owed),
+                $owed > 0 => 'por pagar '.Money::format($owed),
+                $next === null => 'pagado',
+                default => 'al día',
+            },
+            'detail' => collect([
+                $next ? 'Próximo: '.$next['installment']->due_on->format('d/m/Y').' · '.Money::format($next['due']) : null,
+                $toSign,
+            ])->filter()->implode(' · ') ?: null,
+            'color' => $states->contains('state', 'late') ? 'danger' : ($owed > 0 ? 'warning' : 'success'),
+        ];
+    }
+
+    private function scheduleAction(): Action
+    {
+        return Action::make('schedule')
+            ->label('Cronograma de pagos')
+            ->icon(Heroicon::OutlinedCalendar)
+            ->visible(fn (TreatmentPlan $record) => $record->accepted_at !== null)
+            ->modalHeading('Cronograma de pagos y firmas')
+            ->modalContent(fn (TreatmentPlan $record) => view('filament.clinical.plan-schedule', [
+                'paymentText' => app(TreatmentPlanService::class)->paymentText($record),
+                'states' => app(BillingService::class)->installmentStates($record),
+                'signatures' => $record->signatures,
+            ]))
+            ->modalSubmitAction(false)
+            ->modalCancelActionLabel('Cerrar');
     }
 
     /** Agenda la próxima sesión: la cita queda unida al procedimiento y al atenderla se marca sola. */
@@ -203,17 +250,39 @@ class TreatmentPlansRelationManager extends RelationManager
             ->visible(fn (TreatmentPlan $record) => $record->isOpen())
             ->authorize('update')
             ->modalHeading('¿Cancelar este plan?')
-            ->modalDescription('No se borra: queda en la historia como cancelado, con lo que se llegó a hacer.')
+            ->modalDescription(fn (TreatmentPlan $record) => 'No se borra: queda en la historia como cancelado, con lo que se llegó a hacer.'
+                .($record->hasSchedule() ? ' Las cuotas que faltan ya no se cargan.' : ''))
             ->modalSubmitActionLabel('Cancelar plan')
-            ->schema([
+            ->schema(fn (TreatmentPlan $record) => [
                 Textarea::make('reason')
                     ->label('Motivo (opcional)')
                     ->placeholder('Ej.: el paciente prefirió otra opción.')
                     ->rows(2),
+                Toggle::make('charge_missing')
+                    ->label(fn () => 'Cargar lo hecho que falta cobrar ('.Money::format(self::missing($record)).')')
+                    ->helperText(fn () => 'Hecho: '.Money::format(app(TreatmentPlanService::class)->scheduleProgress($record)['done'])
+                        .' · cargado con su forma de pago: '.Money::format(app(TreatmentPlanService::class)->scheduleProgress($record)['charged']))
+                    ->default(true)
+                    ->visible(fn () => self::missing($record) > 0),
             ])
             ->action(function (TreatmentPlan $record, array $data) {
-                app(TreatmentPlanService::class)->cancel($record, $data['reason'] ?? null);
+                /** @var User $user */
+                $user = auth()->user();
+
+                app(TreatmentPlanService::class)->cancel($record, $data['reason'] ?? null, ($data['charge_missing'] ?? false) ? $user : null);
                 Notification::make()->success()->title('Plan cancelado')->send();
             });
+    }
+
+    /** Si el plan se pagaba con cronograma: lo hecho que sus pagos no alcanzaron a cubrir. */
+    private static function missing(TreatmentPlan $plan): float
+    {
+        if (! $plan->hasSchedule()) {
+            return 0.0;
+        }
+
+        $progress = app(TreatmentPlanService::class)->scheduleProgress($plan);
+
+        return max(0, round($progress['done'] - $progress['charged'], 2));
     }
 }
