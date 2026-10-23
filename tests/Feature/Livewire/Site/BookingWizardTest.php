@@ -96,6 +96,33 @@ class BookingWizardTest extends TestCase
             ->assertSet('step', 2);
     }
 
+    public function test_a_free_time_tapped_on_the_website_arrives_already_chosen(): void
+    {
+        $this->freezeMonday();
+        $evaluation = Treatment::factory()->evaluation()->create();
+        $doctor = $this->doctorOffering($evaluation);
+        Appointment::factory()->for($doctor)->at('2026-11-03 11:00')->create();
+
+        Livewire::withQueryParams(['tratamiento' => $evaluation->slug, 'fecha' => '2026-11-03', 'hora' => '10:00'])
+            ->test(BookingWizard::class)
+            ->assertSet('step', 3)
+            ->assertSet('date', '2026-11-03')
+            ->assertSet('time', '10:00');
+
+        // Si ya se ocupó, queda en ese día para elegir otra hora.
+        Livewire::withQueryParams(['tratamiento' => $evaluation->slug, 'fecha' => '2026-11-03', 'hora' => '11:00'])
+            ->test(BookingWizard::class)
+            ->assertSet('step', 2)
+            ->assertSet('date', '2026-11-03')
+            ->assertSet('time', null);
+
+        // Un día sin atención (domingo) no se impone: se ofrece el primero libre.
+        Livewire::withQueryParams(['tratamiento' => $evaluation->slug, 'fecha' => '2026-11-08', 'hora' => '10:00'])
+            ->test(BookingWizard::class)
+            ->assertSet('step', 2)
+            ->assertSet('date', '2026-11-02');
+    }
+
     public function test_a_time_taken_meanwhile_sends_the_patient_back_to_choose_another(): void
     {
         $this->freezeMonday();

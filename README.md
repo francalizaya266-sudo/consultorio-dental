@@ -28,6 +28,8 @@ Pruebas: `php artisan test` (usan SQLite en memoria; también pasan sobre MySQL)
    `* * * * * php /ruta/al/proyecto/artisan schedule:run >> /dev/null 2>&1`
    Ese cron prepara los recordatorios del día anterior, marca las citas sin confirmar, procesa la cola y limpia enlaces vencidos.
 5. PHP con la extensión **GD** (casi todos los hostings la traen): comprime radiografías y fotos al subirlas. Esos archivos y las firmas quedan en `storage/app/private/clinica`, fuera de `public/`; inclúyanlo en las copias de seguridad junto con la base de datos.
+6. Las fotos de la web (doctores, tratamientos, promociones, antes y después) se guardan en `public/media`, achicadas y sin datos de ubicación. También van en las copias de seguridad.
+7. En **Ajustes → Web** se completan la dirección, el distrito, el correo, las redes y los textos del inicio. El horario de atención que muestra la web sale solo de los horarios de los doctores.
 
 ## Cómo está organizado
 
@@ -41,6 +43,7 @@ Pruebas: `php artisan test` (usan SQLite en memoria; también pasan sobre MySQL)
 | `app/Services/WhatsApp` | Bandeja de avisos: hoy se envían con un clic desde el WhatsApp del consultorio; mañana, por la API oficial sin cambiar nada más. |
 | `app/Services/Clinical` | Historia clínica: atención, odontograma, plan de tratamiento, recetas, radiografías y fotos (comprimidas) y consentimientos firmados en pantalla. |
 | `app/Livewire/Site`, `resources/views/site` | Web del paciente: reservar en 3 pasos (`/reservar`), Mi cuenta (`/mi-cuenta`) y cambiar el horario desde el enlace. |
+| `app/Http/Controllers/Site`, `app/Services/Web` | Páginas públicas: inicio con el próximo horario libre, tratamientos con precio "desde", equipo con COP, promociones, antes y después, opiniones, preguntas frecuentes y contacto. Datos para Google (schema.org `Dentist`, `FAQPage`), `sitemap.xml` y `robots.txt`. El contenido se edita en el panel, grupo **Web** (solo administrador). |
 | `public/css/sitio.css` | Estilos de la web, escritos a mano: el hosting no necesita Node ni compilar nada. |
 | `config/consultorio.php` | Valores por defecto (plazos, topes, tiempos). Se pueden cambiar desde el panel (tabla `settings`). |
 
@@ -54,6 +57,7 @@ Pruebas: `php artisan test` (usan SQLite en memoria; también pasan sobre MySQL)
 - **Cancelación** directa hasta el plazo que define el consultorio; después, debe comunicarse.
 - **Doctores** solo manejan su propia agenda; cada cambio prepara el aviso al paciente y alerta a recepción.
 - **Datos clínicos** solo los ven los doctores y el administrador si es odontólogo (Ley N.º 29733).
+- **Antes y después** solo se publica si el paciente lo autorizó por escrito; queda registrado quién lo confirmó y cuándo. Las opiniones se copian de Google tal cual: la web no inventa reseñas ni resultados.
 
 ## WhatsApp: etapa 1 y etapa 2
 

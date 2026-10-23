@@ -7,8 +7,8 @@ use App\Models\ClinicalFile;
 use App\Models\Consultation;
 use App\Models\Patient;
 use App\Models\User;
+use App\Support\Images;
 use Carbon\CarbonInterface;
-use GdImage;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
@@ -104,52 +104,9 @@ final class ClinicalFileService
      */
     public function compress(string $path): ?array
     {
-        $contents = @file_get_contents($path);
-        $source = $contents !== false ? @imagecreatefromstring($contents) : false;
+        $source = Images::read($path);
 
-        if (! $source instanceof GdImage) {
-            return null;
-        }
-
-        $source = $this->orient($source, $path);
-
-        return [$this->jpeg($source, self::MAX_SIDE), $this->jpeg($source, self::THUMB_SIDE)];
-    }
-
-    private function jpeg(GdImage $source, int $maxSide): string
-    {
-        $width = imagesx($source);
-        $height = imagesy($source);
-        $scale = min(1, $maxSide / max($width, $height));
-        $newWidth = max(1, (int) round($width * $scale));
-        $newHeight = max(1, (int) round($height * $scale));
-
-        // Fondo blanco: las radiografías en PNG suelen traer transparencias.
-        $canvas = imagecreatetruecolor($newWidth, $newHeight);
-        imagefill($canvas, 0, 0, imagecolorallocate($canvas, 255, 255, 255));
-        imagecopyresampled($canvas, $source, 0, 0, 0, 0, $newWidth, $newHeight, $width, $height);
-
-        ob_start();
-        imagejpeg($canvas, null, self::QUALITY);
-
-        return (string) ob_get_clean();
-    }
-
-    /** Las fotos del celular guardan la orientación aparte (EXIF): se aplica para que no salgan echadas. */
-    private function orient(GdImage $image, string $path): GdImage
-    {
-        $orientation = function_exists('exif_read_data') ? (int) (@exif_read_data($path)['Orientation'] ?? 1) : 1;
-
-        return match ($orientation) {
-            2 => tap($image, fn ($i) => imageflip($i, IMG_FLIP_HORIZONTAL)),
-            3 => imagerotate($image, 180, 0),
-            4 => tap($image, fn ($i) => imageflip($i, IMG_FLIP_VERTICAL)),
-            5 => tap(imagerotate($image, -90, 0), fn ($i) => imageflip($i, IMG_FLIP_HORIZONTAL)),
-            6 => imagerotate($image, -90, 0),
-            7 => tap(imagerotate($image, 90, 0), fn ($i) => imageflip($i, IMG_FLIP_HORIZONTAL)),
-            8 => imagerotate($image, 90, 0),
-            default => $image,
-        };
+        return $source ? [Images::jpeg($source, self::MAX_SIDE, self::QUALITY), Images::jpeg($source, self::THUMB_SIDE, self::QUALITY)] : null;
     }
 
     private function thumbnailPathFor(string $path): string

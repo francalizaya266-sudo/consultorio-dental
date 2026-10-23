@@ -2,6 +2,7 @@
 
 namespace App\Providers;
 
+use App\Services\Web\ClinicInfo;
 use Carbon\Carbon;
 use Carbon\CarbonImmutable;
 use Illuminate\Auth\Events\Login;
@@ -16,7 +17,8 @@ class AppServiceProvider extends ServiceProvider
      */
     public function register(): void
     {
-        //
+        // Una vez por petición: el horario se arma con los horarios de los doctores.
+        $this->app->scoped(ClinicInfo::class);
     }
 
     /**

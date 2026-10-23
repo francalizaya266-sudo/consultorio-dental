@@ -15,6 +15,7 @@ use App\Services\Booking\AppointmentService;
 use App\Services\Booking\PatientChangePolicy;
 use App\Services\Booking\RescheduleMode;
 use App\Services\Booking\RescheduleRequestService;
+use App\Support\Dates;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Collection;
 use Illuminate\View\View;
@@ -150,7 +151,7 @@ class ChangeAppointment extends Component
         try {
             if ($this->mode === RescheduleMode::Automatic) {
                 $appointments->rescheduleByPatient($appointment, $starts[0]);
-                $message = '¡Listo! Tu cita se cambió al '.mb_strtolower(self::dayLabel($starts[0])).', '.self::timeLabel($starts[0]->format('H:i'));
+                $message = '¡Listo! Tu cita se cambió al '.mb_strtolower(Dates::day($starts[0])).', '.Dates::time($starts[0]->format('H:i'));
             } else {
                 $requests->requestByPatient($appointment, $starts, filled($this->reason) ? $this->reason : null);
                 $message = 'Enviamos tu pedido. Te avisaremos por WhatsApp cuando el consultorio elija uno de tus horarios. Mientras tanto, tu cita sigue como estaba.';

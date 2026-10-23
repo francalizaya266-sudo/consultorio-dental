@@ -8,6 +8,7 @@ use App\Exceptions\BookingException;
 use App\Livewire\Site\Concerns\PicksSlots;
 use App\Models\Appointment;
 use App\Models\Campaign;
+use App\Models\Doctor;
 use App\Models\Patient;
 use App\Models\RememberedDevice;
 use App\Models\Setting;
@@ -16,6 +17,7 @@ use App\Services\Access\DeviceService;
 use App\Services\Booking\AppointmentService;
 use App\Services\Booking\WebAvailability;
 use App\Services\Booking\WebBookingData;
+use App\Support\Dates;
 use App\Support\Phone;
 use Carbon\CarbonImmutable;
 use Illuminate\Auth\Access\AuthorizationException;
@@ -72,6 +74,10 @@ class BookingWizard extends Component
     #[Locked]
     public ?int $appointmentId = null;
 
+    /** Doctor elegido desde su ficha en la web: se usa en cuanto elige un tratamiento que atiende. */
+    #[Locked]
+    public ?int $preferredDoctorId = null;
+
     #[Locked]
     public ?string $error = null;
 
@@ -80,6 +86,7 @@ class BookingWizard extends Component
         $this->promoCode = strtoupper(substr((string) request('codigo'), 0, 30));
         $this->origin = AppointmentOrigin::tryFrom((string) request('origen'))?->value;
 
+        $this->preferredDoctorId = filled(request('doctor')) ? Doctor::query()->where('slug', (string) request('doctor'))->value('id') : null;
         $campaign = $this->promoCode ? Campaign::query()->published()->where('promo_code', $this->promoCode)->first() : null;
         $treatment = $this->treatments->firstWhere('slug', (string) request('tratamiento'))
             ?? ($campaign ? $this->treatments->firstWhere('id', $campaign->treatment_id) : null);
@@ -87,8 +94,12 @@ class BookingWizard extends Component
         if ($treatment) {
             $this->chooseTreatment($treatment->getKey());
 
-            if ($doctor = $this->doctors->firstWhere('slug', (string) request('doctor'))) {
-                $this->selectDoctor($doctor->getKey());
+            // Desde "Próximo horario libre": el día y la hora ya elegidos. Si ese día ya no
+            // se ofrece, la hora tampoco: que no quede elegida en otro día sin que lo note.
+            $this->selectDate((string) request('fecha'));
+
+            if (filled(request('hora')) && $this->date === request('fecha')) {
+                $this->chooseTime((string) request('hora'));
             }
         }
 
@@ -156,11 +167,10 @@ class BookingWizard extends Component
         }
 
         $this->treatmentId = $treatmentId;
-        $this->doctorId = null;
         $this->time = null;
         $this->error = null;
         unset($this->treatment, $this->doctors);
-        $this->refreshDays();
+        $this->selectDoctor($this->preferredDoctorId);
         $this->step = 2;
     }
 
@@ -317,8 +327,8 @@ class BookingWizard extends Component
         }
 
         $text = "Hola, acabo de reservar {$appointment->treatment->name} para el "
-            .mb_strtolower(self::dayLabel($appointment->starts_at->toImmutable()))
-            .' a las '.self::timeLabel($appointment->starts_at->format('H:i'))
+            .mb_strtolower(Dates::day($appointment->starts_at->toImmutable()))
+            .' a las '.Dates::time($appointment->starts_at->format('H:i'))
             ." a nombre de {$appointment->patient->full_name}.";
 
         return 'https://wa.me/'.Phone::forWhatsApp($number).'?text='.rawurlencode($text);

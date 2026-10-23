@@ -13,11 +13,14 @@ use App\Filament\Resources\Consultations\ConsultationResource;
 use App\Filament\Resources\Doctors\DoctorResource;
 use App\Filament\Resources\Doctors\Pages\EditDoctor;
 use App\Filament\Resources\Doctors\RelationManagers\TreatmentsRelationManager;
+use App\Filament\Resources\Faqs\FaqResource;
 use App\Filament\Resources\MessageTemplates\MessageTemplateResource;
 use App\Filament\Resources\Patients\PatientResource;
 use App\Filament\Resources\Payments\PaymentResource;
 use App\Filament\Resources\RescheduleRequests\RescheduleRequestResource;
+use App\Filament\Resources\Reviews\ReviewResource;
 use App\Filament\Resources\ScheduleBlocks\ScheduleBlockResource;
+use App\Filament\Resources\SmileCases\SmileCaseResource;
 use App\Filament\Resources\TextSnippets\TextSnippetResource;
 use App\Filament\Resources\Treatments\TreatmentResource;
 use App\Filament\Resources\Users\UserResource;
@@ -75,6 +78,9 @@ class PanelAccessTest extends TestCase
             'campañas' => ['campaigns', [true, false, false]],
             'nueva campaña' => ['campaigns.create', [true, false, false]],
             'editar campaña' => ['campaigns.edit', [true, false, false]],
+            'preguntas de la web' => ['faqs', [true, false, false]],
+            'opiniones' => ['reviews', [true, false, false]],
+            'antes y después' => ['cases', [true, false, false]],
             'ajustes' => ['settings', [true, false, false]],
         ];
     }
@@ -123,6 +129,9 @@ class PanelAccessTest extends TestCase
             'campaigns' => CampaignResource::getUrl('index'),
             'campaigns.create' => CampaignResource::getUrl('create'),
             'campaigns.edit' => CampaignResource::getUrl('edit', ['record' => $campaign]),
+            'faqs' => FaqResource::getUrl('index'),
+            'reviews' => ReviewResource::getUrl('index'),
+            'cases' => SmileCaseResource::getUrl('index'),
             'settings' => Settings::getUrl(),
         };
 

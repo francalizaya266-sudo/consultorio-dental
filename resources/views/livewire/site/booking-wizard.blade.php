@@ -1,6 +1,6 @@
 @php
     use App\Enums\PatientRelationship;
-    use App\Livewire\Site\BookingWizard;
+    use App\Support\Dates;
     use App\Support\Money;
     use App\Support\Phone;
 @endphp
@@ -80,7 +80,7 @@
 
             <div class="summary">
                 <p class="what">{{ $this->treatment->name }}</p>
-                <p style="margin: 4px 0 0">{{ BookingWizard::dayLabel($date) }}, {{ BookingWizard::timeLabel($time) }}</p>
+                <p style="margin: 4px 0 0">{{ Dates::day($date) }}, {{ Dates::time($time) }}</p>
                 @php($chosen = $this->daySlots->firstWhere('time', $time))
                 @if ($chosen)
                     <p class="muted" style="margin: 2px 0 0">con {{ $this->doctors->firstWhere('id', $chosen['doctor_id'])?->name }}</p>
@@ -213,7 +213,7 @@
             <h1 id="listo">¡Tu cita quedó reservada!</h1>
             <div class="summary">
                 <p class="what">{{ $appointment->treatment->name }}</p>
-                <p style="margin: 4px 0 0">{{ BookingWizard::dayLabel($appointment->starts_at->toImmutable()) }}, {{ BookingWizard::timeLabel($appointment->starts_at->format('H:i')) }}</p>
+                <p style="margin: 4px 0 0">{{ Dates::day($appointment->starts_at->toImmutable()) }}, {{ Dates::time($appointment->starts_at->format('H:i')) }}</p>
                 <p class="muted" style="margin: 2px 0 0">{{ $appointment->patient->full_name }} · con {{ $appointment->doctor->name }}</p>
             </div>
 

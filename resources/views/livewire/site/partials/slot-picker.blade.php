@@ -1,6 +1,6 @@
 {{-- Tira de días con horarios libres y los horarios del día elegido. --}}
 @php
-    use App\Livewire\Site\BookingWizard;
+    use App\Support\Dates;
     use Carbon\CarbonImmutable;
 
     $groups = $this->visibleSlots->groupBy(fn (array $slot) => $slot['time'] < '12:00' ? 'Por la mañana' : 'Por la tarde');
@@ -15,7 +15,7 @@
         <div class="days" role="group" aria-label="Días con horarios libres">
             @foreach ($availableDays as $day)
                 @php($d = CarbonImmutable::parse($day))
-                <button type="button" class="day" aria-pressed="{{ $date === $day ? 'true' : 'false' }}" wire:click="selectDate('{{ $day }}')" aria-label="{{ BookingWizard::dayLabel($d) }}">
+                <button type="button" class="day" aria-pressed="{{ $date === $day ? 'true' : 'false' }}" wire:click="selectDate('{{ $day }}')" aria-label="{{ Dates::day($d) }}">
                     <span>{{ $d->isToday() ? 'Hoy' : ($d->isTomorrow() ? 'Mañana' : ucfirst($d->translatedFormat('D'))) }}</span>
                     <strong>{{ $d->day }}</strong>
                     <span>{{ $d->translatedFormat('M') }}</span>
@@ -25,14 +25,14 @@
     </div>
 
     <div class="stack" wire:key="times-{{ $date }}-{{ $doctorId }}">
-        <h2>{{ BookingWizard::dayLabel($date) }}</h2>
+        <h2>{{ Dates::day($date) }}</h2>
         @foreach ($groups as $period => $slots)
             <div class="stack">
                 <p class="muted small">{{ $period }}</p>
                 <div class="times">
                     @foreach ($slots as $slot)
                         <button type="button" class="time" aria-pressed="{{ in_array($date.' '.$slot['time'], $selectedTimes, true) ? 'true' : 'false' }}" wire:click="{{ $action }}('{{ $slot['time'] }}')">
-                            {{ BookingWizard::timeLabel($slot['time']) }}
+                            {{ Dates::time($slot['time']) }}
                         </button>
                     @endforeach
                 </div>

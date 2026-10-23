@@ -47,6 +47,17 @@ return [
             'report' => false,
         ],
 
+        // Fotos de la web (equipo, tratamientos, promociones, antes y después). Viven dentro
+        // de public/ para no depender de enlaces simbólicos, que muchos hostings compartidos no permiten.
+        'web' => [
+            'driver' => 'local',
+            'root' => public_path('media'),
+            'url' => '/media',
+            'visibility' => 'public',
+            'throw' => false,
+            'report' => false,
+        ],
+
         's3' => [
             'driver' => 's3',
             'key' => env('AWS_ACCESS_KEY_ID'),

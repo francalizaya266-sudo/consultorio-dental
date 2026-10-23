@@ -23,6 +23,7 @@ use App\Models\Campaign;
 use App\Models\Charge;
 use App\Models\Consultation;
 use App\Models\Doctor;
+use App\Models\Faq;
 use App\Models\Icd10Code;
 use App\Models\OdontogramCondition;
 use App\Models\Patient;
@@ -49,12 +50,25 @@ class DemoSeeder extends Seeder
         Setting::set('clinic.name', 'Consultorio Dental Sonrisas');
         Setting::set('clinic.address', 'Av. Larco 123, Miraflores');
         Setting::set('clinic.phone', '(01) 445 1234');
+        Setting::set('clinic.district', 'Miraflores');
+        Setting::set('clinic.email', 'citas@sonrisas.test');
+        Setting::set('clinic.hours_note', 'Feriados: con cita previa.');
+        Setting::set('web.about', "Somos un consultorio de barrio en Miraflores. Atendemos a toda la familia, desde la primera visita de los chicos hasta los abuelos.\n\nAntes de empezar cualquier tratamiento te explicamos qué tienes, qué opciones hay y cuánto cuesta cada una. Sin sorpresas.");
 
         $admin = User::factory()->admin(isDentist: true)->create(['name' => 'Administrador', 'email' => 'admin@consultorio.test']);
         $reception = User::factory()->reception()->create(['name' => 'Recepción', 'email' => 'recepcion@consultorio.test']);
 
         $torres = $this->doctor('Dra. Ana Torres', 'dra.torres@consultorio.test', 'Odontología general', '#0ea5e9', '24581');
         $ramos = $this->doctor('Dr. Luis Ramos', 'dr.ramos@consultorio.test', 'Ortodoncia', '#a855f7', '19873');
+        $torres->update([
+            'bio' => 'Atiendo a toda la familia. Me gusta explicar cada paso con calma, sobre todo a quienes llegan con miedo al dentista.',
+            'education' => "Cirujana dentista, Universidad Peruana Cayetano Heredia\nDiplomado en estética dental",
+        ]);
+        $ramos->update([
+            'rne_number' => '03215',
+            'bio' => 'Especialista en ortodoncia: brackets y alineadores para chicos y adultos.',
+            'education' => "Cirujano dentista, Universidad Nacional Mayor de San Marcos\nEspecialidad en ortodoncia y ortopedia maxilar",
+        ]);
 
         $treatments = Treatment::all()->keyBy('slug');
         $prices = [
@@ -67,6 +81,18 @@ class DemoSeeder extends Seeder
             $treatments[$slug]?->update(['price_from' => $price]);
         }
 
+        $treatments['limpieza-dental']->update(['description' => <<<'MD'
+            La limpieza retira el sarro y la placa que el cepillo no alcanza, sobre todo entre los dientes y bajo la encía. Así se previenen las caries, el sangrado de encías y el mal aliento.
+
+            ## Cómo es la sesión
+
+            1. Revisamos tus dientes y encías.
+            2. Retiramos el sarro con ultrasonido y pulimos.
+            3. Te damos indicaciones de cepillado según lo que vimos.
+
+            Dura unos 45 minutos y no duele; si tienes las encías sensibles, avísanos y vamos más despacio.
+            MD]);
+
         $ids = fn (array $slugs) => array_map(fn (string $slug) => $treatments[$slug]->id, $slugs);
 
         $torres->treatments()->sync($ids([
@@ -74,6 +100,7 @@ class DemoSeeder extends Seeder
         ]));
         $ramos->treatments()->sync($ids(['evaluacion-o-primera-consulta', 'limpieza-dental', 'colocacion-de-brackets']));
         $ramos->treatments()->attach($treatments['control-de-ortodoncia']->id, ['duration_minutes' => 20]);
+        $this->faqs($treatments['blanqueamiento']);
 
         // Una familia: la mamá tiene el celular y tiene a cargo a su hijo y a su madre.
         $quispe = Account::factory()->verified()->create(['phone' => '+51987654321', 'accepts_promotions' => true]);
@@ -197,6 +224,22 @@ class DemoSeeder extends Seeder
     }
 
     /** Una "radiografía" de muestra: fondo oscuro con dos piezas claras. */
+    /** Preguntas de ejemplo para ver la web completa; el consultorio las reemplaza por las suyas. */
+    private function faqs(Treatment $whitening): void
+    {
+        $faqs = [
+            ['¿Cuánto cuesta la evaluación?', "La evaluación cuesta S/ 50 e incluye la revisión completa y tu presupuesto.\n\nSi decides hacer el tratamiento con nosotros, la descontamos del total.", null],
+            ['¿Cómo pago?', 'En el consultorio, con efectivo, tarjeta, Yape o Plin. No se cobra nada al reservar en la web.', null],
+            ['¿Atienden a niños?', 'Sí, desde los 3 años. La primera visita es corta y tranquila para que se acostumbren.', null],
+            ['¿Cómo confirmo, cambio o cancelo mi cita?', 'Con el enlace que te enviamos por WhatsApp al reservar. Si faltan más de 24 horas, el cambio se hace al instante.', null],
+            ['¿El blanqueamiento daña los dientes?', 'Hecho por un dentista y con el producto adecuado, no daña el esmalte. Algunas personas sienten sensibilidad uno o dos días; pasa sola.', $whitening->id],
+        ];
+
+        foreach ($faqs as $i => [$question, $answer, $treatmentId]) {
+            Faq::create(['question' => $question, 'answer' => $answer, 'treatment_id' => $treatmentId, 'sort_order' => $i]);
+        }
+    }
+
     private function demoImage(string $name): UploadedFile
     {
         $image = imagecreatetruecolor(900, 1200);

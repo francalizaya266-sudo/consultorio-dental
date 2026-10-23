@@ -11,6 +11,7 @@ use App\Services\Agenda\Slot;
 use Carbon\CarbonImmutable;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\Cache;
 
 /**
  * Lo que la web ofrece para reservar o cambiar una cita: tratamientos, doctores, días y
@@ -96,6 +97,25 @@ class WebAvailability
             ->sortBy([['time', 'asc'], ['recommended', 'desc'], ['waste', 'asc']])
             ->unique('time')
             ->values();
+    }
+
+    /**
+     * Los primeros horarios libres para mostrarlos en el inicio: el primer día con lugar y
+     * hasta $limit horarios (primero los que no dejan huecos). Se guardan un minuto.
+     *
+     * @return array{date: string, times: list<string>}|null
+     */
+    public function nextFree(Treatment $treatment, int $limit = 4): ?array
+    {
+        return Cache::remember("web.proximos-horarios.{$treatment->getKey()}.{$limit}", 60, function () use ($treatment, $limit) {
+            $doctors = $this->doctorsFor($treatment);
+            $day = $this->days($treatment, $doctors, count: 1)[0] ?? null;
+
+            return $day ? [
+                'date' => $day->toDateString(),
+                'times' => $this->suggested($this->slots($treatment, $doctors, $day))->take($limit)->pluck('time')->all(),
+            ] : null;
+        });
     }
 
     /**
