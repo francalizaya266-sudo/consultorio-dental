@@ -1,6 +1,7 @@
 @php
     use App\Enums\AppointmentStatus;
     use App\Enums\PlanItemStatus;
+    use App\Support\CampaignText;
     use App\Support\Dates;
     use App\Support\Money;
     use App\Support\Phone;
@@ -131,7 +132,7 @@
                         <strong @class(['owed' => $balance > 0])>{{ $balance > 0 ? Money::format($balance).' por pagar' : Money::format(-$balance).' a favor' }}</strong>
                     </p>
                 @endforeach
-                <p class="muted small">Pagas en el consultorio con Yape, Plin, tarjeta o efectivo.</p>
+                <p class="muted small">{{ CampaignText::HOW_TO_PAY }}</p>
             </section>
         @endif
 
