@@ -2,6 +2,7 @@
 
 namespace App\Services\Reports;
 
+use App\Models\Doctor;
 use App\Models\Setting;
 use App\Models\User;
 
@@ -31,9 +32,15 @@ final class ReportAccess
         return $user->doctorId();
     }
 
-    /** La administración puede elegir el doctor; el doctor solo ve lo suyo. */
+    /** La administración puede elegir el doctor, si hay más de uno; el doctor solo ve lo suyo. */
     public static function choosesDoctor(?User $user): bool
     {
-        return (bool) $user?->isAdmin();
+        return (bool) $user?->isAdmin() && self::severalDoctors();
+    }
+
+    /** Hay con quién comparar: más de un doctor, contando a los que ya no atienden (sus números siguen en el historial). */
+    public static function severalDoctors(): bool
+    {
+        return once(fn () => Doctor::query()->count() > 1);
     }
 }

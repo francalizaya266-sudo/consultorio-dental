@@ -28,6 +28,7 @@ use Carbon\CarbonImmutable;
 use Database\Seeders\CatalogSeeder;
 use Filament\Actions\Testing\TestAction;
 use Illuminate\Foundation\Testing\LazilyRefreshDatabase;
+use Illuminate\Support\Once;
 use Livewire\Livewire;
 use Tests\Concerns\CreatesAgenda;
 use Tests\TestCase;
@@ -61,6 +62,25 @@ class AgendaPanelTest extends TestCase
             $this->get(WhatsappMessageResource::getUrl('index'))->assertOk();
             $this->get(RescheduleRequestResource::getUrl('index'))->assertOk();
         }
+    }
+
+    public function test_the_doctor_column_and_filter_only_show_with_more_than_one_doctor(): void
+    {
+        $treatment = Treatment::factory()->create();
+        $doctor = $this->doctorOffering($treatment);
+        Appointment::factory()->for($doctor)->for($treatment)->at('2026-11-02 10:00')->create();
+
+        $this->actingAs(User::factory()->reception()->create());
+
+        Livewire::test(TodayAppointments::class)->assertTableColumnHidden('doctor.name');
+        Livewire::test(ListAppointments::class)->assertTableColumnHidden('doctor.name')->assertTableFilterHidden('doctor_id');
+
+        $this->doctorOffering($treatment);
+        // Cada pedido cuenta los doctores una sola vez.
+        Once::flush();
+
+        Livewire::test(TodayAppointments::class)->assertTableColumnVisible('doctor.name');
+        Livewire::test(ListAppointments::class)->assertTableColumnVisible('doctor.name')->assertTableFilterVisible('doctor_id');
     }
 
     public function test_a_doctor_only_sees_their_own_appointments(): void
@@ -146,6 +166,8 @@ class AgendaPanelTest extends TestCase
 
         $widget->callAction(TestAction::make('complete')->table($appointment));
         $this->assertSame(AppointmentStatus::Completed, $appointment->fresh()->status);
+
+        Livewire::test(TodayStats::class)->assertSee('1 atendida')->assertDontSee('1 atendidas');
     }
 
     public function test_reception_moves_an_appointment_from_its_page(): void

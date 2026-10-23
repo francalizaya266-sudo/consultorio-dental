@@ -29,11 +29,12 @@ class TodayAppointments extends TableWidget
             ->query(fn () => AppointmentResource::getEloquentQuery()
                 ->whereDate('starts_at', today())
                 ->where('status', '!=', AppointmentStatus::Cancelled))
-            ->columns(AppointmentsTable::columns(showDoctor: $user->managesAllAgendas(), timeOnly: true))
+            ->columns(AppointmentsTable::columns(showDoctor: AppointmentsTable::showsDoctor($user), timeOnly: true))
             ->defaultSort('starts_at')
             ->paginated(false)
             ->recordUrl(fn (Appointment $record) => AppointmentResource::getUrl('view', ['record' => $record]))
             ->recordActions(AppointmentActions::all())
+            ->stackedOnMobile()
             ->headerActions([
                 Action::make('new')
                     ->label('Nueva cita')

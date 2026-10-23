@@ -26,7 +26,7 @@
         .agenda-col.is-over { outline: 2px dashed var(--primary-500); outline-offset: -2px; }
         .agenda-col.is-refused { outline: 2px dashed var(--danger-400); outline-offset: -2px; }
         .agenda-frame.is-dragging, .agenda-frame.is-dragging * { cursor: grabbing !important; user-select: none; }
-        .agenda-drop { position: absolute; left: 4px; right: 4px; z-index: 3; pointer-events: none; border: 2px dashed var(--primary-500); border-radius: .45rem; background: rgb(20 184 166 / .12); }
+        .agenda-drop { position: absolute; left: 4px; right: 4px; z-index: 3; pointer-events: none; border: 2px dashed var(--primary-500); border-radius: .45rem; background: color-mix(in oklab, var(--primary-500) 12%, transparent); }
         .agenda-drop.is-refused { border-color: var(--danger-500); background: rgb(239 68 68 / .08); }
         .agenda-drop.is-refused span { background: var(--danger-600); }
         .agenda-drop span { position: absolute; top: -.1rem; left: -.1rem; transform: translateY(-100%); background: var(--primary-600); color: #fff; font-size: .7rem; font-weight: 600; border-radius: .3rem; padding: .05rem .35rem; white-space: nowrap; }
@@ -58,6 +58,22 @@
         .agenda-legend .s-completed::before { background: #f4f4f5; border-color: #d4d4d8; }
         .agenda-legend .s-block::before { background: repeating-linear-gradient(135deg, rgb(148 163 184 / .5) 0 2px, transparent 2px 4px); border-color: var(--gray-300); }
         .agenda-empty { padding: 3rem 1rem; text-align: center; color: var(--gray-500); }
+        /* Modo oscuro: el mismo color de cada estado, como tinte sobre el fondo oscuro. */
+        .dark .agenda-appt { color: var(--gray-100); box-shadow: none; }
+        .dark .agenda-appt small { color: var(--gray-400); }
+        .dark .agenda-appt .tag-call { background: rgb(239 68 68 / .2); color: var(--danger-300); }
+        .dark .agenda-appt .tag-new { background: rgb(59 130 246 / .2); color: var(--info-300); }
+        .dark .agenda-block { border-color: rgb(255 255 255 / .1); color: var(--gray-400); }
+        .dark .agenda-buffer { background: repeating-linear-gradient(135deg, rgb(148 163 184 / .12) 0 3px, transparent 3px 6px); }
+        .dark .agenda-legend { color: var(--gray-400); }
+        .dark .s-pending, .dark .agenda-legend .s-pending::before { background: rgb(245 158 11 / .14); border-color: rgb(251 191 36 / .5); }
+        .dark .s-confirmed, .dark .agenda-legend .s-confirmed::before { background: rgb(16 185 129 / .14); border-color: rgb(52 211 153 / .5); }
+        .dark .s-checked_in, .dark .agenda-legend .s-checked_in::before { background: rgb(59 130 246 / .16); border-color: rgb(96 165 250 / .55); }
+        .dark .s-in_progress { background: rgb(99 102 241 / .16); border-color: rgb(129 140 248 / .55); }
+        .dark .s-completed, .dark .agenda-legend .s-completed::before { background: rgb(255 255 255 / .05); border-color: rgb(255 255 255 / .15); }
+        .dark .s-completed, .dark .s-no_show { color: var(--gray-400); }
+        .dark .s-no_show { background: rgb(244 63 94 / .1); border-color: rgb(251 113 133 / .45); }
+        .dark .agenda-legend .s-block::before { border-color: rgb(255 255 255 / .2); }
     </style>
 
     @if ($weekByDefault)
@@ -77,7 +93,7 @@
                 <x-filament::input type="date" wire:model.live="date" aria-label="Ir a la fecha" />
             </x-filament::input.wrapper>
 
-            @if ($mode === 'week' && $doctors->isNotEmpty())
+            @if ($mode === 'week' && $doctors->count() > 1)
                 <x-filament::input.wrapper>
                     <x-filament::input.select wire:model.live="doctor" aria-label="Doctor">
                         @foreach ($doctors as $id => $name)

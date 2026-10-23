@@ -12,8 +12,8 @@ use Illuminate\Support\Js;
 /**
  * Base de los gráficos de reportes: una sola forma de dibujar y de escribir los números.
  *
- * Colores (validados para daltonismo, en modo claro y oscuro): la serie 1 es el verde azulado
- * del panel; la 2, naranja. Barras finas con la punta redondeada, sin bordes, grilla tenue y
+ * Colores (validados para daltonismo, en modo claro y oscuro): la serie 1 es el azul de la
+ * clínica; la 2, naranja. Barras finas con la punta redondeada, sin bordes, grilla tenue y
  * el valor completo al pasar el mouse. Debajo de cada gráfico hay una tabla para lectores de pantalla.
  */
 abstract class ReportChart extends ChartWidget
@@ -22,7 +22,7 @@ abstract class ReportChart extends ChartWidget
 
     /** [claro, oscuro] por serie, en orden fijo. */
     private const SERIES_COLORS = [
-        ['#0d9488', '#0d9488'],
+        ['#2563eb', '#3b82f6'],
         ['#eb6834', '#d95926'],
     ];
 

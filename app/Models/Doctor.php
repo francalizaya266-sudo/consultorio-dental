@@ -65,6 +65,12 @@ class Doctor extends Model
         return (int) ($custom ?? $treatment->duration_minutes);
     }
 
+    /** Con un solo doctor activo, la columna, el filtro y las tablas "por doctor" sobran. */
+    public static function severalActive(): bool
+    {
+        return once(fn () => static::query()->active()->count() > 1);
+    }
+
     #[Scope]
     protected function active(Builder $query): Builder
     {

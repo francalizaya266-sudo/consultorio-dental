@@ -22,6 +22,14 @@ class TodayStats extends StatsOverviewWidget
 
     protected ?string $pollingInterval = '30s';
 
+    /** En el celular van de a dos, para llegar rápido a la tabla; en la computadora, de a tres o los cuatro en fila. */
+    protected function getColumns(): array
+    {
+        $perRow = count($this->getCachedStats()) === 4 ? 4 : 3;
+
+        return ['default' => 2, '@3xl' => $perRow, '!@lg' => $perRow];
+    }
+
     protected function getStats(): array
     {
         $today = AppointmentResource::getEloquentQuery()
@@ -30,6 +38,7 @@ class TodayStats extends StatsOverviewWidget
             ->pluck('status');
 
         $done = $today->filter(fn (AppointmentStatus $s) => $s === AppointmentStatus::Completed)->count();
+        $doneLabel = $done === 1 ? '1 atendida' : "{$done} atendidas";
         $waiting = $today->filter(fn (AppointmentStatus $s) => $s === AppointmentStatus::CheckedIn)->count();
 
         $unconfirmed = AppointmentResource::getEloquentQuery()
@@ -45,7 +54,7 @@ class TodayStats extends StatsOverviewWidget
 
         return array_values(array_filter([
             Stat::make('Citas de hoy', $today->count())
-                ->description($waiting > 0 ? "{$waiting} en sala · {$done} atendidas" : "{$done} atendidas")
+                ->description($waiting > 0 ? "{$waiting} en sala · {$doneLabel}" : $doneLabel)
                 ->icon('heroicon-o-calendar-days')
                 ->url(AppointmentResource::getUrl('index', ['tab' => 'today'])),
             Stat::make('Sin confirmar (hoy y mañana)', $unconfirmed)
@@ -80,7 +89,9 @@ class TodayStats extends StatsOverviewWidget
             ->whereHas('appointments', fn (Builder $query) => $query->whereDate('starts_at', today())->where('status', AppointmentStatus::Completed))
             ->count();
 
+        // El monto no entra en media tarjeta del celular: va a lo ancho.
         return Stat::make('Cobrado hoy', Money::format($collected))
+            ->columnSpan(['default' => 2, '@3xl' => 1, '!@lg' => 1])
             ->description(match ($owing) {
                 0 => 'Nadie se fue debiendo',
                 1 => '1 paciente atendido hoy debe',

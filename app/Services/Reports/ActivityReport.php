@@ -17,6 +17,8 @@ final class ActivityReport
 {
     public const NO_ORIGIN = 'Sin dato';
 
+    private const WEEKDAYS = [1 => 'Lunes', 2 => 'Martes', 3 => 'Miércoles', 4 => 'Jueves', 5 => 'Viernes', 6 => 'Sábado', 7 => 'Domingo'];
+
     public function __construct(
         public readonly ReportPeriod $period,
         public readonly ?int $doctorId = null,
@@ -146,31 +148,67 @@ final class ActivityReport
      */
     public function occupancyByDoctor(): array
     {
-        $doctors = Doctor::query()
+        return $this->occupancyDoctors()
+            ->mapWithKeys(function (Doctor $doctor) {
+                $available = array_sum($this->workingMinutes($doctor));
+
+                return $available > 0
+                    ? [$doctor->name => self::share($this->bookedAppointments($doctor)->sum(fn (Appointment $a) => $a->starts_at->diffInMinutes($a->ends_at)), $available)]
+                    : [];
+            })
+            ->all();
+    }
+
+    /**
+     * Lo mismo, día por día de la semana: con un solo doctor muestra qué días tienen espacio.
+     *
+     * @return array<string, int> "Lunes", "Martes"… (solo los días con horario) => porcentaje (0–100)
+     */
+    public function occupancyByWeekday(): array
+    {
+        $available = array_fill(1, 7, 0);
+        $booked = array_fill(1, 7, 0);
+
+        foreach ($this->occupancyDoctors() as $doctor) {
+            foreach ($this->workingMinutes($doctor) as $weekday => $minutes) {
+                $available[$weekday] += $minutes;
+            }
+
+            foreach ($this->bookedAppointments($doctor) as $appointment) {
+                $booked[$appointment->starts_at->dayOfWeekIso] += $appointment->starts_at->diffInMinutes($appointment->ends_at);
+            }
+        }
+
+        return collect($available)
+            ->filter(fn (int $minutes) => $minutes > 0)
+            ->mapWithKeys(fn (int $minutes, int $weekday) => [self::WEEKDAYS[$weekday] => self::share($booked[$weekday], $minutes)])
+            ->all();
+    }
+
+    /** @return Collection<int, Doctor> Los doctores activos que entran en el reporte. */
+    private function occupancyDoctors(): Collection
+    {
+        return Doctor::query()
             ->active()
             ->when($this->doctorId, fn (Builder $query, int $id) => $query->whereKey($id))
             ->orderBy('sort_order')
             ->orderBy('name')
             ->get();
+    }
 
-        return $doctors
-            ->mapWithKeys(function (Doctor $doctor) {
-                $available = $this->workingMinutes($doctor);
+    /** @return Collection<int, Appointment> Las citas que ocuparon el horario del doctor en el período, aunque el paciente no viniera. */
+    private function bookedAppointments(Doctor $doctor): Collection
+    {
+        return Appointment::query()
+            ->whereBelongsTo($doctor)
+            ->whereIn('status', [...AppointmentStatus::occupying(), AppointmentStatus::NoShow])
+            ->whereBetween('starts_at', [$this->period->from, $this->period->to])
+            ->get(['starts_at', 'ends_at']);
+    }
 
-                if ($available <= 0) {
-                    return [];
-                }
-
-                $booked = Appointment::query()
-                    ->whereBelongsTo($doctor)
-                    ->whereIn('status', [...AppointmentStatus::occupying(), AppointmentStatus::NoShow])
-                    ->whereBetween('starts_at', [$this->period->from, $this->period->to])
-                    ->get(['starts_at', 'ends_at'])
-                    ->sum(fn (Appointment $a) => $a->starts_at->diffInMinutes($a->ends_at));
-
-                return [$doctor->name => (int) min(100, round($booked / $available * 100))];
-            })
-            ->all();
+    private static function share(int|float $booked, int $available): int
+    {
+        return (int) min(100, round($booked / $available * 100));
     }
 
     /**
@@ -213,12 +251,16 @@ final class ActivityReport
             ]);
     }
 
-    /** Minutos de atención del doctor en el período, según su horario semanal y menos los bloqueos. */
-    private function workingMinutes(Doctor $doctor): int
+    /**
+     * Minutos de atención del doctor en el período, según su horario semanal y menos los bloqueos.
+     *
+     * @return array<int, int> Día de la semana (1 = lunes) => minutos
+     */
+    private function workingMinutes(Doctor $doctor): array
     {
         $schedules = DoctorSchedule::query()->whereBelongsTo($doctor)->get();
         $blocks = ScheduleBlock::query()->affecting($doctor, $this->period->from, $this->period->to)->get();
-        $minutes = 0;
+        $minutes = array_fill(1, 7, 0);
 
         for ($day = $this->period->from; $day->lte($this->period->to); $day = $day->addDay()) {
             $ranges = $schedules->filter(fn (DoctorSchedule $s) => $s->weekday === $day->dayOfWeekIso
@@ -231,11 +273,11 @@ final class ActivityReport
                 $blocked = $blocks->sum(fn (ScheduleBlock $b) => max(0, CarbonImmutable::instance($b->starts_at)->max($start)
                     ->diffInMinutes(CarbonImmutable::instance($b->ends_at)->min($end), false)));
 
-                $minutes += max(0, $start->diffInMinutes($end) - $blocked);
+                $minutes[$day->dayOfWeekIso] += (int) max(0, $start->diffInMinutes($end) - $blocked);
             }
         }
 
-        return (int) $minutes;
+        return $minutes;
     }
 
     /**

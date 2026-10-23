@@ -39,8 +39,8 @@ final class EarningsTables
             'total' => ['Total', self::sum($periods, 'collected'), self::sum($periods, 'produced'), array_sum(array_column($periods, 'payments'))],
         ];
 
-        // Con un solo doctor elegido, la tabla por doctor no dice nada nuevo.
-        if ($report->doctorId === null) {
+        // Con un doctor elegido, o uno solo en el consultorio, la tabla por doctor no dice nada nuevo.
+        if ($report->doctorId === null && ReportAccess::severalDoctors()) {
             $doctors = $report->byDoctor();
             $tables[] = [
                 'key' => 'doctor',

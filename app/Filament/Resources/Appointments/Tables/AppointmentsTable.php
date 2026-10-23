@@ -20,15 +20,16 @@ class AppointmentsTable
     {
         /** @var User $user */
         $user = auth()->user();
+        $showDoctor = self::showsDoctor($user);
 
         return $table
-            ->columns(self::columns(showDoctor: $user->managesAllAgendas()))
+            ->columns(self::columns(showDoctor: $showDoctor))
             ->defaultSort('starts_at')
             ->filters([
                 SelectFilter::make('doctor_id')
                     ->label('Doctor')
                     ->options(fn () => Doctor::query()->active()->orderBy('sort_order')->pluck('name', 'id'))
-                    ->visible($user->managesAllAgendas()),
+                    ->visible($showDoctor),
                 SelectFilter::make('status')
                     ->label('Estado')
                     ->options(AppointmentStatus::class)
@@ -39,9 +40,16 @@ class AppointmentsTable
                     ->query(fn (Builder $query) => $query->where('is_new_patient', true)),
             ])
             ->recordActions(AppointmentActions::all())
+            ->stackedOnMobile()
             ->poll('30s')
             ->emptyStateHeading('No hay citas')
             ->emptyStateDescription('Usa "Nueva cita" para agendar una.');
+    }
+
+    /** La columna "Doctor", para quien ve todas las agendas y solo si hay más de un doctor. */
+    public static function showsDoctor(User $user): bool
+    {
+        return $user->managesAllAgendas() && Doctor::severalActive();
     }
 
     /**

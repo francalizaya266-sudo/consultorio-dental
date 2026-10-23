@@ -103,11 +103,27 @@ class ReportsPanelTest extends TestCase
     {
         $this->actingAs(User::factory()->admin()->create());
 
+        Livewire::test(Summary::class)->assertFormFieldVisible('doctor', 'filtersForm');
+
         Livewire::test(EarningsStats::class, ['pageFilters' => ['period' => 'month', 'doctor' => $this->torres->id]])
             ->assertSee('S/ 120.00')
             ->assertDontSee('S/ 570.00')
             // Lo que deben los pacientes no es de un doctor.
             ->assertDontSee('Por cobrar (a hoy)');
+    }
+
+    public function test_with_a_single_doctor_there_is_nothing_to_compare(): void
+    {
+        $this->ramos->delete();
+        $this->actingAs(User::factory()->admin()->create());
+
+        Livewire::test(Summary::class)->assertFormFieldHidden('doctor', 'filtersForm');
+        Livewire::test(EarningsTables::class, ['pageFilters' => ['period' => 'month']])
+            ->assertSee(['Por día', 'Por tratamiento', 'Por medio de pago'])
+            ->assertDontSee('Por doctor');
+        // Jueves 1 a sábado 3: ocho horas por día; el viernes, 30 minutos reservados.
+        Livewire::test(OccupancyChart::class, ['pageFilters' => ['period' => 'custom', 'from' => '2026-10-01', 'to' => '2026-10-03']])
+            ->assertSee(['Ocupación de la agenda por día', '2 % del horario reservado · el día más libre: jueves']);
     }
 
     public function test_reception_does_not_see_earnings(): void
