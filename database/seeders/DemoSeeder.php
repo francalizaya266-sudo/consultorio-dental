@@ -107,6 +107,14 @@ class DemoSeeder extends Seeder
             'clinical_exam' => 'Extraoral: sin alteraciones. Intraoral: caries profunda en 36, restauración antigua en 46.',
             'procedures' => 'Evaluación completa. Se toma radiografía periapical de 36.',
             'indications' => 'Evitar masticar del lado izquierdo hasta el tratamiento.',
+            'next_steps' => 'Endodoncia de 36 en dos sesiones y luego resina.',
+            'closed_at' => $past->starts_at->addMinutes(40),
+        ]);
+        $rosa->medicalBackground()->create([
+            'conditions' => ['hypertension'],
+            'allergies' => 'Penicilina',
+            'medications' => 'Losartán 50 mg cada mañana',
+            'updated_by_user_id' => $torres->user_id,
         ]);
         $consultation->diagnoses()->create(['icd10_code_id' => Icd10Code::where('code', 'K02.1')->value('id'), 'tooth' => '36']);
 
@@ -121,6 +129,10 @@ class DemoSeeder extends Seeder
             ['tooth' => 36, 'surface' => 'O', 'odontogram_condition_id' => $conditions['caries']->id, 'state' => ToothState::Bad, 'abbreviation' => 'CD'],
             ['tooth' => 46, 'surface' => 'O', 'odontogram_condition_id' => $conditions['restauracion']->id, 'state' => ToothState::Good, 'abbreviation' => 'AM'],
             ['tooth' => 18, 'odontogram_condition_id' => $conditions['ausente']->id, 'state' => ToothState::Good],
+            ['tooth' => 26, 'odontogram_condition_id' => $conditions['corona']->id, 'state' => ToothState::Good, 'abbreviation' => 'CM'],
+            ['tooth' => 21, 'odontogram_condition_id' => $conditions['tratamiento_pulpar']->id, 'state' => ToothState::Good, 'abbreviation' => 'TC'],
+            ['tooth' => 38, 'odontogram_condition_id' => $conditions['remanente_radicular']->id, 'state' => ToothState::Bad, 'abbreviation' => 'RR'],
+            ['tooth' => 14, 'surface' => 'M', 'odontogram_condition_id' => $conditions['caries']->id, 'state' => ToothState::Bad, 'abbreviation' => 'CE'],
         ]);
 
         $plan = $rosa->treatmentPlans()->create([
