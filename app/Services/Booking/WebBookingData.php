@@ -26,5 +26,7 @@ final readonly class WebBookingData
         public ?AppointmentOrigin $origin = null,
         public ?string $promoCode = null,
         public ?string $note = null,
+        // La campaña desde cuya página llegó (sin código de promoción).
+        public ?string $campaignSlug = null,
     ) {}
 }

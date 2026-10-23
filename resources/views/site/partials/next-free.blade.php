@@ -10,8 +10,8 @@
     <p class="for">{{ $treatment->name }} · {{ $treatment->duration_minutes }} min</p>
     <ul class="free-times">
         @foreach ($nextFree['times'] as $time)
-            <li><a href="{{ route('site.booking', ['tratamiento' => $treatment->slug, 'fecha' => $nextFree['date'], 'hora' => $time]) }}">{{ Dates::time($time) }}</a></li>
+            <li><a href="{{ route('site.booking', array_filter(['tratamiento' => $treatment->slug, 'fecha' => $nextFree['date'], 'hora' => $time, 'promo' => $promo ?? null])) }}">{{ Dates::time($time) }}</a></li>
         @endforeach
     </ul>
-    <a href="{{ route('site.booking', ['tratamiento' => $treatment->slug]) }}" class="more">Ver otros días y horarios</a>
+    <a href="{{ route('site.booking', array_filter(['tratamiento' => $treatment->slug, 'promo' => $promo ?? null])) }}" class="more">Ver otros días y horarios</a>
 </div>

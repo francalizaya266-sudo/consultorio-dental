@@ -206,6 +206,9 @@ dl.facts dd { margin: 0; font-weight: 650; min-width: 0; overflow-wrap: anywhere
 
 .summary { background: var(--surface); border-radius: var(--radius); padding: 16px 18px; }
 .summary .what { font-weight: 750; font-size: 1.125rem; }
+.summary .price-line { margin: 10px 0 0; padding-top: 10px; border-top: 1px solid var(--surface-strong); font-weight: 650; }
+.choice .price s { color: var(--muted); font-weight: 500; margin-right: 4px; }
+.choice.featured .price s { color: #d6e3f5; }
 :where(.summary, .panel, .appointment, .flash) p { margin: 0; }
 
 /* Formularios */
@@ -421,6 +424,9 @@ details.more > summary::-webkit-details-marker { display: none; }
 .facts-row div { background: var(--surface); border-radius: var(--radius); padding: 12px 18px; }
 .facts-row dt { color: var(--muted); font-size: .875rem; }
 .facts-row dd { margin: 0; font-weight: 800; font-size: 1.125rem; }
+.facts-row dd s.was { color: var(--muted); font-weight: 600; font-size: 1rem; margin-right: 4px; }
+.promo-note { margin: 12px 0 0; padding: 10px 14px; border-radius: var(--radius); background: var(--ok-bg); color: var(--ok); font-weight: 650; }
+.promo-note a { color: inherit; }
 @media (max-width: 559px) {
     /* En el celular, una sola ficha con un dato por fila. */
     .facts-row { display: block; background: var(--surface); border-radius: var(--radius); padding: 4px 18px; }

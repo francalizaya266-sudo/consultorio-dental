@@ -82,6 +82,18 @@ class Campaign extends Model
         };
     }
 
+    /** El precio "desde" del tratamiento en la web con el descuento de la campaña, o null si la campaña no lo baja. */
+    public function priceFor(Treatment $treatment): ?float
+    {
+        if ($treatment->webPrice() === null) {
+            return null;
+        }
+
+        $discount = $this->discountOn((float) $treatment->price_from, $treatment->getKey());
+
+        return $discount > 0 ? round((float) $treatment->price_from - $discount, 2) : null;
+    }
+
     public function hasSlotsLeft(): bool
     {
         return $this->max_redemptions === null || $this->usedSlots() < $this->max_redemptions;

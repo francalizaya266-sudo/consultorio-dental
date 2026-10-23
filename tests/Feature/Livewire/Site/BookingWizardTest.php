@@ -4,14 +4,19 @@ namespace Tests\Feature\Livewire\Site;
 
 use App\Enums\AppointmentStatus;
 use App\Enums\BookingChannel;
+use App\Enums\DiscountType;
+use App\Enums\MessageTemplateKey;
 use App\Enums\PatientRelationship;
 use App\Livewire\Site\BookingWizard;
 use App\Models\Account;
 use App\Models\Appointment;
+use App\Models\Campaign;
 use App\Models\Patient;
 use App\Models\RememberedDevice;
 use App\Models\Treatment;
+use App\Models\WhatsappMessage;
 use App\Services\Access\DeviceService;
+use App\Services\WhatsApp\WhatsAppOutbox;
 use Illuminate\Foundation\Testing\LazilyRefreshDatabase;
 use Livewire\Livewire;
 use Tests\Concerns\CreatesAgenda;
@@ -121,6 +126,39 @@ class BookingWizardTest extends TestCase
             ->test(BookingWizard::class)
             ->assertSet('step', 2)
             ->assertSet('date', '2026-11-02');
+    }
+
+    public function test_arriving_from_a_campaign_shows_its_price_books_with_it_and_the_whatsapp_says_it(): void
+    {
+        $this->freezeMonday();
+        $cleaning = Treatment::factory()->create(['name' => 'Limpieza dental', 'price_from' => 150]);
+        $evaluation = Treatment::factory()->evaluation()->create(['price_from' => 50]);
+        $this->doctorOffering($cleaning, $evaluation);
+        $campaign = Campaign::query()->create(['name' => 'Limpieza de verano', 'slug' => 'limpieza-verano', 'treatment_id' => $cleaning->id, 'discount_type' => DiscountType::Amount, 'discount_value' => 30, 'starts_at' => now()->subDay(), 'ends_at' => now()->addMonth()]);
+
+        Livewire::withQueryParams(['promo' => 'limpieza-verano'])
+            ->test(BookingWizard::class)
+            ->assertSet('step', 2)
+            ->assertSet('treatmentId', $cleaning->id)
+            ->call('back')
+            ->assertSeeHtml('<strong>Limpieza dental</strong>')
+            ->assertSeeHtml('<span class="price"><s>S/ 150</s> desde S/ 120</span>')
+            ->call('chooseTreatment', $cleaning->id)
+            ->call('chooseTime', '10:00')
+            ->assertSee('Precio con la campaña Limpieza de verano: desde S/ 120 (normal desde S/ 150).')
+            ->assertSee('No se cobra nada ahora. Pagas en el consultorio con Yape, Plin, tarjeta o efectivo.')
+            ->set('phone', '987 654 321')
+            ->set('firstName', 'María')
+            ->set('lastName', 'Quispe')
+            ->set('acceptsPrivacy', true)
+            ->call('book')
+            ->assertSet('step', 4)
+            ->assertSee('Precio con la campaña Limpieza de verano: desde S/ 120 (normal desde S/ 150). Pagas en el consultorio con Yape, Plin, tarjeta o efectivo.');
+
+        $this->assertTrue(Appointment::sole()->campaign->is($campaign));
+
+        $confirmation = app(WhatsAppOutbox::class)->render(WhatsappMessage::where('template_key', MessageTemplateKey::BookingConfirmation)->sole());
+        $this->assertStringContainsString("a las 10:00 am con {$cleaning->doctors->first()->name}.\nPrecio con la campaña Limpieza de verano: desde S/ 120 (normal desde S/ 150). Pagas en el consultorio con Yape, Plin, tarjeta o efectivo.\n\nConfirma tu asistencia", $confirmation);
     }
 
     public function test_a_time_taken_meanwhile_sends_the_patient_back_to_choose_another(): void

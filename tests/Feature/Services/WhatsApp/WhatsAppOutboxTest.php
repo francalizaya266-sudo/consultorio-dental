@@ -38,6 +38,22 @@ class WhatsAppOutboxTest extends TestCase
         $this->assertTrue($message->fresh()->sentBy->is($reception));
     }
 
+    public function test_the_booking_confirmation_says_the_price_only_if_the_treatment_shows_it(): void
+    {
+        $this->freezeMonday();
+        $appointment = Appointment::factory()->at('2026-11-04 10:30')->create();
+        $appointment->treatment->update(['price_from' => 150]);
+        $outbox = app(WhatsAppOutbox::class);
+
+        $withPrice = $outbox->render($outbox->queueForAppointment($appointment, MessageTemplateKey::BookingConfirmation));
+        $this->assertStringContainsString(".\nPrecio: desde S/ 150. Pagas en el consultorio con Yape, Plin, tarjeta o efectivo.\n\nConfirma", $withPrice);
+
+        $appointment->treatment->update(['show_price' => false]);
+        $withoutPrice = $outbox->render($outbox->queueForAppointment($appointment->fresh(), MessageTemplateKey::BookingConfirmation));
+        $this->assertStringNotContainsString('Precio', $withoutPrice);
+        $this->assertStringContainsString("10:30 am con {$appointment->doctor->name}.\n\nConfirma tu asistencia", $withoutPrice);
+    }
+
     public function test_uses_the_text_edited_by_the_clinic(): void
     {
         $this->freezeMonday();
