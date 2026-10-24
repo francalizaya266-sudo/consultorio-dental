@@ -2,8 +2,20 @@
 
 namespace App\Providers\Filament;
 
+use App\Filament\Pages\Backups;
 use App\Filament\Pages\Dashboard;
+use App\Filament\Pages\Settings;
+use App\Filament\Resources\Campaigns\CampaignResource;
+use App\Filament\Resources\ConsentTemplates\ConsentTemplateResource;
+use App\Filament\Resources\Doctors\DoctorResource;
+use App\Filament\Resources\Faqs\FaqResource;
 use App\Filament\Resources\Patients\PatientResource;
+use App\Filament\Resources\Reviews\ReviewResource;
+use App\Filament\Resources\SmileCases\SmileCaseResource;
+use App\Filament\Resources\TextSnippets\TextSnippetResource;
+use App\Filament\Resources\TreatmentPackages\TreatmentPackageResource;
+use App\Filament\Resources\Treatments\TreatmentResource;
+use App\Filament\Resources\Users\UserResource;
 use App\Filament\Support\InitialsAvatarProvider;
 use App\Http\Controllers\Backup\BackupDownloadController;
 use App\Http\Controllers\Clinical\ClinicalFileController;
@@ -15,12 +27,13 @@ use Filament\Http\Middleware\Authenticate;
 use Filament\Http\Middleware\AuthenticateSession;
 use Filament\Http\Middleware\DisableBladeIconComponents;
 use Filament\Http\Middleware\DispatchServingFilamentEvent;
-use Filament\Navigation\NavigationGroup;
 use Filament\Navigation\NavigationItem;
 use Filament\Panel;
 use Filament\PanelProvider;
+use Filament\Resources\Resource;
 use Filament\Support\Colors\Color;
 use Filament\Support\Icons\Heroicon;
+use Filament\View\PanelsRenderHook;
 use Illuminate\Cookie\Middleware\AddQueuedCookiesToResponse;
 use Illuminate\Cookie\Middleware\EncryptCookies;
 use Illuminate\Foundation\Http\Middleware\PreventRequestForgery;
@@ -32,6 +45,22 @@ use Illuminate\View\Middleware\ShareErrorsFromSession;
 /** Panel interno único: lo que ve cada persona depende de su rol (políticas en app/Policies). */
 class AdminPanelProvider extends PanelProvider
 {
+    /** @var list<class-string> Páginas y secciones que van dentro de "Configuración". */
+    private const SETTINGS = [
+        Settings::class,
+        TreatmentResource::class,
+        TreatmentPackageResource::class,
+        DoctorResource::class,
+        UserResource::class,
+        TextSnippetResource::class,
+        ConsentTemplateResource::class,
+        CampaignResource::class,
+        FaqResource::class,
+        ReviewResource::class,
+        SmileCaseResource::class,
+        Backups::class,
+    ];
+
     public function panel(Panel $panel): Panel
     {
         return $panel
@@ -50,23 +79,26 @@ class AdminPanelProvider extends PanelProvider
             ->databaseNotifications()
             ->databaseNotificationsPolling('30s')
             ->sidebarCollapsibleOnDesktop()
-            ->navigationGroups([
-                NavigationGroup::make('Agenda'),
-                NavigationGroup::make('Pacientes'),
-                NavigationGroup::make('Caja'),
-                NavigationGroup::make('Web')->collapsed(),
-                NavigationGroup::make('Configuración')->collapsed(),
-            ])
+            // Ctrl + K (o ⌘ + K) abre el buscador desde cualquier pantalla.
+            ->globalSearchKeyBindings(['mod+k'])
+            ->globalSearchFieldKeyBindingSuffix()
+            // Siete entradas en el menú; lo demás aparece dentro de cada una al entrar.
             ->navigationItems([
                 // La lista de pacientes filtrada: quién debe y cuánto.
                 NavigationItem::make('Saldos pendientes')
-                    ->group('Caja')
-                    ->sort(2)
+                    ->parentItem('Caja')
+                    ->sort(1)
                     ->icon(Heroicon::OutlinedScale)
                     ->url(fn () => PatientResource::getUrl('index', ['tab' => 'owing']))
                     ->isActiveWhen(fn () => request()->routeIs(PatientResource::getRouteBaseName().'.index') && request()->query('tab') === 'owing')
                     ->visible(fn () => auth()->user()?->can('viewAny', Charge::class) ?? false),
+                NavigationItem::make('Configuración')
+                    ->sort(6)
+                    ->icon(Heroicon::OutlinedCog6Tooth)
+                    ->url(fn () => self::firstSettingsUrl())
+                    ->visible(fn () => self::firstSettingsUrl() !== null),
             ])
+            ->renderHook(PanelsRenderHook::HEAD_END, fn () => view('filament.panel-styles'))
             ->discoverResources(in: app_path('Filament/Resources'), for: 'App\Filament\Resources')
             ->discoverPages(in: app_path('Filament/Pages'), for: 'App\Filament\Pages')
             ->pages([
@@ -97,5 +129,17 @@ class AdminPanelProvider extends PanelProvider
                 Route::get('reportes/ganancias/excel', [EarningsExportController::class, 'excel'])->name('reports.earnings.excel');
                 Route::get('copias-de-seguridad/{file}', BackupDownloadController::class)->name('backups.download');
             });
+    }
+
+    /** "Configuración" lleva a lo primero que la persona puede ver (al admin, a Ajustes; al doctor, a sus tratamientos). */
+    private static function firstSettingsUrl(): ?string
+    {
+        foreach (self::SETTINGS as $class) {
+            if ($class::canAccess()) {
+                return is_subclass_of($class, Resource::class) ? $class::getUrl('index') : $class::getUrl();
+            }
+        }
+
+        return null;
     }
 }

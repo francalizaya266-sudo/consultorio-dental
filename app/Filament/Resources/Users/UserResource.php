@@ -18,7 +18,6 @@ use Filament\Support\Icons\Heroicon;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Columns\ToggleColumn;
 use Filament\Tables\Table;
-use UnitEnum;
 
 /** Personas que entran al panel. Nadie se borra: se desactiva para conservar el historial. */
 class UserResource extends Resource
@@ -33,9 +32,9 @@ class UserResource extends Resource
 
     protected static ?string $pluralModelLabel = 'usuarios';
 
-    protected static string|UnitEnum|null $navigationGroup = 'Configuración';
+    protected static ?string $navigationParentItem = 'Configuración';
 
-    protected static ?int $navigationSort = 3;
+    protected static ?int $navigationSort = 4;
 
     protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedUserCircle;
 

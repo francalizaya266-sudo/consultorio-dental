@@ -20,7 +20,6 @@ use Filament\Support\Icons\Heroicon;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Columns\ToggleColumn;
 use Filament\Tables\Table;
-use UnitEnum;
 
 /** Textos de consentimiento informado. Uno general y, si hace falta, uno por tratamiento. */
 class ConsentTemplateResource extends Resource
@@ -35,9 +34,9 @@ class ConsentTemplateResource extends Resource
 
     protected static ?string $pluralModelLabel = 'textos de consentimiento';
 
-    protected static string|UnitEnum|null $navigationGroup = 'Configuración';
+    protected static ?string $navigationParentItem = 'Configuración';
 
-    protected static ?int $navigationSort = 5;
+    protected static ?int $navigationSort = 6;
 
     protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedDocumentCheck;
 

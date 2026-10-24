@@ -2,6 +2,7 @@
 
 namespace App\Filament\Pages;
 
+use App\Filament\Forms\WebPhotoUpload;
 use App\Models\Setting;
 use App\Models\User;
 use App\Support\Phone;
@@ -19,7 +20,6 @@ use Filament\Schemas\Components\Section;
 use Filament\Schemas\Schema;
 use Filament\Support\Icons\Heroicon;
 use Illuminate\Support\Arr;
-use UnitEnum;
 
 /**
  * Datos del consultorio y reglas de la agenda y de las reservas web.
@@ -39,6 +39,8 @@ class Settings extends Page
         'clinic.email' => 'string',
         'clinic.maps_url' => 'string',
         'clinic.reviews_url' => 'string',
+        'clinic.google_rating' => 'rating',
+        'clinic.google_reviews_count' => 'optional_int',
         'clinic.instagram' => 'string',
         'clinic.facebook' => 'string',
         'clinic.tiktok' => 'string',
@@ -47,6 +49,7 @@ class Settings extends Page
         'web.headline' => 'string',
         'web.intro' => 'string',
         'web.about' => 'string',
+        'web.hero_image' => 'string',
         'agenda.buffer_minutes' => 'int',
         'agenda.slot_step_minutes' => 'int',
         'booking.min_lead_minutes' => 'int',
@@ -63,9 +66,9 @@ class Settings extends Page
 
     protected static ?string $slug = 'ajustes';
 
-    protected static string|UnitEnum|null $navigationGroup = 'Configuración';
+    protected static ?string $navigationParentItem = 'Configuración';
 
-    protected static ?int $navigationSort = 10;
+    protected static ?int $navigationSort = 0;
 
     protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedCog6Tooth;
 
@@ -129,7 +132,7 @@ class Settings extends Page
                             ->helperText('Sale al pie de las recetas.'),
                     ]),
                 Section::make('Web')
-                    ->description('Textos del inicio y enlaces del consultorio. El horario de atención sale solo de los horarios de los doctores.')
+                    ->description('Textos y foto del inicio, estrellas de Google y enlaces del consultorio. El horario de atención sale solo de los horarios de los doctores.')
                     ->columns(2)
                     ->collapsed()
                     ->schema([
@@ -153,9 +156,30 @@ class Settings extends Page
                             ->label('Enlace de Google Maps')
                             ->url()
                             ->helperText('Para el botón "Cómo llegar". Vacío = se busca la dirección.'),
+                        WebPhotoUpload::make('web.hero_image', 'inicio')
+                            ->label('Foto del inicio')
+                            ->imageEditor()
+                            ->helperText('Una foto real del consultorio o del equipo, horizontal. Sale arriba de todo en el inicio.')
+                            ->columnSpanFull(),
                         TextInput::make('clinic.reviews_url')
                             ->label('Enlace a sus opiniones en Google')
-                            ->url(),
+                            ->url()
+                            ->columnSpanFull(),
+                        TextInput::make('clinic.google_rating')
+                            ->label('Puntaje en Google')
+                            ->placeholder('4,9')
+                            ->rule(fn () => function (string $attribute, $value, $fail) {
+                                if (filled($value) && self::rating($value) === null) {
+                                    $fail('Escribe un puntaje de 1 a 5, por ejemplo 4,9.');
+                                }
+                            })
+                            ->helperText('Cópialo tal como sale en Google. Vacío = no se muestran estrellas.'),
+                        TextInput::make('clinic.google_reviews_count')
+                            ->label('Cantidad de opiniones en Google')
+                            ->numeric()
+                            ->integer()
+                            ->minValue(1)
+                            ->suffix('opiniones'),
                         TextInput::make('clinic.instagram')
                             ->label('Instagram')
                             ->url()
@@ -228,11 +252,25 @@ class Settings extends Page
                 'int' => (int) $value,
                 'bool' => (bool) $value,
                 'phone' => Phone::normalize((string) $value),
+                'optional_int' => filled($value) ? (int) $value : null,
+                'rating' => self::rating($value),
                 default => filled($value) ? (string) $value : null,
             });
         }
 
         Notification::make()->success()->title('Ajustes guardados')->send();
+    }
+
+    /** Puntaje de 1 a 5 con un decimal ("4,9" o "4.9"), o null si no es válido. */
+    private static function rating(mixed $value): ?float
+    {
+        $normalized = str_replace(',', '.', trim((string) $value));
+
+        if (! is_numeric($normalized) || (float) $normalized < 1 || (float) $normalized > 5) {
+            return null;
+        }
+
+        return round((float) $normalized, 1);
     }
 
     private static function number(string $key, string $label, int $min, int $max, string $suffix): TextInput

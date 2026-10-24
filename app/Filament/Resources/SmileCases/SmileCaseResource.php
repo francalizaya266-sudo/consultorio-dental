@@ -27,7 +27,6 @@ use Filament\Tables\Filters\TrashedFilter;
 use Filament\Tables\Table;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\SoftDeletingScope;
-use UnitEnum;
 
 /** Antes y después para la web. Solo se publica con la autorización escrita del paciente. */
 class SmileCaseResource extends Resource
@@ -42,9 +41,9 @@ class SmileCaseResource extends Resource
 
     protected static ?string $pluralModelLabel = 'antes y después';
 
-    protected static string|UnitEnum|null $navigationGroup = 'Web';
+    protected static ?string $navigationParentItem = 'Configuración';
 
-    protected static ?int $navigationSort = 4;
+    protected static ?int $navigationSort = 10;
 
     protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedPhoto;
 

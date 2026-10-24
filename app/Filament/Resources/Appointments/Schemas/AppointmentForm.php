@@ -9,10 +9,9 @@ use App\Models\Patient;
 use App\Models\TreatmentPlanItem;
 use App\Models\User;
 use App\Services\Clinical\TreatmentPlanService;
-use App\Services\Patients\PatientRegistrar;
 use App\Support\Phone;
-use Filament\Actions\Action;
 use Filament\Forms\Components\DatePicker;
+use Filament\Forms\Components\Field;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\Textarea;
 use Filament\Forms\Components\TextInput;
@@ -32,9 +31,19 @@ class AppointmentForm
             ->components([
                 Section::make('Paciente')
                     ->schema([
+                        Toggle::make('new_patient')
+                            ->label('Es un paciente nuevo (aún no está registrado)')
+                            ->live()
+                            ->afterStateUpdated(fn (Set $set) => $set('patient_id', null)),
                         self::patientSelect()
+                            ->hidden(fn (Get $get) => (bool) $get('new_patient'))
+                            ->required(fn (Get $get) => ! $get('new_patient'))
                             ->live()
                             ->afterStateUpdated(fn (Set $set) => $set('treatment_plan_item_id', null)),
+                        Grid::make(2)
+                            ->statePath('patient')
+                            ->visible(fn (Get $get) => (bool) $get('new_patient'))
+                            ->schema(self::newPatientFields()),
                         self::planItemSelect(),
                     ]),
                 Section::make('Horario')
@@ -121,30 +130,34 @@ class AppointmentForm
                 ->limit(20)
                 ->get()
                 ->mapWithKeys(fn (Patient $p) => [$p->id => $p->selectLabel()]))
-            ->getOptionLabelUsing(fn ($value) => Patient::with('account')->find($value)?->selectLabel())
-            ->createOptionModalHeading('Paciente nuevo')
-            ->createOptionAction(fn (Action $action) => $action->modalSubmitActionLabel('Guardar paciente')->tooltip('Paciente nuevo'))
-            ->createOptionForm([
-                Grid::make(2)->schema([
-                    TextInput::make('first_name')->label('Nombres')->required(),
-                    TextInput::make('last_name')->label('Apellidos')->required(),
-                    TextInput::make('phone')
-                        ->label('Celular')
-                        ->tel()
-                        ->helperText('Si es un familiar a cargo, usa el celular del titular.')
-                        ->rule(fn () => function (string $attribute, $value, $fail) {
-                            if (filled($value) && ! Phone::isValid($value)) {
-                                $fail('Escribe un celular válido de 9 dígitos.');
-                            }
-                        }),
-                    Select::make('relationship')
-                        ->label('Parentesco con el titular del celular')
-                        ->options(PatientRelationship::class)
-                        ->default(PatientRelationship::Self->value),
-                    DatePicker::make('birth_date')->label('Fecha de nacimiento')->maxDate(today()),
-                    TextInput::make('document_number')->label('DNI')->maxLength(20),
-                ]),
-            ])
-            ->createOptionUsing(fn (array $data) => app(PatientRegistrar::class)->register(array_filter($data, fn ($v) => $v !== null && $v !== ''))->getKey());
+            ->getOptionLabelUsing(fn ($value) => Patient::with('account')->find($value)?->selectLabel());
+    }
+
+    /**
+     * Datos mínimos del paciente nuevo, en la misma ventana de la cita.
+     *
+     * @return list<Field>
+     */
+    public static function newPatientFields(): array
+    {
+        return [
+            TextInput::make('first_name')->label('Nombres')->required(),
+            TextInput::make('last_name')->label('Apellidos')->required(),
+            TextInput::make('phone')
+                ->label('Celular')
+                ->tel()
+                ->helperText('Si es un familiar a cargo, usa el celular del titular.')
+                ->rule(fn () => function (string $attribute, $value, $fail) {
+                    if (filled($value) && ! Phone::isValid($value)) {
+                        $fail('Escribe un celular válido de 9 dígitos.');
+                    }
+                }),
+            Select::make('relationship')
+                ->label('Parentesco con el titular del celular')
+                ->options(PatientRelationship::class)
+                ->default(PatientRelationship::Self->value),
+            DatePicker::make('birth_date')->label('Fecha de nacimiento')->maxDate(today()),
+            TextInput::make('document_number')->label('DNI')->maxLength(20),
+        ];
     }
 }

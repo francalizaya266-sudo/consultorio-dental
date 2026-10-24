@@ -12,7 +12,6 @@ use Filament\Resources\Resource;
 use Filament\Support\Icons\Heroicon;
 use Filament\Tables\Table;
 use Illuminate\Database\Eloquent\Builder;
-use UnitEnum;
 
 /** Bandeja de avisos: el sistema los prepara y recepción los envía con un clic. */
 class WhatsappMessageResource extends Resource
@@ -27,11 +26,9 @@ class WhatsappMessageResource extends Resource
 
     protected static ?string $pluralModelLabel = 'avisos';
 
-    protected static ?string $navigationLabel = 'Avisos por enviar';
+    protected static ?string $navigationLabel = 'Avisos';
 
-    protected static string|UnitEnum|null $navigationGroup = 'Agenda';
-
-    protected static ?int $navigationSort = 2;
+    protected static ?int $navigationSort = 4;
 
     protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedChatBubbleLeftRight;
 

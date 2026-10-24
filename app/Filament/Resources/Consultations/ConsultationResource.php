@@ -20,7 +20,6 @@ use Filament\Support\Icons\Heroicon;
 use Filament\Tables\Table;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
-use UnitEnum;
 
 /** Atenciones clínicas. Solo las ven los doctores y el administrador odontólogo (Ley 29733). */
 class ConsultationResource extends Resource
@@ -35,9 +34,9 @@ class ConsultationResource extends Resource
 
     protected static ?string $pluralModelLabel = 'atenciones';
 
-    protected static string|UnitEnum|null $navigationGroup = 'Pacientes';
+    protected static ?string $navigationParentItem = 'Pacientes';
 
-    protected static ?int $navigationSort = 2;
+    protected static ?int $navigationSort = 1;
 
     protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedClipboardDocumentList;
 

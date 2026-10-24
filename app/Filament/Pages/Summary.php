@@ -24,7 +24,9 @@ class Summary extends BaseDashboard
 
     protected static ?string $title = 'Resumen';
 
-    protected static ?int $navigationSort = -1;
+    protected static ?string $navigationLabel = 'Reportes';
+
+    protected static ?int $navigationSort = 5;
 
     protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedChartBar;
 

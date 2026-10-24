@@ -46,7 +46,7 @@ final class SlotPicker
             Select::make('doctor_id')
                 ->label('Doctor')
                 ->options(fn () => Doctor::query()->active()->orderBy('sort_order')->pluck('name', 'id'))
-                ->default($moving?->doctor_id ?? $ownDoctorId ?? (request()->integer('doctor') ?: null))
+                ->default(fn () => $moving?->doctor_id ?? $ownDoctorId ?? (request()->integer('doctor') ?: null) ?? self::onlyActiveDoctorId())
                 ->disabled($ownDoctorId !== null)
                 ->dehydrated()
                 ->required()
@@ -120,6 +120,14 @@ final class SlotPicker
 
         return collect(array_keys(self::slotOptions($get, $moving)))
             ->first(fn (string $time) => $time >= $preferred);
+    }
+
+    /** Si el consultorio tiene un solo doctor activo, ya viene elegido. */
+    private static function onlyActiveDoctorId(): ?int
+    {
+        $ids = Doctor::query()->active()->limit(2)->pluck('id');
+
+        return $ids->count() === 1 ? $ids->first() : null;
     }
 
     private static function requestedDate(): ?CarbonImmutable

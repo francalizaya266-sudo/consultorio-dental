@@ -11,7 +11,6 @@ use Filament\Actions\Action;
 use Filament\Facades\Filament;
 use Filament\Pages\Dashboard as BaseDashboard;
 use Filament\Support\Icons\Heroicon;
-use UnitEnum;
 
 /** Ganancias por día, doctor, tratamiento y medio de pago, para imprimir o bajar en Excel. */
 class Earnings extends BaseDashboard
@@ -22,9 +21,9 @@ class Earnings extends BaseDashboard
 
     protected static ?string $title = 'Ganancias';
 
-    protected static string|UnitEnum|null $navigationGroup = 'Caja';
+    protected static ?string $navigationParentItem = 'Reportes';
 
-    protected static ?int $navigationSort = 3;
+    protected static ?int $navigationSort = 1;
 
     protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedPresentationChartLine;
 

@@ -21,6 +21,9 @@ return [
             // Enlace de Google Maps del consultorio ("Cómo llegar") y de sus opiniones en Google.
             'maps_url' => null,
             'reviews_url' => null,
+            // Puntaje y cantidad de opiniones en Google, copiados a mano (sale con estrellas en el inicio).
+            'google_rating' => null,
+            'google_reviews_count' => null,
             'instagram' => null,
             'facebook' => null,
             'tiktok' => null,
@@ -33,6 +36,8 @@ return [
             'headline' => 'Atención dental sin esperas',
             'intro' => 'Evaluaciones, limpiezas, implantes y más. Elige tu horario aquí mismo y te confirmamos por WhatsApp.',
             'about' => null,
+            // Foto real del consultorio o del equipo, arriba del inicio.
+            'hero_image' => null,
         ],
 
         'agenda' => [

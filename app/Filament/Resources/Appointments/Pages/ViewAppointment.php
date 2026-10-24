@@ -10,6 +10,7 @@ use Filament\Forms\Components\Textarea;
 use Filament\Forms\Components\Toggle;
 use Filament\Resources\Pages\ViewRecord;
 use Filament\Support\Icons\Heroicon;
+use Illuminate\Contracts\Support\Htmlable;
 
 class ViewAppointment extends ViewRecord
 {
@@ -21,6 +22,19 @@ class ViewAppointment extends ViewRecord
 
         // Las cuotas que vencieron entran al saldo aunque el cron del servidor no haya pasado.
         app(BillingService::class)->chargeDueInstallments($this->getRecord()->patient);
+    }
+
+    /** "Cita de María Quispe", con el día y la hora debajo. */
+    public function getTitle(): string|Htmlable
+    {
+        return 'Cita de '.$this->getRecord()->patient->full_name;
+    }
+
+    public function getSubheading(): string|Htmlable|null
+    {
+        $appointment = $this->getRecord();
+
+        return ucfirst($appointment->starts_at->translatedFormat('l j \d\e F · H:i')).' · '.$appointment->treatment->name;
     }
 
     protected function getHeaderActions(): array

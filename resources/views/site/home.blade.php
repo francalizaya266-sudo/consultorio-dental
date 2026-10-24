@@ -4,14 +4,25 @@
     use App\Support\Markdown;
 
     $clinic = app(ClinicInfo::class);
+    $heroImage = $clinic->heroImageUrl();
+    $googleRating = $clinic->googleRating();
 @endphp
-<x-site-layout :wide="true" :json-ld="$jsonLd">
-    {{-- Lo primero: qué es, dónde y el próximo horario libre de verdad, sacado de la agenda. --}}
-    <section class="hero" aria-labelledby="titulo">
+{{-- El horario completo ya está en "Cómo llegar y contactarnos": el pie no lo repite. --}}
+<x-site-layout :wide="true" :json-ld="$jsonLd" :image="$heroImage" :footer-hours="false">
+    {{-- Lo primero: el consultorio de verdad, qué es, dónde y el próximo horario libre, sacado de la agenda. --}}
+    <section @class(['hero', 'with-photo' => $heroImage]) aria-labelledby="titulo">
+        @if ($heroImage)
+            <figure class="hero-photo">
+                <img src="{{ $heroImage }}" alt="{{ $clinic->name() }}" fetchpriority="high">
+            </figure>
+        @endif
         <div class="hero-text">
             <h1 id="titulo">{{ $clinic->headline() }}</h1>
             @if ($clinic->intro())
                 <p class="lead">{{ $clinic->intro() }}</p>
+            @endif
+            @if ($googleRating)
+                @include('site.partials.google-rating', ['rating' => $googleRating])
             @endif
             <div class="row">
                 <a href="{{ route('site.booking') }}" class="btn">Reservar cita</a>

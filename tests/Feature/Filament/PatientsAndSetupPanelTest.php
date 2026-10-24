@@ -10,6 +10,7 @@ use App\Filament\Resources\Accounts\Pages\ViewAccount;
 use App\Filament\Resources\Doctors\Pages\EditDoctor;
 use App\Filament\Resources\Patients\Pages\CreatePatient;
 use App\Filament\Resources\Patients\Pages\ListPatients;
+use App\Filament\Resources\Patients\PatientResource;
 use App\Filament\Resources\Payments\Pages\ManagePayments;
 use App\Filament\Resources\ScheduleBlocks\Pages\ManageScheduleBlocks;
 use App\Filament\Resources\TextSnippets\Pages\ManageTextSnippets;
@@ -23,8 +24,11 @@ use App\Models\Setting;
 use App\Models\TextSnippet;
 use App\Models\Treatment;
 use App\Models\User;
+use App\Services\Web\PublicImages;
 use Filament\Actions\Testing\TestAction;
 use Illuminate\Foundation\Testing\LazilyRefreshDatabase;
+use Illuminate\Http\UploadedFile;
+use Illuminate\Support\Facades\Storage;
 use Livewire\Livewire;
 use Tests\Concerns\CreatesAgenda;
 use Tests\TestCase;
@@ -192,6 +196,37 @@ class PatientsAndSetupPanelTest extends TestCase
         $this->assertSame(['+51912345678', 'Sonríe sin miedo'], [Setting::get('clinic.whatsapp'), Setting::get('clinic.slogan')]);
     }
 
+    public function test_the_admin_sets_the_home_photo_and_the_google_stars_in_settings(): void
+    {
+        Storage::fake(PublicImages::DISK);
+        $this->actingAs(User::factory()->admin()->create());
+
+        Livewire::test(Settings::class)
+            ->fillForm(['clinic' => ['google_rating' => '6']])
+            ->call('save')
+            ->assertHasFormErrors(['clinic.google_rating']);
+
+        Livewire::test(Settings::class)
+            ->fillForm([
+                'web' => ['hero_image' => UploadedFile::fake()->image('consultorio.jpg', 2400, 1200)],
+                'clinic' => ['google_rating' => '4,9', 'google_reviews_count' => '87'],
+            ])
+            ->call('save')
+            ->assertHasNoFormErrors();
+
+        $this->assertSame([4.9, 87], [Setting::get('clinic.google_rating'), Setting::get('clinic.google_reviews_count')]);
+        $this->assertStringStartsWith('inicio/', Setting::get('web.hero_image'));
+        Storage::disk(PublicImages::DISK)->assertExists(Setting::get('web.hero_image'));
+
+        // Sin puntaje, no quedan estrellas a medias en la web.
+        Livewire::test(Settings::class)
+            ->fillForm(['clinic' => ['google_rating' => '', 'google_reviews_count' => '']])
+            ->call('save')
+            ->assertHasNoFormErrors();
+
+        $this->assertSame([null, null], [Setting::get('clinic.google_rating'), Setting::get('clinic.google_reviews_count')]);
+    }
+
     public function test_the_doctor_schedule_is_edited_on_the_doctor_page(): void
     {
         $doctor = Doctor::factory()->create();
@@ -223,5 +258,30 @@ class PatientsAndSetupPanelTest extends TestCase
             ->set('activeTab', 'checkup')
             ->assertCanSeeTableRecords([$away])
             ->assertCanNotSeeTableRecords([$alreadyBooked, $recent, $neverCame]);
+    }
+
+    public function test_the_patient_file_shows_one_timeline_and_the_medical_alert_only_to_who_attends(): void
+    {
+        $this->freezeMonday();
+        $treatment = Treatment::factory()->create(['name' => 'Limpieza dental']);
+        $doctor = $this->doctorOffering($treatment);
+        $patient = Patient::factory()->create(['first_name' => 'María', 'last_name' => 'Quispe', 'email' => null, 'admin_notes' => null]);
+        $patient->medicalBackground()->create(['allergies' => 'Penicilina']);
+        Appointment::factory()->for($doctor)->for($treatment)->for($patient)->at('2026-10-20 10:00')->create();
+        Payment::factory()->for($patient)->create(['amount' => 80, 'method' => PaymentMethod::Yape, 'paid_at' => '2026-10-20 11:00']);
+
+        $this->actingAs(User::factory()->reception()->create());
+
+        $this->get(PatientResource::getUrl('view', ['record' => $patient]))
+            ->assertOk()
+            ->assertSee(['María Quispe', 'Línea de tiempo', 'Limpieza dental · Pendiente', 'Pagó S/ 80.00 · Yape'])
+            ->assertDontSee(['Ver María Quispe', 'Penicilina', 'Correo', 'Notas internas']);
+
+        $this->actingAs($doctor->user);
+
+        $this->get(PatientResource::getUrl('view', ['record' => $patient]))
+            ->assertOk()
+            ->assertSeeInOrder(['Atención: Alergia: Penicilina', 'Datos del paciente', 'Línea de tiempo'])
+            ->assertDontSee('Pagó S/ 80.00');
     }
 }

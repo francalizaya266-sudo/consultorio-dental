@@ -43,6 +43,8 @@
         .agenda-appt .tag { display: inline-block; font-size: .62rem; font-weight: 600; border-radius: .25rem; padding: 0 .25rem; margin-left: .2rem; vertical-align: 1px; }
         .agenda-appt .tag-call { background: var(--danger-100); color: var(--danger-700); }
         .agenda-appt .tag-new { background: var(--info-100); color: var(--info-700); }
+        .agenda-appt .tag-owes { background: var(--warning-100); color: var(--warning-800); }
+        .agenda-appt .tag-note { background: var(--gray-200); color: var(--gray-700); }
         .agenda-buffer { position: absolute; left: 4px; right: 4px; pointer-events: none; background: repeating-linear-gradient(135deg, rgb(148 163 184 / .2) 0 3px, transparent 3px 6px); border-radius: 0 0 .35rem .35rem; }
         .s-pending { background: #fffbeb; border-color: #fcd34d; }
         .s-confirmed { background: #ecfdf5; border-color: #6ee7b7; }
@@ -63,6 +65,8 @@
         .dark .agenda-appt small { color: var(--gray-400); }
         .dark .agenda-appt .tag-call { background: rgb(239 68 68 / .2); color: var(--danger-300); }
         .dark .agenda-appt .tag-new { background: rgb(59 130 246 / .2); color: var(--info-300); }
+        .dark .agenda-appt .tag-owes { background: rgb(245 158 11 / .2); color: var(--warning-300); }
+        .dark .agenda-appt .tag-note { background: rgb(255 255 255 / .12); color: var(--gray-300); }
         .dark .agenda-block { border-color: rgb(255 255 255 / .1); color: var(--gray-400); }
         .dark .agenda-buffer { background: repeating-linear-gradient(135deg, rgb(148 163 184 / .12) 0 3px, transparent 3px 6px); }
         .dark .agenda-legend { color: var(--gray-400); }
@@ -118,7 +122,7 @@
             <span class="s-completed">Atendida</span>
             <span class="s-block">No se atiende</span>
         </div>
-        <p class="agenda-help">Toca un espacio libre para agendar ahí. Arrastra una cita para cambiarla de horario (en celular, mantenla presionada y luego arrástrala).</p>
+        <p class="agenda-help">Toca una cita para ver sus datos y botones, o un espacio libre para agendar ahí. Arrastra una cita para cambiarla de horario (en celular, mantenla presionada y luego arrástrala).</p>
     </div>
 
     <script>
@@ -127,8 +131,7 @@
              * Grilla de la agenda. Una cita se mueve con el mouse apenas se arrastra; con el dedo,
              * hay que mantenerla presionada un momento para no confundirlo con desplazar la pantalla.
              */
-            Alpine.data('agendaGrid', (createUrl) => ({
-                createUrl,
+            Alpine.data('agendaGrid', () => ({
                 press: null,
                 dragging: null,
                 over: null,
@@ -138,10 +141,12 @@
                 preview: { top: 0, height: 0, time: '' },
                 refresher: null,
 
+                // Se refresca sola cada 30 s, salvo mientras alguien arrastra una cita o tiene una ventana abierta.
                 init() {
                     this.refresher = setInterval(() => {
-                        if (! document.hidden && ! this.press && ! this.dragging) this.$wire.$refresh();
-                    }, 60000);
+                        if (document.hidden || this.press || this.dragging || this.$wire.mountedActions?.length) return;
+                        this.$wire.$refresh();
+                    }, 30000);
                 },
 
                 destroy() {
@@ -169,11 +174,18 @@
 
                 create(event, column, doctor, date) {
                     if (event.target.closest('.agenda-appt') || this.justDropped()) return;
-                    const url = new URL(this.createUrl);
-                    url.searchParams.set('doctor', doctor);
-                    url.searchParams.set('date', date);
-                    url.searchParams.set('time', this.label(this.minuteAt(event.clientY, column)));
-                    window.location.href = url.toString();
+                    this.$wire.mountAction('createAppointment', { doctor, date, time: this.label(this.minuteAt(event.clientY, column)) });
+                },
+
+                /** Abre el panel de la cita. Con Ctrl o ⌘ se abre la ficha completa en otra pestaña. */
+                open(event, id) {
+                    if (this.justDropped()) {
+                        event.preventDefault();
+                        return;
+                    }
+                    if (event.ctrlKey || event.metaKey || event.shiftKey) return;
+                    event.preventDefault();
+                    this.$wire.mountAction('appointment', { id });
                 },
 
                 start(event, card) {
@@ -282,7 +294,7 @@
             :class="{ 'is-dragging': dragging }"
             data-from="{{ $from }}"
             data-scale="{{ $scale }}"
-            x-data="agendaGrid(@js($createUrl))"
+            x-data="agendaGrid"
             x-on:pointermove.window="move($event)"
             x-on:pointerup.window="end()"
             x-on:pointercancel.window="cancel()"
@@ -346,9 +358,9 @@
                                 href="{{ $appt['url'] }}"
                                 @class(['agenda-appt', 's-'.$appt['status'], 'is-movable' => $appt['draggable']])
                                 style="top: {{ ($appt['start'] - $from) * $scale }}px; height: {{ max(($appt['end'] - $appt['start']) * $scale - 2, 18) }}px; border-left-color: {{ $column['color'] }}"
-                                title="{{ $appt['time'] }} · {{ $appt['patient'] }} · {{ $appt['treatment'] }} · {{ $appt['statusLabel'] }}"
+                                title="{{ $appt['time'] }} · {{ $appt['patient'] }} · {{ $appt['treatment'] }} · {{ $appt['statusLabel'] }}{{ $appt['phone'] ? ' · '.$appt['phone'] : '' }}"
                                 draggable="false"
-                                x-on:click="if (justDropped()) $event.preventDefault()"
+                                x-on:click="open($event, {{ $appt['id'] }})"
                                 @if ($appt['draggable'])
                                     data-id="{{ $appt['id'] }}"
                                     data-treatment="{{ $appt['treatmentId'] }}"
@@ -357,8 +369,9 @@
                                     x-on:pointerdown="start($event, $el)"
                                 @endif
                             >
-                                <b>{{ $appt['patient'] }}@if ($appt['needsCall'])<span class="tag tag-call">Llamar</span>@endif @if ($appt['isNew'])<span class="tag tag-new">Nuevo</span>@endif</b>
+                                <b>{{ $appt['patient'] }}@if ($appt['needsCall'])<span class="tag tag-call">Llamar</span>@endif @if ($appt['isNew'])<span class="tag tag-new">Nuevo</span>@endif @if ($appt['owes'])<span class="tag tag-owes">Debe {{ $appt['owes'] }}</span>@endif @if ($appt['hasNote'])<span class="tag tag-note">Nota</span>@endif</b>
                                 <small>{{ $appt['time'] }} · {{ $appt['treatment'] }}</small>
+                                <small>{{ $appt['statusLabel'] }}@if ($appt['phone']) · {{ $appt['phone'] }}@endif</small>
                             </a>
                         @endforeach
                     </div>

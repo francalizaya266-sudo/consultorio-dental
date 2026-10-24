@@ -19,7 +19,6 @@ use Filament\Support\Icons\Heroicon;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Columns\ToggleColumn;
 use Filament\Tables\Table;
-use UnitEnum;
 
 /** Textos de los avisos de WhatsApp. Las palabras entre llaves se reemplazan solas. */
 class MessageTemplateResource extends Resource
@@ -34,9 +33,9 @@ class MessageTemplateResource extends Resource
 
     protected static ?string $pluralModelLabel = 'textos de WhatsApp';
 
-    protected static string|UnitEnum|null $navigationGroup = 'Configuración';
+    protected static ?string $navigationParentItem = 'Avisos';
 
-    protected static ?int $navigationSort = 4;
+    protected static ?int $navigationSort = 1;
 
     protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedChatBubbleBottomCenterText;
 

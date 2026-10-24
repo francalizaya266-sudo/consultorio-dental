@@ -41,7 +41,7 @@ class AccountInfolist
                         TextEntry::make('last_seen_at')
                             ->label('Última vez en la web')
                             ->since()
-                            ->placeholder('—'),
+                            ->hidden(fn ($state) => blank($state)),
                     ]),
             ]);
     }

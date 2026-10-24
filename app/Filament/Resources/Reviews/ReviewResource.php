@@ -25,7 +25,6 @@ use Filament\Tables\Filters\TrashedFilter;
 use Filament\Tables\Table;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\SoftDeletingScope;
-use UnitEnum;
 
 /** Opiniones de pacientes copiadas de Google (u otra fuente) para mostrarlas en la web. */
 class ReviewResource extends Resource
@@ -40,9 +39,9 @@ class ReviewResource extends Resource
 
     protected static ?string $pluralModelLabel = 'opiniones';
 
-    protected static string|UnitEnum|null $navigationGroup = 'Web';
+    protected static ?string $navigationParentItem = 'Configuración';
 
-    protected static ?int $navigationSort = 3;
+    protected static ?int $navigationSort = 9;
 
     protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedChatBubbleBottomCenterText;
 

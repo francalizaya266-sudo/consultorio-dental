@@ -1,6 +1,7 @@
 <?php
 
-// Textos que la traducción al español de Filament todavía no trae (si faltan, se ve la clave en pantalla).
+// Textos que la traducción al español de Filament todavía no trae (si faltan, se ve la clave en pantalla),
+// y los que trae de "usted": en todo el sistema se trata de "tú".
 return [
 
     'column_manager' => [
@@ -17,6 +18,11 @@ return [
     ],
 
     'columns' => [
+        'select' => [
+            'placeholder' => 'Elige una opción',
+            'no_search_results_message' => 'No hay opciones para tu búsqueda.',
+            'search_prompt' => 'Escribe para buscar…',
+        ],
         'editable' => [
             'saving' => 'Guardando…',
             'saved' => 'Cambio guardado.',
