@@ -21,7 +21,6 @@ use Filament\Tables\Table;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\SoftDeletingScope;
-use UnitEnum;
 
 /** Un celular con su familia: quién reserva, a quién se le avisa y si puede reservar en la web. */
 class AccountResource extends Resource
@@ -38,7 +37,7 @@ class AccountResource extends Resource
 
     protected static ?string $navigationLabel = 'Celulares y familias';
 
-    protected static string|UnitEnum|null $navigationGroup = 'Pacientes';
+    protected static ?string $navigationParentItem = 'Pacientes';
 
     protected static ?int $navigationSort = 2;
 

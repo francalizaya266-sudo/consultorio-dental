@@ -19,7 +19,6 @@ use Filament\Schemas\Components\Section;
 use Filament\Schemas\Schema;
 use Filament\Support\Icons\Heroicon;
 use Illuminate\Support\Arr;
-use UnitEnum;
 
 /**
  * Datos del consultorio y reglas de la agenda y de las reservas web.
@@ -63,9 +62,9 @@ class Settings extends Page
 
     protected static ?string $slug = 'ajustes';
 
-    protected static string|UnitEnum|null $navigationGroup = 'Configuración';
+    protected static ?string $navigationParentItem = 'Configuración';
 
-    protected static ?int $navigationSort = 10;
+    protected static ?int $navigationSort = 0;
 
     protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedCog6Tooth;
 

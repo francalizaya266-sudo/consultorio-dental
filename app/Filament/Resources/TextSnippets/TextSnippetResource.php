@@ -25,7 +25,6 @@ use Filament\Tables\Filters\SelectFilter;
 use Filament\Tables\Table;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Arr;
-use UnitEnum;
 
 /**
  * Frases para escribir rápido en la historia clínica. Las del equipo las maneja
@@ -43,7 +42,7 @@ class TextSnippetResource extends Resource
 
     protected static ?string $pluralModelLabel = 'opciones rápidas';
 
-    protected static string|UnitEnum|null $navigationGroup = 'Configuración';
+    protected static ?string $navigationParentItem = 'Configuración';
 
     protected static ?int $navigationSort = 5;
 

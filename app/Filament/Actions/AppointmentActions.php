@@ -43,6 +43,30 @@ final class AppointmentActions
         ];
     }
 
+    /**
+     * Las del panel al costado de la agenda: los botones del día y WhatsApp a la vista.
+     *
+     * @return list<Action|ActionGroup>
+     */
+    public static function panel(): array
+    {
+        return [
+            self::confirm(),
+            self::arrived(),
+            self::start(),
+            self::continueConsultation(),
+            self::complete(),
+            CheckoutAction::make(),
+            self::whatsapp(),
+            ActionGroup::make([
+                self::viewConsultation(),
+                self::move(),
+                self::noShow(),
+                self::cancel(),
+            ])->label('Más')->button()->color('gray')->icon(Heroicon::OutlinedEllipsisHorizontal),
+        ];
+    }
+
     public static function confirm(): Action
     {
         return Action::make('confirm')

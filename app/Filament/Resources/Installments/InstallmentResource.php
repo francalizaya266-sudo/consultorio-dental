@@ -18,7 +18,6 @@ use Filament\Support\Icons\Heroicon;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Table;
 use Illuminate\Database\Eloquent\Builder;
-use UnitEnum;
 
 /** Cuotas por cobrar: las atrasadas, para llamar, y las que vencen esta semana. */
 class InstallmentResource extends Resource
@@ -35,9 +34,9 @@ class InstallmentResource extends Resource
 
     protected static ?string $navigationLabel = 'Cuotas por cobrar';
 
-    protected static string|UnitEnum|null $navigationGroup = 'Caja';
+    protected static ?string $navigationParentItem = 'Caja';
 
-    protected static ?int $navigationSort = 3;
+    protected static ?int $navigationSort = 2;
 
     protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedCalendarDays;
 

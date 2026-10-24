@@ -3,27 +3,36 @@
 namespace App\Filament\Pages;
 
 use App\Enums\AppointmentStatus;
+use App\Filament\Actions\AppointmentActions;
+use App\Filament\Actions\CreateAppointmentAction;
 use App\Filament\Resources\Appointments\AppointmentResource;
+use App\Filament\Resources\Patients\PatientResource;
+use App\Filament\Support\ClinicalAlerts;
 use App\Filament\Support\Notify;
 use App\Models\Appointment;
+use App\Models\Charge;
 use App\Models\Doctor;
 use App\Models\ScheduleBlock;
 use App\Models\User;
 use App\Services\Agenda\AvailabilityService;
+use App\Services\Billing\BillingService;
 use App\Services\Booking\AppointmentService;
+use App\Support\Money;
+use App\Support\Phone;
 use BackedEnum;
 use Carbon\CarbonImmutable;
 use Filament\Actions\Action;
 use Filament\Pages\Page;
+use Filament\Support\Enums\Width;
 use Filament\Support\Icons\Heroicon;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Collection;
 use Livewire\Attributes\Url;
-use UnitEnum;
 
 /**
  * Agenda en calendario: por día (una columna por doctor) o por semana (un doctor).
- * Las citas se mueven arrastrándolas; un clic en un espacio libre abre "Nueva cita".
+ * Las citas se mueven arrastrándolas. Al tocar una cita se abre un panel al costado con sus datos y
+ * botones; al tocar un espacio libre, "Nueva cita" en una ventana sobre la agenda.
  */
 class Agenda extends Page
 {
@@ -36,9 +45,7 @@ class Agenda extends Page
 
     protected static ?string $slug = 'agenda';
 
-    protected static string|UnitEnum|null $navigationGroup = 'Agenda';
-
-    protected static ?int $navigationSort = 0;
+    protected static ?int $navigationSort = 1;
 
     protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedCalendar;
 
@@ -53,6 +60,9 @@ class Agenda extends Page
 
     /** La vista semanal se eligió sola (no la pidió el usuario): en un celular se cambia a la del día. */
     protected bool $weekByDefault = false;
+
+    /** @var array<int, Appointment|null> Citas abiertas en el panel durante esta petición. */
+    protected array $panelAppointments = [];
 
     public function mount(): void
     {
@@ -125,6 +135,29 @@ class Agenda extends Page
             });
     }
 
+    /** Panel al costado con la cita: datos, saldo y los botones del día, sin salir de la agenda. */
+    public function appointmentAction(): Action
+    {
+        return Action::make('appointment')
+            ->record(fn (array $arguments) => $this->panelAppointment($arguments['id'] ?? null))
+            ->authorize(fn (?Appointment $record) => $record !== null && auth()->user()->can('view', $record))
+            ->slideOver()
+            ->modalWidth(Width::Medium)
+            ->modalHeading(fn (Appointment $record) => $record->patient->full_name)
+            ->modalDescription(fn (Appointment $record) => ucfirst($record->starts_at->translatedFormat('l j \d\e F'))
+                .' · '.$record->starts_at->format('H:i').'–'.$record->ends_at->format('H:i'))
+            ->modalContent(fn (Appointment $record) => view('filament.pages.agenda-appointment', $this->panelData($record)))
+            ->modalSubmitAction(false)
+            ->modalCancelActionLabel('Cerrar')
+            ->extraModalFooterActions(fn () => AppointmentActions::panel());
+    }
+
+    /** Se abre al tocar un espacio libre: ya viene con el doctor, el día y la hora. */
+    public function createAppointmentAction(): Action
+    {
+        return CreateAppointmentAction::make();
+    }
+
     /** @return array<string, mixed> */
     protected function getViewData(): array
     {
@@ -141,7 +174,6 @@ class Agenda extends Page
             'heading' => $this->mode === 'week'
                 ? 'Semana del '.$this->weekStart()->translatedFormat('j \d\e F')
                 : ucfirst($this->day()->translatedFormat('l j \d\e F')),
-            'createUrl' => AppointmentResource::getUrl('create'),
             'weekByDefault' => $this->weekByDefault,
         ];
     }
@@ -197,9 +229,10 @@ class Agenda extends Page
     {
         /** @var User $user */
         $user = auth()->user();
+        $seesMoney = $user->can('viewAny', Charge::class);
 
         return Appointment::query()
-            ->with(['patient', 'treatment'])
+            ->with(['patient' => fn ($patient) => $patient->with('account')->when($seesMoney, fn ($q) => $q->withBalance()), 'treatment'])
             ->whereBelongsTo($doctor)
             ->whereBetween('starts_at', [$day->startOfDay(), $day->endOfDay()])
             ->where('status', '!=', AppointmentStatus::Cancelled)
@@ -212,15 +245,60 @@ class Agenda extends Page
                 'until' => $this->minuteOf($a->occupied_until),
                 'time' => $a->starts_at->format('H:i').'–'.$a->ends_at->format('H:i'),
                 'patient' => $a->patient->full_name,
+                'phone' => $a->patient->account ? Phone::display($a->patient->account->phone) : null,
                 'treatment' => $a->treatment->name,
                 'treatmentId' => $a->treatment_id,
                 'status' => $a->status->value,
                 'statusLabel' => $a->status->getLabel(),
                 'needsCall' => $a->needsCall(),
                 'isNew' => $a->is_new_patient,
+                'owes' => $seesMoney && (float) $a->patient->balance_due > 0 ? Money::short($a->patient->balance_due) : null,
+                'hasNote' => filled($a->patient_note) || filled($a->internal_notes),
                 'url' => AppointmentResource::getUrl('view', ['record' => $a]),
                 'draggable' => $a->status->isChangeable() && $user->can('update', $a),
             ]);
+    }
+
+    /** La cita del panel, cargada una sola vez por petición. */
+    private function panelAppointment(mixed $id): ?Appointment
+    {
+        $id = (int) $id;
+
+        if (! array_key_exists($id, $this->panelAppointments)) {
+            $this->panelAppointments[$id] = Appointment::query()
+                ->with(['patient.account', 'patient.medicalBackground', 'treatment', 'doctor'])
+                ->find($id);
+        }
+
+        return $this->panelAppointments[$id];
+    }
+
+    /**
+     * Lo que muestra el panel. El saldo y lo que hay que cobrar solo para quien maneja la caja;
+     * las alertas médicas solo para quien ve lo clínico.
+     *
+     * @return array<string, mixed>
+     */
+    private function panelData(Appointment $appointment): array
+    {
+        /** @var User $user */
+        $user = auth()->user();
+        $seesMoney = $user->can('viewAny', Charge::class);
+        $balance = $seesMoney ? $appointment->patient->balance() : null;
+        $toCharge = $seesMoney && in_array($appointment->status, [AppointmentStatus::Pending, AppointmentStatus::Confirmed, AppointmentStatus::CheckedIn, AppointmentStatus::InProgress], true)
+            ? app(BillingService::class)->estimateFor($appointment)
+            : null;
+
+        return [
+            'appointment' => $appointment,
+            'phone' => $appointment->patient->account ? Phone::display($appointment->patient->account->phone) : null,
+            'phoneLink' => $appointment->patient->account ? 'tel:'.Phone::normalize($appointment->patient->account->phone) : null,
+            'balance' => $balance,
+            'toCharge' => $toCharge,
+            'alerts' => $user->canSeeClinical() ? ClinicalAlerts::for($appointment->patient) : null,
+            'patientUrl' => PatientResource::getUrl('view', ['record' => $appointment->patient]),
+            'appointmentUrl' => AppointmentResource::getUrl('view', ['record' => $appointment]),
+        ];
     }
 
     /** @return Collection<int, Doctor> */

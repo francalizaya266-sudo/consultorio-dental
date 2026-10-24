@@ -1,6 +1,7 @@
 <?php
 
-// Textos que la traducción al español de Filament todavía no trae (si faltan, se ve la clave en pantalla).
+// Textos que la traducción al español de Filament todavía no trae (si faltan, se ve la clave en pantalla),
+// y los que trae de "usted": en todo el sistema se trata de "tú".
 return [
 
     'builder' => [
@@ -42,6 +43,9 @@ return [
     'select' => [
         'error_message' => 'No se pudieron cargar las opciones. Vuelve a intentarlo.',
         'required_description' => 'Elige una opción.',
+        'placeholder' => 'Elige una opción',
+        'no_search_results_message' => 'No hay resultados para tu búsqueda.',
+        'search_prompt' => 'Escribe para buscar…',
     ],
 
     'toggle_buttons' => [

@@ -22,7 +22,6 @@ use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Filters\Filter;
 use Filament\Tables\Table;
 use Illuminate\Database\Eloquent\Builder;
-use UnitEnum;
 
 /** Horas en que no se atiende (almuerzo, cursos, vacaciones, feriados): la agenda no ofrece esos horarios. */
 class ScheduleBlockResource extends Resource
@@ -37,9 +36,9 @@ class ScheduleBlockResource extends Resource
 
     protected static ?string $pluralModelLabel = 'bloqueos de horario';
 
-    protected static string|UnitEnum|null $navigationGroup = 'Agenda';
+    protected static ?string $navigationParentItem = 'Agenda';
 
-    protected static ?int $navigationSort = 4;
+    protected static ?int $navigationSort = 3;
 
     protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedNoSymbol;
 

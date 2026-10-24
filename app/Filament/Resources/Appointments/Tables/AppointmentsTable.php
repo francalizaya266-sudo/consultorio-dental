@@ -7,6 +7,7 @@ use App\Filament\Actions\AppointmentActions;
 use App\Models\Appointment;
 use App\Models\Doctor;
 use App\Models\User;
+use App\Support\Money;
 use App\Support\Phone;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Filters\Filter;
@@ -79,19 +80,27 @@ class AppointmentsTable
             TextColumn::make('status')
                 ->label('Estado')
                 ->badge(),
-            TextColumn::make('flags')
-                ->label('')
-                ->state(fn (Appointment $record) => array_values(array_filter([
-                    $record->needsCall() ? 'Llamar' : null,
-                    $record->is_new_patient ? 'Nuevo' : null,
-                    $record->fixed_date ? 'Fecha fija' : null,
-                ])))
-                ->badge()
-                ->color(fn (string $state) => match ($state) {
-                    'Llamar' => 'danger',
-                    'Nuevo' => 'info',
-                    default => 'gray',
-                }),
+            self::flagsColumn(),
         ];
+    }
+
+    /** Avisos de la cita: llamar, paciente nuevo, fecha fija y, si se pasa el saldo, cuánto debe. */
+    public static function flagsColumn(bool $withBalance = false): TextColumn
+    {
+        return TextColumn::make('flags')
+            ->label('')
+            ->state(fn (Appointment $record) => array_values(array_filter([
+                $record->needsCall() ? 'Llamar' : null,
+                $record->is_new_patient ? 'Nuevo' : null,
+                $record->fixed_date ? 'Fecha fija' : null,
+                $withBalance && (float) $record->patient->balance_due > 0 ? 'Debe '.Money::short($record->patient->balance_due) : null,
+            ])))
+            ->badge()
+            ->color(fn (string $state) => match (true) {
+                $state === 'Llamar' => 'danger',
+                $state === 'Nuevo' => 'info',
+                str_starts_with($state, 'Debe') => 'warning',
+                default => 'gray',
+            });
     }
 }

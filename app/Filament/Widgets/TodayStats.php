@@ -11,26 +11,29 @@ use App\Filament\Resources\WhatsappMessages\WhatsappMessageResource;
 use App\Models\Patient;
 use App\Models\Payment;
 use App\Support\Money;
-use Filament\Widgets\StatsOverviewWidget;
-use Filament\Widgets\StatsOverviewWidget\Stat;
+use Filament\Widgets\Widget;
 use Illuminate\Database\Eloquent\Builder;
 
-/** Números del día. Cada uno lleva a la lista donde se resuelve. */
-class TodayStats extends StatsOverviewWidget
+/**
+ * Números del día en una franja pequeña, para que la lista de citas quede a la vista.
+ * Cada uno lleva a la lista donde se resuelve. Se actualiza solo cada 30 s.
+ */
+class TodayStats extends Widget
 {
     protected static ?int $sort = 1;
 
-    protected ?string $pollingInterval = '30s';
+    protected string $view = 'filament.widgets.today-stats';
 
-    /** En el celular van de a dos, para llegar rápido a la tabla; en la computadora, de a tres o los cuatro en fila. */
-    protected function getColumns(): array
+    protected int|string|array $columnSpan = 'full';
+
+    /** @return array{stats: list<array{label: string, value: string|int, hint: string, color: string, icon: string, url: string}>} */
+    protected function getViewData(): array
     {
-        $perRow = count($this->getCachedStats()) === 4 ? 4 : 3;
-
-        return ['default' => 2, '@3xl' => $perRow, '!@lg' => $perRow];
+        return ['stats' => $this->stats()];
     }
 
-    protected function getStats(): array
+    /** @return list<array{label: string, value: string|int, hint: string, color: string, icon: string, url: string}> */
+    private function stats(): array
     {
         $today = AppointmentResource::getEloquentQuery()
             ->whereDate('starts_at', today())
@@ -53,31 +56,48 @@ class TodayStats extends StatsOverviewWidget
             ->count();
 
         return array_values(array_filter([
-            Stat::make('Citas de hoy', $today->count())
-                ->description($waiting > 0 ? "{$waiting} en sala · {$doneLabel}" : $doneLabel)
-                ->icon('heroicon-o-calendar-days')
-                ->url(AppointmentResource::getUrl('index', ['tab' => 'today'])),
-            Stat::make('Sin confirmar (hoy y mañana)', $unconfirmed)
-                ->description($unconfirmed > 0 ? 'Reenvía el aviso o llama' : 'Todo confirmado')
-                ->color($unconfirmed > 0 ? 'warning' : 'success')
-                ->icon('heroicon-o-phone')
-                ->url(AppointmentResource::getUrl('index', ['tab' => 'pending'])),
-            Stat::make('Avisos por enviar', $messages)
-                ->description($messages > 0 ? 'Listos para WhatsApp' : 'Nada pendiente')
-                ->color($messages > 0 ? 'warning' : 'success')
-                ->icon('heroicon-o-chat-bubble-left-right')
-                ->url(WhatsappMessageResource::getUrl('index')),
-            Stat::make('Solicitudes de cambio', $requests)
-                ->description($requests > 0 ? 'Aprueba un horario con un clic' : 'Nada pendiente')
-                ->color($requests > 0 ? 'danger' : 'success')
-                ->icon('heroicon-o-arrows-right-left')
-                ->url(RescheduleRequestResource::getUrl('index')),
+            [
+                'label' => 'Citas de hoy',
+                'value' => $today->count(),
+                'hint' => $waiting > 0 ? "{$waiting} en sala · {$doneLabel}" : $doneLabel,
+                'color' => 'primary',
+                'icon' => 'heroicon-o-calendar-days',
+                'url' => AppointmentResource::getUrl('index', ['tab' => 'today']),
+            ],
+            [
+                'label' => 'Sin confirmar (hoy y mañana)',
+                'value' => $unconfirmed,
+                'hint' => $unconfirmed > 0 ? 'Reenvía el aviso o llama' : 'Todo confirmado',
+                'color' => $unconfirmed > 0 ? 'warning' : 'success',
+                'icon' => 'heroicon-o-phone',
+                'url' => AppointmentResource::getUrl('index', ['tab' => 'pending']),
+            ],
+            [
+                'label' => 'Avisos por enviar',
+                'value' => $messages,
+                'hint' => $messages > 0 ? 'Listos para WhatsApp' : 'Nada pendiente',
+                'color' => $messages > 0 ? 'warning' : 'success',
+                'icon' => 'heroicon-o-chat-bubble-left-right',
+                'url' => WhatsappMessageResource::getUrl('index'),
+            ],
+            [
+                'label' => 'Solicitudes de cambio',
+                'value' => $requests,
+                'hint' => $requests > 0 ? 'Aprueba un horario con un clic' : 'Nada pendiente',
+                'color' => $requests > 0 ? 'danger' : 'success',
+                'icon' => 'heroicon-o-arrows-right-left',
+                'url' => RescheduleRequestResource::getUrl('index'),
+            ],
             $this->collectedToday(),
         ]));
     }
 
-    /** Para recepción y administración: lo cobrado hoy y quién se fue sin pagar. */
-    private function collectedToday(): ?Stat
+    /**
+     * Para recepción y administración: lo cobrado hoy y quién se fue sin pagar.
+     *
+     * @return array{label: string, value: string, hint: string, color: string, icon: string, url: string}|null
+     */
+    private function collectedToday(): ?array
     {
         if (! auth()->user()->can('viewAny', Payment::class)) {
             return null;
@@ -89,16 +109,17 @@ class TodayStats extends StatsOverviewWidget
             ->whereHas('appointments', fn (Builder $query) => $query->whereDate('starts_at', today())->where('status', AppointmentStatus::Completed))
             ->count();
 
-        // El monto no entra en media tarjeta del celular: va a lo ancho.
-        return Stat::make('Cobrado hoy', Money::format($collected))
-            ->columnSpan(['default' => 2, '@3xl' => 1, '!@lg' => 1])
-            ->description(match ($owing) {
+        return [
+            'label' => 'Cobrado hoy',
+            'value' => Money::format($collected),
+            'hint' => match ($owing) {
                 0 => 'Nadie se fue debiendo',
                 1 => '1 paciente atendido hoy debe',
                 default => "{$owing} pacientes atendidos hoy deben",
-            })
-            ->color($owing > 0 ? 'warning' : 'success')
-            ->icon('heroicon-o-banknotes')
-            ->url($owing > 0 ? AppointmentResource::getUrl('index', ['tab' => 'today']) : PaymentResource::getUrl('index'));
+            },
+            'color' => $owing > 0 ? 'warning' : 'success',
+            'icon' => 'heroicon-o-banknotes',
+            'url' => $owing > 0 ? AppointmentResource::getUrl('index', ['tab' => 'today']) : PaymentResource::getUrl('index'),
+        ];
     }
 }

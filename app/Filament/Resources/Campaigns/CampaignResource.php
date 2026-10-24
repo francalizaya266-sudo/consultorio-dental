@@ -16,7 +16,6 @@ use Filament\Support\Icons\Heroicon;
 use Filament\Tables\Table;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\SoftDeletingScope;
-use UnitEnum;
 
 /** Promociones con fecha de inicio y fin: se publican y se retiran solas. */
 class CampaignResource extends Resource
@@ -31,9 +30,9 @@ class CampaignResource extends Resource
 
     protected static ?string $pluralModelLabel = 'campañas';
 
-    protected static string|UnitEnum|null $navigationGroup = 'Web';
+    protected static ?string $navigationParentItem = 'Configuración';
 
-    protected static ?int $navigationSort = 1;
+    protected static ?int $navigationSort = 7;
 
     protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedMegaphone;
 

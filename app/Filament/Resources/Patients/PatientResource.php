@@ -3,6 +3,7 @@
 namespace App\Filament\Resources\Patients;
 
 use App\Filament\Concerns\HasSpanishLabels;
+use App\Filament\Resources\Appointments\AppointmentResource;
 use App\Filament\Resources\Patients\Pages\CreatePatient;
 use App\Filament\Resources\Patients\Pages\EditPatient;
 use App\Filament\Resources\Patients\Pages\ListPatients;
@@ -18,6 +19,7 @@ use App\Models\Patient;
 use App\Models\User;
 use App\Support\Phone;
 use BackedEnum;
+use Filament\Actions\Action;
 use Filament\Resources\Resource;
 use Filament\Schemas\Schema;
 use Filament\Support\Icons\Heroicon;
@@ -25,7 +27,6 @@ use Filament\Tables\Table;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\SoftDeletingScope;
-use UnitEnum;
 
 class PatientResource extends Resource
 {
@@ -39,9 +40,9 @@ class PatientResource extends Resource
 
     protected static ?string $pluralModelLabel = 'pacientes';
 
-    protected static string|UnitEnum|null $navigationGroup = 'Pacientes';
+    protected static ?string $navigationLabel = 'Pacientes';
 
-    protected static ?int $navigationSort = 1;
+    protected static ?int $navigationSort = 2;
 
     protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedUsers;
 
@@ -115,5 +116,23 @@ class PatientResource extends Resource
             'DNI' => $record->document_number,
             'Celular' => $record->account ? Phone::display($record->account->phone) : null,
         ]);
+    }
+
+    /** En el buscador (Ctrl + K), cada paciente lleva a agendarle una cita o a escribirle por WhatsApp. */
+    public static function getGlobalSearchResultActions(Model $record): array
+    {
+        /** @var Patient $record */
+        return [
+            Action::make('newAppointment')
+                ->label('Nueva cita')
+                ->icon(Heroicon::OutlinedCalendarDays)
+                ->url(AppointmentResource::getUrl('create', ['patient' => $record->getKey()])),
+            Action::make('whatsapp')
+                ->label('WhatsApp')
+                ->icon(Heroicon::OutlinedChatBubbleLeftRight)
+                ->color('success')
+                ->visible($record->account !== null)
+                ->url($record->account ? 'https://wa.me/'.Phone::forWhatsApp($record->account->phone) : null, shouldOpenInNewTab: true),
+        ];
     }
 }

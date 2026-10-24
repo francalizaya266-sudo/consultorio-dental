@@ -32,9 +32,9 @@ class ConsultationInfolist
                     ->columnSpan(2)
                     ->columns(2)
                     ->schema([
-                        TextEntry::make('chief_complaint')->label('Motivo de consulta')->placeholder('—'),
-                        TextEntry::make('current_illness')->label('Enfermedad actual')->placeholder('—'),
-                        TextEntry::make('clinical_exam')->label('Examen clínico')->placeholder('—')->columnSpanFull(),
+                        TextEntry::make('chief_complaint')->label('Motivo de consulta')->hidden(fn ($state) => blank($state)),
+                        TextEntry::make('current_illness')->label('Enfermedad actual')->hidden(fn ($state) => blank($state)),
+                        TextEntry::make('clinical_exam')->label('Examen clínico')->hidden(fn ($state) => blank($state))->columnSpanFull(),
                         TextEntry::make('vitals')
                             ->label('Signos vitales')
                             ->state(fn (Consultation $record) => collect([
@@ -42,7 +42,7 @@ class ConsultationInfolist
                                 filled($record->vital_signs['heart_rate'] ?? null) ? 'Pulso '.$record->vital_signs['heart_rate'].' lpm' : null,
                                 filled($record->vital_signs['temperature'] ?? null) ? $record->vital_signs['temperature'].' °C' : null,
                             ])->filter()->implode(' · ') ?: null)
-                            ->placeholder('—')
+                            ->hidden(fn ($state) => blank($state))
                             ->columnSpanFull(),
                         RepeatableEntry::make('diagnoses')
                             ->label('Diagnóstico')
@@ -58,17 +58,17 @@ class ConsultationInfolist
                                         $record->type?->getLabel(),
                                     ])->filter()->implode(' · ')),
                             ]),
-                        TextEntry::make('diagnosis_notes')->label('Notas del diagnóstico')->placeholder('—')->columnSpanFull(),
-                        TextEntry::make('procedures')->label('Evolución (qué se hizo)')->placeholder('—')->columnSpanFull(),
+                        TextEntry::make('diagnosis_notes')->label('Notas del diagnóstico')->hidden(fn ($state) => blank($state))->columnSpanFull(),
+                        TextEntry::make('procedures')->label('Evolución (qué se hizo)')->hidden(fn ($state) => blank($state))->columnSpanFull(),
                         TextEntry::make('planItems')
                             ->label('Del plan de tratamiento se trabajó')
                             ->state(fn (Consultation $record) => $record->planItems->map(fn (TreatmentPlanItem $item) => $item->label())->all())
                             ->listWithLineBreaks()
                             ->bulleted()
-                            ->placeholder('—')
+                            ->hidden(fn ($state) => blank($state))
                             ->columnSpanFull(),
-                        TextEntry::make('indications')->label('Indicaciones')->placeholder('—'),
-                        TextEntry::make('next_steps')->label('Próximos pasos')->placeholder('—'),
+                        TextEntry::make('indications')->label('Indicaciones')->hidden(fn ($state) => blank($state)),
+                        TextEntry::make('next_steps')->label('Próximos pasos')->hidden(fn ($state) => blank($state)),
                         TextEntry::make('prescription')
                             ->label('Receta')
                             ->state(fn (Consultation $record) => $record->prescription?->items->map(fn (PrescriptionItem $item) => $item->medication.(($instructions = app(PrescriptionService::class)->instructionsOf($item)) ? ': '.$instructions : ''))->all() ?? [])

@@ -271,6 +271,46 @@ class ClinicalPanelTest extends TestCase
     }
 
     /** @return array{0: Doctor, 1: Appointment} */
+    public function test_the_draft_saves_itself_only_when_something_changed(): void
+    {
+        [$doctor, $appointment] = $this->appointmentToday();
+        $consultation = app(ConsultationService::class)->startFromAppointment($appointment, $doctor->user);
+        $this->actingAs($doctor->user);
+
+        $page = Livewire::test(EditConsultation::class, ['record' => $consultation->getRouteKey()])
+            ->call('autosave')
+            ->assertSet('autosavedAt', null)
+            ->fillForm(['procedures' => 'Profilaxis y aplicación de flúor.'])
+            ->call('autosave')
+            ->assertSet('autosavedAt', '08:00')
+            ->assertSee('Guardado solo a las 08:00');
+
+        $this->assertSame('Profilaxis y aplicación de flúor.', $consultation->fresh()->procedures);
+
+        // Un diagnóstico a medio llenar no se marca en pantalla: se guarda a mano cuando esté completo.
+        $page->fillForm(['diagnoses' => [['icd10_code_id' => null, 'tooth' => '36', 'type' => 'definitive']], 'indications' => 'Cepillado tres veces al día.'])
+            ->call('autosave')
+            ->assertHasNoFormErrors()
+            ->assertNotDispatched('form-validation-error');
+
+        $this->assertNull($consultation->fresh()->indications);
+    }
+
+    public function test_the_allergy_stays_next_to_the_name_and_a_related_medication_is_flagged(): void
+    {
+        [$doctor, $appointment] = $this->appointmentToday();
+        $appointment->patient->medicalBackground()->create(['allergies' => 'Penicilina (ronchas)']);
+        $consultation = app(ConsultationService::class)->startFromAppointment($appointment, $doctor->user);
+        $this->actingAs($doctor->user);
+
+        Livewire::test(EditConsultation::class, ['record' => $consultation->getRouteKey()])
+            ->assertSeeInOrder([$appointment->patient->full_name, '⚠ Alergia: Penicilina (ronchas)', 'Motivo', 'Odontograma', 'Receta', 'Terminar atención'])
+            ->fillForm(['prescription_items' => [['medication' => 'Amoxicilina 500 mg', 'instructions' => '1 cada 8 horas']]])
+            ->assertSee('Cuidado con Amoxicilina: el paciente tiene alergia a la penicilina.')
+            ->fillForm(['prescription_items' => [['medication' => 'Ibuprofeno 400 mg', 'instructions' => null]]])
+            ->assertDontSee('Cuidado con');
+    }
+
     private function appointmentToday(?string $treatmentSlug = null): array
     {
         $treatment = $treatmentSlug ? Treatment::where('slug', $treatmentSlug)->firstOrFail() : Treatment::factory()->create();

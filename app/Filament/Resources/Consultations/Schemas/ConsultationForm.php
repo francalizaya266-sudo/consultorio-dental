@@ -24,6 +24,7 @@ use App\Models\TextSnippet;
 use App\Models\TreatmentPackage;
 use App\Models\TreatmentPlanItem;
 use App\Models\User;
+use App\Services\Clinical\AllergyCheck;
 use App\Services\Clinical\PrescriptionService;
 use App\Services\Clinical\TreatmentPlanService;
 use App\Support\CampaignText;
@@ -45,22 +46,48 @@ use Filament\Schemas\Components\Utilities\Get;
 use Filament\Schemas\Components\Utilities\Set;
 use Filament\Schemas\Components\View;
 use Filament\Schemas\Schema;
+use Filament\Support\Enums\FontWeight;
 use Filament\Support\Enums\Width;
 use Filament\Support\Icons\Heroicon;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Collection;
 
-/** Pantalla de la atención: todo lo que el doctor escribe mientras atiende, de arriba hacia abajo. */
+/**
+ * Pantalla de la atención: todo lo que el doctor escribe mientras atiende. Arriba, una barra fija con el
+ * paciente, sus alertas, las secciones y los botones de guardar y terminar. En la tablet horizontal
+ * (y en la computadora) el odontograma va a la izquierda y las notas a la derecha.
+ */
 class ConsultationForm
 {
+    /** @var array<string, string> Secciones de la barra fija: ancla → nombre. */
+    public const SECTIONS = [
+        'motivo' => 'Motivo',
+        'odontograma' => 'Odontograma',
+        'diagnostico' => 'Diagnóstico',
+        'plan' => 'Plan',
+        'evolucion' => 'Evolución',
+        'indicaciones' => 'Indicaciones',
+        'archivos' => 'Fotos',
+        'receta' => 'Receta',
+    ];
+
     public static function configure(Schema $schema): Schema
     {
         return $schema
             ->columns(1)
             ->components([
+                View::make('filament.clinical.consultation-bar')
+                    ->viewData(fn (?Consultation $record, $livewire) => [
+                        'patient' => $record?->patient,
+                        'alerts' => $record ? ClinicalAlerts::for($record->patient) : [],
+                        'autosavedAt' => $livewire->autosavedAt ?? null,
+                        'sections' => self::SECTIONS,
+                    ]),
+
                 Group::make(fn (?Consultation $record) => array_filter([ClinicalAlerts::callout($record?->patient)])),
 
                 Section::make('Motivo y examen')
+                    ->id('motivo')
                     ->icon(Heroicon::OutlinedChatBubbleLeftEllipsis)
                     ->columns(2)
                     ->schema([
@@ -96,83 +123,117 @@ class ConsultationForm
                             ]),
                     ]),
 
-                Section::make('Odontograma')
-                    ->icon(Heroicon::OutlinedSquares2x2)
-                    ->description('Cada toque se guarda solo. Parte del odontograma de la atención anterior.')
+                Grid::make(['default' => 1, 'lg' => 5])
+                    ->extraAttributes(['class' => 'consultation-split'])
                     ->schema([
-                        Livewire::make(OdontogramChart::class, ['editable' => true])
-                            ->key('odontogram'),
-                    ]),
+                        Group::make([
+                            Section::make('Odontograma')
+                                ->id('odontograma')
+                                ->icon(Heroicon::OutlinedSquares2x2)
+                                ->description('Cada toque se guarda solo. Parte del odontograma de la atención anterior.')
+                                ->schema([
+                                    Livewire::make(OdontogramChart::class, ['editable' => true])
+                                        ->key('odontogram'),
+                                ]),
+                        ])->columnSpan(['lg' => 3]),
+                        Group::make([
+                            Section::make('Diagnóstico')
+                                ->id('diagnostico')
+                                ->key('diagnosis')
+                                ->icon(Heroicon::OutlinedClipboardDocumentCheck)
+                                ->description('Los del odontograma se agregan desde las sugerencias, debajo del dibujo.')
+                                ->schema([
+                                    Repeater::make('diagnoses')
+                                        ->hiddenLabel()
+                                        ->relationship()
+                                        ->addActionLabel('Agregar diagnóstico')
+                                        ->defaultItems(0)
+                                        ->columns(6)
+                                        ->itemLabel(fn (array $state) => filled($state['tooth'] ?? null) ? 'Pieza '.$state['tooth'] : null)
+                                        ->schema([
+                                            Select::make('icd10_code_id')
+                                                ->label('CIE-10')
+                                                ->options(fn () => Icd10Code::query()->orderBy('code')->get()->mapWithKeys(fn (Icd10Code $code) => [$code->getKey() => "{$code->code} · {$code->description}"]))
+                                                ->searchable()
+                                                ->required()
+                                                ->columnSpanFull(),
+                                            TextInput::make('tooth')
+                                                ->label('Pieza')
+                                                ->placeholder('36')
+                                                ->maxLength(10)
+                                                ->columnSpan(2),
+                                            ToggleButtons::make('type')
+                                                ->label('Tipo')
+                                                ->options(DiagnosisType::class)
+                                                ->default(DiagnosisType::Definitive)
+                                                ->inline()
+                                                ->grouped()
+                                                ->columnSpan(4),
+                                        ]),
+                                    QuickTextarea::make('diagnosis_notes')
+                                        ->label('Notas del diagnóstico')
+                                        ->snippets(SnippetField::Diagnosis),
+                                ]),
 
-                Section::make('Diagnóstico')
-                    ->key('diagnosis')
-                    ->icon(Heroicon::OutlinedClipboardDocumentCheck)
-                    ->description('Los del odontograma se agregan desde las sugerencias, debajo del dibujo.')
-                    ->schema([
-                        Repeater::make('diagnoses')
-                            ->hiddenLabel()
-                            ->relationship()
-                            ->addActionLabel('Agregar diagnóstico')
-                            ->defaultItems(0)
-                            ->columns(6)
-                            ->itemLabel(fn (array $state) => filled($state['tooth'] ?? null) ? 'Pieza '.$state['tooth'] : null)
-                            ->schema([
-                                Select::make('icd10_code_id')
-                                    ->label('CIE-10')
-                                    ->options(fn () => Icd10Code::query()->orderBy('code')->get()->mapWithKeys(fn (Icd10Code $code) => [$code->getKey() => "{$code->code} · {$code->description}"]))
-                                    ->searchable()
-                                    ->required()
-                                    ->columnSpan(3),
-                                TextInput::make('tooth')
-                                    ->label('Pieza')
-                                    ->placeholder('36')
-                                    ->maxLength(10)
-                                    ->columnSpan(1),
-                                ToggleButtons::make('type')
-                                    ->label('Tipo')
-                                    ->options(DiagnosisType::class)
-                                    ->default(DiagnosisType::Definitive)
-                                    ->inline()
-                                    ->grouped()
-                                    ->columnSpan(2),
-                            ]),
-                        QuickTextarea::make('diagnosis_notes')
-                            ->label('Notas del diagnóstico')
-                            ->snippets(SnippetField::Diagnosis),
-                    ]),
+                            Section::make('Plan de tratamiento')
+                                ->id('plan')
+                                ->key('plan')
+                                ->icon(Heroicon::OutlinedClipboardDocumentList)
+                                ->description('Marca lo que se trabajó hoy. Al terminar la atención, el avance del plan se actualiza solo.')
+                                ->headerActions([self::addPackageAction()])
+                                ->schema([
+                                    CheckboxList::make('planItems')
+                                        ->label('Lo que se trabajó hoy')
+                                        ->hiddenLabel()
+                                        ->relationship('planItems', 'description', modifyQueryUsing: fn (Builder $query, ?Consultation $record) => $query
+                                            ->with('plan')
+                                            ->whereHas('plan', fn (Builder $plan) => $plan->open()->where('patient_id', $record?->patient_id))
+                                            ->where(fn (Builder $items) => $items
+                                                ->whereIn('treatment_plan_items.status', [PlanItemStatus::Pending, PlanItemStatus::InProgress])
+                                                ->when($record, fn (Builder $items) => $items->orWhereHas('consultations', fn (Builder $c) => $c->whereKey($record->getKey()))))
+                                            ->reorder()
+                                            ->orderBy('treatment_plan_items.treatment_plan_id')
+                                            ->orderBy('treatment_plan_items.sort_order'))
+                                        ->getOptionLabelFromRecordUsing(fn (TreatmentPlanItem $record) => $record->label())
+                                        ->getOptionDescriptionFromRecordUsing(fn (TreatmentPlanItem $record) => collect([
+                                            $record->sessions_planned > 1 ? "Sesiones hechas: {$record->sessions_done} de {$record->sessions_planned}" : null,
+                                            $record->plan->title,
+                                        ])->filter()->implode(' · '))
+                                        ->bulkToggleable(false)
+                                        ->visible(fn (?Consultation $record) => $record && self::workableItems($record)->isNotEmpty()),
+                                    Text::make('El paciente no tiene un plan de tratamiento vigente. Ármalo desde las sugerencias que salen debajo del odontograma.')
+                                        ->color('gray')
+                                        ->visible(fn (?Consultation $record) => ! $record || self::workableItems($record)->isEmpty()),
+                                ]),
 
-                Section::make('Plan de tratamiento')
-                    ->key('plan')
-                    ->icon(Heroicon::OutlinedClipboardDocumentList)
-                    ->description('Marca lo que se trabajó hoy. Al terminar la atención, el avance del plan se actualiza solo.')
-                    ->headerActions([self::addPackageAction()])
-                    ->schema([
-                        CheckboxList::make('planItems')
-                            ->label('Lo que se trabajó hoy')
-                            ->hiddenLabel()
-                            ->relationship('planItems', 'description', modifyQueryUsing: fn (Builder $query, ?Consultation $record) => $query
-                                ->with('plan')
-                                ->whereHas('plan', fn (Builder $plan) => $plan->open()->where('patient_id', $record?->patient_id))
-                                ->where(fn (Builder $items) => $items
-                                    ->whereIn('treatment_plan_items.status', [PlanItemStatus::Pending, PlanItemStatus::InProgress])
-                                    ->when($record, fn (Builder $items) => $items->orWhereHas('consultations', fn (Builder $c) => $c->whereKey($record->getKey()))))
-                                ->reorder()
-                                ->orderBy('treatment_plan_items.treatment_plan_id')
-                                ->orderBy('treatment_plan_items.sort_order'))
-                            ->getOptionLabelFromRecordUsing(fn (TreatmentPlanItem $record) => $record->label())
-                            ->getOptionDescriptionFromRecordUsing(fn (TreatmentPlanItem $record) => collect([
-                                $record->sessions_planned > 1 ? "Sesiones hechas: {$record->sessions_done} de {$record->sessions_planned}" : null,
-                                $record->plan->title,
-                            ])->filter()->implode(' · '))
-                            ->columns(2)
-                            ->bulkToggleable(false)
-                            ->visible(fn (?Consultation $record) => $record && self::workableItems($record)->isNotEmpty()),
-                        Text::make('El paciente no tiene un plan de tratamiento vigente. Ármalo desde las sugerencias que salen debajo del odontograma.')
-                            ->color('gray')
-                            ->visible(fn (?Consultation $record) => ! $record || self::workableItems($record)->isEmpty()),
+                            Section::make('Evolución')
+                                ->id('evolucion')
+                                ->icon(Heroicon::OutlinedWrenchScrewdriver)
+                                ->description('Qué se hizo hoy.')
+                                ->schema([
+                                    QuickTextarea::make('procedures')
+                                        ->hiddenLabel()
+                                        ->label('Evolución')
+                                        ->snippets(SnippetField::Procedures),
+                                ]),
+
+                            Section::make('Indicaciones y próximos pasos')
+                                ->id('indicaciones')
+                                ->icon(Heroicon::OutlinedClipboardDocument)
+                                ->schema([
+                                    QuickTextarea::make('indications')
+                                        ->label('Indicaciones para el paciente')
+                                        ->snippets(SnippetField::Indications),
+                                    QuickTextarea::make('next_steps')
+                                        ->label('Próximos pasos')
+                                        ->placeholder('Ej.: resina en 36 la próxima sesión')
+                                        ->snippets(SnippetField::Any),
+                                ]),
+                        ])->columnSpan(['lg' => 2]),
                     ]),
 
                 Section::make('Radiografías y fotos')
+                    ->id('archivos')
                     ->key('files')
                     ->icon(Heroicon::OutlinedPhoto)
                     ->collapsible()
@@ -187,30 +248,8 @@ class ConsultationForm
                             ->viewData(fn (?Consultation $record) => ['files' => $record?->files()->latest('id')->get() ?? collect()]),
                     ]),
 
-                Section::make('Evolución')
-                    ->icon(Heroicon::OutlinedWrenchScrewdriver)
-                    ->description('Qué se hizo hoy.')
-                    ->schema([
-                        QuickTextarea::make('procedures')
-                            ->hiddenLabel()
-                            ->label('Evolución')
-                            ->snippets(SnippetField::Procedures),
-                    ]),
-
-                Section::make('Indicaciones y próximos pasos')
-                    ->icon(Heroicon::OutlinedClipboardDocument)
-                    ->columns(2)
-                    ->schema([
-                        QuickTextarea::make('indications')
-                            ->label('Indicaciones para el paciente')
-                            ->snippets(SnippetField::Indications),
-                        QuickTextarea::make('next_steps')
-                            ->label('Próximos pasos')
-                            ->placeholder('Ej.: resina en 36 la próxima sesión')
-                            ->snippets(SnippetField::Any),
-                    ]),
-
                 Section::make('Receta')
+                    ->id('receta')
                     ->key('prescription')
                     ->icon(Heroicon::OutlinedBeaker)
                     ->description('Se imprime o se envía por WhatsApp junto con las indicaciones.')
@@ -228,12 +267,19 @@ class ConsultationForm
                                     ->placeholder('Ibuprofeno 400 mg')
                                     ->datalist(fn () => self::medicationSnippets()->map(fn (TextSnippet $snippet) => app(PrescriptionService::class)->fromSnippet($snippet)['medication'])->unique()->values()->all())
                                     ->maxLength(255)
+                                    ->live(onBlur: true)
                                     ->columnSpan(2),
                                 TextInput::make('instructions')
                                     ->label('Cómo tomarlo')
                                     ->placeholder('1 tableta cada 8 horas por 3 días')
                                     ->maxLength(255)
                                     ->columnSpan(3),
+                                // Avisa si el medicamento choca con una alergia registrada.
+                                Text::make(fn (Get $get, EditConsultation $livewire) => '⚠ '.AllergyCheck::warning($livewire->getRecord()->patient, $get('medication')))
+                                    ->color('danger')
+                                    ->weight(FontWeight::Bold)
+                                    ->visible(fn (Get $get, EditConsultation $livewire) => AllergyCheck::warning($livewire->getRecord()->patient, $get('medication')) !== null)
+                                    ->columnSpanFull(),
                             ]),
                         Actions::make(fn () => self::medicationSnippets()
                             ->map(fn (TextSnippet $snippet) => Action::make('addMedication'.$snippet->getKey())
@@ -242,9 +288,14 @@ class ConsultationForm
                                 ->size('sm')
                                 ->color('gray')
                                 ->outlined()
-                                ->action(function (Get $get, Set $set) use ($snippet) {
-                                    $set('prescription_items', PrescriptionService::merge($get('prescription_items') ?? [], [app(PrescriptionService::class)->fromSnippet($snippet)]));
+                                ->action(function (Get $get, Set $set, EditConsultation $livewire) use ($snippet) {
+                                    $item = app(PrescriptionService::class)->fromSnippet($snippet);
+                                    $set('prescription_items', PrescriptionService::merge($get('prescription_items') ?? [], [$item]));
                                     $snippet->recordUse(auth()->user());
+
+                                    if ($warning = AllergyCheck::warning($livewire->getRecord()->patient, $item['medication'])) {
+                                        Notification::make()->danger()->title($warning)->persistent()->send();
+                                    }
                                 }))
                             ->all()),
                     ]),

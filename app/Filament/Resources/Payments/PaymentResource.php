@@ -25,7 +25,6 @@ use Filament\Schemas\Schema;
 use Filament\Support\Icons\Heroicon;
 use Filament\Tables\Table;
 use Illuminate\Database\Eloquent\Builder;
-use UnitEnum;
 
 /** Pagos recibidos en el consultorio. Solo informativo: no se cobra en línea. */
 class PaymentResource extends Resource
@@ -40,9 +39,9 @@ class PaymentResource extends Resource
 
     protected static ?string $pluralModelLabel = 'pagos';
 
-    protected static string|UnitEnum|null $navigationGroup = 'Caja';
+    protected static ?string $navigationLabel = 'Caja';
 
-    protected static ?int $navigationSort = 1;
+    protected static ?int $navigationSort = 3;
 
     protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedBanknotes;
 

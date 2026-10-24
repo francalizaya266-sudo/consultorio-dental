@@ -12,7 +12,6 @@ use Filament\Notifications\Notification;
 use Filament\Pages\Page;
 use Filament\Support\Icons\Heroicon;
 use Illuminate\Support\Number;
-use UnitEnum;
 
 /**
  * Las copias de seguridad diarias, para bajarlas y guardarlas fuera del hosting.
@@ -29,7 +28,7 @@ class Backups extends Page
 
     protected static ?string $slug = 'copias-de-seguridad';
 
-    protected static string|UnitEnum|null $navigationGroup = 'Configuración';
+    protected static ?string $navigationParentItem = 'Configuración';
 
     protected static ?int $navigationSort = 11;
 

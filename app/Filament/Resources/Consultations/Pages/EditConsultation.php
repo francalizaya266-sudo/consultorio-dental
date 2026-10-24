@@ -17,10 +17,13 @@ use Filament\Actions\Action;
 use Filament\Forms\Components\Select;
 use Filament\Notifications\Notification;
 use Filament\Resources\Pages\EditRecord;
+use Filament\Support\Exceptions\Halt;
 use Filament\Support\Icons\Heroicon;
 use Illuminate\Contracts\Support\Htmlable;
 use Illuminate\Http\Exceptions\HttpResponseException;
 use Illuminate\Support\Arr;
+use Illuminate\Validation\ValidationException;
+use Livewire\Attributes\Locked;
 use Livewire\Attributes\On;
 
 /** Pantalla donde el doctor escribe mientras atiende. */
@@ -38,7 +41,22 @@ class EditConsultation extends EditRecord
         }
 
         parent::mount($record);
+
+        $this->savedFingerprint = $this->fingerprint();
     }
+
+    /** Hora del último guardado automático, para mostrarla en la barra fija. */
+    #[Locked]
+    public ?string $autosavedAt = null;
+
+    /** Huella de lo último guardado: el guardado automático solo guarda si algo cambió. */
+    #[Locked]
+    public ?string $savedFingerprint = null;
+
+    /** Mientras se guarda solo, lo incompleto no se marca en pantalla ni mueve la página. */
+    private bool $isAutosaving = false;
+
+    private bool $autosaveFailed = false;
 
     /** Medicamentos del formulario: se guardan aparte, en la receta de la atención. */
     private array $prescriptionItems = [];
@@ -104,6 +122,49 @@ class EditConsultation extends EditRecord
     protected function afterSave(): void
     {
         app(PrescriptionService::class)->syncForConsultation($this->getConsultation(), $this->prescriptionItems);
+        $this->savedFingerprint = $this->fingerprint();
+    }
+
+    /**
+     * Guardado automático del borrador (lo llama la barra fija cada pocos segundos), como el odontograma.
+     * Si falta completar algo (por ejemplo, un diagnóstico sin código), espera al guardado a mano.
+     */
+    public function autosave(): void
+    {
+        if (! auth()->user()->can('update', $this->getConsultation()) || $this->fingerprint() === $this->savedFingerprint) {
+            $this->skipRender();
+
+            return;
+        }
+
+        $this->isAutosaving = true;
+        $this->save(shouldRedirect: false, shouldSendSavedNotification: false);
+        $this->isAutosaving = false;
+
+        if ($this->autosaveFailed) {
+            $this->resetErrorBag();
+            $this->skipRender();
+
+            return;
+        }
+
+        $this->autosavedAt = now()->format('H:i');
+    }
+
+    protected function onValidationError(ValidationException $exception): void
+    {
+        if ($this->isAutosaving) {
+            $this->autosaveFailed = true;
+
+            throw new Halt;
+        }
+
+        parent::onValidationError($exception);
+    }
+
+    private function fingerprint(): string
+    {
+        return md5((string) json_encode($this->data));
     }
 
     protected function getSavedNotificationTitle(): ?string

@@ -32,7 +32,6 @@ use Filament\Tables\Columns\ToggleColumn;
 use Filament\Tables\Filters\TernaryFilter;
 use Filament\Tables\Table;
 use Illuminate\Database\Eloquent\Builder;
-use UnitEnum;
 
 /** Paquetes que arma el doctor: qué incluye, a qué precio y cómo se puede pagar. */
 class TreatmentPackageResource extends Resource
@@ -47,7 +46,7 @@ class TreatmentPackageResource extends Resource
 
     protected static ?string $pluralModelLabel = 'paquetes';
 
-    protected static string|UnitEnum|null $navigationGroup = 'Configuración';
+    protected static ?string $navigationParentItem = 'Configuración';
 
     protected static ?int $navigationSort = 2;
 

@@ -58,18 +58,18 @@ class AppointmentInfolist
                             ->color('gray'),
                         TextEntry::make('origin')
                             ->label('¿Cómo nos encontró?')
-                            ->placeholder('—'),
+                            ->hidden(fn ($state) => blank($state)),
                         TextEntry::make('promo_code')
                             ->label('Código de campaña')
                             ->state(fn (Appointment $record) => $record->promo_code ?? $record->campaign?->promo_code)
-                            ->placeholder('—'),
+                            ->hidden(fn ($state) => blank($state)),
                         TextEntry::make('patient_note')
                             ->label('Nota del paciente')
-                            ->placeholder('—')
+                            ->hidden(fn ($state) => blank($state))
                             ->columnSpanFull(),
                         TextEntry::make('internal_notes')
                             ->label('Notas internas')
-                            ->placeholder('—')
+                            ->hidden(fn ($state) => blank($state))
                             ->columnSpanFull(),
                         TextEntry::make('cancellation_reason')
                             ->label('Motivo de cancelación')

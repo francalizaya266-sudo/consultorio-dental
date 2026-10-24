@@ -23,7 +23,6 @@ use Filament\Tables\Filters\TrashedFilter;
 use Filament\Tables\Table;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\SoftDeletingScope;
-use UnitEnum;
 
 /** Preguntas frecuentes: las generales salen en su página y en el inicio; las de un tratamiento, en la página de ese tratamiento. */
 class FaqResource extends Resource
@@ -38,9 +37,9 @@ class FaqResource extends Resource
 
     protected static ?string $pluralModelLabel = 'preguntas frecuentes';
 
-    protected static string|UnitEnum|null $navigationGroup = 'Web';
+    protected static ?string $navigationParentItem = 'Configuración';
 
-    protected static ?int $navigationSort = 2;
+    protected static ?int $navigationSort = 8;
 
     protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedQuestionMarkCircle;
 

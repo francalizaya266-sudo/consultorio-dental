@@ -13,7 +13,6 @@ use Filament\Resources\Resource;
 use Filament\Support\Icons\Heroicon;
 use Filament\Tables\Table;
 use Illuminate\Database\Eloquent\Builder;
-use UnitEnum;
 
 /** Pacientes que proponen otros horarios: se aprueba uno con un clic. */
 class RescheduleRequestResource extends Resource
@@ -30,9 +29,9 @@ class RescheduleRequestResource extends Resource
 
     protected static ?string $navigationLabel = 'Solicitudes de cambio';
 
-    protected static string|UnitEnum|null $navigationGroup = 'Agenda';
+    protected static ?string $navigationParentItem = 'Agenda';
 
-    protected static ?int $navigationSort = 3;
+    protected static ?int $navigationSort = 2;
 
     protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedArrowsRightLeft;
 

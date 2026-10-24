@@ -10,6 +10,7 @@ use App\Filament\Resources\Accounts\Pages\ViewAccount;
 use App\Filament\Resources\Doctors\Pages\EditDoctor;
 use App\Filament\Resources\Patients\Pages\CreatePatient;
 use App\Filament\Resources\Patients\Pages\ListPatients;
+use App\Filament\Resources\Patients\PatientResource;
 use App\Filament\Resources\Payments\Pages\ManagePayments;
 use App\Filament\Resources\ScheduleBlocks\Pages\ManageScheduleBlocks;
 use App\Filament\Resources\TextSnippets\Pages\ManageTextSnippets;
@@ -223,5 +224,30 @@ class PatientsAndSetupPanelTest extends TestCase
             ->set('activeTab', 'checkup')
             ->assertCanSeeTableRecords([$away])
             ->assertCanNotSeeTableRecords([$alreadyBooked, $recent, $neverCame]);
+    }
+
+    public function test_the_patient_file_shows_one_timeline_and_the_medical_alert_only_to_who_attends(): void
+    {
+        $this->freezeMonday();
+        $treatment = Treatment::factory()->create(['name' => 'Limpieza dental']);
+        $doctor = $this->doctorOffering($treatment);
+        $patient = Patient::factory()->create(['first_name' => 'María', 'last_name' => 'Quispe', 'email' => null, 'admin_notes' => null]);
+        $patient->medicalBackground()->create(['allergies' => 'Penicilina']);
+        Appointment::factory()->for($doctor)->for($treatment)->for($patient)->at('2026-10-20 10:00')->create();
+        Payment::factory()->for($patient)->create(['amount' => 80, 'method' => PaymentMethod::Yape, 'paid_at' => '2026-10-20 11:00']);
+
+        $this->actingAs(User::factory()->reception()->create());
+
+        $this->get(PatientResource::getUrl('view', ['record' => $patient]))
+            ->assertOk()
+            ->assertSee(['María Quispe', 'Línea de tiempo', 'Limpieza dental · Pendiente', 'Pagó S/ 80.00 · Yape'])
+            ->assertDontSee(['Ver María Quispe', 'Penicilina', 'Correo', 'Notas internas']);
+
+        $this->actingAs($doctor->user);
+
+        $this->get(PatientResource::getUrl('view', ['record' => $patient]))
+            ->assertOk()
+            ->assertSeeInOrder(['Atención: Alergia: Penicilina', 'Datos del paciente', 'Línea de tiempo'])
+            ->assertDontSee('Pagó S/ 80.00');
     }
 }
