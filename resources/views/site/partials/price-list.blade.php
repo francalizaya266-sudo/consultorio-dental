@@ -1,8 +1,9 @@
-{{-- Tarifario: nombre, para qué sirve, duración y precio desde. --}}
+{{-- Tarifario: ícono, nombre, para qué sirve, duración y precio desde. --}}
 <ul class="price-list">
     @foreach ($treatments as $treatment)
         <li>
             <a href="{{ route('site.treatment', $treatment->slug) }}">
+                <span class="icon">{{ \App\Support\TreatmentIcon::for($treatment) }}</span>
                 <span class="name">{{ $treatment->name }}</span>
                 <span class="price">{{ $treatment->webPrice() ?? 'Precio en la evaluación' }}</span>
                 @if ($treatment->summary)

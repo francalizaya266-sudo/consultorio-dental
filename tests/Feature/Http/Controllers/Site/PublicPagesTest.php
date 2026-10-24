@@ -58,6 +58,64 @@ class PublicPagesTest extends TestCase
             ->assertDontSee('Promociones');
     }
 
+    public function test_the_home_shows_the_clinic_photo_the_google_stars_and_treatment_icons(): void
+    {
+        $this->freezeMonday();
+        Setting::set('web.hero_image', 'inicio/consultorio.jpg');
+        Setting::set('clinic.google_rating', 4.9);
+        Setting::set('clinic.google_reviews_count', 87);
+        Setting::set('clinic.reviews_url', 'https://g.page/r/consultorio/review');
+        $this->doctorOffering(Treatment::factory()->create(['name' => 'Ortodoncia con brackets']));
+
+        $this->get(route('site.home'))
+            ->assertOk()
+            ->assertSee('<img src="/media/inicio/consultorio.jpg"', false)
+            ->assertSee('<meta property="og:image" content="'.url('/media/inicio/consultorio.jpg').'">', false)
+            ->assertSee('<strong>4,9</strong> de 5 en Google · 87 opiniones', false)
+            ->assertSee('href="https://g.page/r/consultorio/review"', false)
+            ->assertSee('style="--rating: 4.9"', false)
+            ->assertSee('<span class="icon"><svg', false)
+            // El horario completo sale una vez, en "Cómo llegar y contactarnos", no también en el pie.
+            ->assertSeeTextInOrder(['Cómo llegar y contactarnos', 'Lunes a sábado', 'Dónde estamos', 'Escríbenos'])
+            ->assertDontSee('<h2>Horario</h2>', false);
+    }
+
+    public function test_without_photo_or_score_the_home_shows_no_empty_frame_or_stars(): void
+    {
+        $this->get(route('site.home'))
+            ->assertOk()
+            ->assertDontSee('hero-photo')
+            ->assertDontSee('rating-stars');
+    }
+
+    public function test_on_the_phone_reserve_whatsapp_and_call_stay_at_hand_except_while_booking(): void
+    {
+        $this->doctorOffering(Treatment::factory()->create());
+        Setting::set('clinic.phone', '(051) 32-1234');
+
+        $this->get(route('site.team'))
+            ->assertOk()
+            ->assertSeeInOrder(['class="action-bar"', route('site.booking'), 'https://wa.me/51918874568', 'href="tel:051321234"'], false)
+            // En el resto de páginas el pie trae el horario y todo el menú.
+            ->assertSee('<h2>Horario</h2>', false)
+            ->assertSee('El consultorio');
+
+        // Sin teléfono fijo, "Llamar" marca el celular del consultorio.
+        Setting::set('clinic.phone', null);
+        $this->get(route('site.team'))->assertSee('href="tel:+51918874568"', false);
+
+        // Mientras reserva: sin barra ni botón flotante, y un pie de una línea.
+        $this->get(route('site.booking'))
+            ->assertOk()
+            ->assertDontSee('class="action-bar"', false)
+            ->assertDontSee('wa-float')
+            ->assertSee('site-footer minimal')
+            ->assertSee('Escríbenos por WhatsApp')
+            ->assertSee('Política de privacidad')
+            ->assertDontSee('El consultorio')
+            ->assertDontSee('<h2>Horario</h2>', false);
+    }
+
     public function test_only_published_content_reaches_the_web(): void
     {
         Faq::factory()->create(['question' => '¿Atienden a niños?']);

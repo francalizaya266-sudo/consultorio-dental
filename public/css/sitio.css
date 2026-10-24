@@ -102,7 +102,16 @@ main { padding: 24px 0 96px; }
 .site-footer .socials { display: flex; flex-wrap: wrap; gap: 12px; }
 .footer-cols { display: grid; gap: 28px; }
 @media (min-width: 720px) { .footer-cols { grid-template-columns: repeat(2, 1fr); } }
-@media (min-width: 1080px) { .footer-cols { grid-template-columns: 1fr 1.3fr 1fr 1fr; } }
+@media (min-width: 1080px) {
+    .footer-cols { grid-template-columns: 1fr 1.3fr 1fr 1fr; }
+    .footer-cols.without-hours { grid-template-columns: repeat(3, 1fr); }
+}
+
+/* Pie mínimo mientras se reserva: nombre, ayuda por WhatsApp y privacidad. */
+.site-footer.minimal { padding: 28px 0; }
+.site-footer.minimal .wrap { display: flex; flex-wrap: wrap; align-items: baseline; gap: 8px 24px; }
+.site-footer.minimal .name { font-size: 1.25rem; margin-right: auto; }
+.site-footer.minimal p { margin: 0; }
 
 /* Tipografía */
 
@@ -265,6 +274,16 @@ details.more > summary::-webkit-details-marker { display: none; }
 .hero h1 { font-size: clamp(2.5rem, 9vw, 4.75rem); line-height: 1; letter-spacing: -.035em; max-width: 13ch; }
 .hero .lead { font-size: clamp(1.125rem, 2.4vw, 1.375rem); max-width: 36ch; margin: 20px 0 28px; }
 .hero .where { margin: 20px 0 0; color: var(--muted); }
+/* Foto real del consultorio arriba de todo; en pantallas grandes ocupa el ancho del inicio. */
+.hero-photo { margin: 0; border-radius: 24px; overflow: hidden; background: var(--surface); aspect-ratio: 2 / 1; }
+.hero-photo img { width: 100%; height: 100%; object-fit: cover; }
+
+/* Estrellas de Google: cinco grises y encima las doradas, cortadas según el puntaje. */
+.rating { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 4px 10px; margin: -8px 0 24px; color: var(--ink); text-decoration: none; }
+a.rating > span:last-child { text-decoration: underline; text-decoration-color: var(--field-line); text-underline-offset: .18em; }
+.rating-stars { position: relative; display: inline-block; font-size: 1.25rem; line-height: 1; letter-spacing: .08em; color: var(--surface-strong); }
+.rating-stars::before { content: "★★★★★"; }
+.rating-stars::after { content: "★★★★★"; position: absolute; top: 0; left: 0; width: calc(var(--rating) * 20%); overflow: hidden; white-space: nowrap; color: var(--star); }
 .hero .where .open, .contact .status.open, .site-footer .status.open { color: var(--ok); font-weight: 700; }
 .site-footer .status.open { color: #9fe3d4; }
 
@@ -281,6 +300,9 @@ details.more > summary::-webkit-details-marker { display: none; }
 
 @media (min-width: 900px) {
     .hero { grid-template-columns: 1.35fr 1fr; align-items: center; gap: 56px; padding: 32px 0 24px; }
+    .hero.with-photo { row-gap: 40px; padding-top: 0; }
+    /* Baja, para que el título y "Reservar cita" sigan a la vista sin bajar. */
+    .hero-photo { grid-column: 1 / -1; aspect-ratio: 4 / 1; max-height: 320px; }
     .next-free { padding: 32px; }
 }
 
@@ -320,12 +342,18 @@ details.more > summary::-webkit-details-marker { display: none; }
 
 .price-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px; }
 .price-list a {
-    display: grid; grid-template-columns: 1fr auto; gap: 4px 16px; padding: 18px 20px; border-radius: var(--radius);
+    display: grid; grid-template-columns: auto 1fr auto; align-content: start; gap: 4px 16px; padding: 18px 20px; border-radius: var(--radius);
     background: var(--surface); color: var(--ink); text-decoration: none; height: 100%;
 }
+/* Ícono de cada tratamiento: ayuda a encontrarlo de un vistazo, sin leer. */
+.price-list .icon {
+    grid-row: 1 / span 3; width: 44px; height: 44px; border-radius: 12px; display: grid; place-items: center;
+    background: var(--ground); color: var(--accent);
+}
+.price-list .icon svg { width: 26px; height: 26px; }
 .price-list .name { font-weight: 800; font-size: 1.125rem; letter-spacing: -.01em; }
 .price-list .price { font-weight: 800; color: var(--accent); white-space: nowrap; text-align: right; }
-.price-list .desc, .price-list .meta { grid-column: 1 / -1; }
+.price-list .desc, .price-list .meta { grid-column: 2 / -1; }
 .price-list .meta { color: var(--muted); font-size: .9375rem; }
 @media (min-width: 720px) { .price-list { grid-template-columns: 1fr 1fr; } }
 
@@ -476,7 +504,7 @@ details.more > summary::-webkit-details-marker { display: none; }
 a.chip { text-decoration: none; display: inline-flex; align-items: center; }
 .chip[aria-current="page"] { background: var(--ink); color: #fff; }
 
-/* Botón flotante de WhatsApp: lo único que flota, por eso lleva sombra */
+/* Botón flotante de WhatsApp y barra de abajo en el celular: lo único que flota, por eso llevan sombra */
 
 .wa-float {
     position: fixed; right: 16px; bottom: 16px; z-index: 30; width: 60px; height: 60px; border-radius: 50%;
@@ -484,6 +512,20 @@ a.chip { text-decoration: none; display: inline-flex; align-items: center; }
     box-shadow: 0 6px 20px rgb(12 26 46 / .25);
 }
 .wa-float svg { width: 32px; height: 32px; }
+
+/* En el celular, Reservar, WhatsApp y Llamar quedan siempre a mano (la barra reemplaza al botón redondo). */
+.action-bar { display: none; }
+@media (max-width: 719px) {
+    .action-bar {
+        position: fixed; left: 0; right: 0; bottom: 0; z-index: 30;
+        display: grid; grid-auto-flow: column; grid-auto-columns: 1fr; gap: 8px;
+        padding: 10px var(--gutter) calc(10px + env(safe-area-inset-bottom));
+        background: var(--ground); box-shadow: 0 -6px 20px rgb(12 26 46 / .12);
+    }
+    .action-bar .btn { padding: 10px 8px; font-size: 1rem; }
+    .action-bar ~ .wa-float { display: none; }
+    body:has(.action-bar) .site-footer { padding-bottom: calc(104px + env(safe-area-inset-bottom)); }
+}
 
 /* Hover solo con mouse: en pantallas táctiles el color se quedaba pegado tras tocar */
 

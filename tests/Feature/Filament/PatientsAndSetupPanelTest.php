@@ -24,8 +24,11 @@ use App\Models\Setting;
 use App\Models\TextSnippet;
 use App\Models\Treatment;
 use App\Models\User;
+use App\Services\Web\PublicImages;
 use Filament\Actions\Testing\TestAction;
 use Illuminate\Foundation\Testing\LazilyRefreshDatabase;
+use Illuminate\Http\UploadedFile;
+use Illuminate\Support\Facades\Storage;
 use Livewire\Livewire;
 use Tests\Concerns\CreatesAgenda;
 use Tests\TestCase;
@@ -191,6 +194,37 @@ class PatientsAndSetupPanelTest extends TestCase
 
         $this->assertSame(3, Setting::get('booking.max_web_appointments_per_patient'));
         $this->assertSame(['+51912345678', 'Sonríe sin miedo'], [Setting::get('clinic.whatsapp'), Setting::get('clinic.slogan')]);
+    }
+
+    public function test_the_admin_sets_the_home_photo_and_the_google_stars_in_settings(): void
+    {
+        Storage::fake(PublicImages::DISK);
+        $this->actingAs(User::factory()->admin()->create());
+
+        Livewire::test(Settings::class)
+            ->fillForm(['clinic' => ['google_rating' => '6']])
+            ->call('save')
+            ->assertHasFormErrors(['clinic.google_rating']);
+
+        Livewire::test(Settings::class)
+            ->fillForm([
+                'web' => ['hero_image' => UploadedFile::fake()->image('consultorio.jpg', 2400, 1200)],
+                'clinic' => ['google_rating' => '4,9', 'google_reviews_count' => '87'],
+            ])
+            ->call('save')
+            ->assertHasNoFormErrors();
+
+        $this->assertSame([4.9, 87], [Setting::get('clinic.google_rating'), Setting::get('clinic.google_reviews_count')]);
+        $this->assertStringStartsWith('inicio/', Setting::get('web.hero_image'));
+        Storage::disk(PublicImages::DISK)->assertExists(Setting::get('web.hero_image'));
+
+        // Sin puntaje, no quedan estrellas a medias en la web.
+        Livewire::test(Settings::class)
+            ->fillForm(['clinic' => ['google_rating' => '', 'google_reviews_count' => '']])
+            ->call('save')
+            ->assertHasNoFormErrors();
+
+        $this->assertSame([null, null], [Setting::get('clinic.google_rating'), Setting::get('clinic.google_reviews_count')]);
     }
 
     public function test_the_doctor_schedule_is_edited_on_the_doctor_page(): void

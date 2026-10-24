@@ -1,9 +1,11 @@
 {{--
     wide: páginas de contenido (inicio, tratamientos…); sin wide, columna angosta para formularios.
-    whatsappFloat: false en pantallas donde el botón flotante taparía los horarios.
+    whatsappFloat: false en pantallas donde el botón flotante (y, en el celular, la barra de abajo) taparía los horarios.
+    footerHours: false donde la página ya muestra el horario completo, para no repetirlo en el pie.
+    minimalFooter: pie de una línea mientras se reserva, para que nada distraiga hasta terminar.
     jsonLd: datos estructurados de schema.org para Google.
 --}}
-@props(['title' => null, 'description' => null, 'noindex' => false, 'whatsappFloat' => true, 'wide' => false, 'image' => null, 'jsonLd' => []])
+@props(['title' => null, 'description' => null, 'noindex' => false, 'whatsappFloat' => true, 'footerHours' => true, 'minimalFooter' => false, 'wide' => false, 'image' => null, 'jsonLd' => []])
 @php
     use App\Services\Web\ClinicInfo;
     use App\Support\Phone;
@@ -98,10 +100,21 @@
     </div>
 </main>
 
+@if ($minimalFooter)
+    <footer class="site-footer minimal">
+        <div class="wrap wide">
+            <p class="name">{{ $name }}</p>
+            @if ($clinic->whatsappUrl())
+                <p>¿Alguna duda? <a href="{{ $clinic->whatsappUrl('Hola, tengo una duda con mi reserva.') }}" rel="noopener">Escríbenos por WhatsApp</a></p>
+            @endif
+            <p><a href="{{ route('site.privacy') }}">Política de privacidad</a></p>
+        </div>
+    </footer>
+@else
 <footer class="site-footer">
     <div class="wrap wide">
         <p class="name">{{ $name }}</p>
-        <div class="footer-cols">
+        <div @class(['footer-cols', 'without-hours' => ! $footerHours || $hours->isEmpty()])>
             <div>
                 <h2>Dónde estamos</h2>
                 @if ($clinic->fullAddress())
@@ -111,7 +124,7 @@
                     <p><a href="{{ $clinic->directionsUrl() }}" rel="noopener" target="_blank">Cómo llegar</a></p>
                 @endif
             </div>
-            @unless ($hours->isEmpty())
+            @if ($footerHours && ! $hours->isEmpty())
                 <div>
                     <h2>Horario</h2>
                     @if ($status)
@@ -127,7 +140,7 @@
                         <p class="note">{{ $clinic->hoursNote() }}</p>
                     @endif
                 </div>
-            @endunless
+            @endif
             <div>
                 <h2>Escríbenos</h2>
                 <p>
@@ -162,6 +175,20 @@
         </div>
     </div>
 </footer>
+@endif
+
+{{-- En el celular: barra fija abajo con lo que más se busca. En pantallas grandes queda el botón de WhatsApp. --}}
+@if ($whatsappFloat)
+    <nav class="action-bar" aria-label="Acciones rápidas">
+        <a href="{{ route('site.booking') }}" class="btn">Reservar</a>
+        @if ($clinic->whatsappUrl())
+            <a href="{{ $clinic->whatsappUrl() }}" class="btn whatsapp" rel="noopener">WhatsApp</a>
+        @endif
+        @if ($clinic->callHref())
+            <a href="{{ $clinic->callHref() }}" class="btn quiet">Llamar</a>
+        @endif
+    </nav>
+@endif
 
 @if ($clinic->whatsappUrl() && $whatsappFloat)
     <a href="{{ $clinic->whatsappUrl() }}" class="wa-float" rel="noopener" aria-label="Escríbenos por WhatsApp">

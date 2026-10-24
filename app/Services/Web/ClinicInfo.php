@@ -93,6 +93,28 @@ final class ClinicInfo
         return $this->text('clinic.reviews_url');
     }
 
+    /**
+     * Puntaje en Google tal como lo copiaron en Ajustes, o null si no lo pusieron.
+     *
+     * @return array{rating: float, count: int|null, url: string|null}|null
+     */
+    public function googleRating(): ?array
+    {
+        $rating = Setting::get('clinic.google_rating');
+
+        if (! is_numeric($rating) || $rating < 1 || $rating > 5) {
+            return null;
+        }
+
+        $count = (int) Setting::get('clinic.google_reviews_count');
+
+        return [
+            'rating' => round((float) $rating, 1),
+            'count' => $count > 0 ? $count : null,
+            'url' => $this->reviewsUrl(),
+        ];
+    }
+
     /** @return array<string, string> Red social => enlace. */
     public function socials(): array
     {
@@ -126,6 +148,18 @@ final class ClinicInfo
     public function about(): ?string
     {
         return $this->text('web.about');
+    }
+
+    /** Foto real del inicio, o null si no subieron una. */
+    public function heroImageUrl(): ?string
+    {
+        return PublicImages::url($this->text('web.hero_image'));
+    }
+
+    /** "Llamar": el teléfono fijo, o el celular de WhatsApp si no hay fijo. */
+    public function callHref(): ?string
+    {
+        return $this->phoneHref() ?? ($this->whatsapp() ? 'tel:'.$this->whatsapp() : null);
     }
 
     /**

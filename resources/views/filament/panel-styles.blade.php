@@ -10,6 +10,8 @@
         .dark .fi-ta-actions > .fi-dropdown .fi-icon-btn,
         .dark .fi-ta-actions > .fi-icon-btn { background: rgb(255 255 255 / .07); }
         .fi-modal-footer-actions .fi-btn { min-height: 2.75rem; }
+        /* "Ctrl + K" no sirve sin teclado y le quita espacio al buscador. */
+        .fi-global-search-field .fi-input-wrp-suffix { display: none; }
     }
 
     /* "Hoy": cada cita en una o dos líneas. */

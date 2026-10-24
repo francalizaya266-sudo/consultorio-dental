@@ -2,6 +2,11 @@
     <style>
         .today-strip { display: flex; gap: .5rem; overflow-x: auto; scrollbar-width: none; margin: 0 -.25rem; padding: 0 .25rem; }
         .today-strip::-webkit-scrollbar { display: none; }
+        /* En el celular la franja se desliza; en pantallas grandes baja a otra línea si no entra. */
+        @media (min-width: 48rem) {
+            .today-strip { display: grid; grid-template-columns: repeat(auto-fit, minmax(10.5rem, 1fr)); overflow: visible; }
+            .today-stat small { white-space: normal; }
+        }
         .today-stat { flex: 1 0 auto; min-width: 8.5rem; display: flex; align-items: center; gap: .6rem; padding: .55rem .8rem; border-radius: .75rem; background: #fff; border: 1px solid var(--gray-200); text-decoration: none; color: var(--gray-700); }
         .today-stat:hover { border-color: var(--gray-300); box-shadow: 0 1px 4px rgb(0 0 0 / .06); }
         .dark .today-stat { background: var(--gray-900); border-color: rgb(255 255 255 / .1); color: var(--gray-300); }

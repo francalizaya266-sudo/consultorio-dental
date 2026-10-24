@@ -1,6 +1,8 @@
 {{-- Barra fija de la atención: el paciente con sus alertas, las secciones (tocar y saltar) y guardar o terminar. --}}
 <style>
-    .consultation-bar { position: sticky; top: var(--topbar-height, 4rem); z-index: 20; margin: 0 -.25rem; padding: .6rem .75rem .5rem; border-radius: .9rem; background: rgb(255 255 255 / .96); backdrop-filter: blur(6px); box-shadow: 0 1px 3px rgb(0 0 0 / .08), 0 0 0 1px rgb(0 0 0 / .05); display: grid; gap: .45rem; }
+    /* Lo que se pega arriba es la caja que Filament pone alrededor (la barra sola no tiene espacio para pegarse). */
+    .fi-grid-col:has(> .fi-sc-component > .consultation-bar) { position: sticky; top: var(--topbar-height, 4rem); z-index: 20; }
+    .consultation-bar { margin: 0 -.25rem; padding: .6rem .75rem .5rem; border-radius: .9rem; background: rgb(255 255 255 / .96); backdrop-filter: blur(6px); box-shadow: 0 1px 3px rgb(0 0 0 / .08), 0 0 0 1px rgb(0 0 0 / .05); display: grid; gap: .45rem; }
     .dark .consultation-bar { background: rgb(24 24 27 / .96); box-shadow: 0 0 0 1px rgb(255 255 255 / .08); }
     .cb-top { display: flex; flex-wrap: wrap; gap: .5rem 1rem; align-items: center; justify-content: space-between; }
     .cb-patient { display: flex; flex-wrap: wrap; gap: .35rem .5rem; align-items: center; min-width: 0; }
