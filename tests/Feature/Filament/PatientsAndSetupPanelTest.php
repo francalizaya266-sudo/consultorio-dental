@@ -57,7 +57,7 @@ class PatientsAndSetupPanelTest extends TestCase
             ->call('create')
             ->assertHasNoFormErrors();
 
-        $child = Patient::query()->where('first_name', 'Mateo')->sole();
+        $child = Patient::query()->where('first_name', 'Mateo')->where('last_name', 'Quispe Rojas')->sole();
         $this->assertTrue($child->account->is($mother->account));
         $this->assertSame(PatientRelationship::Child, $child->relationship);
     }

@@ -7,6 +7,8 @@ use App\Filament\Support\ClinicalAlerts;
 use App\Livewire\OdontogramChart;
 use App\Models\MedicalBackground;
 use App\Models\Patient;
+use App\Models\StockMovement;
+use App\Services\Inventory\InventoryService;
 use Filament\Actions\Action;
 use Filament\Forms\Components\CheckboxList;
 use Filament\Forms\Components\Textarea;
@@ -65,6 +67,26 @@ class ClinicalRecordInfolist
                             ->placeholder('No')
                             ->visible(fn (Patient $record) => $record->sex !== Sex::Male),
                         TextEntry::make('medicalBackground.notes')->label('Otras notas')->placeholder('—'),
+                    ]),
+
+                Section::make('Implantes colocados')
+                    ->icon(Heroicon::OutlinedQrCode)
+                    ->description('Con su serie y lote, por si el fabricante pide revisar alguno.')
+                    ->collapsible()
+                    ->visible(fn (Patient $record) => app(InventoryService::class)->implantsOf($record)->isNotEmpty())
+                    ->schema([
+                        TextEntry::make('implants')
+                            ->hiddenLabel()
+                            ->state(fn (Patient $record) => app(InventoryService::class)->implantsOf($record)
+                                ->map(fn (StockMovement $use) => collect([
+                                    ($use->consultation?->attended_at ?? $use->appointment?->starts_at ?? $use->created_at)->format('d/m/Y'),
+                                    $use->supply->name,
+                                    $use->batch?->label() ?? 'serie sin registrar',
+                                    $use->consultation?->doctor?->name ?? $use->appointment?->doctor?->name,
+                                ])->filter()->implode(' · '))
+                                ->all())
+                            ->listWithLineBreaks()
+                            ->bulleted(),
                     ]),
 
                 Section::make('Odontograma')

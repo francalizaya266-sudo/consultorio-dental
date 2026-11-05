@@ -43,6 +43,12 @@ class Treatment extends Model
         return $this->hasMany(Appointment::class);
     }
 
+    /** La receta: los materiales que usa en una atención y cuánto de cada uno. */
+    public function supplies(): BelongsToMany
+    {
+        return $this->belongsToMany(Supply::class, 'treatment_supplies')->withPivot('quantity')->withTimestamps();
+    }
+
     public function clinicalTemplates(): HasMany
     {
         return $this->hasMany(ClinicalTemplate::class);

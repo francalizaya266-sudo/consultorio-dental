@@ -15,6 +15,7 @@ use App\Enums\OdontogramType;
 use App\Enums\PatientRelationship;
 use App\Enums\PaymentMethod;
 use App\Enums\PlanItemStatus;
+use App\Enums\StockMovementType;
 use App\Enums\ToothState;
 use App\Enums\TreatmentPlanStatus;
 use App\Models\Account;
@@ -29,15 +30,22 @@ use App\Models\OdontogramCondition;
 use App\Models\Patient;
 use App\Models\Payment;
 use App\Models\Setting;
+use App\Models\StockMovement;
+use App\Models\Supplier;
+use App\Models\Supply;
+use App\Models\SupplyBatch;
 use App\Models\Treatment;
 use App\Models\User;
 use App\Services\Billing\BillingService;
 use App\Services\Clinical\ClinicalFileService;
 use App\Services\Clinical\ConsentService;
+use App\Services\Inventory\InventoryService;
+use App\Services\Inventory\StarterCatalog;
 use App\Services\WhatsApp\WhatsAppOutbox;
 use Carbon\CarbonImmutable;
 use Illuminate\Database\Seeder;
 use Illuminate\Http\UploadedFile;
+use Illuminate\Support\Str;
 
 /**
  * Datos de demostración para probar el panel en local.
@@ -231,6 +239,7 @@ class DemoSeeder extends Seeder
         ]);
 
         $this->history($vega, $treatments->all(), $reception);
+        $this->inventory($admin, $reception);
 
         $this->command?->info("Demo lista. Entra a /panel con {$admin->email} / password");
     }
@@ -320,6 +329,105 @@ class DemoSeeder extends Seeder
                 }
             }
         }
+    }
+
+    /**
+     * Inventario en marcha: se cargó hace un mes, las atenciones de las últimas semanas ya
+     * descontaron su receta y el conteo encontró menos resina y ligaduras de las que había.
+     * Queda un pedido por llegar, algo por reponer, un lote por vencer, otro vencido y un implante
+     * colocado con su serie.
+     */
+    private function inventory(User $admin, User $reception): void
+    {
+        $inventory = app(InventoryService::class);
+        $suppliers = [
+            'sur' => Supplier::create(['name' => 'Dental Sur', 'contact_name' => 'Rocío', 'phone' => '+51987111222', 'email' => 'ventas@dentalsur.test']),
+            'lima' => Supplier::create(['name' => 'Depósito Dental Lima', 'contact_name' => 'Jorge', 'phone' => '+51986333444']),
+            'implantes' => Supplier::create(['name' => 'Implantes Perú', 'contact_name' => 'Carla', 'phone' => '+51985555666', 'notes' => 'Entrega en 48 horas. Pedir con el número de lote.']),
+        ];
+
+        app(StarterCatalog::class)->install();
+
+        $loadedAt = CarbonImmutable::today()->subDays(30)->setTime(9, 30);
+        // Material => proveedor, costo por unidad, cuánto se cargó, meses hasta que vence.
+        $stock = [
+            'Guantes de nitrilo' => ['lima', 0.45, 300, 30],
+            'Baberos descartables' => ['lima', 0.20, 300, null],
+            'Eyectores de saliva' => ['lima', 0.15, 300, null],
+            'Mascarillas' => ['lima', 0.25, 200, 24],
+            'Vasos descartables' => ['lima', 0.08, 200, null],
+            'Gasas estériles' => ['lima', 0.10, 400, 18],
+            'Dique de goma' => ['sur', 1.20, 30, 20],
+            'Lidocaína 2 % con epinefrina' => ['sur', 2.80, 200, 14],
+            'Agujas dentales cortas' => ['sur', 0.90, 200, 36],
+            'Pasta profiláctica' => ['sur', 0.35, 400, 12],
+            'Copas de profilaxis' => ['lima', 0.50, 100, null],
+            'Resina compuesta A2' => ['sur', 18.00, 12, 16],
+            'Ácido grabador 37 %' => ['sur', 9.00, 10, 12],
+            'Microaplicadores' => ['lima', 0.12, 200, null],
+            'Hipoclorito de sodio 2.5 %' => ['lima', 0.02, 2000, 10],
+            'Conos de gutapercha' => ['sur', 0.60, 240, 30],
+            'Sutura reabsorbible 4-0' => ['implantes', 14.00, 20, 24],
+            'Kit de blanqueamiento' => ['sur', 95.00, 6, 9],
+            'Brackets metálicos' => ['sur', 120.00, 3, null],
+            'Arcos de níquel-titanio' => ['sur', 8.00, 20, null],
+            'Ligaduras elásticas' => ['lima', 0.05, 90, null],
+        ];
+
+        foreach ($stock as $name => [$supplier, $cost, $quantity, $months]) {
+            $supply = Supply::where('name', $name)->firstOrFail();
+            $supply->update(['supplier_id' => $suppliers[$supplier]->id, 'unit_cost' => $cost]);
+            $inventory->receive($supply, $quantity, $reception, [
+                'lot' => Str::upper(Str::substr(Str::ascii($name), 0, 2)).'-'.(2400 + $supply->id),
+                'expires_on' => $months ? $loadedAt->addMonths($months)->toDateString() : null,
+                'unit_cost' => $cost,
+            ]);
+        }
+
+        // El adhesivo que queda vence este mes; del ácido grabador quedó un frasco ya vencido.
+        $adhesive = Supply::where('name', 'Adhesivo dental')->firstOrFail();
+        $adhesive->update(['supplier_id' => $suppliers['sur']->id, 'unit_cost' => 32.00]);
+        $inventory->receive($adhesive, 6, $reception, ['lot' => 'AD-2210', 'expires_on' => CarbonImmutable::today()->addDays(18)->toDateString(), 'unit_cost' => 32.00]);
+        $inventory->receive(Supply::where('name', 'Ácido grabador 37 %')->firstOrFail(), 3, $reception, ['lot' => 'AG-1907', 'expires_on' => CarbonImmutable::today()->subDays(4)->toDateString(), 'unit_cost' => 9.00]);
+
+        $fixture = Supply::where('name', 'Implante dental')->firstOrFail();
+        $fixture->update(['supplier_id' => $suppliers['implantes']->id]);
+        $inventory->receiveSerials($fixture, ['ST-48213', 'ST-48214', 'ST-48215', 'ST-48216'], $reception, ['lot' => 'ST-2291', 'expires_on' => '2030-06-30', 'unit_cost' => 450.00]);
+
+        StockMovement::query()->update(['created_at' => $loadedAt, 'updated_at' => $loadedAt]);
+        SupplyBatch::query()->update(['received_at' => $loadedAt]);
+
+        // Cada atención de las últimas tres semanas descontó su receta.
+        $recent = Appointment::query()
+            ->where('status', AppointmentStatus::Completed)
+            ->whereBetween('starts_at', [CarbonImmutable::today()->subDays(21), now()])
+            ->with('treatment')
+            ->orderBy('starts_at')
+            ->get();
+
+        foreach ($recent as $appointment) {
+            $inventory->useForAppointment($appointment, $admin);
+            StockMovement::query()->where('appointment_id', $appointment->id)->update(['created_at' => $appointment->ends_at, 'updated_at' => $appointment->ends_at]);
+        }
+
+        // El implante de la última cirugía, con su serie: queda en la historia del paciente.
+        $surgery = $recent->last(fn (Appointment $appointment) => $appointment->treatment->slug === 'implante');
+
+        if ($surgery) {
+            $inventory->take($fixture, 1, StockMovementType::Use, $admin, ['patient_id' => $surgery->patient_id, 'appointment_id' => $surgery->id], $fixture->batches()->where('serial', 'ST-48213')->firstOrFail());
+            StockMovement::query()->where('appointment_id', $surgery->id)->update(['created_at' => $surgery->ends_at, 'updated_at' => $surgery->ends_at]);
+        }
+
+        // El conteo del mes: había menos resina y ligaduras de las que decía el sistema.
+        $countedAt = CarbonImmutable::today()->subDays(3)->setTime(18, 0);
+        $before = StockMovement::max('id');
+        $inventory->adjust(Supply::where('name', 'Resina compuesta A2')->firstOrFail(), 6, 'Conteo de '.$countedAt->translatedFormat('F Y'), $reception);
+        $inventory->adjust(Supply::where('name', 'Ligaduras elásticas')->firstOrFail(), 70, 'Conteo de '.$countedAt->translatedFormat('F Y'), $reception);
+        StockMovement::query()->where('id', '>', $before)->update(['created_at' => $countedAt, 'updated_at' => $countedAt]);
+
+        // La resina ya se pidió; las ligaduras quedan para "Pedir lo que falta".
+        $order = $inventory->placeOrder($suppliers['sur'], [['supply_id' => Supply::where('name', 'Resina compuesta A2')->value('id'), 'quantity' => 12]], $reception, 'Entregar por la mañana.');
+        $order->update(['sent_at' => CarbonImmutable::today()->subDay()->setTime(10, 15), 'created_at' => CarbonImmutable::today()->subDay()->setTime(10, 15)]);
     }
 
     /**

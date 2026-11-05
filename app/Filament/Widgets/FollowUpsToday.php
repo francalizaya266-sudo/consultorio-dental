@@ -9,8 +9,11 @@ use App\Filament\Resources\Appointments\AppointmentResource;
 use App\Filament\Resources\Installments\InstallmentResource;
 use App\Filament\Resources\Patients\PatientResource;
 use App\Filament\Resources\RescheduleRequests\RescheduleRequestResource;
+use App\Filament\Resources\Supplies\SupplyResource;
 use App\Filament\Resources\WhatsappMessages\WhatsappMessageResource;
 use App\Models\Patient;
+use App\Models\Supply;
+use App\Models\SupplyBatch;
 use App\Models\TreatmentPlan;
 use App\Models\TreatmentPlanItem;
 use App\Models\User;
@@ -79,6 +82,8 @@ class FollowUpsToday extends Widget implements HasActions, HasSchemas
             $this->awaitingAnswer($followUps),
             $this->unscheduled($followUps),
             $this->installments($followUps),
+            $this->suppliesToReorder(),
+            $this->batchesExpiring(),
             $this->checkups($followUps),
             $this->birthdays($followUps),
         ], fn (?array $section) => $section !== null && $section['count'] > 0))];
@@ -191,6 +196,73 @@ class FollowUpsToday extends Widget implements HasActions, HasSchemas
             'template' => null,
             'rows' => [],
         ];
+    }
+
+    /**
+     * Materiales que bajaron del mínimo y nadie pidió todavía: el pedido sale por WhatsApp desde Inventario.
+     *
+     * @return array<string, mixed>|null
+     */
+    private function suppliesToReorder(): ?array
+    {
+        if (! auth()->user()->can('viewAny', Supply::class)) {
+            return null;
+        }
+
+        // Lo que ya se pidió espera en Compras: aquí queda solo lo que falta pedir.
+        $names = Supply::query()->toReorder()->orderBy('name')->pluck('name');
+
+        return [
+            'key' => 'supplies',
+            'title' => 'Materiales por pedir',
+            'hint' => 'Bajaron del mínimo y no se pidieron',
+            'count' => $names->count(),
+            'url' => SupplyResource::getUrl('index', ['tab' => 'low']),
+            'summary' => self::firstNames($names).'. Pídelos por WhatsApp desde Inventario.',
+            'template' => null,
+            'rows' => [],
+        ];
+    }
+
+    /**
+     * Lotes que vencen en 30 días o ya vencieron: se usan primero o se dan de baja.
+     *
+     * @return array<string, mixed>|null
+     */
+    private function batchesExpiring(): ?array
+    {
+        if (! auth()->user()->can('viewAny', Supply::class)) {
+            return null;
+        }
+
+        $batches = SupplyBatch::query()
+            ->available()
+            ->expiringSoon()
+            ->whereHas('supply', fn ($supply) => $supply->active())
+            ->with('supply')
+            ->orderBy('expires_on')
+            ->get();
+        $expired = $batches->filter->isExpired()->count();
+
+        return [
+            'key' => 'batches',
+            'title' => 'Lotes por vencer',
+            'hint' => 'Vencen en '.Supply::EXPIRY_WARNING_DAYS.' días o menos',
+            'count' => $batches->count(),
+            'url' => SupplyResource::getUrl('index', ['tab' => 'expiring']),
+            'summary' => self::firstNames($batches->map(fn (SupplyBatch $batch) => $batch->supply->name.' ('.($batch->isExpired() ? 'venció' : 'vence').' el '.$batch->expires_on->format('d/m').')')->unique())
+                .($expired > 0 ? '. Lo vencido se da de baja.' : '. Úsalos primero.'),
+            'template' => null,
+            'rows' => [],
+        ];
+    }
+
+    /** @param  Collection<int, string>  $names  "Guantes, Lidocaína y 3 más". */
+    private static function firstNames(Collection $names): string
+    {
+        $names = $names->values();
+
+        return $names->take(2)->implode(', ').($names->count() > 2 ? ' y '.($names->count() - 2).' más' : '');
     }
 
     /** @return array<string, mixed> */

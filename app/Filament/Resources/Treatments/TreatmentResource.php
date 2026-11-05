@@ -6,7 +6,10 @@ use App\Filament\Concerns\HasSpanishLabels;
 use App\Filament\Forms\WebPhotoUpload;
 use App\Filament\Resources\Treatments\Pages\ManageTreatments;
 use App\Models\Setting;
+use App\Models\Supply;
 use App\Models\Treatment;
+use App\Services\Inventory\InventoryService;
+use App\Support\Money;
 use BackedEnum;
 use Filament\Actions\DeleteAction;
 use Filament\Actions\EditAction;
@@ -161,6 +164,13 @@ class TreatmentResource extends Resource
                 IconColumn::make('online_bookable')
                     ->label('Reserva web')
                     ->boolean(),
+                // Lo que usa cada atención: lo descuenta del inventario al terminarla.
+                TextColumn::make('supplies_count')
+                    ->label('Materiales')
+                    ->state(fn (Treatment $record) => $record->supplies->count() ?: null)
+                    ->description(fn (Treatment $record) => $record->supplies->isNotEmpty() && auth()->user()->can('viewCosts', Supply::class) ? Money::format(app(InventoryService::class)->recipeCost($record)).' por atención' : null)
+                    ->placeholder('Sin receta')
+                    ->visible(fn () => Supply::query()->exists()),
                 ToggleColumn::make('is_active')
                     ->label('Activo'),
             ])
@@ -169,7 +179,9 @@ class TreatmentResource extends Resource
             ->filters([
                 TrashedFilter::make(),
             ])
+            ->modifyQueryUsing(fn (Builder $query) => $query->with('supplies'))
             ->recordActions([
+                TreatmentRecipeAction::make(),
                 EditAction::make(),
                 DeleteAction::make(),
                 RestoreAction::make(),

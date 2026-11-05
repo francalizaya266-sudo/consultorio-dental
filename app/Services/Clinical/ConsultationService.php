@@ -13,6 +13,7 @@ use App\Models\Treatment;
 use App\Models\User;
 use App\Services\Billing\BillingService;
 use App\Services\Booking\AppointmentService;
+use App\Services\Inventory\InventoryService;
 use Illuminate\Support\Facades\DB;
 
 /**
@@ -33,6 +34,7 @@ final class ConsultationService
         private readonly TreatmentPlanService $plans,
         private readonly PrescriptionService $prescriptions,
         private readonly BillingService $billing,
+        private readonly InventoryService $inventory,
     ) {}
 
     /** Abre la atención de una cita (o retoma la que ya estaba abierta). */
@@ -81,12 +83,18 @@ final class ConsultationService
         });
     }
 
-    /** Termina la atención: queda cerrada, la cita pasa a "atendida", avanza el plan y se carga lo realizado. */
-    public function close(Consultation $consultation, User $by): void
+    /**
+     * Termina la atención: queda cerrada, la cita pasa a "atendida", avanza el plan, se carga lo
+     * realizado y salen del inventario los materiales usados (los que corrigió el doctor o, si no,
+     * la receta de lo trabajado).
+     *
+     * @param  list<array{supply_id: int|string|null, quantity: float|int|string|null, batch_id?: int|string|null}>|null  $suppliesUsed
+     */
+    public function close(Consultation $consultation, User $by, ?array $suppliesUsed = null): void
     {
         $this->assertWritable($consultation, $by);
 
-        DB::transaction(function () use ($consultation, $by) {
+        DB::transaction(function () use ($consultation, $by, $suppliesUsed) {
             $consultation->update(['closed_at' => now()]);
             $this->plans->syncConsultation($consultation);
 
@@ -97,6 +105,7 @@ final class ConsultationService
             }
 
             $this->billing->chargeConsultation($consultation, $by);
+            $this->inventory->useForConsultation($consultation, $suppliesUsed ?? $this->inventory->plannedUsage($consultation), $by);
         });
     }
 
@@ -111,9 +120,11 @@ final class ConsultationService
             throw ClinicalException::reopenExpired();
         }
 
-        DB::transaction(function () use ($consultation) {
+        DB::transaction(function () use ($consultation, $by) {
             $consultation->update(['closed_at' => null]);
             $this->plans->syncConsultation($consultation);
+            // Lo usado vuelve al stock; al terminar de nuevo se descuenta lo que quede registrado.
+            $this->inventory->revertConsultation($consultation, $by);
         });
     }
 

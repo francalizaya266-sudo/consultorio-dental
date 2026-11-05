@@ -1,7 +1,7 @@
 {{-- Cada grupo se abre y se cierra con su número a la vista; el primero con personas va abierto.
-     Solo se pinta el número de lo que no puede esperar: avisos, solicitudes y cuotas vencidas. --}}
+     Solo se pinta el número de lo que no puede esperar: avisos, solicitudes, cuotas vencidas y el inventario. --}}
 @php($firstWithRows = collect($sections)->search(fn (array $section) => $section['rows'] !== []))
-@php($urgent = ['messages', 'requests', 'installments'])
+@php($urgent = ['messages', 'requests', 'installments', 'supplies', 'batches'])
 <x-filament-widgets::widget>
     <x-filament::section heading="Por hacer hoy" icon="heroicon-o-clipboard-document-check" description="Avisos, respuestas y a quién escribirle hoy.">
         @forelse ($sections as $i => $section)
