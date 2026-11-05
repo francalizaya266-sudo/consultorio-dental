@@ -12,6 +12,7 @@ use Filament\Notifications\Notification;
 use Filament\Support\Icons\Heroicon;
 use Filament\Tables\Columns\Summarizers\Sum;
 use Filament\Tables\Columns\TextColumn;
+use Filament\Tables\Contracts\HasTable;
 use Filament\Tables\Filters\Filter;
 use Filament\Tables\Filters\Indicator;
 use Filament\Tables\Filters\SelectFilter;
@@ -24,6 +25,7 @@ class PaymentsTable
     public static function configure(Table $table): Table
     {
         return $table
+            ->stackedOnMobile()
             ->columns([
                 TextColumn::make('paid_at')
                     ->label('Fecha')
@@ -94,7 +96,16 @@ class PaymentsTable
                 self::voidAction(),
             ])
             ->emptyStateHeading('No hay pagos en estas fechas')
-            ->emptyStateDescription('Usa "Registrar pago" cuando el paciente pague en el consultorio.');
+            ->emptyStateDescription('Usa "Registrar pago" cuando el paciente pague en el consultorio, o mira los pagos de otros días.')
+            // Un día sin pagos no deja la pantalla en blanco: un clic quita el filtro de fecha.
+            ->emptyStateActions([
+                Action::make('allDates')
+                    ->label('Ver pagos de todos los días')
+                    ->icon(Heroicon::OutlinedCalendarDays)
+                    ->color('gray')
+                    ->visible(fn (HasTable $livewire) => filled($livewire->getTableFilterState('paid_at')['from'] ?? null) || filled($livewire->getTableFilterState('paid_at')['until'] ?? null))
+                    ->action(fn (HasTable $livewire) => $livewire->removeTableFilter('paid_at')),
+            ]);
     }
 
     /** Anular un pago: queda registrado (no se borra) y deja de sumar. */

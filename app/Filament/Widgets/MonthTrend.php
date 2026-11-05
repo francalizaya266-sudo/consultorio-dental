@@ -24,6 +24,8 @@ class MonthTrend extends ReportChart
 
     protected string $unit = 'money';
 
+    protected string $tone = 'money';
+
     protected ?string $maxHeight = '240px';
 
     protected string $hoverMode = 'index';
@@ -60,7 +62,7 @@ class MonthTrend extends ReportChart
                     'label' => ucfirst(today()->translatedFormat('F')),
                     'data' => array_pad($series['this_month'], $days, null),
                     'fill' => 'origin',
-                    'backgroundColor' => 'rgba(59, 130, 246, 0.12)',
+                    'backgroundColor' => 'rgba(16, 185, 129, 0.12)',
                     'borderWidth' => 2.5,
                     'pointRadius' => 0,
                     'pointHoverRadius' => 5,

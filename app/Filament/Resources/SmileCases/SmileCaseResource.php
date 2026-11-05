@@ -100,6 +100,7 @@ class SmileCaseResource extends Resource
     public static function table(Table $table): Table
     {
         return $table
+            ->stackedOnMobile()
             ->columns([
                 ImageColumn::make('before_path')
                     ->label('Antes')

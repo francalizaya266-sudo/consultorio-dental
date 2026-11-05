@@ -78,6 +78,7 @@ class TreatmentPlansRelationManager extends RelationManager
         $patient = $this->getOwnerRecord();
 
         return $table
+            ->stackedOnMobile()
             ->modifyQueryUsing(fn (Builder $query) => $query->with(['doctor', 'items', 'patient.account', 'installments', 'includedIn.patient', 'companionPlans.patient']))
             ->defaultSort('created_at', 'desc')
             ->columns([

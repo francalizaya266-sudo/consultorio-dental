@@ -97,4 +97,12 @@ class ReportPeriodTest extends TestCase
 
         $this->assertSame(['2025-11-01', '2026-10-23'], [$period->from->toDateString(), $period->to->toDateString()]);
     }
+
+    public function test_fewer_than_seven_days_are_too_short_to_judge(): void
+    {
+        $this->assertTrue(ReportPeriod::fromFilters(['period' => 'today'])->isTooShortToJudge());
+        $this->assertTrue((new ReportPeriod(CarbonImmutable::parse('2026-11-01'), CarbonImmutable::parse('2026-11-06')))->isTooShortToJudge());
+        $this->assertFalse((new ReportPeriod(CarbonImmutable::parse('2026-11-01'), CarbonImmutable::parse('2026-11-07')))->isTooShortToJudge());
+        $this->assertFalse(ReportPeriod::fromFilters(['period' => 'month'])->isTooShortToJudge());
+    }
 }

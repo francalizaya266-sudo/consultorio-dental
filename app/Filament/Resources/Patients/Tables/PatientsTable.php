@@ -20,6 +20,7 @@ class PatientsTable
     public static function configure(Table $table): Table
     {
         return $table
+            ->stackedOnMobile()
             ->modifyQueryUsing(fn (Builder $query) => $query
                 ->withMin(
                     ['appointments as next_appointment_at' => fn (Builder $a) => $a->where('starts_at', '>=', now())->whereIn('status', AppointmentStatus::changeable())],

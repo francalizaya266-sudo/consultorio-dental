@@ -49,6 +49,7 @@ class ConsentsRelationManager extends RelationManager
         $patient = $this->getOwnerRecord();
 
         return $table
+            ->stackedOnMobile()
             ->modifyQueryUsing(fn (Builder $query) => $query->with(['doctor', 'patient']))
             ->defaultSort('signed_at', 'desc')
             ->columns([

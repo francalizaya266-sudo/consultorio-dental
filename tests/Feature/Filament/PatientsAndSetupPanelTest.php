@@ -2,9 +2,12 @@
 
 namespace Tests\Feature\Filament;
 
+use App\Enums\AppointmentOrigin;
+use App\Enums\AppointmentStatus;
 use App\Enums\PatientRelationship;
 use App\Enums\PaymentMethod;
 use App\Enums\SnippetStatus;
+use App\Filament\Pages\Dashboard;
 use App\Filament\Pages\Settings;
 use App\Filament\Resources\Accounts\Pages\ViewAccount;
 use App\Filament\Resources\Doctors\Pages\EditDoctor;
@@ -14,8 +17,10 @@ use App\Filament\Resources\Patients\PatientResource;
 use App\Filament\Resources\Payments\Pages\ManagePayments;
 use App\Filament\Resources\ScheduleBlocks\Pages\ManageScheduleBlocks;
 use App\Filament\Resources\TextSnippets\Pages\ManageTextSnippets;
+use App\Filament\Support\MobileBar;
 use App\Models\Account;
 use App\Models\Appointment;
+use App\Models\Charge;
 use App\Models\Doctor;
 use App\Models\Patient;
 use App\Models\Payment;
@@ -107,6 +112,18 @@ class PatientsAndSetupPanelTest extends TestCase
 
         $this->assertNotNull($payment->fresh()->voided_at);
         $this->assertSame(1, Payment::count());
+    }
+
+    public function test_a_day_without_payments_offers_the_other_days_in_one_click(): void
+    {
+        $payment = Payment::factory()->for(Patient::factory())->create(['paid_at' => now()->subDays(3)]);
+        $this->actingAs(User::factory()->reception()->create());
+
+        Livewire::test(ManagePayments::class)
+            ->assertCanNotSeeTableRecords([$payment])
+            ->assertSee('No hay pagos en estas fechas')
+            ->callAction(TestAction::make('allDates')->table())
+            ->assertCanSeeTableRecords([$payment]);
     }
 
     public function test_a_doctor_can_only_block_their_own_agenda(): void
@@ -283,5 +300,49 @@ class PatientsAndSetupPanelTest extends TestCase
             ->assertOk()
             ->assertSeeInOrder(['Atención: Alergia: Penicilina', 'Datos del paciente', 'Línea de tiempo'])
             ->assertDontSee('Pagó S/ 80.00');
+    }
+
+    public function test_the_patient_file_sums_up_what_matters_in_chips_under_the_name(): void
+    {
+        $this->freezeMonday();
+        $treatment = Treatment::factory()->create();
+        $doctor = $this->doctorOffering($treatment);
+        $patient = Patient::factory()
+            ->for(Account::factory()->state(['phone' => '+51987654321']))
+            ->create(['first_name' => 'Rosa', 'last_name' => 'Quispe', 'birth_date' => '1990-11-02', 'district' => 'San Isidro', 'origin' => null]);
+        Charge::factory()->for($patient)->create(['amount' => 120]);
+        Payment::factory()->for($patient)->create(['amount' => 80]);
+        Appointment::factory()->for($doctor)->for($treatment)->for($patient)->at('2026-04-01 10:00')->create(['status' => AppointmentStatus::Completed]);
+        Appointment::factory()->for($doctor)->for($treatment)->for($patient)->at('2026-11-04 10:00')->confirmed()->create();
+
+        $this->actingAs(User::factory()->reception()->create());
+
+        $this->get(PatientResource::getUrl('view', ['record' => $patient]))
+            ->assertOk()
+            ->assertSee(['36 años', 'San Isidro', 'Debe S/ 40.00', 'Próxima cita:', '10:00', 'Hoy cumple 36 años', 'Falta: ¿cómo nos encontró?'])
+            ->assertSee('https://wa.me/51987654321')
+            ->assertSee(PatientResource::getUrl('edit', ['record' => $patient]));
+
+        // El doctor no ve la plata; sin cita por delante y con 7 meses sin venir, le toca control.
+        $patient->appointments()->where('starts_at', '>=', today())->delete();
+        $patient->update(['last_visit_at' => now()->subMonths(7), 'origin' => AppointmentOrigin::Instagram]);
+        $this->actingAs($doctor->user);
+
+        $this->get(PatientResource::getUrl('view', ['record' => $patient]))
+            ->assertOk()
+            ->assertSee(['Le toca control · Última visita hace 7 meses', 'Origen: Instagram'])
+            ->assertDontSee(['Debe S/ 40.00', 'Falta: ¿cómo nos encontró?']);
+    }
+
+    public function test_the_phone_bar_shows_what_each_role_uses_most(): void
+    {
+        $doctor = $this->doctorOffering(Treatment::factory()->create());
+
+        $this->actingAs(User::factory()->reception()->create());
+        $this->get(Dashboard::getUrl())->assertOk()->assertSee('Accesos rápidos');
+        $this->assertSame(['Hoy', 'Agenda', 'Nueva cita', 'Pacientes', 'Caja'], array_column(MobileBar::items(), 'label'));
+
+        $this->actingAs($doctor->user);
+        $this->assertSame(['Hoy', 'Agenda', 'Nueva cita', 'Pacientes', 'Avisos'], array_column(MobileBar::items(), 'label'));
     }
 }

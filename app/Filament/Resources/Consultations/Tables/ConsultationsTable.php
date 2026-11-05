@@ -21,6 +21,7 @@ class ConsultationsTable
         $user = auth()->user();
 
         return $table
+            ->stackedOnMobile()
             ->columns(self::columns($showPatient))
             ->defaultSort('attended_at', 'desc')
             ->recordUrl(fn (Consultation $record) => ConsultationResource::urlFor($record))

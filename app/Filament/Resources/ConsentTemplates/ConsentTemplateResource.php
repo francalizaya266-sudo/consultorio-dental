@@ -67,6 +67,7 @@ class ConsentTemplateResource extends Resource
     public static function table(Table $table): Table
     {
         return $table
+            ->stackedOnMobile()
             ->modifyQueryUsing(fn ($query) => $query->with('treatment'))
             ->columns([
                 TextColumn::make('name')

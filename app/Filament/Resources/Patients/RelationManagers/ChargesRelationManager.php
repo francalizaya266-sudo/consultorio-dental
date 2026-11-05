@@ -58,6 +58,7 @@ class ChargesRelationManager extends RelationManager
     public function table(Table $table): Table
     {
         return $table
+            ->stackedOnMobile()
             ->modifyQueryUsing(fn (Builder $query) => $query->with(['doctor', 'voidedBy']))
             ->columns([
                 TextColumn::make('charged_at')

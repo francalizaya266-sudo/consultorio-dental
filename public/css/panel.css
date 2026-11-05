@@ -6,6 +6,9 @@
 
 /* ---------- Ajustes generales del panel ---------- */
 
+/* La caja de acciones de arriba de una lista, vacía hasta que se marcan filas, no deja un hueco. */
+.fi-ta-header-toolbar > .fi-ta-actions:not(:has(*)) { display: none; }
+
 /* En pantallas táctiles, los botones de cada fila se tocan con el dedo sin errar. */
 @media (pointer: coarse) {
     .fi-ta-actions { flex-wrap: wrap; gap: .5rem; }
@@ -19,6 +22,42 @@
     /* "Ctrl + K" no sirve sin teclado y le quita espacio al buscador. */
     .fi-global-search-field .fi-input-wrp-suffix { display: none; }
 }
+
+/* En el celular, cada fila de una lista es una tarjeta: la primera columna, en negrita y sin etiqueta;
+   las demás, etiqueta y dato en la misma línea. Lo que está vacío no ocupa lugar. */
+@media (max-width: 39.99rem) {
+    .fi-ta-table-stacked-on-mobile > tbody > tr > .fi-ta-cell:has(> .fi-ta-cell-label) { display: grid; grid-template-columns: minmax(5.5rem, 34%) minmax(0, 1fr); column-gap: .75rem; align-items: baseline; }
+    .fi-ta-table-stacked-on-mobile > tbody > tr > .fi-ta-cell > .fi-ta-cell-label { padding-top: .3rem; font-size: .75rem; line-height: 1.2rem; font-weight: 500; }
+    .fi-ta-table-stacked-on-mobile > tbody > tr > .fi-ta-cell:is(:first-child, .fi-ta-selection-cell + .fi-ta-cell):has(> .fi-ta-cell-label) { grid-template-columns: minmax(0, 1fr); padding-top: .5rem; }
+    .fi-ta-table-stacked-on-mobile > tbody > tr > .fi-ta-cell:is(:first-child, .fi-ta-selection-cell + .fi-ta-cell) > .fi-ta-cell-label { display: none; }
+    .fi-ta-table-stacked-on-mobile > tbody > tr > .fi-ta-cell:is(:first-child, .fi-ta-selection-cell + .fi-ta-cell) .fi-ta-text-item { font-size: .9375rem; font-weight: 600; }
+    .fi-ta-table-stacked-on-mobile > tbody > tr > .fi-ta-cell:has(> .fi-ta-cell-content .fi-ta-placeholder),
+    .fi-ta-table-stacked-on-mobile > tbody > tr > .fi-ta-cell:has(> .fi-ta-cell-content:empty) { display: none; }
+    .fi-ta-table-stacked-on-mobile > tbody > tr > .fi-ta-cell { text-align: start; }
+    .fi-ta-table-stacked-on-mobile > tbody > tr > .fi-ta-cell .fi-ta-col { padding-block: .3rem; justify-content: flex-start; text-align: start; }
+    .fi-ta-table-stacked-on-mobile > tbody > tr > .fi-ta-cell .fi-ta-col .fi-align-end { text-align: start; justify-content: flex-start; }
+    /* El buscador de la lista ocupa todo el ancho. */
+    .fi-ta-header-toolbar > div:not(.fi-ta-actions) { flex: 1 1 auto; min-width: 0; }
+    .fi-ta-header-toolbar .fi-ta-search-field { flex: 1 1 auto; }
+}
+
+/* Barra fija de abajo en el celular y la tableta (donde el menú se esconde): lo más usado a un pulgar. */
+.mobile-bar { display: none; }
+@media (max-width: 63.99rem) {
+    .mobile-bar { position: fixed; inset: auto 0 0 0; z-index: 25; display: grid; grid-template-columns: repeat(var(--items), minmax(0, 1fr)); padding: .3rem .4rem calc(.3rem + env(safe-area-inset-bottom)); background: rgb(255 255 255 / .96); backdrop-filter: blur(8px); box-shadow: 0 -1px 0 rgb(3 7 18 / .08), 0 -4px 16px rgb(0 0 0 / .04); }
+    .dark .mobile-bar { background: rgb(24 24 27 / .96); box-shadow: 0 -1px 0 rgb(255 255 255 / .08); }
+    .mobile-bar-item { display: grid; justify-items: center; gap: .15rem; min-height: 3.1rem; padding: .3rem .2rem; border-radius: .7rem; color: var(--gray-500); font-size: .68rem; font-weight: 600; text-decoration: none; -webkit-tap-highlight-color: transparent; }
+    .mobile-bar-item.is-active { color: var(--primary-600); }
+    .dark .mobile-bar-item { color: var(--gray-400); }
+    .dark .mobile-bar-item.is-active { color: var(--primary-400); }
+    .mobile-bar-icon { width: 1.4rem; height: 1.4rem; }
+    .mobile-bar-item.is-primary .mobile-bar-icon { width: 2.4rem; height: 2.4rem; margin-top: -1.15rem; padding: .5rem; border-radius: 999px; background: var(--primary-600); color: #fff; box-shadow: 0 4px 12px rgb(37 99 235 / .35); }
+    .mobile-bar-item.is-primary { color: var(--gray-700); }
+    .dark .mobile-bar-item.is-primary { color: var(--gray-200); }
+    /* Que lo último de la página no quede tapado por la barra. */
+    body:has(.mobile-bar) .fi-main { padding-bottom: calc(5rem + env(safe-area-inset-bottom)); }
+}
+@media print { .mobile-bar { display: none !important; } }
 
 /* ---------- Agenda en calendario ---------- */
 
@@ -175,6 +214,24 @@ a.pt-event:hover { background: var(--gray-50); }
 .pt-text small { display: block; font-size: .78rem; color: var(--gray-500); }
 .pt-meta { font-size: .72rem; color: var(--gray-500); white-space: nowrap; text-align: right; }
 .pt-empty { color: var(--gray-500); font-size: .875rem; }
+
+/* Ficha del paciente: lo importante en etiquetas bajo el nombre; el color dice si hay algo que hacer. */
+.pt-summary { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: .6rem 1.25rem; }
+.pt-chips { margin: 0; padding: 0; list-style: none; display: flex; flex-wrap: wrap; gap: .45rem; }
+.pt-chip { display: inline-flex; align-items: center; gap: .35rem; padding: .3rem .7rem; border-radius: 999px; font-size: .8125rem; font-weight: 600; line-height: 1.25; text-decoration: none; background: var(--gray-100); color: var(--gray-700); box-shadow: inset 0 0 0 1px rgb(3 7 18 / .06); }
+a.pt-chip:hover { filter: brightness(.97); text-decoration: underline; text-underline-offset: 2px; }
+.pt-chip-icon { width: 1rem; height: 1rem; flex: none; opacity: .85; }
+.pt-chip.is-danger { background: var(--danger-50); color: var(--danger-700); box-shadow: inset 0 0 0 1px var(--danger-200); }
+.pt-chip.is-warning { background: var(--warning-50); color: var(--warning-800); box-shadow: inset 0 0 0 1px var(--warning-200); }
+.pt-chip.is-success { background: var(--success-50); color: var(--success-700); box-shadow: inset 0 0 0 1px var(--success-200); }
+.pt-chip.is-info { background: var(--primary-50); color: var(--primary-700); box-shadow: inset 0 0 0 1px var(--primary-200); }
+.dark .pt-chip { background: rgb(255 255 255 / .06); color: var(--gray-300); box-shadow: inset 0 0 0 1px rgb(255 255 255 / .1); }
+.dark .pt-chip.is-danger { background: rgb(239 68 68 / .12); color: var(--danger-300); box-shadow: inset 0 0 0 1px rgb(239 68 68 / .3); }
+.dark .pt-chip.is-warning { background: rgb(245 158 11 / .12); color: var(--warning-300); box-shadow: inset 0 0 0 1px rgb(245 158 11 / .3); }
+.dark .pt-chip.is-success { background: rgb(34 197 94 / .1); color: var(--success-300); box-shadow: inset 0 0 0 1px rgb(34 197 94 / .28); }
+.dark .pt-chip.is-info { background: rgb(59 130 246 / .14); color: var(--primary-300); box-shadow: inset 0 0 0 1px rgb(59 130 246 / .32); }
+.pt-contact { display: flex; gap: 1rem; align-items: center; }
+@media (pointer: coarse) { .pt-chip { padding: .45rem .8rem; } .pt-contact .fi-link { min-height: 2.75rem; } }
 
 /* ---------- Ganancias: tablas ---------- */
 

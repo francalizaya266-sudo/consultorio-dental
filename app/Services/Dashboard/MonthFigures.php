@@ -21,7 +21,7 @@ final class MonthFigures
     public const CACHE_SECONDS = 300;
 
     /** Antes de este día del mes, las comparaciones y la proyección se basan en muy poco. */
-    public const SETTLED_FROM_DAY = 7;
+    public const SETTLED_FROM_DAY = ReportPeriod::FEW_DAYS;
 
     private const TREND_DAYS = 30;
 

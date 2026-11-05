@@ -23,7 +23,7 @@ final class StatComparison
 
         $change = round(($current - $previous) / $previous * 100);
 
-        return self::trend($stat, $change, abs($change).' %', $against, $higherIsBetter);
+        return self::trend($stat, $change, abs($change).' %', $previousPeriod, $higherIsBetter);
     }
 
     /** Para porcentajes: el cambio va en puntos ("+3 puntos"), no en porcentaje de porcentaje. */
@@ -38,7 +38,7 @@ final class StatComparison
 
         $change = round($current - $previous, 1);
 
-        return self::trend($stat, $change, self::number(abs($change)).(abs($change) === 1.0 ? ' punto' : ' puntos'), $against, $higherIsBetter);
+        return self::trend($stat, $change, self::number(abs($change)).(abs($change) === 1.0 ? ' punto' : ' puntos'), $previousPeriod, $higherIsBetter);
     }
 
     public static function percent(float $value): string
@@ -46,8 +46,11 @@ final class StatComparison
         return self::number($value).' %';
     }
 
-    private static function trend(Stat $stat, float $change, string $amount, string $against, bool $higherIsBetter): Stat
+    /** Verde si mejoró y rojo si empeoró; con pocos días, sin color, porque todavía no dice mucho. */
+    private static function trend(Stat $stat, float $change, string $amount, ReportPeriod $previousPeriod, bool $higherIsBetter): Stat
     {
+        $against = $previousPeriod->shortLabel();
+
         if ($change == 0) {
             return $stat->description('Igual que en '.$against)->color('gray');
         }
@@ -57,7 +60,11 @@ final class StatComparison
         return $stat
             ->description(($up ? '+' : '−').$amount.' vs. '.$against)
             ->descriptionIcon($up ? 'heroicon-m-arrow-trending-up' : 'heroicon-m-arrow-trending-down')
-            ->color($up === $higherIsBetter ? 'success' : 'danger');
+            ->color(match (true) {
+                $previousPeriod->isTooShortToJudge() => 'gray',
+                $up === $higherIsBetter => 'success',
+                default => 'danger',
+            });
     }
 
     private static function number(float $value): string

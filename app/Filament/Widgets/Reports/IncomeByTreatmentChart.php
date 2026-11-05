@@ -14,6 +14,8 @@ class IncomeByTreatmentChart extends ReportChart
 
     protected string $unit = 'money';
 
+    protected string $tone = 'money';
+
     protected bool $horizontal = true;
 
     protected ?string $maxHeight = '280px';

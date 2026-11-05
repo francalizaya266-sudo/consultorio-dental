@@ -76,11 +76,6 @@ class MonthOverview extends StatsOverviewWidget
                 ->url(Summary::getUrl()),
         ];
 
-        // Los primeros días un solo pago cambia el porcentaje: se muestra, pero sin verde ni rojo.
-        if ($this->isEarly()) {
-            $comparisons = array_map(fn (Stat $stat) => $stat->color('gray'), $comparisons);
-        }
-
         return array_values(array_filter([
             ...$comparisons,
             $this->doctorId() === null ? $this->outstanding() : null,

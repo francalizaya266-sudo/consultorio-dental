@@ -26,6 +26,7 @@ class WaitlistEntriesTable
     public static function configure(Table $table): Table
     {
         return $table
+            ->stackedOnMobile()
             ->defaultSort('created_at')
             ->columns([
                 TextColumn::make('patient')

@@ -13,6 +13,8 @@ class OriginsChart extends ReportChart
 
     protected ?string $maxHeight = '280px';
 
+    protected array $mutedLabels = [ActivityReport::NO_ORIGIN];
+
     protected function chartData(): array
     {
         $origins = $this->activity()->origins();

@@ -64,6 +64,7 @@ class ClinicalFilesRelationManager extends RelationManager
         $patient = $this->getOwnerRecord();
 
         return $table
+            ->stackedOnMobile()
             ->modifyQueryUsing(fn (Builder $query) => $query->with('patient'))
             ->description(fn () => 'Ocupan '.ClinicalFileService::humanSize(app(ClinicalFileService::class)->usedBytes($patient)).'. Toca una para verla en tamaño completo.')
             ->defaultSort('taken_at', 'desc')
