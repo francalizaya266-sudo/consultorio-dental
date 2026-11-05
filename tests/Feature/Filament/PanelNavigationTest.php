@@ -4,6 +4,8 @@ namespace Tests\Feature\Filament;
 
 use App\Filament\Pages\Dashboard;
 use App\Filament\Resources\Appointments\AppointmentResource;
+use App\Filament\Resources\Patients\PatientResource;
+use App\Filament\Resources\Payments\PaymentResource;
 use App\Filament\Resources\Treatments\TreatmentResource;
 use App\Models\Account;
 use App\Models\Patient;
@@ -26,11 +28,19 @@ class PanelNavigationTest extends TestCase
         $this->get(Dashboard::getUrl())
             ->assertOk()
             ->assertSeeInOrder(['Hoy', 'Agenda', 'Pacientes', 'Caja', 'Avisos', 'Reportes', 'Configuración'])
-            ->assertDontSee(['Bloqueos de horario', 'Cuotas por cobrar', 'Copias de seguridad']);
+            ->assertDontSee(['Bloqueos de horario', 'Lista de espera', 'Presupuestos y planes', 'Cuotas por cobrar', 'Cierre del día', 'Copias de seguridad']);
 
         $this->get(AppointmentResource::getUrl('index'))
             ->assertOk()
-            ->assertSeeInOrder(['Agenda', 'Citas', 'Solicitudes de cambio', 'Bloqueos de horario', 'Pacientes']);
+            ->assertSeeInOrder(['Agenda', 'Citas', 'Solicitudes de cambio', 'Lista de espera', 'Bloqueos de horario', 'Pacientes']);
+
+        $this->get(PatientResource::getUrl('index'))
+            ->assertOk()
+            ->assertSeeInOrder(['Pacientes', 'Presupuestos y planes', 'Celulares y familias', 'Caja']);
+
+        $this->get(PaymentResource::getUrl('index'))
+            ->assertOk()
+            ->assertSeeInOrder(['Caja', 'Saldos pendientes', 'Cuotas por cobrar', 'Cierre del día', 'Avisos']);
     }
 
     public function test_reception_only_sees_its_entries(): void

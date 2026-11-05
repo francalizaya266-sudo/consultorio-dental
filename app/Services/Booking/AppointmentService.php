@@ -9,8 +9,8 @@ use App\Enums\CancelledBy;
 use App\Enums\ConfirmationChannel;
 use App\Enums\MessageTemplateKey;
 use App\Enums\PatientRelationship;
-use App\Enums\WaitlistStatus;
 use App\Exceptions\BookingException;
+use App\Filament\Resources\WaitlistEntries\WaitlistEntryResource;
 use App\Models\Account;
 use App\Models\Appointment;
 use App\Models\Campaign;
@@ -20,7 +20,6 @@ use App\Models\RememberedDevice;
 use App\Models\Setting;
 use App\Models\Treatment;
 use App\Models\User;
-use App\Models\WaitlistEntry;
 use App\Services\Access\MagicLinkService;
 use App\Services\Agenda\AvailabilityService;
 use App\Services\Billing\BillingService;
@@ -44,6 +43,7 @@ class AppointmentService
         private readonly StaffAlerts $alerts,
         private readonly MagicLinkService $links,
         private readonly BillingService $billing,
+        private readonly WaitlistService $waitlist,
     ) {}
 
     /**
@@ -126,6 +126,7 @@ class AppointmentService
             ]);
 
             $appointment->logEvent('created', 'patient');
+            $this->waitlist->settle($appointment);
             $this->outbox->queueForAppointment($appointment, MessageTemplateKey::BookingConfirmation);
             $this->alerts->toReception(
                 'Nueva cita web',
@@ -180,6 +181,7 @@ class AppointmentService
             ]);
 
             $appointment->logEvent('created', 'staff');
+            $this->waitlist->settle($appointment);
             $this->outbox->queueForAppointment($appointment, MessageTemplateKey::AppointmentScheduled);
 
             if ($by->isDoctor()) {
@@ -306,11 +308,12 @@ class AppointmentService
 
         $this->cancel($appointment, CancelledBy::Patient, $reason);
 
-        $waiting = $this->waitlistCandidates($appointment);
+        $waitlist = $this->waitlistNotice($appointment);
         $this->alerts->toReception(
             'Un paciente canceló su cita',
             "{$appointment->patient->full_name} canceló {$this->when($appointment)} con {$appointment->doctor->name}."
-                .($waiting > 0 ? " Hay {$waiting} paciente(s) en lista de espera para ese horario." : ''),
+                .($waitlist ? ' '.$waitlist['text'] : ''),
+            link: $waitlist['link'] ?? null,
         );
     }
 
@@ -324,10 +327,19 @@ class AppointmentService
             $this->outbox->queueForAppointment($appointment, MessageTemplateKey::Cancelled);
         }
 
+        $waitlist = $this->waitlistNotice($appointment);
+
         if ($by->isDoctor()) {
             $this->alerts->toReception(
                 "{$appointment->doctor->name} canceló una cita",
-                "{$appointment->patient->full_name} · {$this->when($appointment)}.",
+                "{$appointment->patient->full_name} · {$this->when($appointment)}.".($waitlist ? ' '.$waitlist['text'] : ''),
+                link: $waitlist['link'] ?? null,
+            );
+        } elseif ($waitlist) {
+            $this->alerts->toReception(
+                'Se liberó un horario',
+                "{$this->when($appointment)} con {$appointment->doctor->name}. {$waitlist['text']}",
+                link: $waitlist['link'],
             );
         }
     }
@@ -411,6 +423,11 @@ class AppointmentService
             ]);
 
             $appointment->logEvent('rescheduled', $actor, ['from_starts_at' => $from, 'to_starts_at' => $startsAt]);
+
+            // Adelantarle la cita es justo lo que esperaba en la lista.
+            if ($startsAt->lt($from)) {
+                $this->waitlist->settle($appointment);
+            }
 
             // El recordatorio del horario anterior ya no sirve; el enlace sigue sirviendo para el nuevo.
             $this->outbox->discardPending($appointment, MessageTemplateKey::Reminder);
@@ -536,13 +553,26 @@ class AppointmentService
         Doctor::query()->whereKey($doctor->getKey())->lockForUpdate()->first();
     }
 
-    private function waitlistCandidates(Appointment $appointment): int
+    /**
+     * Si alguien de la lista de espera puede tomar el horario que se liberó: el texto para la alerta
+     * y el botón que abre la lista con quienes pueden venir ese día.
+     *
+     * @return array{text: string, link: array{label: string, url: string}}|null
+     */
+    private function waitlistNotice(Appointment $appointment): ?array
     {
-        return WaitlistEntry::query()
-            ->where('status', WaitlistStatus::Waiting)
-            ->where(fn ($q) => $q->whereNull('treatment_id')->orWhere('treatment_id', $appointment->treatment_id))
-            ->where(fn ($q) => $q->whereNull('doctor_id')->orWhere('doctor_id', $appointment->doctor_id))
-            ->count();
+        $count = $this->waitlist->candidatesFor($appointment->doctor, $appointment->starts_at, $appointment->patient_id)->count();
+
+        if ($count === 0) {
+            return null;
+        }
+
+        return [
+            'text' => $count === 1
+                ? 'Hay 1 paciente en lista de espera que puede venir a esa hora.'
+                : "Hay {$count} pacientes en lista de espera que pueden venir a esa hora.",
+            'link' => ['label' => 'Ofrecer el horario', 'url' => WaitlistEntryResource::urlForSlot($appointment->doctor, $appointment->starts_at)],
+        ];
     }
 
     private function when(Appointment $appointment): string

@@ -4,12 +4,16 @@ namespace App\Services;
 
 use App\Enums\UserRole;
 use App\Models\User;
+use Filament\Actions\Action;
 use Filament\Notifications\Notification;
 
 /** Alertas en la campana del panel para recepción (y administración). */
 class StaffAlerts
 {
-    public function toReception(string $title, ?string $body = null, ?User $except = null): void
+    /**
+     * @param  array{label: string, url: string}|null  $link  Botón para ir directo a resolverlo.
+     */
+    public function toReception(string $title, ?string $body = null, ?User $except = null, ?array $link = null): void
     {
         $recipients = User::query()
             ->where('is_active', true)
@@ -24,6 +28,7 @@ class StaffAlerts
         Notification::make()
             ->title($title)
             ->body($body)
+            ->actions($link ? [Action::make('open')->label($link['label'])->url($link['url'])->markAsRead()] : [])
             ->sendToDatabase($recipients);
     }
 

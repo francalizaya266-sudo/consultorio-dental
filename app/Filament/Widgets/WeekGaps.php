@@ -3,6 +3,7 @@
 namespace App\Filament\Widgets;
 
 use App\Filament\Pages\Agenda;
+use App\Filament\Resources\WaitlistEntries\WaitlistEntryResource;
 use App\Models\User;
 use App\Services\Dashboard\WeekGaps as WeekGapsService;
 use App\Support\Dates;
@@ -30,7 +31,7 @@ class WeekGaps extends Widget
     }
 
     /**
-     * @return array{days: list<array{label: string, occupancy: int, free: string, url: string, doctors: list<array{name: string|null, gaps: string}>}>}
+     * @return array{days: list<array{label: string, occupancy: int, free: string, url: string, waiting: string|null, waiting_url: string, doctors: list<array{name: string|null, gaps: string}>}>}
      */
     protected function getViewData(): array
     {
@@ -46,6 +47,12 @@ class WeekGaps extends Widget
             'occupancy' => $day['occupancy'],
             'free' => $day['free_minutes'] > 0 ? Dates::duration($day['free_minutes']).' libres' : 'Sin huecos',
             'url' => Agenda::getUrl(['date' => $day['date']->toDateString(), 'mode' => 'day']),
+            'waiting' => match ($day['waiting']) {
+                0 => null,
+                1 => '1 de la lista de espera puede venir',
+                default => $day['waiting'].' de la lista de espera pueden venir',
+            },
+            'waiting_url' => WaitlistEntryResource::getUrl('index', ['filters' => ['fits' => ['date' => $day['date']->toDateString()]]]),
             'doctors' => array_values(array_filter(array_map(fn (array $row) => $row['gaps'] === [] ? null : [
                 'name' => $severalDoctors ? $row['doctor']->name : null,
                 'gaps' => collect($row['gaps'])->map(fn (array $gap) => self::range($gap['start'], $gap['end']))->implode(' · '),
