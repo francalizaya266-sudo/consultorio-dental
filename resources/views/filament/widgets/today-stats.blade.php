@@ -1,12 +1,13 @@
 <x-filament-widgets::widget>
-    <nav class="today-strip" wire:poll.30s aria-label="Resumen del día">
+    <nav class="dash-kpis" wire:poll.30s aria-label="Resumen del día">
         @foreach ($stats as $stat)
-            <a href="{{ $stat['url'] }}" class="today-stat c-{{ $stat['color'] }}" title="{{ $stat['hint'] }}">
-                <x-filament::icon :icon="$stat['icon']" />
-                <div>
-                    <span><b>{{ $stat['value'] }}</b> {{ $stat['label'] }}</span>
-                    <small>{{ $stat['hint'] }}</small>
-                </div>
+            <a href="{{ $stat['url'] }}" @class(['dash-kpi', 'is-'.$stat['color']])>
+                <span class="dash-kpi-label">
+                    <x-filament::icon :icon="$stat['icon']" class="dash-kpi-icon" />
+                    {{ $stat['label'] }}
+                </span>
+                <strong class="dash-kpi-value">{{ $stat['value'] }}</strong>
+                <small class="dash-kpi-hint">{{ $stat['hint'] }}</small>
             </a>
         @endforeach
     </nav>

@@ -44,6 +44,12 @@ abstract class ReportChart extends ChartWidget
 
     protected bool $stacked = false;
 
+    /** 'nearest' muestra el valor más cercano; 'index', todas las series del mismo punto (para comparar). */
+    protected string $hoverMode = 'nearest';
+
+    /** Antes de la etiqueta en el título del globo: "Día " convierte "5" en "Día 5". */
+    protected string $tooltipTitlePrefix = '';
+
     /**
      * @return array{labels: list<string>, datasets: list<array{label: string, data: list<int|float|null>}>}
      */
@@ -132,6 +138,8 @@ abstract class ReportChart extends ChartWidget
             'stacked' => $this->stacked,
             'horizontal' => $this->horizontal,
             'max' => $this->unit === 'percent' && $this->horizontal ? 100 : null,
+            'hoverMode' => $this->hoverMode,
+            'titlePrefix' => $this->tooltipTitlePrefix,
         ]);
 
         // Sin comillas dobles: el resultado va dentro de un atributo HTML.
@@ -152,11 +160,12 @@ abstract class ReportChart extends ChartWidget
 
                 return {
                     indexAxis: '{$categoryAxis}',
-                    interaction: { mode: 'nearest', axis: '{$categoryAxis}', intersect: false },
+                    interaction: { mode: c.hoverMode, axis: '{$categoryAxis}', intersect: false },
                     plugins: {
                         legend: { display: c.legend },
                         tooltip: {
                             callbacks: {
+                                title: (items) => items.length ? c.titlePrefix + items[0].label : '',
                                 label: (ctx) => {
                                     const v = ctx.parsed[c.valueAxis];
                                     return (c.legend ? ctx.dataset.label + ': ' : ' ') + full(v);

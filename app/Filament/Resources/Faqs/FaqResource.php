@@ -37,9 +37,9 @@ class FaqResource extends Resource
 
     protected static ?string $pluralModelLabel = 'preguntas frecuentes';
 
-    protected static ?string $navigationParentItem = 'Configuración';
+    protected static ?string $navigationParentItem = 'Página web';
 
-    protected static ?int $navigationSort = 8;
+    protected static ?int $navigationSort = 4;
 
     protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedQuestionMarkCircle;
 

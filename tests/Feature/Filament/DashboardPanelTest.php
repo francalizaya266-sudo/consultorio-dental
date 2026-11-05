@@ -14,10 +14,12 @@ use App\Filament\Resources\Consultations\ConsultationResource;
 use App\Filament\Resources\Patients\Pages\ListPatients;
 use App\Filament\Widgets\FollowUpsToday;
 use App\Filament\Widgets\MonthOverview;
+use App\Filament\Widgets\MonthTrend;
 use App\Filament\Widgets\NextPatient;
 use App\Filament\Widgets\SystemHealth;
 use App\Filament\Widgets\TodayAppointments;
 use App\Filament\Widgets\TodayStats;
+use App\Filament\Widgets\WaitingRoom;
 use App\Filament\Widgets\WeekGaps;
 use App\Models\Appointment;
 use App\Models\Consultation;
@@ -31,6 +33,7 @@ use App\Models\TreatmentPlan;
 use App\Models\User;
 use App\Models\WhatsappMessage;
 use App\Services\Clinical\TreatmentPlanService;
+use App\Services\Dashboard\MonthFigures;
 use Carbon\CarbonImmutable;
 use Illuminate\Foundation\Testing\LazilyRefreshDatabase;
 use Illuminate\Support\Facades\Storage;
@@ -57,20 +60,65 @@ class DashboardPanelTest extends TestCase
         $doctor = Doctor::factory()->withSchedule()->create();
 
         $this->actingAs(User::factory()->admin()->create());
-        $this->assertSame([SystemHealth::class, TodayStats::class, MonthOverview::class, TodayAppointments::class, FollowUpsToday::class, WeekGaps::class], $this->visibleWidgets());
-        $this->get(Dashboard::getUrl())->assertOk();
+        $this->assertSame([SystemHealth::class, TodayStats::class, TodayAppointments::class, MonthOverview::class, MonthTrend::class, WaitingRoom::class, FollowUpsToday::class, WeekGaps::class], $this->visibleWidgets());
+        $this->get(Dashboard::getUrl())->assertOk()->assertSee(['Lunes 2 de noviembre', 'Nueva cita', 'Registrar pago', 'Anotar en espera']);
 
         $this->actingAs(User::factory()->reception()->create());
-        $this->assertSame([TodayStats::class, TodayAppointments::class, FollowUpsToday::class, WeekGaps::class], $this->visibleWidgets());
+        $this->assertSame([TodayStats::class, TodayAppointments::class, WaitingRoom::class, FollowUpsToday::class, WeekGaps::class], $this->visibleWidgets());
         $this->get(Dashboard::getUrl())->assertOk();
+        Livewire::test(TodayStats::class)
+            ->assertSeeInOrder(['Citas de hoy', 'Sin confirmar', 'Cobrado hoy', 'Horas libres'])
+            ->assertDontSee(['Solicitudes de cambio', 'Avisos por enviar']);
 
         // El doctor ve su paciente; cómo va el mes, solo si el consultorio se lo permite.
         $this->actingAs($doctor->user);
         $this->assertSame([TodayStats::class, NextPatient::class, TodayAppointments::class], $this->visibleWidgets());
+        $this->get(Dashboard::getUrl())->assertOk()->assertDontSee(['Registrar pago', 'Anotar en espera']);
+        Livewire::test(TodayStats::class)
+            ->assertSeeInOrder(['Citas de hoy', 'Sin confirmar', 'Solicitudes de cambio', 'Avisos por enviar'])
+            ->assertDontSee(['Cobrado hoy', 'Horas libres']);
 
         Setting::set('reports.doctors_see_own', true);
-        $this->assertSame([TodayStats::class, NextPatient::class, MonthOverview::class, TodayAppointments::class], $this->visibleWidgets());
+        $this->assertSame([TodayStats::class, NextPatient::class, TodayAppointments::class, MonthOverview::class, MonthTrend::class], $this->visibleWidgets());
         $this->get(Dashboard::getUrl())->assertOk();
+    }
+
+    public function test_only_the_number_that_needs_someone_is_highlighted(): void
+    {
+        $treatment = Treatment::factory()->create();
+        $doctor = $this->doctorOffering($treatment);
+        $this->actingAs(User::factory()->reception()->create());
+
+        Livewire::test(TodayStats::class)
+            ->assertSee('Hoy y mañana, todo confirmado')
+            ->assertDontSeeHtml('dash-kpi is-warning');
+
+        Appointment::factory()->for($doctor)->for($treatment)->at('2026-11-03 10:00')->create(['status' => AppointmentStatus::Pending]);
+
+        Livewire::test(TodayStats::class)
+            ->assertSee('Hoy y mañana · reenvía el aviso o llama')
+            ->assertSeeHtml('dash-kpi is-warning');
+    }
+
+    public function test_the_waiting_room_lists_who_has_waited_longest_first(): void
+    {
+        $treatment = Treatment::factory()->create(['name' => 'Limpieza dental']);
+        $doctor = $this->doctorOffering($treatment);
+        $this->actingAs(User::factory()->reception()->create());
+
+        Livewire::test(WaitingRoom::class)->assertSee('Nadie esperando');
+
+        Appointment::factory()->for($doctor)->for($treatment)->for($this->patient('Luis', 'Mamani'))->at('2026-11-02 08:30')
+            ->create(['status' => AppointmentStatus::CheckedIn, 'checked_in_at' => now()->subMinutes(5)]);
+        Appointment::factory()->for($doctor)->for($treatment)->for($this->patient('Rosa', 'Quispe'))->at('2026-11-02 09:00')
+            ->create(['status' => AppointmentStatus::CheckedIn, 'checked_in_at' => now()->subMinutes(25)]);
+        Appointment::factory()->for($doctor)->for($treatment)->for($this->patient('Ana', 'Flores'))->at('2026-11-02 09:30')->confirmed()->create();
+
+        Livewire::test(WaitingRoom::class)
+            // Rosa llegó antes, aunque su cita sea más tarde; con 25 minutos, su espera va en rojo.
+            ->assertSeeInOrder(['Rosa Quispe', 'Limpieza dental · cita de las 09:00', '25'.self::NBSP.'min', 'Luis Mamani', '5'.self::NBSP.'min'])
+            ->assertSeeHtml('dash-waiting-time is-long')
+            ->assertDontSee(['Ana Flores', $doctor->name]);
     }
 
     public function test_the_month_at_a_glance_compares_with_the_same_days_of_last_month_and_tracks_the_goal(): void
@@ -89,6 +137,8 @@ class DashboardPanelTest extends TestCase
 
         Livewire::test(MonthOverview::class)
             ->assertSee(['Noviembre hasta hoy', 'Cobrado', 'S/ 450.00', '+50 % vs. 1–2 oct.', 'Por cobrar (a hoy)'])
+            // Con dos días del mes, la diferencia se muestra sin verde ni rojo.
+            ->assertSee('Con tan pocos días, las diferencias todavía no dicen mucho.')
             // Al 2 de noviembre, S/ 450 de S/ 4,500 es justo el ritmo de 2 días de 30.
             ->assertSee(['Meta del mes', '10 %', 'De S/ 4,500 · faltan S/ 4,050 en 28 días, a buen ritmo']);
 
@@ -98,6 +148,38 @@ class DashboardPanelTest extends TestCase
         Livewire::test(MonthOverview::class)
             ->assertSee(['Solo tus citas', 'S/ 150.00'])
             ->assertDontSee(['S/ 450.00', 'Por cobrar', 'Meta del mes']);
+    }
+
+    public function test_the_month_chart_adds_up_day_by_day_and_projects_the_close(): void
+    {
+        $patient = $this->patient('Rosa', 'Quispe');
+        Payment::factory()->for($patient)->create(['amount' => 300, 'paid_at' => '2026-11-01 10:00']);
+        Payment::factory()->for($patient)->create(['amount' => 150, 'paid_at' => '2026-11-02 07:30']);
+        Payment::factory()->for($patient)->create(['amount' => 200, 'paid_at' => '2026-10-01 10:00']);
+        Payment::factory()->for($patient)->create(['amount' => 1000, 'paid_at' => '2026-10-31 10:00']);
+        Payment::factory()->for($patient)->create(['amount' => 999, 'paid_at' => '2026-10-31 11:00', 'voided_at' => '2026-10-31 12:00']);
+        $this->actingAs(User::factory()->admin()->create());
+
+        $series = (new MonthFigures)->cumulative();
+        $this->assertSame([300.0, 450.0], $series['this_month']);
+        $this->assertCount(31, $series['last_month']);
+        $this->assertSame([200.0, 200.0, 1200.0], [$series['last_month'][0], $series['last_month'][29], $series['last_month'][30]]);
+
+        // Los primeros días no se proyecta: un solo pago lo cambia todo.
+        Livewire::test(MonthTrend::class)
+            ->assertSee(['Cobrado en noviembre, día a día', 'Van S/ 450.00 en 2 días. Desde el día 7 te digo a cuánto cerraría el mes.']);
+
+        $this->travelTo(CarbonImmutable::parse('2026-11-10 18:00', 'America/Lima'));
+        Payment::factory()->for($patient)->create(['amount' => 550, 'paid_at' => '2026-11-10 09:00']);
+
+        // S/ 1,000 en 10 días de 30: a este ritmo, S/ 3,000.
+        Livewire::test(MonthTrend::class)
+            ->assertSee('A este ritmo, noviembre cerraría en S/ 3,000.00; octubre cerró en S/ 1,200.00.');
+
+        Setting::set('reports.monthly_goal', 4500);
+
+        Livewire::test(MonthTrend::class)
+            ->assertSee(['Ritmo para la meta', 'A este ritmo, noviembre cerraría en S/ 3,000.00, por debajo de la meta de S/ 4,500.']);
     }
 
     public function test_reception_sees_whom_to_follow_up_with_and_the_lists_count_the_same(): void

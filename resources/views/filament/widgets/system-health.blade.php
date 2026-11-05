@@ -1,13 +1,17 @@
+{{-- Una franja delgada por problema: el título se lee de un vistazo y el detalle queda al lado. --}}
 <x-filament-widgets::widget>
-    <div class="dash-health">
+    <div class="dash-health" role="alert">
         @foreach ($issues as $issue)
-            <x-filament::callout color="danger" icon="heroicon-o-exclamation-triangle" :heading="$issue['heading']" :description="$issue['description']">
+            <div class="dash-health-item">
+                <x-filament::icon icon="heroicon-m-exclamation-triangle" class="dash-health-icon" />
+                <p>
+                    <strong>{{ $issue['heading'] }}.</strong>
+                    <span>{{ $issue['description'] }}</span>
+                </p>
                 @if ($issue['url'])
-                    <x-slot name="footer">
-                        <x-filament::link :href="$issue['url']">{{ $issue['link'] }}</x-filament::link>
-                    </x-slot>
+                    <x-filament::link :href="$issue['url']" size="sm" color="danger">{{ $issue['link'] }}</x-filament::link>
                 @endif
-            </x-filament::callout>
+            </div>
         @endforeach
     </div>
 </x-filament-widgets::widget>
