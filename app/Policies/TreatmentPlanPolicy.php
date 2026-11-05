@@ -2,6 +2,7 @@
 
 namespace App\Policies;
 
+use App\Enums\TreatmentPlanStatus;
 use App\Models\TreatmentPlan;
 use App\Models\User;
 
@@ -29,6 +30,22 @@ class TreatmentPlanPolicy
     public function update(User $user, TreatmentPlan $plan): bool
     {
         return $plan->isOpen() && $this->patients->updateClinical($user, $plan->patient);
+    }
+
+    /**
+     * La lista de presupuestos de todos para hacerles seguimiento: recepción y administración ven
+     * todos (sin la pieza ni los datos clínicos); cada doctor, los que armó.
+     */
+    public function viewBudgets(User $user): bool
+    {
+        return $user->managesAllAgendas() || ($user->canSeeClinical() && $user->doctorId() !== null);
+    }
+
+    /** El paciente dijo que no al presupuesto: lo cierra quien le hace seguimiento o el doctor que lo armó. */
+    public function decline(User $user, TreatmentPlan $plan): bool
+    {
+        return $plan->status === TreatmentPlanStatus::Proposed
+            && ($user->managesAllAgendas() || $this->update($user, $plan));
     }
 
     public function delete(User $user, TreatmentPlan $plan): bool

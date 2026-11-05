@@ -21,6 +21,12 @@
                                 <small>@if ($doctor['name'])<b>{{ $doctor['name'] }}:</b> @endif{{ $doctor['gaps'] }}</small>
                             @endforeach
                         </a>
+                        @if ($day['waiting'])
+                            <a href="{{ $day['waiting_url'] }}" class="dash-day-wait">
+                                <x-filament::icon icon="heroicon-m-queue-list" class="dash-day-wait-icon" />
+                                {{ $day['waiting'] }}
+                            </a>
+                        @endif
                     </li>
                 @endforeach
             </ul>

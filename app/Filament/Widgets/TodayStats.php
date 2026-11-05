@@ -4,8 +4,8 @@ namespace App\Filament\Widgets;
 
 use App\Enums\AppointmentStatus;
 use App\Enums\RescheduleRequestStatus;
+use App\Filament\Pages\CashClosing;
 use App\Filament\Resources\Appointments\AppointmentResource;
-use App\Filament\Resources\Payments\PaymentResource;
 use App\Filament\Resources\RescheduleRequests\RescheduleRequestResource;
 use App\Filament\Resources\WhatsappMessages\WhatsappMessageResource;
 use App\Models\Patient;
@@ -119,7 +119,7 @@ class TodayStats extends Widget
             },
             'color' => $owing > 0 ? 'warning' : 'success',
             'icon' => 'heroicon-o-banknotes',
-            'url' => $owing > 0 ? AppointmentResource::getUrl('index', ['tab' => 'today']) : PaymentResource::getUrl('index'),
+            'url' => $owing > 0 ? AppointmentResource::getUrl('index', ['tab' => 'today']) : CashClosing::getUrl(),
         ];
     }
 }

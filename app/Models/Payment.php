@@ -51,4 +51,9 @@ class Payment extends Model
     {
         return $this->belongsTo(User::class, 'received_by_user_id');
     }
+
+    public function voidedBy(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'voided_by_user_id');
+    }
 }

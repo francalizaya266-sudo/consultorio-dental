@@ -1,5 +1,5 @@
 @use('App\Services\Reports\EarningsTables')
-{{-- Una tabla de EarningsTables. La usan el panel y la hoja para imprimir, cada uno con sus estilos. --}}
+{{-- Una tabla con la forma de EarningsTables (Ganancias o el cierre de caja). La usan el panel y la hoja para imprimir, cada uno con sus estilos. $empty: el texto si no hay filas. --}}
 <table class="report-table">
     <thead>
         <tr>
@@ -17,7 +17,7 @@
             </tr>
         @empty
             <tr>
-                <td colspan="{{ count($table['columns']) }}" class="empty">Sin movimientos en este período.</td>
+                <td colspan="{{ count($table['columns']) }}" class="empty">{{ $empty ?? 'Sin movimientos en este período.' }}</td>
             </tr>
         @endforelse
     </tbody>

@@ -131,8 +131,11 @@ final class FollowUps
             ->all();
     }
 
-    /** El aviso armado para el paciente, sin guardar. Null si no tiene celular o el aviso no es de seguimiento. */
-    public function draft(MessageTemplateKey $key, Patient $patient): ?WhatsappMessage
+    /**
+     * El aviso armado para el paciente, sin guardar. Null si no tiene celular o el aviso no es de seguimiento.
+     * Con $plan, habla de ese plan; sin él, del presupuesto más antiguo o de todo lo que le falta.
+     */
+    public function draft(MessageTemplateKey $key, Patient $patient, ?TreatmentPlan $plan = null): ?WhatsappMessage
     {
         if (! array_key_exists($key->value, self::CONTACT_DAYS) || ! $patient->account) {
             return null;
@@ -141,14 +144,18 @@ final class FollowUps
         $params = ['nombre' => $patient->first_name, 'paciente' => $patient->full_name];
 
         if ($key === MessageTemplateKey::PlanFollowUp) {
-            $plan = $patient->treatmentPlans()->awaitingAnswer()->with('doctor')->oldest('proposed_at')->first();
+            $plan ??= $patient->treatmentPlans()->awaitingAnswer()->with('doctor')->oldest('proposed_at')->first();
             $params['doctor'] = $plan?->doctor?->name ?? 'el doctor';
         }
 
         if ($key === MessageTemplateKey::PlanNextSession) {
             $pending = TreatmentPlanItem::query()
                 ->whereIn('status', TreatmentPlanItem::OPEN_STATUSES)
-                ->whereHas('plan', fn ($plans) => $plans->unscheduled()->where('patient_id', $patient->getKey()))
+                ->when(
+                    $plan,
+                    fn ($items) => $items->where('treatment_plan_id', $plan->getKey()),
+                    fn ($items) => $items->whereHas('plan', fn ($plans) => $plans->unscheduled()->where('patient_id', $patient->getKey())),
+                )
                 ->orderBy('sort_order')
                 ->pluck('description')
                 ->unique()
