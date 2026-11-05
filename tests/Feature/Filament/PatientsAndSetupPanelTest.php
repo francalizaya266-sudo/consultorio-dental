@@ -213,6 +213,32 @@ class PatientsAndSetupPanelTest extends TestCase
         $this->assertSame(['+51912345678', 'Sonríe sin miedo'], [Setting::get('clinic.whatsapp'), Setting::get('clinic.slogan')]);
     }
 
+    public function test_the_admin_uploads_and_removes_the_logo_in_settings(): void
+    {
+        Storage::fake(PublicImages::DISK);
+        $this->actingAs(User::factory()->admin()->create());
+
+        Livewire::test(Settings::class)
+            ->fillForm(['web' => ['logo' => UploadedFile::fake()->image('logo.png', 600, 200)]])
+            ->call('save')
+            ->assertHasNoFormErrors();
+
+        $logo = Setting::get('web.logo');
+        $this->assertStringStartsWith('marca/', $logo);
+        $this->assertStringEndsWith('.png', $logo, 'El logo no se pasa a JPG: conserva el fondo transparente.');
+        Storage::disk(PublicImages::DISK)->assertExists($logo);
+
+        $this->get(route('site.home'))->assertSee('class="logo"', false);
+
+        Livewire::test(Settings::class)
+            ->fillForm(['web' => ['logo' => null]])
+            ->call('save')
+            ->assertHasNoFormErrors();
+
+        $this->assertNull(Setting::get('web.logo'));
+        $this->get(route('site.home'))->assertDontSee('class="logo"', false)->assertSee('class="mark"', false);
+    }
+
     public function test_the_admin_sets_the_home_photo_and_the_google_stars_in_settings(): void
     {
         Storage::fake(PublicImages::DISK);

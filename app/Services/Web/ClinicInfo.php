@@ -156,6 +156,12 @@ final class ClinicInfo
         return PublicImages::url($this->text('web.hero_image'));
     }
 
+    /** Logo subido en Ajustes, o null para mostrar el nombre. */
+    public function logoUrl(): ?string
+    {
+        return PublicImages::url($this->text('web.logo'));
+    }
+
     /** "Llamar": el teléfono fijo, o el celular de WhatsApp si no hay fijo. */
     public function callHref(): ?string
     {

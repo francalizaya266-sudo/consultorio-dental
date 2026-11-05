@@ -69,7 +69,11 @@
 <a href="#contenido" class="skip">Saltar al contenido</a>
 <header class="site-header">
     <div class="wrap">
-        <a href="{{ route('site.home') }}" class="wordmark"><span class="mark">{{ \App\Support\TreatmentIcon::svg('tooth') }}</span>{{ $name }}</a>
+        @if ($logo = $clinic->logoUrl())
+            <a href="{{ route('site.home') }}" class="wordmark with-logo"><img src="{{ $logo }}" alt="{{ $name }}" class="logo"></a>
+        @else
+            <a href="{{ route('site.home') }}" class="wordmark"><span class="mark">{{ \App\Support\TreatmentIcon::svg('tooth') }}</span>{{ $name }}</a>
+        @endif
         @unless ($minimalFooter)
         <nav class="site-nav" aria-label="Principal">
             @foreach ($nav as [$label, $url, $pattern])

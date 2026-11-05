@@ -75,6 +75,7 @@ img { max-width: 100%; display: block; }
 .wordmark { display: inline-flex; align-items: center; gap: 10px; font-weight: 750; font-size: 1.125rem; letter-spacing: -.02em; color: var(--ink); text-decoration: none; margin-right: auto; line-height: 1.15; }
 .wordmark .mark { flex: none; display: grid; place-items: center; width: 34px; height: 34px; border-radius: 10px; background: var(--accent); color: #fff; }
 .wordmark .mark svg { width: 22px; height: 22px; stroke-width: 1.9; }
+.wordmark .logo { display: block; height: 40px; width: auto; max-width: min(220px, 52vw); object-fit: contain; object-position: left center; }
 .site-nav { display: flex; align-items: center; gap: 4px; }
 .site-nav a { color: var(--muted); text-decoration: none; font-weight: 600; font-size: 1rem; padding: 8px 8px; border-radius: 999px; white-space: nowrap; transition: color .15s ease, background-color .15s ease; }
 .site-header .btn { white-space: nowrap; gap: 0; }
