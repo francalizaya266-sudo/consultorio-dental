@@ -153,14 +153,25 @@
                         </div>
                     </div>
 
-                    <div class="field">
-                        <label for="birthDate">Fecha de nacimiento {{ $relationship === 'self' ? '(opcional)' : '' }}</label>
-                        <input id="birthDate" type="date" class="input" max="{{ today()->subDay()->toDateString() }}" wire:model="birthDate">
+                    <fieldset class="field">
+                        <legend class="label">Fecha de nacimiento {{ $relationship === 'self' ? '(opcional)' : '' }}</legend>
+                        <div class="date-parts">
+                            <label><span class="sr-only">Día</span><input id="birthDay" class="input" inputmode="numeric" pattern="[0-9]*" maxlength="2" placeholder="Día" autocomplete="{{ $relationship === 'self' ? 'bday-day' : 'off' }}" wire:model="birthDay" @error('birthDate') aria-invalid="true" @enderror></label>
+                            <label><span class="sr-only">Mes</span>
+                                <select id="birthMonth" class="input" autocomplete="{{ $relationship === 'self' ? 'bday-month' : 'off' }}" wire:model="birthMonth" @error('birthDate') aria-invalid="true" @enderror>
+                                    <option value="">Mes</option>
+                                    @foreach (range(1, 12) as $month)
+                                        <option value="{{ $month }}">{{ ucfirst(\Carbon\CarbonImmutable::create(2000, $month, 1)->translatedFormat('F')) }}</option>
+                                    @endforeach
+                                </select>
+                            </label>
+                            <label><span class="sr-only">Año</span><input id="birthYear" class="input" inputmode="numeric" pattern="[0-9]*" maxlength="4" placeholder="Año" autocomplete="{{ $relationship === 'self' ? 'bday-year' : 'off' }}" wire:model="birthYear" @error('birthDate') aria-invalid="true" @enderror></label>
+                        </div>
                         @if ($relationship !== 'self')
                             <span class="hint">Nos ayuda a preparar la atención, sobre todo si es un niño.</span>
                         @endif
                         @error('birthDate') <span class="error">{{ $message }}</span> @enderror
-                    </div>
+                    </fieldset>
 
                     @unless ($this->device)
                         <div class="field">
@@ -215,7 +226,8 @@
     {{-- Paso 4: listo --}}
     @if ($step === 4 && $this->appointment)
         @php($appointment = $this->appointment)
-        <section class="stack" aria-labelledby="listo">
+        <section class="stack booked" aria-labelledby="listo">
+            <span class="done-mark" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="m5 12.5 4.5 4.5L19 7.5"/></svg></span>
             <h1 id="listo">¡Tu cita quedó reservada!</h1>
             <div class="summary">
                 <p class="what">{{ $appointment->treatment->name }}</p>

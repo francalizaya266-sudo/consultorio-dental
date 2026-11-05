@@ -2,7 +2,8 @@
     wide: páginas de contenido (inicio, tratamientos…); sin wide, columna angosta para formularios.
     whatsappFloat: false en pantallas donde el botón flotante (y, en el celular, la barra de abajo) taparía los horarios.
     footerHours: false donde la página ya muestra el horario completo, para no repetirlo en el pie.
-    minimalFooter: pie de una línea mientras se reserva, para que nada distraiga hasta terminar.
+    minimalFooter: pie de una línea mientras se reserva, para que nada distraiga hasta terminar (el encabezado
+        también queda solo con el nombre, que vuelve al inicio).
     jsonLd: datos estructurados de schema.org para Google.
 --}}
 @props(['title' => null, 'description' => null, 'noindex' => false, 'whatsappFloat' => true, 'footerHours' => true, 'minimalFooter' => false, 'wide' => false, 'image' => null, 'jsonLd' => []])
@@ -69,6 +70,7 @@
 <header class="site-header">
     <div class="wrap">
         <a href="{{ route('site.home') }}" class="wordmark"><span class="mark">{{ \App\Support\TreatmentIcon::svg('tooth') }}</span>{{ $name }}</a>
+        @unless ($minimalFooter)
         <nav class="site-nav" aria-label="Principal">
             @foreach ($nav as [$label, $url, $pattern])
                 <a href="{{ $url }}" @if (request()->routeIs($pattern)) aria-current="page" @endif>{{ $label }}</a>
@@ -87,6 +89,7 @@
                 <a href="{{ route('site.account') }}" @if (request()->routeIs('site.account*')) aria-current="page" @endif>Mi cuenta</a>
             </nav>
         </details>
+        @endunless
     </div>
 </header>
 
