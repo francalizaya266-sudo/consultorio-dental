@@ -70,7 +70,7 @@
     @endif
 
     @if ($doctors->isNotEmpty())
-        <section class="section" aria-labelledby="equipo">
+        <section class="section band" aria-labelledby="equipo">
             <div class="section-head">
                 @if ($doctors->count() === 1)
                     <h2 id="equipo">Quién te atiende</h2>
@@ -118,7 +118,7 @@
     @endif
 
     @if ($faqs->isNotEmpty())
-        <section class="section" aria-labelledby="preguntas">
+        <section class="section split" aria-labelledby="preguntas">
             <div class="section-head">
                 <h2 id="preguntas">Preguntas frecuentes</h2>
             </div>
