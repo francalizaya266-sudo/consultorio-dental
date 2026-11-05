@@ -11,6 +11,7 @@ use App\Enums\Sex;
 use App\Enums\TreatmentPlanStatus;
 use App\Models\Concerns\Auditable;
 use App\Support\Phone;
+use Carbon\CarbonInterface;
 use Database\Factories\PatientFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Attributes\Scope;
@@ -110,6 +111,12 @@ class Patient extends Model
         return $this->hasMany(WaitlistEntry::class);
     }
 
+    /** Avisos de WhatsApp preparados para este paciente (los de la cuenta sin paciente no). */
+    public function whatsappMessages(): HasMany
+    {
+        return $this->hasMany(WhatsappMessage::class);
+    }
+
     protected function fullName(): Attribute
     {
         return Attribute::get(fn () => trim("{$this->first_name} {$this->last_name}"));
@@ -174,6 +181,32 @@ class Patient extends Model
         return $query
             ->where('last_visit_at', '<=', now()->subMonths(6))
             ->whereDoesntHave('appointments', fn (Builder $a) => $a->where('starts_at', '>=', now())->whereIn('status', AppointmentStatus::changeable()));
+    }
+
+    /** Tiene un presupuesto presentado hace una semana o más, sin respuesta. */
+    #[Scope]
+    protected function withPlanAwaitingAnswer(Builder $query): Builder
+    {
+        return $query->whereHas('treatmentPlans', fn (Builder $plans) => $plans->awaitingAnswer());
+    }
+
+    /** Aceptó un plan, le quedan procedimientos y no tiene cita de hoy en adelante. */
+    #[Scope]
+    protected function withUnscheduledPlan(Builder $query): Builder
+    {
+        return $query->whereHas('treatmentPlans', fn (Builder $plans) => $plans->unscheduled());
+    }
+
+    /** Cumplen años ese día (el 29 de febrero se saluda el 28 cuando el año no es bisiesto). */
+    #[Scope]
+    protected function birthdayOn(Builder $query, CarbonInterface $date): Builder
+    {
+        $leapDayToo = $date->month === 2 && $date->day === 28 && ! $date->isLeapYear();
+
+        return $query->whereMonth('birth_date', $date->month)
+            ->where(fn (Builder $day) => $day
+                ->whereDay('birth_date', $date->day)
+                ->when($leapDayToo, fn (Builder $q) => $q->orWhereDay('birth_date', 29)));
     }
 
     private static function balanceSql(): string

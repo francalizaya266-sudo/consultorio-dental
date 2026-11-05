@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Enums\AppointmentStatus;
 use App\Enums\PlanItemStatus;
 use App\Enums\PlanPaymentMode;
 use App\Enums\TreatmentPlanStatus;
@@ -16,7 +17,7 @@ use Illuminate\Database\Eloquent\SoftDeletes;
 use Illuminate\Support\Collection;
 
 /** Plan de tratamiento con costos (presupuesto informativo). */
-#[Fillable(['patient_id', 'doctor_id', 'consultation_id', 'included_in_plan_id', 'campaign_id', 'title', 'status', 'payment_mode', 'notes', 'accepted_at', 'completed_at'])]
+#[Fillable(['patient_id', 'doctor_id', 'consultation_id', 'included_in_plan_id', 'campaign_id', 'title', 'status', 'payment_mode', 'notes', 'proposed_at', 'accepted_at', 'completed_at'])]
 class TreatmentPlan extends Model
 {
     use Auditable, SoftDeletes;
@@ -24,14 +25,31 @@ class TreatmentPlan extends Model
     /** Planes que siguen vigentes: se pueden presentar, aceptar o trabajar. */
     public const OPEN_STATUSES = [TreatmentPlanStatus::Draft, TreatmentPlanStatus::Proposed, TreatmentPlanStatus::Accepted, TreatmentPlanStatus::InProgress];
 
+    /** Planes que el paciente ya aceptó y se siguen trabajando. */
+    public const ACCEPTED_STATUSES = [TreatmentPlanStatus::Accepted, TreatmentPlanStatus::InProgress];
+
+    /** Días que se le da al paciente para pensar el presupuesto antes de volver a escribirle. */
+    public const ANSWER_WAIT_DAYS = 7;
+
     protected function casts(): array
     {
         return [
             'status' => TreatmentPlanStatus::class,
             'payment_mode' => PlanPaymentMode::class,
+            'proposed_at' => 'datetime',
             'accepted_at' => 'datetime',
             'completed_at' => 'datetime',
         ];
+    }
+
+    protected static function booted(): void
+    {
+        // Se presenta por varios caminos (enviarlo, imprimirlo, un 2x1): todos dejan la fecha.
+        static::saving(function (TreatmentPlan $plan) {
+            if ($plan->isDirty('status') && $plan->status === TreatmentPlanStatus::Proposed && $plan->proposed_at === null) {
+                $plan->proposed_at = now();
+            }
+        });
     }
 
     public function patient(): BelongsTo
@@ -88,6 +106,34 @@ class TreatmentPlan extends Model
     protected function open(Builder $query): Builder
     {
         return $query->whereIn('status', self::OPEN_STATUSES);
+    }
+
+    /**
+     * Presupuestos presentados hace una semana o más sin que el paciente diga nada.
+     * El de la otra persona de un 2x1 no cuenta: se le escribe a quien paga.
+     */
+    #[Scope]
+    protected function awaitingAnswer(Builder $query): Builder
+    {
+        return $query
+            ->where('status', TreatmentPlanStatus::Proposed)
+            ->whereNull('included_in_plan_id')
+            ->where('proposed_at', '<=', now()->subDays(self::ANSWER_WAIT_DAYS));
+    }
+
+    /**
+     * Planes aceptados con procedimientos por hacer y sin ninguna cita de hoy en adelante:
+     * el paciente se quedó a medias. Quien vino hoy no cuenta, aunque su cita ya haya pasado.
+     */
+    #[Scope]
+    protected function unscheduled(Builder $query): Builder
+    {
+        return $query
+            ->whereIn('status', self::ACCEPTED_STATUSES)
+            ->whereHas('items', fn (Builder $items) => $items->whereIn('status', TreatmentPlanItem::OPEN_STATUSES))
+            ->whereDoesntHave('patient.appointments', fn (Builder $appointments) => $appointments
+                ->where('starts_at', '>=', today())
+                ->whereIn('status', AppointmentStatus::occupying()));
     }
 
     public function isOpen(): bool

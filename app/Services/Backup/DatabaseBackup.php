@@ -18,6 +18,9 @@ final class DatabaseBackup
 {
     public const DIRECTORY = 'respaldos';
 
+    /** Si la última copia es más vieja que esto, el cron del hosting no está corriendo. */
+    public const STALE_AFTER_HOURS = 36;
+
     /** Sesiones y caché se guardan vacías: se rehacen solas. */
     private const STRUCTURE_ONLY = ['sessions', 'cache', 'cache_locks'];
 
@@ -140,6 +143,19 @@ final class DatabaseBackup
                 'created_at' => CarbonImmutable::createFromFormat('Y-m-d_His', substr(basename($name), 9, 17)),
             ])
             ->all();
+    }
+
+    public function latestAt(): ?CarbonImmutable
+    {
+        return $this->list()[0]['created_at'] ?? null;
+    }
+
+    /** No hay copias, o la última tiene más de un día y medio: la tarea programada del hosting no está corriendo. */
+    public function isStale(): bool
+    {
+        $latest = $this->latestAt();
+
+        return $latest === null || $latest->lt(now()->subHours(self::STALE_AFTER_HOURS));
     }
 
     /** Para no servir otra cosa que una copia: "respaldo_2026-10-23_030000.sql.gz". */

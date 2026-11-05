@@ -38,4 +38,17 @@ final class Dates
 
         return $withDate ? $relative.', '.mb_strtolower(self::day($date)) : $relative;
     }
+
+    /** "45 min", "1 h", "2 h 30 min". */
+    public static function duration(int $minutes): string
+    {
+        $hours = intdiv(max(0, $minutes), 60);
+        $rest = max(0, $minutes) % 60;
+
+        return match (true) {
+            $hours === 0 => "{$rest}\u{00A0}min",
+            $rest === 0 => "{$hours}\u{00A0}h",
+            default => "{$hours}\u{00A0}h {$rest}\u{00A0}min",
+        };
+    }
 }

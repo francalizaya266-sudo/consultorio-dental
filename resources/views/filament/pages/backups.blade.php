@@ -1,16 +1,4 @@
 <x-filament-panels::page>
-    <style>
-        .backup-list { display: grid; gap: 0; }
-        .backup-row { display: flex; flex-wrap: wrap; gap: .25rem 1rem; align-items: center; justify-content: space-between; padding: .75rem 0; border-bottom: 1px solid var(--gray-200); }
-        .backup-row:last-child { border-bottom: 0; }
-        .dark .backup-row { border-color: rgb(255 255 255 / .08); }
-        .backup-date { font-weight: 600; color: var(--gray-950); }
-        .dark .backup-date { color: #fff; }
-        .backup-meta { font-size: .8rem; color: var(--gray-500); }
-        .backup-help { font-size: .875rem; color: var(--gray-600); display: grid; gap: .5rem; }
-        .dark .backup-help { color: var(--gray-400); }
-    </style>
-
     @if ($stale)
         <x-filament::section icon="heroicon-o-exclamation-triangle" icon-color="danger">
             <x-slot name="heading">No hay una copia de las últimas horas</x-slot>

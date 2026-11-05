@@ -1,0 +1,29 @@
+<x-filament-widgets::widget>
+    <x-filament::section heading="Huecos de la semana" icon="heroicon-o-calendar" description="Dónde aún entra una cita. Toca un día para abrir la agenda.">
+        @if ($days === [])
+            <div class="dash-empty">
+                <x-filament::icon icon="heroicon-o-calendar" class="dash-empty-icon" />
+                <p>No hay horario de atención en los próximos 7 días.</p>
+            </div>
+        @else
+            <ul class="dash-week">
+                @foreach ($days as $day)
+                    <li>
+                        <a href="{{ $day['url'] }}" class="dash-day">
+                            <span class="dash-day-head">
+                                <b>{{ $day['label'] }}</b>
+                                <span class="dash-day-free @if ($day['occupancy'] >= 100) is-full @endif">{{ $day['free'] }}</span>
+                            </span>
+                            <span class="dash-meter" role="meter" aria-valuemin="0" aria-valuemax="100" aria-valuenow="{{ $day['occupancy'] }}" aria-label="{{ $day['occupancy'] }} % ocupado">
+                                <span style="width: {{ $day['occupancy'] }}%"></span>
+                            </span>
+                            @foreach ($day['doctors'] as $doctor)
+                                <small>@if ($doctor['name'])<b>{{ $doctor['name'] }}:</b> @endif{{ $doctor['gaps'] }}</small>
+                            @endforeach
+                        </a>
+                    </li>
+                @endforeach
+            </ul>
+        @endif
+    </x-filament::section>
+</x-filament-widgets::widget>

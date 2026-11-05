@@ -5,10 +5,10 @@ namespace Tests\Feature\Filament;
 use App\Enums\AppointmentOrigin;
 use App\Enums\AppointmentStatus;
 use App\Enums\PaymentMethod;
-use App\Filament\Pages\Dashboard;
 use App\Filament\Pages\Earnings;
 use App\Filament\Pages\Settings;
 use App\Filament\Pages\Summary;
+use App\Filament\Widgets\MonthOverview;
 use App\Filament\Widgets\Reports\BusiestHoursChart;
 use App\Filament\Widgets\Reports\EarningsChart;
 use App\Filament\Widgets\Reports\EarningsStats;
@@ -20,8 +20,6 @@ use App\Filament\Widgets\Reports\NoShowsChart;
 use App\Filament\Widgets\Reports\OccupancyChart;
 use App\Filament\Widgets\Reports\OriginsChart;
 use App\Filament\Widgets\Reports\SummaryStats;
-use App\Filament\Widgets\TodayAppointments;
-use App\Filament\Widgets\TodayStats;
 use App\Models\Appointment;
 use App\Models\Charge;
 use App\Models\Doctor;
@@ -135,8 +133,8 @@ class ReportsPanelTest extends TestCase
         }
 
         $this->assertFalse(EarningsStats::canView());
-        // "Hoy" sigue igual, sin los gráficos de reportes.
-        $this->assertSame([TodayStats::class, TodayAppointments::class], (new Dashboard)->getWidgets());
+        // En "Hoy" tampoco ve cómo va el mes.
+        $this->assertFalse(MonthOverview::canView());
     }
 
     public function test_a_doctor_sees_only_their_own_numbers_once_the_clinic_allows_it(): void

@@ -60,6 +60,7 @@ class Settings extends Page
         'booking.self_cancel_min_hours' => 'int',
         'booking.max_reschedule_options' => 'int',
         'reports.doctors_see_own' => 'bool',
+        'reports.monthly_goal' => 'optional_int',
     ];
 
     protected static ?string $title = 'Ajustes';
@@ -221,6 +222,14 @@ class Settings extends Page
                         Toggle::make('reports.doctors_see_own')
                             ->label('Cada doctor ve sus propias ganancias y gráficos')
                             ->helperText('Solo lo suyo: lo que atendió y lo que se cobró de sus citas. Recepción no ve reportes.'),
+                        TextInput::make('reports.monthly_goal')
+                            ->label('Meta de cobro del mes')
+                            ->prefix('S/')
+                            ->numeric()
+                            ->integer()
+                            ->minValue(1)
+                            ->maxValue(10_000_000)
+                            ->helperText('Opcional. En "Hoy", la administración ve cuánto falta y si el mes va a buen ritmo.'),
                     ]),
             ])
             ->statePath('data');

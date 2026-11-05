@@ -83,6 +83,8 @@ return [
         'reports' => [
             // Si los doctores ven sus propias ganancias y gráficos (la administración siempre ve todo).
             'doctors_see_own' => false,
+            // Meta de cobro del mes en soles, para la tarjeta de "Hoy". Null es sin meta.
+            'monthly_goal' => null,
         ],
 
         'links' => [
