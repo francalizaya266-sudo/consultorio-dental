@@ -39,10 +39,7 @@
             </form>
         @endif
 
-        <div class="stack">
-            <h2>¿Primera vez?</h2>
-            <p>Reserva tu cita y te enviaremos por WhatsApp el enlace para confirmarla. Ese mismo enlace deja este celular recordado.</p>
-            <a href="{{ route('site.booking') }}" class="btn quiet block">Reservar una cita</a>
-        </div>
+        {{-- Quien nunca reservó no tiene cuenta todavía: una línea basta, sin otro bloque que compita con el formulario. --}}
+        <p class="muted">¿Aún no tienes citas con nosotros? <a href="{{ route('site.booking') }}">Reserva la primera</a> y con su enlace de WhatsApp este celular queda recordado.</p>
     </section>
 </x-site-layout>

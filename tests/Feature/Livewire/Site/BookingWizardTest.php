@@ -71,6 +71,34 @@ class BookingWizardTest extends TestCase
         $this->assertSame(PatientRelationship::Self, $appointment->patient->relationship);
     }
 
+    public function test_the_birth_date_is_typed_in_three_fields_and_an_incomplete_one_is_rejected(): void
+    {
+        $this->freezeMonday();
+        $evaluation = Treatment::factory()->evaluation()->create();
+        $this->doctorOffering($evaluation);
+
+        Livewire::test(BookingWizard::class)
+            ->call('chooseTreatment', $evaluation->id)
+            ->call('chooseTime', '10:00')
+            ->assertSee(['Día', 'Mes', 'Año', 'Febrero'])
+            ->set('phone', '987 654 321')
+            ->set('firstName', 'María')
+            ->set('lastName', 'Quispe Rojas')
+            ->set('acceptsPrivacy', true)
+            ->set('birthDay', '31')
+            ->set('birthMonth', '2')
+            ->set('birthYear', '1985')
+            ->call('book')
+            ->assertHasErrors('birthDate')
+            ->assertSee('Completa el día, el mes y el año de nacimiento.')
+            ->set('birthDay', '7')
+            ->call('book')
+            ->assertHasNoErrors()
+            ->assertSet('step', 4);
+
+        $this->assertSame('1985-02-07', Patient::sole()->birth_date->toDateString());
+    }
+
     public function test_the_first_available_doctor_takes_the_time_and_links_can_preselect_a_doctor(): void
     {
         $this->freezeMonday();
