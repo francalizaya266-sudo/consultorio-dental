@@ -15,6 +15,7 @@ use Filament\Forms\Components\Hidden;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\TimePicker;
 use Filament\Forms\Components\Toggle;
+use Filament\Forms\Components\ToggleButtons;
 use Filament\Schemas\Components\Component;
 use Filament\Schemas\Components\Utilities\Get;
 use Filament\Schemas\Components\Utilities\Set;
@@ -43,16 +44,7 @@ final class SlotPicker
                 ->default(fn () => preg_match('/^\d{2}:\d{2}$/', (string) request('time')) ? request('time') : null)
                 ->dehydrated(false),
 
-            Select::make('doctor_id')
-                ->label('Doctor')
-                ->options(fn () => Doctor::query()->active()->orderBy('sort_order')->pluck('name', 'id'))
-                ->default(fn () => $moving?->doctor_id ?? $ownDoctorId ?? (request()->integer('doctor') ?: null) ?? self::onlyActiveDoctorId())
-                ->disabled($ownDoctorId !== null)
-                ->dehydrated()
-                ->required()
-                ->live()
-                ->afterStateUpdated($suggest),
-
+            // Primero qué se hace y después con quién: así lo cuenta el paciente al llamar.
             Select::make('treatment_id')
                 ->label('Tratamiento')
                 ->options(fn (Get $get) => Treatment::query()
@@ -68,6 +60,21 @@ final class SlotPicker
                 ->live()
                 ->afterStateUpdated($suggest),
 
+            Select::make('doctor_id')
+                ->label('Doctor')
+                // Solo quienes hacen el tratamiento elegido (si ya hay uno).
+                ->options(fn (Get $get) => Doctor::query()
+                    ->active()
+                    ->when($moving?->treatment_id ?? $get('treatment_id'), fn ($q, $treatmentId) => $q->whereHas('treatments', fn ($t) => $t->whereKey($treatmentId)))
+                    ->orderBy('sort_order')
+                    ->pluck('name', 'id'))
+                ->default(fn () => $moving?->doctor_id ?? $ownDoctorId ?? (request()->integer('doctor') ?: null) ?? self::onlyActiveDoctorId())
+                ->disabled($ownDoctorId !== null)
+                ->dehydrated()
+                ->required()
+                ->live()
+                ->afterStateUpdated($suggest),
+
             DatePicker::make('date')
                 ->label('Día')
                 ->native(false)
@@ -80,13 +87,18 @@ final class SlotPicker
                 ->live()
                 ->afterStateUpdated($suggest),
 
-            Select::make('slot')
+            // Todos los horarios a la vista, un toque cada uno (antes era una lista desplegable).
+            ToggleButtons::make('slot')
                 ->label('Horario libre')
-                ->helperText('★ = pegado a otra cita (no deja huecos).')
+                ->helperText(fn (Get $get) => self::slotOptions($get, $moving) === []
+                    ? 'Elige tratamiento, doctor y día para ver los horarios libres.'
+                    : '★ = pegado a otra cita (no deja huecos).')
                 ->options(fn (Get $get) => self::slotOptions($get, $moving))
+                ->inline()
+                ->extraAttributes(['class' => 'slot-buttons'])
+                ->columnSpanFull()
                 ->required(fn (Get $get) => ! $get('manual'))
-                ->hidden(fn (Get $get) => (bool) $get('manual'))
-                ->placeholder('Elige un horario'),
+                ->hidden(fn (Get $get) => (bool) $get('manual')),
 
             Toggle::make('manual')
                 ->label('Otra hora (fuera de los horarios libres)')

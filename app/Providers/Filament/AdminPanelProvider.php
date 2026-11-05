@@ -77,8 +77,8 @@ class AdminPanelProvider extends PanelProvider
             ->login()
             ->brandName(fn () => Setting::get('clinic.name'))
             ->colors([
-                // Azul, como el recetario de la clínica (con este tono los botones llevan texto blanco).
-                'primary' => Color::Blue,
+                // El azul del recetario, el mismo de la página web (#1e4f91); los botones llevan texto blanco.
+                'primary' => Color::hex('#1e4f91'),
             ])
             ->defaultAvatarProvider(InitialsAvatarProvider::class)
             ->strictAuthorization()
