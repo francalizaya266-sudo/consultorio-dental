@@ -61,6 +61,16 @@ class BookingWizard extends Component
 
     public ?string $birthDate = null;
 
+    /**
+     * Fecha de nacimiento en tres campos (día, mes, año): el calendario del celular
+     * abre en el mes actual y llegar a 1985 toma decenas de toques.
+     */
+    public ?string $birthDay = null;
+
+    public ?string $birthMonth = null;
+
+    public ?string $birthYear = null;
+
     public ?string $origin = null;
 
     public bool $acceptsPrivacy = false;
@@ -219,6 +229,7 @@ class BookingWizard extends Component
             return;
         }
 
+        $this->birthDate = $this->composedBirthDate();
         $this->validate();
 
         $limiter = 'reserva-web:'.request()->ip();
@@ -277,6 +288,25 @@ class BookingWizard extends Component
         $this->step = 4;
     }
 
+    /**
+     * Junta día, mes y año en Y-m-d. Sin ninguno, no hay fecha; con alguno suelto o una
+     * fecha imposible (31 de febrero), un valor que la validación rechaza.
+     */
+    private function composedBirthDate(): ?string
+    {
+        $parts = [trim((string) $this->birthYear), trim((string) $this->birthMonth), trim((string) $this->birthDay)];
+
+        if ($parts === ['', '', '']) {
+            return null;
+        }
+
+        if (in_array('', $parts, true) || ! checkdate((int) $parts[1], (int) $parts[2], (int) $parts[0]) || strlen($parts[0]) !== 4) {
+            return 'fecha-incompleta';
+        }
+
+        return sprintf('%04d-%02d-%02d', $parts[0], $parts[1], $parts[2]);
+    }
+
     protected function rules(): array
     {
         $newPerson = $this->patientId === null;
@@ -315,6 +345,8 @@ class BookingWizard extends Component
         return [
             'acceptsPrivacy.accepted' => 'Para reservar, acepta la política de privacidad.',
             'birthDate.before' => 'Revisa la fecha de nacimiento.',
+            'birthDate.date' => 'Completa el día, el mes y el año de nacimiento.',
+            'birthDate.after' => 'Revisa el año de nacimiento.',
         ];
     }
 

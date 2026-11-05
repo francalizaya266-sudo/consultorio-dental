@@ -202,8 +202,8 @@ dl.facts dd { margin: 0; font-weight: 650; min-width: 0; overflow-wrap: anywhere
 .choice strong { font-size: 1.0625rem; }
 .choice .meta { grid-column: 1 / -1; color: var(--muted); font-size: .9375rem; }
 .choice .price { font-weight: 700; white-space: nowrap; }
-.choice.featured { background: var(--accent); color: var(--accent-ink); }
-.choice.featured .meta { color: #d6e3f5; }
+.choice.featured { background: var(--ground); box-shadow: inset 0 0 0 2px var(--accent); }
+.choice.featured strong { color: var(--accent); }
 
 .chips { display: flex; gap: 8px; overflow-x: auto; padding: 2px 2px 6px; margin: 0 -2px; scrollbar-width: none; }
 .chips::-webkit-scrollbar { display: none; }
@@ -235,7 +235,7 @@ dl.facts dd { margin: 0; font-weight: 650; min-width: 0; overflow-wrap: anywhere
 .summary .what { font-weight: 750; font-size: 1.125rem; }
 .summary .price-line { margin: 10px 0 0; padding-top: 10px; border-top: 1px solid var(--surface-strong); font-weight: 650; }
 .choice .price s { color: var(--muted); font-weight: 500; margin-right: 4px; }
-.choice.featured .price s { color: #d6e3f5; }
+
 :where(.summary, .panel, .appointment, .flash) p { margin: 0; }
 
 /* Formularios */
@@ -253,6 +253,17 @@ dl.facts dd { margin: 0; font-weight: 650; min-width: 0; overflow-wrap: anywhere
 .prefix { display: flex; align-items: stretch; }
 .prefix span { display: flex; align-items: center; padding: 0 12px; background: var(--surface); border-radius: 12px 0 0 12px; font-weight: 650; }
 .prefix .input { border-radius: 0 12px 12px 0; }
+.panel .prefix span { background: var(--surface-strong); }
+.stack > .choice-list { margin-top: 24px; }
+/* Reserva lista: un visto grande que no deja dudas. */
+.done-mark { display: grid; place-items: center; width: 64px; height: 64px; border-radius: 50%; background: var(--ok-bg); color: var(--ok); animation: pop .45s cubic-bezier(.2, .9, .3, 1.3) both; }
+.done-mark svg { width: 34px; height: 34px; }
+.booked .summary { background: var(--ground); box-shadow: inset 0 0 0 1px var(--line); }
+@keyframes pop { from { transform: scale(.6); opacity: 0; } to { transform: none; opacity: 1; } }
+fieldset.field { border: 0; margin: 0; padding: 0; min-width: 0; }
+fieldset.field legend { padding: 0; margin-bottom: 6px; }
+.date-parts { display: grid; grid-template-columns: 1fr 1.7fr 1.25fr; gap: 8px; }
+.date-parts label { display: block; }
 .grid-2 { display: grid; gap: 16px; }
 @media (min-width: 560px) { .grid-2 { grid-template-columns: 1fr 1fr; } }
 .check { display: grid; grid-template-columns: 24px 1fr; gap: 12px; align-items: start; cursor: pointer; }
@@ -602,7 +613,7 @@ a.chip { text-decoration: none; display: inline-flex; align-items: center; }
     .btn.whatsapp:hover { background: #0f7a41; }
     .btn.danger:hover { background: #fbd0cb; }
     .choice:hover { background: var(--surface-strong); }
-    .choice.featured:hover { background: var(--accent-press); }
+    .choice.featured:hover { background: var(--surface); }
     .day:not([aria-pressed="true"]):hover { background: var(--surface-strong); }
     .time:not([aria-pressed="true"]):hover { background: var(--surface-strong); }
     .wa-float:hover { background: #0f7a41; }
