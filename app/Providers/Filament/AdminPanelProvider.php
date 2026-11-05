@@ -55,11 +55,15 @@ class AdminPanelProvider extends PanelProvider
         UserResource::class,
         TextSnippetResource::class,
         ConsentTemplateResource::class,
-        CampaignResource::class,
-        FaqResource::class,
-        ReviewResource::class,
-        SmileCaseResource::class,
         Backups::class,
+    ];
+
+    /** @var list<class-string> Lo que se publica en la página web, aparte de la configuración de la clínica. */
+    private const WEB = [
+        CampaignResource::class,
+        SmileCaseResource::class,
+        ReviewResource::class,
+        FaqResource::class,
     ];
 
     public function panel(Panel $panel): Panel
@@ -83,7 +87,7 @@ class AdminPanelProvider extends PanelProvider
             // Ctrl + K (o ⌘ + K) abre el buscador desde cualquier pantalla.
             ->globalSearchKeyBindings(['mod+k'])
             ->globalSearchFieldKeyBindingSuffix()
-            // Siete entradas en el menú; lo demás aparece dentro de cada una al entrar.
+            // Ocho entradas en el menú; lo demás aparece dentro de cada una al entrar.
             ->navigationItems([
                 // La lista de pacientes filtrada: quién debe y cuánto.
                 NavigationItem::make('Saldos pendientes')
@@ -96,8 +100,19 @@ class AdminPanelProvider extends PanelProvider
                 NavigationItem::make('Configuración')
                     ->sort(6)
                     ->icon(Heroicon::OutlinedCog6Tooth)
-                    ->url(fn () => self::firstSettingsUrl())
-                    ->visible(fn () => self::firstSettingsUrl() !== null),
+                    ->url(fn () => self::firstUrl(self::SETTINGS))
+                    ->visible(fn () => self::firstUrl(self::SETTINGS) !== null),
+                NavigationItem::make('Página web')
+                    ->sort(7)
+                    ->icon(Heroicon::OutlinedGlobeAlt)
+                    ->url(fn () => self::firstUrl(self::WEB))
+                    ->visible(fn () => self::firstUrl(self::WEB) !== null),
+                NavigationItem::make('Ver la página')
+                    ->parentItem('Página web')
+                    ->sort(9)
+                    ->icon(Heroicon::OutlinedArrowTopRightOnSquare)
+                    ->url(fn () => route('site.home'), shouldOpenInNewTab: true)
+                    ->visible(fn () => self::firstUrl(self::WEB) !== null),
             ])
             ->renderHook(PanelsRenderHook::HEAD_END, fn () => view('filament.panel-styles'))
             ->discoverResources(in: app_path('Filament/Resources'), for: 'App\Filament\Resources')
@@ -133,10 +148,15 @@ class AdminPanelProvider extends PanelProvider
             });
     }
 
-    /** "Configuración" lleva a lo primero que la persona puede ver (al admin, a Ajustes; al doctor, a sus tratamientos). */
-    private static function firstSettingsUrl(): ?string
+    /**
+     * Una entrada del menú lleva a lo primero de su grupo que la persona puede ver
+     * (en "Configuración": al admin, a Ajustes; al doctor, a sus tratamientos).
+     *
+     * @param  list<class-string>  $classes
+     */
+    private static function firstUrl(array $classes): ?string
     {
-        foreach (self::SETTINGS as $class) {
+        foreach ($classes as $class) {
             if ($class::canAccess()) {
                 return is_subclass_of($class, Resource::class) ? $class::getUrl('index') : $class::getUrl();
             }

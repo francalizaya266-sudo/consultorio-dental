@@ -16,11 +16,12 @@ use Filament\Widgets\Widget;
  */
 class WeekGaps extends Widget
 {
-    protected static ?int $sort = 7;
+    /** Mientras carga, un recuadro del mismo alto: la página no salta. */
+    protected ?string $placeholderHeight = '30rem';
 
     protected string $view = 'filament.widgets.week-gaps';
 
-    protected int|string|array $columnSpan = ['default' => 'full', 'xl' => 1];
+    protected int|string|array $columnSpan = 'full';
 
     public static function canView(): bool
     {

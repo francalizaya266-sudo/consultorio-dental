@@ -39,9 +39,9 @@ class ReviewResource extends Resource
 
     protected static ?string $pluralModelLabel = 'opiniones';
 
-    protected static ?string $navigationParentItem = 'Configuración';
+    protected static ?string $navigationParentItem = 'Página web';
 
-    protected static ?int $navigationSort = 9;
+    protected static ?int $navigationSort = 3;
 
     protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedChatBubbleBottomCenterText;
 

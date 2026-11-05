@@ -15,8 +15,6 @@ use Filament\Widgets\Widget;
  */
 class SystemHealth extends Widget
 {
-    protected static ?int $sort = 1;
-
     protected static bool $isLazy = false;
 
     protected string $view = 'filament.widgets.system-health';

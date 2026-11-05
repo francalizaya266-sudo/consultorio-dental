@@ -4,23 +4,30 @@ namespace App\Filament\Widgets;
 
 use App\Enums\AppointmentStatus;
 use App\Enums\RescheduleRequestStatus;
+use App\Filament\Pages\Agenda;
 use App\Filament\Pages\CashClosing;
 use App\Filament\Resources\Appointments\AppointmentResource;
 use App\Filament\Resources\RescheduleRequests\RescheduleRequestResource;
 use App\Filament\Resources\WhatsappMessages\WhatsappMessageResource;
 use App\Models\Patient;
 use App\Models\Payment;
+use App\Models\User;
+use App\Services\Dashboard\WeekGaps as WeekGapsService;
+use App\Support\Dates;
 use App\Support\Money;
 use Filament\Widgets\Widget;
 use Illuminate\Database\Eloquent\Builder;
 
 /**
- * Números del día en una franja pequeña, para que la lista de citas quede a la vista.
- * Cada uno lleva a la lista donde se resuelve. Se actualiza solo cada 30 s.
+ * Los cuatro números del día, grandes y a la vista. Solo se colorea el que espera una acción
+ * (alguien sin confirmar, alguien que se fue debiendo); el resto queda neutro para que lo urgente
+ * resalte. Recepción ve lo cobrado y las horas libres de la semana; el doctor, sus solicitudes de
+ * cambio y sus avisos (recepción los tiene en "Por hacer hoy"). Cada número lleva a su lista.
  */
 class TodayStats extends Widget
 {
-    protected static ?int $sort = 2;
+    /** Los números del día se ven apenas abre "Hoy", sin un recuadro vacío mientras carga. */
+    protected static bool $isLazy = false;
 
     protected string $view = 'filament.widgets.today-stats';
 
@@ -29,11 +36,20 @@ class TodayStats extends Widget
     /** @return array{stats: list<array{label: string, value: string|int, hint: string, color: string, icon: string, url: string}>} */
     protected function getViewData(): array
     {
-        return ['stats' => $this->stats()];
+        /** @var User $user */
+        $user = auth()->user();
+
+        return ['stats' => array_values(array_filter([
+            $this->appointments(),
+            $this->unconfirmed(),
+            ...($user->managesAllAgendas()
+                ? [$this->collectedToday($user), $this->freeTime()]
+                : [$this->pendingRequests(), $this->dueMessages()]),
+        ]))];
     }
 
-    /** @return list<array{label: string, value: string|int, hint: string, color: string, icon: string, url: string}> */
-    private function stats(): array
+    /** @return array{label: string, value: int, hint: string, color: string, icon: string, url: string} */
+    private function appointments(): array
     {
         $today = AppointmentResource::getEloquentQuery()
             ->whereDate('starts_at', today())
@@ -44,62 +60,42 @@ class TodayStats extends Widget
         $doneLabel = $done === 1 ? '1 atendida' : "{$done} atendidas";
         $waiting = $today->filter(fn (AppointmentStatus $s) => $s === AppointmentStatus::CheckedIn)->count();
 
-        $unconfirmed = AppointmentResource::getEloquentQuery()
+        return [
+            'label' => 'Citas de hoy',
+            'value' => $today->count(),
+            'hint' => $waiting > 0 ? "{$waiting} en sala · {$doneLabel}" : $doneLabel,
+            'color' => 'gray',
+            'icon' => 'heroicon-o-calendar-days',
+            'url' => AppointmentResource::getUrl('index', ['tab' => 'today']),
+        ];
+    }
+
+    /** @return array{label: string, value: int, hint: string, color: string, icon: string, url: string} */
+    private function unconfirmed(): array
+    {
+        $count = AppointmentResource::getEloquentQuery()
             ->where('status', AppointmentStatus::Pending)
             ->whereBetween('starts_at', [now(), today()->addDays(2)])
             ->count();
 
-        $messages = WhatsappMessageResource::getEloquentQuery()->due()->count();
-
-        $requests = RescheduleRequestResource::getEloquentQuery()
-            ->where('status', RescheduleRequestStatus::Pending)
-            ->count();
-
-        return array_values(array_filter([
-            [
-                'label' => 'Citas de hoy',
-                'value' => $today->count(),
-                'hint' => $waiting > 0 ? "{$waiting} en sala · {$doneLabel}" : $doneLabel,
-                'color' => 'primary',
-                'icon' => 'heroicon-o-calendar-days',
-                'url' => AppointmentResource::getUrl('index', ['tab' => 'today']),
-            ],
-            [
-                'label' => 'Sin confirmar (hoy y mañana)',
-                'value' => $unconfirmed,
-                'hint' => $unconfirmed > 0 ? 'Reenvía el aviso o llama' : 'Todo confirmado',
-                'color' => $unconfirmed > 0 ? 'warning' : 'success',
-                'icon' => 'heroicon-o-phone',
-                'url' => AppointmentResource::getUrl('index', ['tab' => 'pending']),
-            ],
-            [
-                'label' => 'Avisos por enviar',
-                'value' => $messages,
-                'hint' => $messages > 0 ? 'Listos para WhatsApp' : 'Nada pendiente',
-                'color' => $messages > 0 ? 'warning' : 'success',
-                'icon' => 'heroicon-o-chat-bubble-left-right',
-                'url' => WhatsappMessageResource::getUrl('index'),
-            ],
-            [
-                'label' => 'Solicitudes de cambio',
-                'value' => $requests,
-                'hint' => $requests > 0 ? 'Aprueba un horario con un clic' : 'Nada pendiente',
-                'color' => $requests > 0 ? 'danger' : 'success',
-                'icon' => 'heroicon-o-arrows-right-left',
-                'url' => RescheduleRequestResource::getUrl('index'),
-            ],
-            $this->collectedToday(),
-        ]));
+        return [
+            'label' => 'Sin confirmar',
+            'value' => $count,
+            'hint' => $count > 0 ? 'Hoy y mañana · reenvía el aviso o llama' : 'Hoy y mañana, todo confirmado',
+            'color' => $count > 0 ? 'warning' : 'gray',
+            'icon' => 'heroicon-o-phone',
+            'url' => AppointmentResource::getUrl('index', ['tab' => 'pending']),
+        ];
     }
 
     /**
-     * Para recepción y administración: lo cobrado hoy y quién se fue sin pagar.
+     * Lo cobrado hoy y quién se fue sin pagar. Lleva al cierre del día si nadie quedó debiendo.
      *
      * @return array{label: string, value: string, hint: string, color: string, icon: string, url: string}|null
      */
-    private function collectedToday(): ?array
+    private function collectedToday(User $user): ?array
     {
-        if (! auth()->user()->can('viewAny', Payment::class)) {
+        if (! $user->can('viewAny', Payment::class)) {
             return null;
         }
 
@@ -117,9 +113,62 @@ class TodayStats extends Widget
                 1 => '1 paciente atendido hoy debe',
                 default => "{$owing} pacientes atendidos hoy deben",
             },
-            'color' => $owing > 0 ? 'warning' : 'success',
+            'color' => $owing > 0 ? 'warning' : 'gray',
             'icon' => 'heroicon-o-banknotes',
             'url' => $owing > 0 ? AppointmentResource::getUrl('index', ['tab' => 'today']) : CashClosing::getUrl(),
+        ];
+    }
+
+    /**
+     * Cuánto tiempo libre queda en la agenda de hoy a 7 días: lo que se puede llenar.
+     *
+     * @return array{label: string, value: string, hint: string, color: string, icon: string, url: string}
+     */
+    private function freeTime(): array
+    {
+        $days = app(WeekGapsService::class)->days();
+        $free = array_sum(array_column($days, 'free_minutes'));
+        $waiting = array_sum(array_column($days, 'waiting'));
+
+        return [
+            'label' => 'Horas libres',
+            'value' => $free > 0 ? Dates::duration($free) : 'Ninguna',
+            'hint' => $waiting > 0 ? 'Esta semana · hay lista de espera' : 'De hoy a 7 días',
+            'color' => 'gray',
+            'icon' => 'heroicon-o-clock',
+            'url' => Agenda::getUrl(['mode' => 'week']),
+        ];
+    }
+
+    /** @return array{label: string, value: int, hint: string, color: string, icon: string, url: string} */
+    private function pendingRequests(): array
+    {
+        $count = RescheduleRequestResource::getEloquentQuery()
+            ->where('status', RescheduleRequestStatus::Pending)
+            ->count();
+
+        return [
+            'label' => 'Solicitudes de cambio',
+            'value' => $count,
+            'hint' => $count > 0 ? 'Aprueba un horario con un clic' : 'Nada pendiente',
+            'color' => $count > 0 ? 'warning' : 'gray',
+            'icon' => 'heroicon-o-arrows-right-left',
+            'url' => RescheduleRequestResource::getUrl('index'),
+        ];
+    }
+
+    /** @return array{label: string, value: int, hint: string, color: string, icon: string, url: string} */
+    private function dueMessages(): array
+    {
+        $count = WhatsappMessageResource::getEloquentQuery()->due()->count();
+
+        return [
+            'label' => 'Avisos por enviar',
+            'value' => $count,
+            'hint' => $count > 0 ? 'Listos para WhatsApp' : 'Nada pendiente',
+            'color' => $count > 0 ? 'warning' : 'gray',
+            'icon' => 'heroicon-o-chat-bubble-left-right',
+            'url' => WhatsappMessageResource::getUrl('index'),
         ];
     }
 }

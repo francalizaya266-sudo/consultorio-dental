@@ -29,7 +29,8 @@ class NextPatient extends Widget implements HasActions, HasSchemas
     use InteractsWithActions;
     use InteractsWithSchemas;
 
-    protected static ?int $sort = 3;
+    /** Tu próximo paciente se ve apenas abre "Hoy", sin un recuadro vacío mientras carga. */
+    protected static bool $isLazy = false;
 
     protected string $view = 'filament.widgets.next-patient';
 

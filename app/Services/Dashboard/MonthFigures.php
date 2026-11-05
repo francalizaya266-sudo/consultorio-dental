@@ -11,13 +11,17 @@ use Illuminate\Support\Facades\Cache;
 
 /**
  * El mes hasta hoy para el inicio: lo cobrado y lo realizado contra los mismos días del mes pasado,
- * las citas atendidas, las inasistencias y lo cobrado día por día en los últimos 30 días.
+ * las citas atendidas, las inasistencias, lo cobrado día por día en los últimos 30 días y lo
+ * acumulado de este mes contra el mes pasado entero.
  * Sale de los mismos reportes que la pantalla Reportes, así las cifras coinciden.
  * Se guarda 5 minutos por doctor (o para todos), para que "Hoy" abra rápido.
  */
 final class MonthFigures
 {
     public const CACHE_SECONDS = 300;
+
+    /** Antes de este día del mes, las comparaciones y la proyección se basan en muy poco. */
+    public const SETTLED_FROM_DAY = 7;
 
     private const TREND_DAYS = 30;
 
@@ -42,6 +46,35 @@ final class MonthFigures
             self::CACHE_SECONDS,
             fn () => $this->compute(),
         );
+    }
+
+    /**
+     * Lo cobrado acumulado día por día: este mes hasta hoy y el mes pasado entero, para ver si
+     * este mes viene por encima o por debajo. La posición 0 es el día 1.
+     *
+     * @return array{this_month: list<float>, last_month: list<float>}
+     */
+    public function cumulative(): array
+    {
+        return Cache::remember(
+            'dashboard.cumulative.'.today()->toDateString().'.'.($this->doctorId ?? 'all'),
+            self::CACHE_SECONDS,
+            fn () => [
+                'this_month' => $this->runningTotal($this->period),
+                'last_month' => $this->runningTotal(ReportPeriod::fromFilters(['period' => 'last_month'])),
+            ],
+        );
+    }
+
+    /**
+     * A cuánto llegaría el mes si sigue al ritmo de los días que van. Null los primeros días,
+     * cuando un solo pago grande (o ninguno) cambia todo.
+     */
+    public static function projection(float $collected): ?float
+    {
+        $today = CarbonImmutable::today();
+
+        return $today->day < self::SETTLED_FROM_DAY ? null : round($collected / $today->day * $today->daysInMonth, 2);
     }
 
     /** Lo que deben hoy todos los pacientes juntos. */
@@ -74,6 +107,21 @@ final class MonthFigures
             'days_left' => $today->daysInMonth - $today->day,
             'on_track' => $collected >= $expectedByToday,
         ];
+    }
+
+    /** @return list<float> */
+    private function runningTotal(ReportPeriod $period): array
+    {
+        $total = 0.0;
+
+        return array_map(
+            function (float $collected) use (&$total) {
+                $total += $collected;
+
+                return round($total, 2);
+            },
+            array_column((new EarningsReport($period, $this->doctorId))->byPeriod(withEmpty: true), 'collected'),
+        );
     }
 
     /**

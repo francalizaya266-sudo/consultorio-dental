@@ -3,10 +3,13 @@
 namespace App\Filament\Widgets;
 
 use App\Enums\MessageTemplateKey;
+use App\Enums\RescheduleRequestStatus;
 use App\Filament\Actions\SendWhatsAppAction;
 use App\Filament\Resources\Appointments\AppointmentResource;
 use App\Filament\Resources\Installments\InstallmentResource;
 use App\Filament\Resources\Patients\PatientResource;
+use App\Filament\Resources\RescheduleRequests\RescheduleRequestResource;
+use App\Filament\Resources\WhatsappMessages\WhatsappMessageResource;
 use App\Models\Patient;
 use App\Models\TreatmentPlan;
 use App\Models\TreatmentPlanItem;
@@ -24,20 +27,22 @@ use Filament\Widgets\Widget;
 use Illuminate\Support\Collection;
 
 /**
- * "Por hacer hoy" de recepción: a quién escribirle o llamar, con el WhatsApp ya redactado y
- * "Nueva cita" a un toque. Cada grupo lleva a su lista completa. Quien ya recibió el aviso
- * hace poco queda marcado, para no escribirle dos veces.
+ * "Por hacer hoy" de recepción, al costado de la agenda: primero lo que espera un clic (avisos por
+ * enviar, solicitudes de cambio) y después a quién escribirle o llamar, con el WhatsApp ya redactado
+ * y "Nueva cita" a un toque. Cada grupo se abre y se cierra, con su número a la vista, y lleva a su
+ * lista completa. Quien ya recibió el aviso hace poco queda marcado, para no escribirle dos veces.
  */
 class FollowUpsToday extends Widget implements HasActions, HasSchemas
 {
     use InteractsWithActions;
     use InteractsWithSchemas;
 
-    protected static ?int $sort = 6;
+    /** Mientras carga, un recuadro del mismo alto: la página no salta. */
+    protected ?string $placeholderHeight = '24rem';
 
     protected string $view = 'filament.widgets.follow-ups-today';
 
-    protected int|string|array $columnSpan = ['default' => 'full', 'xl' => 1];
+    protected int|string|array $columnSpan = 'full';
 
     public static function canView(): bool
     {
@@ -69,12 +74,52 @@ class FollowUpsToday extends Widget implements HasActions, HasSchemas
         $followUps = app(FollowUps::class);
 
         return ['sections' => array_values(array_filter([
+            $this->dueMessages(),
+            $this->pendingRequests(),
             $this->awaitingAnswer($followUps),
             $this->unscheduled($followUps),
             $this->installments($followUps),
             $this->checkups($followUps),
             $this->birthdays($followUps),
         ], fn (?array $section) => $section !== null && $section['count'] > 0))];
+    }
+
+    /**
+     * Los avisos que esperan su clic en "Avisos por enviar" (recordatorios, confirmaciones).
+     *
+     * @return array<string, mixed>
+     */
+    private function dueMessages(): array
+    {
+        return [
+            'key' => 'messages',
+            'title' => 'Avisos por enviar',
+            'hint' => 'Recordatorios y confirmaciones listos para WhatsApp',
+            'count' => WhatsappMessageResource::getEloquentQuery()->due()->count(),
+            'url' => WhatsappMessageResource::getUrl('index'),
+            'summary' => null,
+            'template' => null,
+            'rows' => [],
+        ];
+    }
+
+    /**
+     * Pacientes que pidieron otro horario desde su enlace y esperan respuesta.
+     *
+     * @return array<string, mixed>
+     */
+    private function pendingRequests(): array
+    {
+        return [
+            'key' => 'requests',
+            'title' => 'Solicitudes de cambio',
+            'hint' => 'Elige uno de los horarios que propuso el paciente',
+            'count' => RescheduleRequestResource::getEloquentQuery()->where('status', RescheduleRequestStatus::Pending)->count(),
+            'url' => RescheduleRequestResource::getUrl('index'),
+            'summary' => null,
+            'template' => null,
+            'rows' => [],
+        ];
     }
 
     /** @return array<string, mixed> */

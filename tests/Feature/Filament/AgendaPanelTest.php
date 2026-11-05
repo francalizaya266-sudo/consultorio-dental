@@ -55,7 +55,7 @@ class AgendaPanelTest extends TestCase
             $this->actingAs($user);
 
             $this->get(Dashboard::getUrl())->assertOk();
-            Livewire::test(TodayStats::class)->assertSee(['Citas de hoy', 'Avisos por enviar']);
+            Livewire::test(TodayStats::class)->assertSee(['Citas de hoy', 'Sin confirmar']);
             Livewire::test(TodayAppointments::class)->assertOk();
             $this->get(AppointmentResource::getUrl('index'))->assertOk();
             $this->get(AppointmentResource::getUrl('create'))->assertOk();

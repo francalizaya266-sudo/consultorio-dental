@@ -4,6 +4,7 @@ namespace Tests\Feature\Filament;
 
 use App\Filament\Pages\Dashboard;
 use App\Filament\Resources\Appointments\AppointmentResource;
+use App\Filament\Resources\Campaigns\CampaignResource;
 use App\Filament\Resources\Patients\PatientResource;
 use App\Filament\Resources\Payments\PaymentResource;
 use App\Filament\Resources\Treatments\TreatmentResource;
@@ -21,14 +22,25 @@ class PanelNavigationTest extends TestCase
 {
     use CreatesAgenda, LazilyRefreshDatabase;
 
-    public function test_the_menu_has_seven_entries_and_the_rest_goes_inside(): void
+    public function test_the_menu_has_eight_entries_and_the_rest_goes_inside(): void
     {
         $this->actingAs(User::factory()->admin()->create());
 
         $this->get(Dashboard::getUrl())
             ->assertOk()
-            ->assertSeeInOrder(['Hoy', 'Agenda', 'Pacientes', 'Caja', 'Avisos', 'Reportes', 'Configuración'])
-            ->assertDontSee(['Bloqueos de horario', 'Lista de espera', 'Presupuestos y planes', 'Cuotas por cobrar', 'Cierre del día', 'Copias de seguridad']);
+            ->assertSeeInOrder(['Hoy', 'Agenda', 'Pacientes', 'Caja', 'Avisos', 'Reportes', 'Configuración', 'Página web'])
+            ->assertDontSee(['Bloqueos de horario', 'Lista de espera', 'Presupuestos y planes', 'Cuotas por cobrar', 'Cierre del día', 'Copias de seguridad', 'Preguntas frecuentes']);
+
+        // Lo de la página web va aparte de la configuración de la clínica.
+        $this->get(TreatmentResource::getUrl('index'))
+            ->assertOk()
+            ->assertSeeInOrder(['Configuración', 'Ajustes', 'Tratamientos', 'Textos de consentimiento', 'Página web'])
+            ->assertDontSee(['Campañas', 'Antes y después', 'Opiniones', 'Preguntas frecuentes']);
+
+        $this->get(CampaignResource::getUrl('index'))
+            ->assertOk()
+            ->assertSeeInOrder(['Página web', 'Campañas', 'Antes y después', 'Opiniones', 'Preguntas frecuentes', 'Ver la página'])
+            ->assertSee(route('site.home'));
 
         $this->get(AppointmentResource::getUrl('index'))
             ->assertOk()
@@ -50,7 +62,7 @@ class PanelNavigationTest extends TestCase
         $this->get(Dashboard::getUrl())
             ->assertOk()
             ->assertSeeInOrder(['Hoy', 'Agenda', 'Pacientes', 'Caja', 'Avisos'])
-            ->assertDontSee(['Reportes', 'Configuración']);
+            ->assertDontSee(['Reportes', 'Configuración', 'Página web']);
     }
 
     public function test_a_doctor_reaches_their_own_settings_inside_configuracion(): void

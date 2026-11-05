@@ -275,7 +275,7 @@
                             <a
                                 wire:key="appt-{{ $appt['id'] }}"
                                 href="{{ $appt['url'] }}"
-                                @class(['agenda-appt', 's-'.$appt['status'], 'is-movable' => $appt['draggable']])
+                                @class(['agenda-appt', 's-'.$appt['status'], 'is-movable' => $appt['draggable'], 'is-short' => $appt['end'] - $appt['start'] <= 30])
                                 style="top: {{ ($appt['start'] - $from) * $scale }}px; height: {{ max(($appt['end'] - $appt['start']) * $scale - 2, 18) }}px; border-left-color: {{ $column['color'] }}"
                                 title="{{ $appt['time'] }} · {{ $appt['patient'] }} · {{ $appt['treatment'] }} · {{ $appt['statusLabel'] }}{{ $appt['phone'] ? ' · '.$appt['phone'] : '' }}"
                                 draggable="false"

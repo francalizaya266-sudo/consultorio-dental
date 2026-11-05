@@ -20,7 +20,8 @@ use Filament\Widgets\StatsOverviewWidget\Stat;
  */
 class MonthOverview extends StatsOverviewWidget
 {
-    protected static ?int $sort = 4;
+    /** Mientras carga, un recuadro del mismo alto: la página no salta. */
+    protected ?string $placeholderHeight = '18rem';
 
     protected ?string $pollingInterval = null;
 
@@ -47,9 +48,9 @@ class MonthOverview extends StatsOverviewWidget
 
     protected function getDescription(): ?string
     {
-        return $this->doctorId() !== null
-            ? 'Solo tus citas y lo que se cobró de ellas. Comparado con los mismos días del mes pasado.'
-            : 'Comparado con los mismos días del mes pasado.';
+        return ($this->doctorId() !== null ? 'Solo tus citas y lo que se cobró de ellas. ' : '')
+            .'Comparado con los mismos días del mes pasado.'
+            .($this->isEarly() ? ' Con tan pocos días, las diferencias todavía no dicen mucho.' : '');
     }
 
     protected function getStats(): array
@@ -59,7 +60,7 @@ class MonthOverview extends StatsOverviewWidget
         $before = $month->previousPeriod;
         $count = fn (float $n) => number_format($n);
 
-        return array_values(array_filter([
+        $comparisons = [
             StatComparison::make('Cobrado', $figures['collected'], $figures['collected_before'], $before, Money::format(...))
                 ->icon('heroicon-o-banknotes')
                 ->chart($figures['daily_collected'])
@@ -73,9 +74,23 @@ class MonthOverview extends StatsOverviewWidget
             StatComparison::points('Inasistencias', $figures['no_show_rate'], $figures['no_show_rate_before'], $before, higherIsBetter: false)
                 ->icon('heroicon-o-user-minus')
                 ->url(Summary::getUrl()),
+        ];
+
+        // Los primeros días un solo pago cambia el porcentaje: se muestra, pero sin verde ni rojo.
+        if ($this->isEarly()) {
+            $comparisons = array_map(fn (Stat $stat) => $stat->color('gray'), $comparisons);
+        }
+
+        return array_values(array_filter([
+            ...$comparisons,
             $this->doctorId() === null ? $this->outstanding() : null,
             $this->doctorId() === null ? $this->goal($figures['collected']) : null,
         ]));
+    }
+
+    private function isEarly(): bool
+    {
+        return today()->day < MonthFigures::SETTLED_FROM_DAY;
     }
 
     /** Un doctor ve lo suyo; la administración, todo el consultorio. */

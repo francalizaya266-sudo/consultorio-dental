@@ -4,7 +4,6 @@ namespace App\Filament\Widgets;
 
 use App\Enums\AppointmentStatus;
 use App\Filament\Actions\AppointmentActions;
-use App\Filament\Actions\CreateAppointmentAction;
 use App\Filament\Resources\Appointments\AppointmentResource;
 use App\Filament\Resources\Appointments\Tables\AppointmentsTable;
 use App\Models\Appointment;
@@ -21,18 +20,23 @@ use Filament\Tables\Table;
 use Filament\Widgets\TableWidget;
 
 /**
- * Citas de hoy en orden, una o dos líneas por cita ("09:00 · María Quispe · Limpieza" y su estado),
- * con los botones del día: confirmar, llegó, atender, atendido, cobrar. Quien está en sala muestra
- * cuánto lleva esperando.
+ * La agenda de hoy como línea de tiempo: la hora grande a la izquierda, el color de su estado en el
+ * borde y una línea de "ahora" antes de la próxima cita. El primer botón de cada cita es el paso que
+ * sigue (confirmar, llegó, atender, cobrar) y se ve como botón; los demás quedan más discretos.
+ * Quien está en sala muestra cuánto lleva esperando.
  */
 class TodayAppointments extends TableWidget
 {
     /** Desde aquí la espera se marca en rojo: alguien tiene que ver qué pasa. */
     public const LONG_WAIT_MINUTES = 20;
 
-    protected static ?int $sort = 5;
+    /** La agenda de hoy se ve apenas abre "Hoy", sin un recuadro vacío mientras carga. */
+    protected static bool $isLazy = false;
 
     protected int|string|array $columnSpan = 'full';
+
+    /** La próxima cita que todavía no empieza: antes de ella va la línea de "ahora". */
+    private int|false|null $nextId = null;
 
     public function table(Table $table): Table
     {
@@ -43,17 +47,26 @@ class TodayAppointments extends TableWidget
         $seesMoney = $user->can('viewAny', Charge::class);
 
         return $table
-            ->heading('Citas de hoy')
+            ->heading('Agenda de hoy')
             ->query(fn () => AppointmentResource::getEloquentQuery()
                 ->with(['patient' => fn ($patient) => $patient->with('account')->when($seesMoney, fn ($q) => $q->withBalance()), 'treatment', 'doctor'])
                 ->whereDate('starts_at', today())
                 ->where('status', '!=', AppointmentStatus::Cancelled))
             ->columns([
                 Split::make([
+                    TextColumn::make('starts_at')
+                        ->formatStateUsing(fn (Appointment $record) => $record->starts_at->format('H:i'))
+                        ->description(fn (Appointment $record) => Dates::duration($record->starts_at->diffInMinutes($record->ends_at)))
+                        ->weight(FontWeight::Bold)
+                        ->extraAttributes(['class' => 'dash-appt-time'])
+                        ->grow(false),
                     Stack::make([
-                        TextColumn::make('starts_at')
-                            ->formatStateUsing(fn (Appointment $record) => $record->starts_at->format('H:i').' · '.$record->patient->full_name.' · '.$record->treatment->name)
+                        TextColumn::make('patient.full_name')
                             ->weight(FontWeight::SemiBold)
+                            ->wrap(),
+                        TextColumn::make('treatment.name')
+                            ->color('gray')
+                            ->size(TextSize::Small)
                             ->wrap(),
                         Split::make([
                             TextColumn::make('phone')
@@ -83,13 +96,31 @@ class TodayAppointments extends TableWidget
             ])
             ->defaultSort('starts_at')
             ->paginated(false)
+            ->recordClasses(fn (Appointment $record) => [
+                'dash-appt',
+                'dash-appt-'.$record->status->value,
+                'dash-appt-next' => $record->getKey() === $this->nextId(),
+            ])
             ->recordUrl(fn (Appointment $record) => AppointmentResource::getUrl('view', ['record' => $record]))
             ->recordActions(AppointmentActions::all())
-            ->headerActions([
-                CreateAppointmentAction::make('new'),
-            ])
             ->poll('30s')
             ->emptyStateHeading('No hay citas hoy')
+            ->emptyStateDescription('Las citas de hoy aparecen aquí en orden, con el botón del paso que sigue.')
             ->emptyStateIcon('heroicon-o-calendar');
+    }
+
+    private function nextId(): ?int
+    {
+        if ($this->nextId === null) {
+            $this->nextId = AppointmentResource::getEloquentQuery()
+                ->whereDate('starts_at', today())
+                ->where('starts_at', '>=', now())
+                ->whereIn('status', [AppointmentStatus::Pending, AppointmentStatus::Confirmed])
+                ->orderBy('starts_at')
+                ->toBase()
+                ->value('id') ?? false;
+        }
+
+        return $this->nextId ?: null;
     }
 }
