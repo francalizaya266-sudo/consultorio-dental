@@ -5,9 +5,11 @@ namespace App\Filament\Pages;
 use App\Filament\Forms\WebPhotoUpload;
 use App\Models\Setting;
 use App\Models\User;
+use App\Services\Web\PublicImages;
 use App\Support\Phone;
 use BackedEnum;
 use Filament\Actions\Action;
+use Filament\Forms\Components\FileUpload;
 use Filament\Forms\Components\Textarea;
 use Filament\Forms\Components\TextInput;
 use Filament\Forms\Components\Toggle;
@@ -50,6 +52,7 @@ class Settings extends Page
         'web.intro' => 'string',
         'web.about' => 'string',
         'web.hero_image' => 'string',
+        'web.logo' => 'string',
         'agenda.buffer_minutes' => 'int',
         'agenda.slot_step_minutes' => 'int',
         'booking.min_lead_minutes' => 'int',
@@ -157,6 +160,17 @@ class Settings extends Page
                             ->label('Enlace de Google Maps')
                             ->url()
                             ->helperText('Para el botón "Cómo llegar". Vacío = se busca la dirección.'),
+                        // El logo se guarda tal cual (PNG con fondo transparente, JPG o WebP): no se pasa a JPG como las fotos.
+                        FileUpload::make('web.logo')
+                            ->label('Logo')
+                            ->image()
+                            ->acceptedFileTypes(['image/png', 'image/jpeg', 'image/webp'])
+                            ->disk(PublicImages::DISK)
+                            ->directory('marca')
+                            ->visibility('public')
+                            ->maxSize(2 * 1024)
+                            ->helperText('Sale arriba en la página web y en este panel, en lugar del nombre. Mejor en PNG con fondo transparente. Si lo quitas, vuelve el nombre.')
+                            ->columnSpanFull(),
                         WebPhotoUpload::make('web.hero_image', 'inicio')
                             ->label('Foto del inicio')
                             ->imageEditor()

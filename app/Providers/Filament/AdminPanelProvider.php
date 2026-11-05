@@ -25,6 +25,7 @@ use App\Http\Controllers\Reports\CashClosingController;
 use App\Http\Controllers\Reports\EarningsExportController;
 use App\Models\Charge;
 use App\Models\Setting;
+use App\Services\Web\ClinicInfo;
 use Filament\Http\Middleware\Authenticate;
 use Filament\Http\Middleware\AuthenticateSession;
 use Filament\Http\Middleware\DisableBladeIconComponents;
@@ -92,6 +93,9 @@ class AdminPanelProvider extends PanelProvider
             ->unsavedChangesAlerts()
             ->login()
             ->brandName(fn () => Setting::get('clinic.name'))
+            // Con logo subido en Ajustes, el panel lo muestra en lugar del nombre.
+            ->brandLogo(fn () => app(ClinicInfo::class)->logoUrl())
+            ->brandLogoHeight('2.25rem')
             ->colors([
                 // El azul del recetario, el mismo de la página web, en el tono 600 (el de los botones, con texto blanco).
                 'primary' => self::brandPalette(),
