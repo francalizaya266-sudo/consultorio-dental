@@ -56,7 +56,10 @@
         <meta property="og:image" content="{{ url($image) }}">
     @endif
     <meta name="theme-color" content="#ffffff">
+    <link rel="preload" href="{{ asset('fonts/inter-latin.woff2') }}" as="font" type="font/woff2" crossorigin>
     <link rel="stylesheet" href="{{ asset('css/sitio.css') }}?v={{ @filemtime(public_path('css/sitio.css')) }}">
+    {{-- Con JavaScript, las secciones aparecen suaves al llegar a ellas; sin él, se ven de una vez. --}}
+    <script>document.documentElement.classList.add('js')</script>
     @foreach ($jsonLd as $data)
         <script type="application/ld+json">{!! json_encode($data, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_HEX_TAG | JSON_HEX_AMP) !!}</script>
     @endforeach
@@ -65,7 +68,7 @@
 <a href="#contenido" class="skip">Saltar al contenido</a>
 <header class="site-header">
     <div class="wrap">
-        <a href="{{ route('site.home') }}" class="wordmark">{{ $name }}</a>
+        <a href="{{ route('site.home') }}" class="wordmark"><span class="mark">{{ \App\Support\TreatmentIcon::svg('tooth') }}</span>{{ $name }}</a>
         <nav class="site-nav" aria-label="Principal">
             @foreach ($nav as [$label, $url, $pattern])
                 <a href="{{ $url }}" @if (request()->routeIs($pattern)) aria-current="page" @endif>{{ $label }}</a>
@@ -195,5 +198,23 @@
         <svg viewBox="0 0 32 32" fill="currentColor" aria-hidden="true"><path d="M16.02 3C8.84 3 3 8.83 3 16c0 2.29.6 4.53 1.74 6.5L3 29l6.68-1.75A12.96 12.96 0 0 0 16.02 29C23.2 29 29 23.17 29 16S23.2 3 16.02 3Zm0 23.8c-2.02 0-4-.54-5.72-1.57l-.41-.24-3.96 1.04 1.06-3.86-.27-.4A10.73 10.73 0 0 1 5.2 16c0-5.96 4.85-10.8 10.82-10.8 5.96 0 10.8 4.84 10.8 10.8 0 5.96-4.84 10.8-10.8 10.8Zm5.93-8.09c-.33-.16-1.93-.95-2.23-1.06-.3-.11-.52-.16-.73.17-.22.32-.84 1.05-1.03 1.27-.19.22-.38.24-.71.08-.33-.16-1.38-.51-2.63-1.62-.97-.87-1.63-1.94-1.82-2.27-.19-.32-.02-.5.14-.66.15-.15.33-.38.49-.57.16-.19.22-.32.33-.54.11-.22.05-.4-.03-.57-.08-.16-.73-1.76-1-2.41-.26-.63-.53-.55-.73-.56h-.62c-.22 0-.57.08-.87.4-.3.33-1.14 1.11-1.14 2.71s1.17 3.15 1.33 3.36c.16.22 2.3 3.5 5.56 4.91.78.34 1.38.54 1.86.69.78.25 1.49.21 2.05.13.63-.09 1.93-.79 2.2-1.55.27-.76.27-1.41.19-1.55-.08-.14-.3-.22-.62-.38Z"/></svg>
     </a>
 @endif
+<script>
+    (function () {
+        var sections = document.querySelectorAll('main .section');
+        if (!('IntersectionObserver' in window)) {
+            sections.forEach(function (el) { el.classList.add('is-in'); });
+            return;
+        }
+        var seen = new IntersectionObserver(function (entries) {
+            entries.forEach(function (entry) {
+                if (entry.isIntersecting) {
+                    entry.target.classList.add('is-in');
+                    seen.unobserve(entry.target);
+                }
+            });
+        }, { rootMargin: '0px 0px -8% 0px' });
+        sections.forEach(function (el) { seen.observe(el); });
+    })();
+</script>
 </body>
 </html>
