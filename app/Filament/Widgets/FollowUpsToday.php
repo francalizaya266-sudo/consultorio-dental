@@ -77,6 +77,7 @@ class FollowUpsToday extends Widget implements HasActions, HasSchemas
         $followUps = app(FollowUps::class);
 
         return ['sections' => array_values(array_filter([
+            $this->leftOpenAppointments(),
             $this->dueMessages(),
             $this->pendingRequests(),
             $this->awaitingAnswer($followUps),
@@ -87,6 +88,26 @@ class FollowUpsToday extends Widget implements HasActions, HasSchemas
             $this->checkups($followUps),
             $this->birthdays($followUps),
         ], fn (?array $section) => $section !== null && $section['count'] > 0))];
+    }
+
+    /**
+     * Citas de días pasados que quedaron sin cerrar. Sin cerrarlas, no se cobra lo atendido,
+     * no se descuentan los materiales y las inasistencias del reporte salen mal.
+     *
+     * @return array<string, mixed>
+     */
+    private function leftOpenAppointments(): array
+    {
+        return [
+            'key' => 'left-open',
+            'title' => 'Citas sin cerrar',
+            'hint' => 'De días pasados: marca si vino o si no asistió',
+            'count' => AppointmentResource::getEloquentQuery()->leftOpen()->count(),
+            'url' => AppointmentResource::getUrl('index', ['tab' => 'unclosed']),
+            'summary' => null,
+            'template' => null,
+            'rows' => [],
+        ];
     }
 
     /**

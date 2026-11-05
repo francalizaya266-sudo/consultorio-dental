@@ -45,7 +45,7 @@
             @if ($open !== [])
                 <section class="dash-group" aria-labelledby="open-consultations">
                     <header class="dash-group-head">
-                        <h3 id="open-consultations">Atenciones sin terminar <span class="dash-count is-warning">{{ count($open) }}</span></h3>
+                        <h3 id="open-consultations">Atenciones sin terminar <span class="dash-count is-warning">{{ $openCount }}</span></h3>
                     </header>
                     <ul class="dash-rows">
                         @foreach ($open as $consultation)
@@ -60,6 +60,9 @@
                             </li>
                         @endforeach
                     </ul>
+                    @if ($openCount > count($open))
+                        <x-filament::link :href="$openUrl" size="sm" class="dash-group-more">Ver las {{ $openCount }}</x-filament::link>
+                    @endif
                 </section>
             @endif
         </x-filament::section>

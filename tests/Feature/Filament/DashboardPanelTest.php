@@ -10,6 +10,7 @@ use App\Enums\ScheduleBlockType;
 use App\Enums\TreatmentPlanStatus;
 use App\Filament\Pages\Dashboard;
 use App\Filament\Pages\Settings;
+use App\Filament\Resources\Appointments\Pages\ListAppointments;
 use App\Filament\Resources\Consultations\ConsultationResource;
 use App\Filament\Resources\Patients\Pages\ListPatients;
 use App\Filament\Widgets\FollowUpsToday;
@@ -322,6 +323,45 @@ class DashboardPanelTest extends TestCase
 
         $this->assertSame(AppointmentStatus::InProgress, $waiting->fresh()->status);
         $this->assertNotNull($unfinished->fresh());
+    }
+
+    public function test_past_appointments_left_open_show_up_and_the_no_shows_close_in_one_click(): void
+    {
+        $treatment = Treatment::factory()->create();
+        $doctor = $this->doctorOffering($treatment);
+        $forgotten = Appointment::factory()->for($doctor)->for($treatment)->for($this->patient('Ana', 'Ríos'))->at('2026-10-30 10:00')->confirmed()->create();
+        $leftInRoom = Appointment::factory()->for($doctor)->for($treatment)->for($this->patient('Luis', 'Paz'))->at('2026-10-30 11:00')
+            ->create(['status' => AppointmentStatus::CheckedIn, 'checked_in_at' => '2026-10-30 10:55']);
+        $closed = Appointment::factory()->for($doctor)->for($treatment)->for($this->patient('Eva', 'Sol'))->at('2026-10-30 12:00')->create(['status' => AppointmentStatus::Completed]);
+        $today = Appointment::factory()->for($doctor)->for($treatment)->for($this->patient('Rut', 'Mar'))->at('2026-11-02 10:00')->confirmed()->create();
+
+        $this->actingAs(User::factory()->reception()->create());
+
+        Livewire::test(FollowUpsToday::class)
+            ->assertSee(['Citas sin cerrar', 'De días pasados: marca si vino o si no asistió']);
+
+        Livewire::test(ListAppointments::class, ['activeTab' => 'unclosed'])
+            ->assertCanSeeTableRecords([$forgotten, $leftInRoom])
+            ->assertCanNotSeeTableRecords([$closed, $today])
+            ->callTableBulkAction('noShowBulk', [$forgotten, $leftInRoom]);
+
+        // Solo cambia la que nadie marcó; la que quedó en sala espera que alguien diga si se atendió.
+        $this->assertSame(AppointmentStatus::NoShow, $forgotten->fresh()->status);
+        $this->assertSame(AppointmentStatus::CheckedIn, $leftInRoom->fresh()->status);
+    }
+
+    public function test_home_shows_the_first_unfinished_consultations_and_links_to_the_rest(): void
+    {
+        $doctor = Doctor::factory()->withSchedule()->create();
+        foreach (['Uno', 'Dos', 'Tres', 'Cuatro', 'Cinco'] as $i => $name) {
+            Consultation::factory()->for($doctor)->for($this->patient($name, 'Prueba'))->create(['attended_at' => now()->subDays(5 - $i)]);
+        }
+
+        $this->actingAs($doctor->user);
+
+        Livewire::test(NextPatient::class)
+            ->assertSee(['Uno Prueba', 'Dos Prueba', 'Tres Prueba', 'Ver las 5'])
+            ->assertDontSee(['Cuatro Prueba', 'Cinco Prueba']);
     }
 
     public function test_the_admin_is_warned_when_backups_stop_or_whatsapp_fails(): void

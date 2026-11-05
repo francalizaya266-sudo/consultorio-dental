@@ -19,6 +19,8 @@ use Filament\Schemas\Components\Actions;
 use Filament\Schemas\Components\EmbeddedSchema;
 use Filament\Schemas\Components\Form;
 use Filament\Schemas\Components\Section;
+use Filament\Schemas\Components\Tabs;
+use Filament\Schemas\Components\Tabs\Tab;
 use Filament\Schemas\Schema;
 use Filament\Support\Icons\Heroicon;
 use Illuminate\Support\Arr;
@@ -102,148 +104,169 @@ class Settings extends Page
     {
         return $schema
             ->components([
-                Section::make('Consultorio')
-                    ->columns(2)
-                    ->schema([
-                        TextInput::make('clinic.name')
-                            ->label('Nombre')
-                            ->required()
-                            ->maxLength(100),
-                        TextInput::make('clinic.whatsapp')
-                            ->label('WhatsApp del consultorio')
-                            ->tel()
-                            ->required()
-                            ->rule(fn () => function (string $attribute, $value, $fail) {
-                                if (! Phone::isValid((string) $value)) {
-                                    $fail('Escribe un celular válido.');
-                                }
-                            }),
-                        TextInput::make('clinic.phone')
-                            ->label('Teléfono fijo'),
-                        TextInput::make('clinic.address')
-                            ->label('Dirección')
-                            ->helperText('Sale en los avisos como {direccion}, en la web y en el mapa.'),
-                        TextInput::make('clinic.district')
-                            ->label('Distrito o ciudad')
-                            ->placeholder('Juliaca')
-                            ->helperText('Para aparecer en Google como "dentista en …".'),
-                        TextInput::make('clinic.email')
-                            ->label('Correo')
-                            ->email(),
-                        TextInput::make('clinic.slogan')
-                            ->label('Lema')
-                            ->maxLength(80)
-                            ->helperText('Sale al pie de las recetas.'),
-                    ]),
-                Section::make('Web')
-                    ->description('Textos y foto del inicio, estrellas de Google y enlaces del consultorio. El horario de atención sale solo de los horarios de los doctores.')
-                    ->columns(2)
-                    ->collapsed()
-                    ->schema([
-                        TextInput::make('web.headline')
-                            ->label('Título del inicio')
-                            ->required()
-                            ->maxLength(60)
-                            ->helperText('Corto: que entre en dos líneas en el celular.'),
-                        Textarea::make('web.intro')
-                            ->label('Frase bajo el título')
-                            ->required()
-                            ->rows(2)
-                            ->maxLength(220),
-                        Textarea::make('web.about')
-                            ->label('Sobre el consultorio')
-                            ->rows(4)
-                            ->maxLength(1200)
-                            ->helperText('Quiénes son y cómo atienden. Sale en el inicio.')
-                            ->columnSpanFull(),
-                        TextInput::make('clinic.maps_url')
-                            ->label('Enlace de Google Maps')
-                            ->url()
-                            ->helperText('Para el botón "Cómo llegar". Vacío = se busca la dirección.'),
-                        // El logo se guarda tal cual (PNG con fondo transparente, JPG o WebP): no se pasa a JPG como las fotos.
-                        FileUpload::make('web.logo')
-                            ->label('Logo')
-                            ->image()
-                            ->acceptedFileTypes(['image/png', 'image/jpeg', 'image/webp'])
-                            ->disk(PublicImages::DISK)
-                            ->directory('marca')
-                            ->visibility('public')
-                            ->maxSize(2 * 1024)
-                            ->helperText('Sale arriba en la página web y en este panel, en lugar del nombre. Mejor en PNG con fondo transparente. Si lo quitas, vuelve el nombre.')
-                            ->columnSpanFull(),
-                        WebPhotoUpload::make('web.hero_image', 'inicio')
-                            ->label('Foto del inicio')
-                            ->imageEditor()
-                            ->helperText('Una foto real del consultorio o del equipo, horizontal. Sale arriba de todo en el inicio.')
-                            ->columnSpanFull(),
-                        TextInput::make('clinic.reviews_url')
-                            ->label('Enlace a sus opiniones en Google')
-                            ->url()
-                            ->columnSpanFull(),
-                        TextInput::make('clinic.google_rating')
-                            ->label('Puntaje en Google')
-                            ->placeholder('4,9')
-                            ->rule(fn () => function (string $attribute, $value, $fail) {
-                                if (filled($value) && self::rating($value) === null) {
-                                    $fail('Escribe un puntaje de 1 a 5, por ejemplo 4,9.');
-                                }
-                            })
-                            ->helperText('Cópialo tal como sale en Google. Vacío = no se muestran estrellas.'),
-                        TextInput::make('clinic.google_reviews_count')
-                            ->label('Cantidad de opiniones en Google')
-                            ->numeric()
-                            ->integer()
-                            ->minValue(1)
-                            ->suffix('opiniones'),
-                        TextInput::make('clinic.instagram')
-                            ->label('Instagram')
-                            ->url()
-                            ->placeholder('https://instagram.com/…'),
-                        TextInput::make('clinic.facebook')
-                            ->label('Facebook')
-                            ->url()
-                            ->placeholder('https://facebook.com/…'),
-                        TextInput::make('clinic.tiktok')
-                            ->label('TikTok')
-                            ->url()
-                            ->placeholder('https://tiktok.com/@…'),
-                        TextInput::make('clinic.hours_note')
-                            ->label('Nota sobre el horario')
-                            ->placeholder('Feriados: con cita previa'),
-                    ]),
-                Section::make('Agenda')
-                    ->columns(2)
-                    ->schema([
-                        self::minutes('agenda.buffer_minutes', 'Limpieza y esterilización entre citas', 0, 60)
-                            ->helperText('Cada tratamiento puede tener su propio tiempo.'),
-                        self::minutes('agenda.slot_step_minutes', 'Cada cuánto se ofrecen horarios', 5, 60)
-                            ->helperText('Cuando no hay citas cerca. Los horarios pegados a otras citas se ofrecen primero.'),
-                    ]),
-                Section::make('Reservas y cambios desde la web')
-                    ->columns(2)
-                    ->schema([
-                        self::minutes('booking.min_lead_minutes', 'Anticipación mínima para reservar', 0, 2880),
-                        self::number('booking.horizon_days', 'Hasta cuántos días adelante se puede reservar', 1, 180, 'días'),
-                        self::number('booking.max_web_appointments_per_patient', 'Citas web futuras por paciente', 1, 10, 'citas'),
-                        self::number('booking.max_web_appointments_per_phone', 'Citas web futuras por celular (toda la familia)', 1, 30, 'citas'),
-                        self::number('booking.self_reschedule_min_hours', 'Cambio automático si faltan más de', 1, 168, 'horas')
-                            ->helperText('Con menos tiempo, el paciente propone horarios y ustedes aprueban.'),
-                        self::number('booking.self_cancel_min_hours', 'El paciente puede cancelar solo hasta', 0, 168, 'horas antes'),
-                        self::number('booking.max_reschedule_options', 'Horarios que puede proponer el paciente', 1, 5, 'opciones'),
-                    ]),
-                Section::make('Reportes')
-                    ->schema([
-                        Toggle::make('reports.doctors_see_own')
-                            ->label('Cada doctor ve sus propias ganancias y gráficos')
-                            ->helperText('Solo lo suyo: lo que atendió y lo que se cobró de sus citas. Recepción no ve reportes.'),
-                        TextInput::make('reports.monthly_goal')
-                            ->label('Meta de cobro del mes')
-                            ->prefix('S/')
-                            ->numeric()
-                            ->integer()
-                            ->minValue(1)
-                            ->maxValue(10_000_000)
-                            ->helperText('Opcional. En "Hoy", la administración ve cuánto falta y si el mes va a buen ritmo.'),
+                // Pestañas en vez de una sola hoja larga: cada tema a un clic y la pestaña queda en la dirección.
+                Tabs::make('Ajustes')
+                    ->contained(false)
+                    ->persistTabInQueryString()
+                    ->tabs([
+                        Tab::make('Consultorio')
+                            ->icon(Heroicon::OutlinedBuildingOffice2)
+                            ->schema([
+                                Section::make('Consultorio')
+                                    ->columns(2)
+                                    ->schema([
+                                        TextInput::make('clinic.name')
+                                            ->label('Nombre')
+                                            ->required()
+                                            ->maxLength(100),
+                                        TextInput::make('clinic.whatsapp')
+                                            ->label('WhatsApp del consultorio')
+                                            ->tel()
+                                            ->required()
+                                            ->rule(fn () => function (string $attribute, $value, $fail) {
+                                                if (! Phone::isValid((string) $value)) {
+                                                    $fail('Escribe un celular válido.');
+                                                }
+                                            }),
+                                        TextInput::make('clinic.phone')
+                                            ->label('Teléfono fijo'),
+                                        TextInput::make('clinic.address')
+                                            ->label('Dirección')
+                                            ->helperText('Sale en los avisos como {direccion}, en la web y en el mapa.'),
+                                        TextInput::make('clinic.district')
+                                            ->label('Distrito o ciudad')
+                                            ->placeholder('Juliaca')
+                                            ->helperText('Para aparecer en Google como "dentista en …".'),
+                                        TextInput::make('clinic.email')
+                                            ->label('Correo')
+                                            ->email(),
+                                        TextInput::make('clinic.slogan')
+                                            ->label('Lema')
+                                            ->maxLength(80)
+                                            ->helperText('Sale al pie de las recetas.'),
+                                    ]),
+                            ]),
+                        Tab::make('Página web')
+                            ->icon(Heroicon::OutlinedGlobeAlt)
+                            ->schema([
+                                Section::make('Web')
+                                    ->description('Textos y foto del inicio, estrellas de Google y enlaces del consultorio. El horario de atención sale solo de los horarios de los doctores.')
+                                    ->columns(2)
+                                    ->schema([
+                                        TextInput::make('web.headline')
+                                            ->label('Título del inicio')
+                                            ->required()
+                                            ->maxLength(60)
+                                            ->helperText('Corto: que entre en dos líneas en el celular.'),
+                                        Textarea::make('web.intro')
+                                            ->label('Frase bajo el título')
+                                            ->required()
+                                            ->rows(2)
+                                            ->maxLength(220),
+                                        Textarea::make('web.about')
+                                            ->label('Sobre el consultorio')
+                                            ->rows(4)
+                                            ->maxLength(1200)
+                                            ->helperText('Quiénes son y cómo atienden. Sale en el inicio.')
+                                            ->columnSpanFull(),
+                                        TextInput::make('clinic.maps_url')
+                                            ->label('Enlace de Google Maps')
+                                            ->url()
+                                            ->helperText('Para el botón "Cómo llegar". Vacío = se busca la dirección.'),
+                                        // El logo se guarda tal cual (PNG con fondo transparente, JPG o WebP): no se pasa a JPG como las fotos.
+                                        FileUpload::make('web.logo')
+                                            ->label('Logo')
+                                            ->image()
+                                            ->acceptedFileTypes(['image/png', 'image/jpeg', 'image/webp'])
+                                            ->disk(PublicImages::DISK)
+                                            ->directory('marca')
+                                            ->visibility('public')
+                                            ->maxSize(2 * 1024)
+                                            ->helperText('Sale arriba en la página web y en este panel, en lugar del nombre. Mejor en PNG con fondo transparente. Si lo quitas, vuelve el nombre.')
+                                            ->columnSpanFull(),
+                                        WebPhotoUpload::make('web.hero_image', 'inicio')
+                                            ->label('Foto del inicio')
+                                            ->imageEditor()
+                                            ->helperText('Una foto real del consultorio o del equipo, horizontal. Sale arriba de todo en el inicio.')
+                                            ->columnSpanFull(),
+                                        TextInput::make('clinic.reviews_url')
+                                            ->label('Enlace a sus opiniones en Google')
+                                            ->url()
+                                            ->columnSpanFull(),
+                                        TextInput::make('clinic.google_rating')
+                                            ->label('Puntaje en Google')
+                                            ->placeholder('4,9')
+                                            ->rule(fn () => function (string $attribute, $value, $fail) {
+                                                if (filled($value) && self::rating($value) === null) {
+                                                    $fail('Escribe un puntaje de 1 a 5, por ejemplo 4,9.');
+                                                }
+                                            })
+                                            ->helperText('Cópialo tal como sale en Google. Vacío = no se muestran estrellas.'),
+                                        TextInput::make('clinic.google_reviews_count')
+                                            ->label('Cantidad de opiniones en Google')
+                                            ->numeric()
+                                            ->integer()
+                                            ->minValue(1)
+                                            ->suffix('opiniones'),
+                                        TextInput::make('clinic.instagram')
+                                            ->label('Instagram')
+                                            ->url()
+                                            ->placeholder('https://instagram.com/…'),
+                                        TextInput::make('clinic.facebook')
+                                            ->label('Facebook')
+                                            ->url()
+                                            ->placeholder('https://facebook.com/…'),
+                                        TextInput::make('clinic.tiktok')
+                                            ->label('TikTok')
+                                            ->url()
+                                            ->placeholder('https://tiktok.com/@…'),
+                                        TextInput::make('clinic.hours_note')
+                                            ->label('Nota sobre el horario')
+                                            ->placeholder('Feriados: con cita previa'),
+                                    ]),
+                            ]),
+                        Tab::make('Agenda y reservas')
+                            ->icon(Heroicon::OutlinedCalendarDays)
+                            ->schema([
+                                Section::make('Agenda')
+                                    ->columns(2)
+                                    ->schema([
+                                        self::minutes('agenda.buffer_minutes', 'Limpieza y esterilización entre citas', 0, 60)
+                                            ->helperText('Cada tratamiento puede tener su propio tiempo.'),
+                                        self::minutes('agenda.slot_step_minutes', 'Cada cuánto se ofrecen horarios', 5, 60)
+                                            ->helperText('Cuando no hay citas cerca. Los horarios pegados a otras citas se ofrecen primero.'),
+                                    ]),
+                                Section::make('Reservas y cambios desde la web')
+                                    ->columns(2)
+                                    ->schema([
+                                        self::minutes('booking.min_lead_minutes', 'Anticipación mínima para reservar', 0, 2880),
+                                        self::number('booking.horizon_days', 'Hasta cuántos días adelante se puede reservar', 1, 180, 'días'),
+                                        self::number('booking.max_web_appointments_per_patient', 'Citas web futuras por paciente', 1, 10, 'citas'),
+                                        self::number('booking.max_web_appointments_per_phone', 'Citas web futuras por celular (toda la familia)', 1, 30, 'citas'),
+                                        self::number('booking.self_reschedule_min_hours', 'Cambio automático si faltan más de', 1, 168, 'horas')
+                                            ->helperText('Con menos tiempo, el paciente propone horarios y ustedes aprueban.'),
+                                        self::number('booking.self_cancel_min_hours', 'El paciente puede cancelar solo hasta', 0, 168, 'horas antes'),
+                                        self::number('booking.max_reschedule_options', 'Horarios que puede proponer el paciente', 1, 5, 'opciones'),
+                                    ]),
+                            ]),
+                        Tab::make('Reportes')
+                            ->icon(Heroicon::OutlinedChartBar)
+                            ->schema([
+                                Section::make('Reportes')
+                                    ->schema([
+                                        Toggle::make('reports.doctors_see_own')
+                                            ->label('Cada doctor ve sus propias ganancias y gráficos')
+                                            ->helperText('Solo lo suyo: lo que atendió y lo que se cobró de sus citas. Recepción no ve reportes.'),
+                                        TextInput::make('reports.monthly_goal')
+                                            ->label('Meta de cobro del mes')
+                                            ->prefix('S/')
+                                            ->numeric()
+                                            ->integer()
+                                            ->minValue(1)
+                                            ->maxValue(10_000_000)
+                                            ->helperText('Opcional. En "Hoy", la administración ve cuánto falta y si el mes va a buen ritmo.'),
+                                    ]),
+                            ]),
                     ]),
             ])
             ->statePath('data');

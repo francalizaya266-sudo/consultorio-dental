@@ -16,9 +16,12 @@ use App\Services\Clinical\ConsultationService;
 use App\Services\WhatsApp\WhatsAppOutbox;
 use Filament\Actions\Action;
 use Filament\Actions\ActionGroup;
+use Filament\Actions\BulkAction;
 use Filament\Forms\Components\Textarea;
 use Filament\Forms\Components\Toggle;
+use Filament\Notifications\Notification;
 use Filament\Support\Icons\Heroicon;
+use Illuminate\Support\Collection;
 
 /** Acciones rápidas sobre una cita, iguales en la agenda, en "Hoy" y en la ficha de la cita. */
 final class AppointmentActions
@@ -179,6 +182,36 @@ final class AppointmentActions
                 fn () => app(AppointmentService::class)->markNoShow($record, auth()->user()),
                 'Marcada como inasistencia',
             ));
+    }
+
+    /** Para la pestaña "Sin cerrar": marca de una vez a los que no vinieron. Las demás citas no se tocan. */
+    public static function noShowBulk(): BulkAction
+    {
+        return BulkAction::make('noShowBulk')
+            ->label('No asistieron')
+            ->icon(Heroicon::OutlinedUserMinus)
+            ->color('danger')
+            ->requiresConfirmation()
+            ->modalHeading('¿Marcar que estos pacientes no asistieron?')
+            ->modalDescription('Solo cambia las citas pendientes o confirmadas que ya pasaron. Las que estaban en sala o en atención se quedan como están.')
+            ->visible(fn (mixed $livewire) => property_exists($livewire, 'activeTab') && $livewire->activeTab === 'unclosed')
+            ->authorizeIndividualRecords('update')
+            ->deselectRecordsAfterCompletion()
+            ->action(function (Collection $records) {
+                $marked = 0;
+                foreach ($records as $record) {
+                    /** @var Appointment $record */
+                    if ($record->status->isChangeable() && $record->starts_at->isPast()) {
+                        app(AppointmentService::class)->markNoShow($record, auth()->user());
+                        $marked++;
+                    }
+                }
+
+                Notification::make()
+                    ->title($marked === 1 ? '1 cita marcada como inasistencia' : $marked.' citas marcadas como inasistencia')
+                    ->success()
+                    ->send();
+            });
     }
 
     public static function move(): Action

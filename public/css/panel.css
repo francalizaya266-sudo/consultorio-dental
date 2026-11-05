@@ -470,3 +470,35 @@ a.dash-name:hover { color: var(--primary-600); }
 
 .slot-buttons { display: grid !important; grid-template-columns: repeat(auto-fill, minmax(5.5rem, 1fr)); gap: .5rem; }
 .slot-buttons label { justify-content: center; font-variant-numeric: tabular-nums; }
+
+/* Mientras un widget carga: líneas grises con la forma de una tarjeta, no una caja vacía. */
+.fi-loading-section {
+    position: relative;
+    overflow: hidden;
+    --skeleton: color-mix(in oklab, var(--gray-400) 22%, transparent);
+    background-image:
+        linear-gradient(var(--skeleton), var(--skeleton)),
+        linear-gradient(var(--skeleton), var(--skeleton)),
+        linear-gradient(var(--skeleton), var(--skeleton)),
+        linear-gradient(var(--skeleton), var(--skeleton));
+    background-repeat: no-repeat;
+    background-size: 40% .875rem, 85% .625rem, 70% .625rem, 78% .625rem;
+    background-position: 1.5rem 1.5rem, 1.5rem 3.75rem, 1.5rem 5rem, 1.5rem 6.25rem;
+}
+
+.fi-loading-section::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(90deg, transparent, color-mix(in oklab, var(--gray-400) 12%, transparent), transparent);
+    transform: translateX(-100%);
+    animation: skeleton-sweep 1.4s linear infinite;
+}
+
+@keyframes skeleton-sweep {
+    to { transform: translateX(100%); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .fi-loading-section::after { animation: none; display: none; }
+}
