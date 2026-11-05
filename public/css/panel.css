@@ -386,8 +386,9 @@ details[open] > summary.dash-task::after { transform: rotate(-135deg) translate(
 /* El mes de un vistazo: va en la columna ancha, así que las cifras van un poco más chicas para que
    "S/ 47,035.00" entre en una línea; en el celular, de a dos y más chicas aún. */
 /* Sin esto, el texto bajo el título no baja de línea y la tarjeta se sale de su columna. */
-.dash-month .fi-section { grid-template-columns: minmax(0, 1fr); }
-.dash-month .fi-section-header > * { min-width: 0; }
+/* Vale para toda sección (también Resumen y Ganancias en el celular, donde las cifras se salían por la derecha). */
+.fi-section { grid-template-columns: minmax(0, 1fr); }
+.fi-section-header > * { min-width: 0; }
 .dash-month .fi-wi-stats-overview-stat-value { font-size: 1.5rem; line-height: 2rem; font-variant-numeric: tabular-nums; }
 @media (max-width: 40rem) {
     .dash-month { gap: .75rem; }

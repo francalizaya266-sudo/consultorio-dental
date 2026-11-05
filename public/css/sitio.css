@@ -492,7 +492,11 @@ a.rating > span:last-child { text-decoration: underline; text-decoration-color: 
 }
 .faqs details[open] summary::after { transform: rotate(45deg); }
 .faqs .prose { padding: 0 52px 12px 0; color: var(--muted); }
-.faq-group h2 { font-size: 1.5rem; margin-bottom: 14px; }
+.faq-group h2 { font-size: 1.5rem; }
+.faq-group .section-head { margin-bottom: 16px; }
+/* Bajo el título de la página, el primer grupo no necesita todo el aire de una sección. */
+.page-head + .section { margin-top: 24px; }
+@media (min-width: 900px) { .faq-group + .faq-group { margin-top: 72px; } }
 .faq-group h2 a { color: var(--ink); text-decoration: none; }
 
 /* Contacto */
