@@ -7,6 +7,7 @@ use App\Filament\Resources\Appointments\AppointmentResource;
 use App\Filament\Resources\Campaigns\CampaignResource;
 use App\Filament\Resources\Patients\PatientResource;
 use App\Filament\Resources\Payments\PaymentResource;
+use App\Filament\Resources\Supplies\SupplyResource;
 use App\Filament\Resources\Treatments\TreatmentResource;
 use App\Models\Account;
 use App\Models\Patient;
@@ -22,14 +23,14 @@ class PanelNavigationTest extends TestCase
 {
     use CreatesAgenda, LazilyRefreshDatabase;
 
-    public function test_the_menu_has_eight_entries_and_the_rest_goes_inside(): void
+    public function test_the_menu_has_nine_entries_and_the_rest_goes_inside(): void
     {
         $this->actingAs(User::factory()->admin()->create());
 
         $this->get(Dashboard::getUrl())
             ->assertOk()
-            ->assertSeeInOrder(['Hoy', 'Agenda', 'Pacientes', 'Caja', 'Avisos', 'Reportes', 'Configuración', 'Página web'])
-            ->assertDontSee(['Bloqueos de horario', 'Lista de espera', 'Presupuestos y planes', 'Cuotas por cobrar', 'Cierre del día', 'Copias de seguridad', 'Preguntas frecuentes']);
+            ->assertSeeInOrder(['Hoy', 'Agenda', 'Pacientes', 'Caja', 'Inventario', 'Avisos', 'Reportes', 'Configuración', 'Página web'])
+            ->assertDontSee(['Bloqueos de horario', 'Lista de espera', 'Presupuestos y planes', 'Cuotas por cobrar', 'Cierre del día', 'Copias de seguridad', 'Preguntas frecuentes', 'Proveedores']);
 
         // Lo de la página web va aparte de la configuración de la clínica.
         $this->get(TreatmentResource::getUrl('index'))
@@ -52,7 +53,11 @@ class PanelNavigationTest extends TestCase
 
         $this->get(PaymentResource::getUrl('index'))
             ->assertOk()
-            ->assertSeeInOrder(['Caja', 'Saldos pendientes', 'Cuotas por cobrar', 'Cierre del día', 'Avisos']);
+            ->assertSeeInOrder(['Caja', 'Saldos pendientes', 'Cuotas por cobrar', 'Cierre del día', 'Inventario']);
+
+        $this->get(SupplyResource::getUrl('index'))
+            ->assertOk()
+            ->assertSeeInOrder(['Inventario', 'Movimientos', 'Compras', 'Proveedores', 'Conteo', 'Avisos']);
     }
 
     public function test_reception_only_sees_its_entries(): void
@@ -61,7 +66,7 @@ class PanelNavigationTest extends TestCase
 
         $this->get(Dashboard::getUrl())
             ->assertOk()
-            ->assertSeeInOrder(['Hoy', 'Agenda', 'Pacientes', 'Caja', 'Avisos'])
+            ->assertSeeInOrder(['Hoy', 'Agenda', 'Pacientes', 'Caja', 'Inventario', 'Avisos'])
             ->assertDontSee(['Reportes', 'Configuración', 'Página web']);
     }
 

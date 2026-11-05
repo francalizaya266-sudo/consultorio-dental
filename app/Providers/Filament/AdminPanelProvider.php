@@ -88,7 +88,7 @@ class AdminPanelProvider extends PanelProvider
             // Ctrl + K (o ⌘ + K) abre el buscador desde cualquier pantalla.
             ->globalSearchKeyBindings(['mod+k'])
             ->globalSearchFieldKeyBindingSuffix()
-            // Ocho entradas en el menú; lo demás aparece dentro de cada una al entrar.
+            // Nueve entradas en el menú; lo demás aparece dentro de cada una al entrar.
             ->navigationItems([
                 // La lista de pacientes filtrada: quién debe y cuánto.
                 NavigationItem::make('Saldos pendientes')
@@ -99,12 +99,12 @@ class AdminPanelProvider extends PanelProvider
                     ->isActiveWhen(fn () => request()->routeIs(PatientResource::getRouteBaseName().'.index') && request()->query('tab') === 'owing')
                     ->visible(fn () => auth()->user()?->can('viewAny', Charge::class) ?? false),
                 NavigationItem::make('Configuración')
-                    ->sort(6)
+                    ->sort(7)
                     ->icon(Heroicon::OutlinedCog6Tooth)
                     ->url(fn () => self::firstUrl(self::SETTINGS))
                     ->visible(fn () => self::firstUrl(self::SETTINGS) !== null),
                 NavigationItem::make('Página web')
-                    ->sort(7)
+                    ->sort(8)
                     ->icon(Heroicon::OutlinedGlobeAlt)
                     ->url(fn () => self::firstUrl(self::WEB))
                     ->visible(fn () => self::firstUrl(self::WEB) !== null),

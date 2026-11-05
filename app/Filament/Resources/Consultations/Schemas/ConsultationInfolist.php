@@ -10,6 +10,7 @@ use App\Models\ConsultationDiagnosis;
 use App\Models\PrescriptionItem;
 use App\Models\TreatmentPlanItem;
 use App\Services\Clinical\PrescriptionService;
+use App\Services\Inventory\InventoryService;
 use Filament\Infolists\Components\RepeatableEntry;
 use Filament\Infolists\Components\TextEntry;
 use Filament\Schemas\Components\Group;
@@ -63,6 +64,13 @@ class ConsultationInfolist
                         TextEntry::make('planItems')
                             ->label('Del plan de tratamiento se trabajó')
                             ->state(fn (Consultation $record) => $record->planItems->map(fn (TreatmentPlanItem $item) => $item->label())->all())
+                            ->listWithLineBreaks()
+                            ->bulleted()
+                            ->hidden(fn ($state) => blank($state))
+                            ->columnSpanFull(),
+                        TextEntry::make('supplies_used')
+                            ->label('Materiales usados')
+                            ->state(fn (Consultation $record) => app(InventoryService::class)->usedIn($record))
                             ->listWithLineBreaks()
                             ->bulleted()
                             ->hidden(fn ($state) => blank($state))

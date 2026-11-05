@@ -23,6 +23,7 @@ use App\Models\User;
 use App\Services\Access\MagicLinkService;
 use App\Services\Agenda\AvailabilityService;
 use App\Services\Billing\BillingService;
+use App\Services\Inventory\InventoryService;
 use App\Services\StaffAlerts;
 use App\Services\WhatsApp\WhatsAppOutbox;
 use App\Support\Phone;
@@ -44,6 +45,7 @@ class AppointmentService
         private readonly MagicLinkService $links,
         private readonly BillingService $billing,
         private readonly WaitlistService $waitlist,
+        private readonly InventoryService $inventory,
     ) {}
 
     /**
@@ -374,8 +376,9 @@ class AppointmentService
             'last_visit_at' => $appointment->starts_at,
         ])->save();
 
-        // Sin atención escrita (la cerró recepción), se carga el tratamiento de la cita.
+        // Sin atención escrita (la cerró recepción), se carga el tratamiento de la cita y se descuentan sus materiales.
         $this->billing->chargeAppointment($appointment, $by);
+        $this->inventory->useForAppointment($appointment, $by);
     }
 
     public function markNoShow(Appointment $appointment, User $by): void

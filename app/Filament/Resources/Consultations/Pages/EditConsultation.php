@@ -7,16 +7,20 @@ use App\Exceptions\ClinicalException;
 use App\Filament\Actions\SignConsentAction;
 use App\Filament\Resources\Appointments\AppointmentResource;
 use App\Filament\Resources\Consultations\ConsultationResource;
+use App\Filament\Resources\Consultations\Schemas\SuppliesUsedField;
 use App\Filament\Resources\Patients\PatientResource;
 use App\Models\ClinicalTemplate;
 use App\Models\Consultation;
+use App\Models\Supply;
 use App\Services\Clinical\ConsultationService;
 use App\Services\Clinical\PrescriptionService;
 use App\Services\Clinical\TreatmentPlanService;
+use App\Services\Inventory\InventoryService;
 use Filament\Actions\Action;
 use Filament\Forms\Components\Select;
 use Filament\Notifications\Notification;
 use Filament\Resources\Pages\EditRecord;
+use Filament\Support\Enums\Width;
 use Filament\Support\Exceptions\Halt;
 use Filament\Support\Icons\Heroicon;
 use Illuminate\Contracts\Support\Htmlable;
@@ -257,16 +261,24 @@ class EditConsultation extends EditRecord
             ->label('Terminar atención')
             ->icon(Heroicon::OutlinedCheckCircle)
             ->color('success')
-            ->requiresConfirmation()
+            // Sin inventario es solo una confirmación; con inventario, además, lo que sale de él.
+            ->requiresConfirmation(fn () => ! self::tracksInventory())
             ->modalHeading('¿Terminar la atención?')
-            ->modalDescription('Se guarda lo escrito y la cita queda como atendida. Si algo quedó mal, puedes reabrirla durante 24 horas.')
+            ->modalDescription(fn () => self::tracksInventory()
+                ? 'Se guarda lo escrito, la cita queda como atendida y estos materiales salen del inventario. Borra lo que no usaste y agrega lo que usaste de más. Si algo quedó mal, puedes reabrirla durante 24 horas.'
+                : 'Se guarda lo escrito y la cita queda como atendida. Si algo quedó mal, puedes reabrirla durante 24 horas.')
+            ->modalWidth(fn () => self::tracksInventory() ? Width::ThreeExtraLarge : null)
             ->modalSubmitActionLabel('Sí, terminar')
-            ->action(function () {
+            ->fillForm(fn () => self::tracksInventory()
+                ? ['supplies_used' => app(InventoryService::class)->plannedUsage($this->getConsultation(), $this->data['planItems'] ?? null)]
+                : [])
+            ->schema(fn () => self::tracksInventory() ? [SuppliesUsedField::make()] : [])
+            ->action(function (array $data) {
                 $this->save(shouldRedirect: false, shouldSendSavedNotification: false);
                 $consultation = $this->getConsultation();
 
                 try {
-                    app(ConsultationService::class)->close($consultation, auth()->user());
+                    app(ConsultationService::class)->close($consultation, auth()->user(), array_key_exists('supplies_used', $data) ? ($data['supplies_used'] ?? []) : null);
                 } catch (ClinicalException $e) {
                     Notification::make()->danger()->title($e->getMessage())->send();
 
@@ -323,6 +335,12 @@ class EditConsultation extends EditRecord
                     Notification::make()->success()->title('Plantilla aplicada. Revisa y guarda.')->send();
                 }
             });
+    }
+
+    /** Si la clínica lleva inventario: entonces al terminar se revisa lo que sale de él. */
+    private static function tracksInventory(): bool
+    {
+        return once(fn () => Supply::query()->active()->exists());
     }
 
     private function getConsultation(): Consultation
