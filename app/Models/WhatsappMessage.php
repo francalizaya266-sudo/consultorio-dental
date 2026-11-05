@@ -65,4 +65,11 @@ class WhatsappMessage extends Model
     {
         return $query->pending()->where(fn (Builder $q) => $q->whereNull('due_at')->orWhere('due_at', '<=', now()));
     }
+
+    /** Avisos que la API de WhatsApp no pudo enviar en los últimos días. */
+    #[Scope]
+    protected function failedRecently(Builder $query, int $days = 7): Builder
+    {
+        return $query->where('status', MessageStatus::Failed)->where('updated_at', '>=', now()->subDays($days));
+    }
 }

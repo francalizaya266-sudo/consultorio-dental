@@ -114,6 +114,35 @@ class AvailabilityService
     }
 
     /**
+     * Cómo está el día del doctor: minutos de atención, cuántos quedan libres y los huecos
+     * donde aún entra una cita (los de al menos "hueco útil" minutos, desde $from si es hoy).
+     *
+     * @return array{open: int, free: int, gaps: list<array{start: CarbonImmutable, end: CarbonImmutable}>}
+     */
+    public function dayGaps(Doctor $doctor, CarbonInterface $date, ?CarbonInterface $from = null): array
+    {
+        $date = CarbonImmutable::instance($date);
+        $from = $from ? $this->ceilTo(CarbonImmutable::instance($from), 5) : null;
+        $minUsefulGap = (int) Setting::get('agenda.min_useful_gap_minutes', 30);
+        $windows = $this->freeWindows($doctor, $date, null);
+        $gaps = [];
+
+        foreach ($windows as $window) {
+            $start = $from ? $window['start']->max($from) : $window['start'];
+
+            if ($start->diffInMinutes($window['end'], false) >= $minUsefulGap) {
+                $gaps[] = ['start' => $start, 'end' => $window['end']];
+            }
+        }
+
+        return [
+            'open' => (int) $this->workingRanges($doctor, $date)->sum(fn (array $range) => $range['start']->diffInMinutes($range['end'])),
+            'free' => (int) collect($windows)->sum(fn (array $window) => $window['start']->diffInMinutes($window['end'])),
+            'gaps' => $gaps,
+        ];
+    }
+
+    /**
      * Ventanas libres del día: horario de atención menos citas y bloqueos.
      *
      * @return list<array{start: CarbonImmutable, end: CarbonImmutable, start_is_appointment: bool, end_is_appointment: bool}>

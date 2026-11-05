@@ -20,6 +20,9 @@ class TreatmentPlanItem extends Model
     /** Lo que el paciente firmó no se cambia ni se quita: se cancela y se agrega el correcto. */
     public const AGREED_FIELDS = ['treatment_id', 'description', 'quantity', 'unit_price', 'discount'];
 
+    /** Por hacer: aún no se termina ni se canceló. */
+    public const OPEN_STATUSES = [PlanItemStatus::Pending, PlanItemStatus::InProgress];
+
     protected function casts(): array
     {
         return [
@@ -86,6 +89,6 @@ class TreatmentPlanItem extends Model
 
     public function isOpen(): bool
     {
-        return in_array($this->status, [PlanItemStatus::Pending, PlanItemStatus::InProgress], true);
+        return in_array($this->status, self::OPEN_STATUSES, true);
     }
 }

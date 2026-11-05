@@ -20,7 +20,7 @@ use Illuminate\Database\Eloquent\Builder;
  */
 class TodayStats extends Widget
 {
-    protected static ?int $sort = 1;
+    protected static ?int $sort = 2;
 
     protected string $view = 'filament.widgets.today-stats';
 

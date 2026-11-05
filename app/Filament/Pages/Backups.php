@@ -19,9 +19,6 @@ use Illuminate\Support\Number;
  */
 class Backups extends Page
 {
-    /** Si la última copia es más vieja que esto, el cron del hosting no está corriendo. */
-    private const STALE_AFTER_HOURS = 36;
-
     protected string $view = 'filament.pages.backups';
 
     protected static ?string $title = 'Copias de seguridad';
@@ -59,18 +56,18 @@ class Backups extends Page
     /** @return array<string, mixed> */
     protected function getViewData(): array
     {
-        $backups = collect(app(DatabaseBackup::class)->list())->map(fn (array $backup) => [
+        $service = app(DatabaseBackup::class);
+        $backups = collect($service->list())->map(fn (array $backup) => [
             'file' => $backup['file'],
             'date' => ucfirst($backup['created_at']->translatedFormat('l j \d\e F \d\e Y')).', '.Dates::time($backup['created_at']),
             'ago' => $backup['created_at']->diffForHumans(),
             'size' => Number::fileSize($backup['size'], precision: 1),
             'url' => Filament::getPanel('admin')->route('backups.download', ['file' => $backup['file']]),
         ]);
-        $latest = app(DatabaseBackup::class)->list()[0]['created_at'] ?? null;
 
         return [
             'backups' => $backups,
-            'stale' => $latest === null || $latest->lt(now()->subHours(self::STALE_AFTER_HOURS)),
+            'stale' => $service->isStale(),
             'keep' => (int) config('consultorio.backups.keep'),
         ];
     }

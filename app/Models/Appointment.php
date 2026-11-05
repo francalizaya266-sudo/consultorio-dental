@@ -133,6 +133,16 @@ class Appointment extends Model
         return $query->where('starts_at', '>=', now())->whereIn('status', AppointmentStatus::changeable());
     }
 
+    /** Minutos que lleva en sala desde que llegó; null si no está esperando. */
+    public function waitingMinutes(): ?int
+    {
+        if ($this->status !== AppointmentStatus::CheckedIn || $this->checked_in_at === null) {
+            return null;
+        }
+
+        return (int) max(0, $this->checked_in_at->diffInMinutes(now()));
+    }
+
     /** "Sin confirmar": falta poco y el paciente aún no confirmó con su enlace. */
     public function needsCall(): bool
     {

@@ -4,7 +4,6 @@ namespace App\Filament\Resources\Patients\Pages;
 
 use App\Filament\Resources\Patients\PatientResource;
 use App\Models\Charge;
-use App\Models\Patient;
 use Filament\Actions\CreateAction;
 use Filament\Resources\Pages\ListRecords;
 use Filament\Schemas\Components\Tabs\Tab;
@@ -21,17 +20,26 @@ class ListPatients extends ListRecords
         ];
     }
 
+    /** Cada pestaña cuenta con la misma consulta con nombre que usa "Hoy", así los números coinciden. */
     public function getTabs(): array
     {
         return array_filter([
             'all' => Tab::make('Todos'),
             'checkup' => Tab::make('Sin venir hace 6 meses')
-                ->badge(fn () => Patient::query()->dueForCheckup()->count() ?: null)
+                ->badge(fn () => PatientResource::getEloquentQuery()->dueForCheckup()->count() ?: null)
                 ->badgeColor('gray')
                 ->modifyQueryUsing(fn (Builder $query) => $query->dueForCheckup()),
+            'unscheduled' => Tab::make('Plan sin agendar')
+                ->badge(fn () => PatientResource::getEloquentQuery()->withUnscheduledPlan()->count() ?: null)
+                ->badgeColor('warning')
+                ->modifyQueryUsing(fn (Builder $query) => $query->withUnscheduledPlan()),
+            'proposed' => Tab::make('Presupuesto sin respuesta')
+                ->badge(fn () => PatientResource::getEloquentQuery()->withPlanAwaitingAnswer()->count() ?: null)
+                ->badgeColor('warning')
+                ->modifyQueryUsing(fn (Builder $query) => $query->withPlanAwaitingAnswer()),
             'owing' => auth()->user()->can('viewAny', Charge::class)
                 ? Tab::make('Con saldo pendiente')
-                    ->badge(fn () => Patient::query()->owing()->count() ?: null)
+                    ->badge(fn () => PatientResource::getEloquentQuery()->owing()->count() ?: null)
                     ->badgeColor('danger')
                     ->modifyQueryUsing(fn (Builder $query) => $query->owing())
                 : null,

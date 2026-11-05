@@ -21,7 +21,7 @@ class ListWhatsappMessages extends ListRecords
 
     public function getTabs(): array
     {
-        return [
+        return array_filter([
             'due' => Tab::make('Por enviar')
                 ->badge(fn () => WhatsappMessageResource::getEloquentQuery()->due()->count() ?: null)
                 ->badgeColor('warning')
@@ -30,7 +30,14 @@ class ListWhatsappMessages extends ListRecords
                 ->modifyQueryUsing(fn (Builder $query) => $query->pending()->where('due_at', '>', now())),
             'sent' => Tab::make('Enviados')
                 ->modifyQueryUsing(fn (Builder $query) => $query->where('status', MessageStatus::Sent)),
+            // Solo con la API de WhatsApp: los que no salieron. Aparece cuando hay alguno.
+            'failed' => WhatsappMessageResource::getEloquentQuery()->where('status', MessageStatus::Failed)->exists()
+                ? Tab::make('No enviados')
+                    ->badge(fn () => WhatsappMessageResource::getEloquentQuery()->failedRecently()->count() ?: null)
+                    ->badgeColor('danger')
+                    ->modifyQueryUsing(fn (Builder $query) => $query->where('status', MessageStatus::Failed))
+                : null,
             'all' => Tab::make('Todos'),
-        ];
+        ]);
     }
 }

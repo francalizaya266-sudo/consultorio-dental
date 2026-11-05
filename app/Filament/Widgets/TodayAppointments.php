@@ -10,6 +10,7 @@ use App\Filament\Resources\Appointments\Tables\AppointmentsTable;
 use App\Models\Appointment;
 use App\Models\Charge;
 use App\Models\User;
+use App\Support\Dates;
 use App\Support\Phone;
 use Filament\Support\Enums\FontWeight;
 use Filament\Support\Enums\TextSize;
@@ -21,11 +22,15 @@ use Filament\Widgets\TableWidget;
 
 /**
  * Citas de hoy en orden, una o dos líneas por cita ("09:00 · María Quispe · Limpieza" y su estado),
- * con los botones del día: confirmar, llegó, atender, atendido, cobrar.
+ * con los botones del día: confirmar, llegó, atender, atendido, cobrar. Quien está en sala muestra
+ * cuánto lleva esperando.
  */
 class TodayAppointments extends TableWidget
 {
-    protected static ?int $sort = 2;
+    /** Desde aquí la espera se marca en rojo: alguien tiene que ver qué pasa. */
+    public const LONG_WAIT_MINUTES = 20;
+
+    protected static ?int $sort = 5;
 
     protected int|string|array $columnSpan = 'full';
 
@@ -67,6 +72,11 @@ class TodayAppointments extends TableWidget
                     ])->space(1),
                     Stack::make([
                         TextColumn::make('status')->badge(),
+                        TextColumn::make('waiting')
+                            ->state(fn (Appointment $record) => ($minutes = $record->waitingMinutes()) !== null ? 'En sala hace '.Dates::duration($minutes) : null)
+                            ->icon('heroicon-m-clock')
+                            ->color(fn (Appointment $record) => $record->waitingMinutes() >= self::LONG_WAIT_MINUTES ? 'danger' : 'warning')
+                            ->size(TextSize::Small),
                         AppointmentsTable::flagsColumn(withBalance: $seesMoney),
                     ])->space(1)->alignEnd()->grow(false),
                 ]),
