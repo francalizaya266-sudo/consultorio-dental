@@ -11,6 +11,7 @@ use App\Filament\Resources\Appointments\AppointmentResource;
 use App\Filament\Resources\Appointments\Pages\CreateAppointment;
 use App\Filament\Resources\Appointments\Pages\ListAppointments;
 use App\Filament\Resources\Appointments\Pages\ViewAppointment;
+use App\Filament\Resources\Patients\PatientResource;
 use App\Filament\Resources\RescheduleRequests\Pages\ListRescheduleRequests;
 use App\Filament\Resources\RescheduleRequests\RescheduleRequestResource;
 use App\Filament\Resources\WhatsappMessages\Pages\ListWhatsappMessages;
@@ -184,6 +185,37 @@ class AgendaPanelTest extends TestCase
 
         $this->assertSame('2026-11-04 16:00', $appointment->fresh()->starts_at->format('Y-m-d H:i'));
         $this->assertSame(MessageTemplateKey::Rescheduled, WhatsappMessage::query()->pending()->sole()->template_key);
+    }
+
+    public function test_an_appointment_leads_back_to_the_patient_and_to_their_other_visits(): void
+    {
+        $treatment = Treatment::factory()->create(['name' => 'Limpieza dental']);
+        $doctor = $this->doctorOffering($treatment);
+        $patient = Patient::factory()->create(['first_name' => 'Ana Paula', 'last_name' => 'Acosta Gaona']);
+        $earlier = Appointment::factory()->for($doctor)->for($treatment)->for($patient)->at('2026-07-24 15:00')->create(['status' => AppointmentStatus::Completed]);
+        $appointment = Appointment::factory()->for($doctor)->for($treatment)->for($patient)->at('2026-11-03 10:00')->confirmed()->create();
+        $later = Appointment::factory()->for($doctor)->for($treatment)->for($patient)->at('2026-12-01 09:00')->create();
+        $someoneElse = Appointment::factory()->for($doctor)->for($treatment)->at('2026-11-05 10:00')->create();
+
+        $this->actingAs(User::factory()->reception()->create());
+
+        // Arriba, la ruta vuelve a la ficha; al costado, sus otras citas con esta marcada.
+        $this->get(AppointmentResource::getUrl('view', ['record' => $appointment]))
+            ->assertOk()
+            ->assertSeeInOrder(['Pacientes', 'Ana Paula Acosta Gaona', 'Cita del 03/11/2026'])
+            ->assertSee(PatientResource::getUrl('view', ['record' => $patient]))
+            ->assertSeeInOrder(['Sus citas', 'Mar. 01/12/2026 · 09:00', 'Esta cita', 'Vie. 24/07/2026 · 15:00', 'Ver su ficha'])
+            ->assertSee(AppointmentResource::getUrl('view', ['record' => $earlier]))
+            ->assertSee(AppointmentResource::getUrl('view', ['record' => $later]))
+            ->assertDontSee(AppointmentResource::getUrl('view', ['record' => $someoneElse]));
+
+        Livewire::test(ViewAppointment::class, ['record' => $appointment->getKey()])
+            ->assertActionVisible('patient')
+            ->assertActionHidden(TestAction::make('patientProfile')->table($appointment));
+
+        // Desde la lista de citas, el menú de cada una también lleva a la ficha.
+        Livewire::test(ListAppointments::class, ['activeTab' => 'all'])
+            ->assertActionVisible(TestAction::make('patientProfile')->table($appointment));
     }
 
     public function test_sending_a_notice_opens_whatsapp_and_marks_it_sent(): void

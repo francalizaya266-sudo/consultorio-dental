@@ -3,7 +3,9 @@
 namespace App\Filament\Resources\Appointments\Schemas;
 
 use App\Enums\AppointmentStatus;
+use App\Filament\Resources\Appointments\AppointmentResource;
 use App\Filament\Resources\Patients\PatientResource;
+use App\Filament\Support\PatientSummary;
 use App\Models\Appointment;
 use App\Models\AppointmentEvent;
 use App\Models\Charge;
@@ -14,6 +16,7 @@ use App\Support\Phone;
 use Filament\Infolists\Components\RepeatableEntry;
 use Filament\Infolists\Components\TextEntry;
 use Filament\Schemas\Components\Section;
+use Filament\Schemas\Components\View;
 use Filament\Schemas\Schema;
 use Filament\Support\Enums\TextSize;
 
@@ -24,6 +27,13 @@ class AppointmentInfolist
         return $schema
             ->columns(3)
             ->components([
+                // Lo mismo que bajo el nombre en su ficha: saldo, próxima cita, control y cómo escribirle.
+                View::make('filament.patients.summary')
+                    ->viewData(fn (Appointment $record) => [
+                        'chips' => PatientSummary::chips($record->patient, auth()->user()),
+                        'contact' => PatientSummary::contact($record->patient),
+                    ])
+                    ->columnSpanFull(),
                 Section::make('Cita')
                     ->columnSpan(2)
                     ->columns(2)
@@ -77,6 +87,7 @@ class AppointmentInfolist
                             ->visible(fn (Appointment $record) => $record->status === AppointmentStatus::Cancelled)
                             ->columnSpanFull(),
                     ]),
+                self::patientVisits(),
                 self::toCharge(),
                 self::billing(),
                 Section::make('Historial')
@@ -85,6 +96,7 @@ class AppointmentInfolist
                         RepeatableEntry::make('events')
                             ->hiddenLabel()
                             ->contained(false)
+                            ->placeholder('Sin cambios registrados para esta cita.')
                             ->state(fn (Appointment $record) => $record->events()->with('user')->orderBy('id')->get())
                             ->schema([
                                 TextEntry::make('type')
@@ -99,6 +111,50 @@ class AppointmentInfolist
                             ]),
                     ]),
             ]);
+    }
+
+    /** Al costado, las otras citas del mismo paciente: se pasa de una a otra sin volver a buscarlo. */
+    private static function patientVisits(): Section
+    {
+        return Section::make('Sus citas')
+            ->columnSpan(1)
+            ->schema([
+                View::make('filament.appointments.patient-visits')
+                    ->viewData(fn (Appointment $record) => self::visitsAround($record)),
+            ]);
+    }
+
+    /**
+     * Las dos que siguen y las cuatro anteriores, con esta en su lugar.
+     *
+     * @return array{rows: list<array{title: string, when: string, status: string, color: string, url: string|null, current: bool}>, total: int, profile_url: string|null, new_url: string|null}
+     */
+    public static function visitsAround(Appointment $appointment): array
+    {
+        $patient = $appointment->patient;
+        $query = fn () => AppointmentResource::getEloquentQuery()->whereBelongsTo($patient)->whereKeyNot($appointment->getKey())->with('treatment');
+        $after = $query()->where('starts_at', '>', $appointment->starts_at)->orderBy('starts_at')->limit(2)->get();
+        $before = $query()->where('starts_at', '<=', $appointment->starts_at)->orderByDesc('starts_at')->limit(4)->get();
+
+        $row = fn (Appointment $visit, bool $current = false) => [
+            'title' => $visit->treatment->name,
+            'when' => ucfirst($visit->starts_at->translatedFormat('D d/m/Y · H:i')),
+            'status' => $visit->status->getLabel(),
+            'color' => $visit->status->getColor(),
+            'url' => $current ? null : AppointmentResource::getUrl('view', ['record' => $visit]),
+            'current' => $current,
+        ];
+
+        return [
+            'rows' => [
+                ...$after->reverse()->map(fn (Appointment $visit) => $row($visit))->values()->all(),
+                $row($appointment, current: true),
+                ...$before->map(fn (Appointment $visit) => $row($visit))->all(),
+            ],
+            'total' => $query()->count() + 1,
+            'profile_url' => PatientResource::canView($patient) ? PatientResource::getUrl('view', ['record' => $patient]) : null,
+            'new_url' => AppointmentResource::canCreate() ? AppointmentResource::getUrl('create', ['patient' => $patient->getKey()]) : null,
+        ];
     }
 
     /**

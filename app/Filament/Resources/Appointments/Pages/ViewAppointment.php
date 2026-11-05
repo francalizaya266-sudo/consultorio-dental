@@ -4,6 +4,7 @@ namespace App\Filament\Resources\Appointments\Pages;
 
 use App\Filament\Actions\AppointmentActions;
 use App\Filament\Resources\Appointments\AppointmentResource;
+use App\Filament\Resources\Patients\PatientResource;
 use App\Services\Billing\BillingService;
 use Filament\Actions\Action;
 use Filament\Forms\Components\Textarea;
@@ -37,10 +38,32 @@ class ViewAppointment extends ViewRecord
         return ucfirst($appointment->starts_at->translatedFormat('l j \d\e F · H:i')).' · '.$appointment->treatment->name;
     }
 
+    /** La cita es del paciente: la ruta de arriba vuelve a su ficha. */
+    public function getBreadcrumbs(): array
+    {
+        $appointment = $this->getRecord();
+
+        if (! PatientResource::canView($appointment->patient)) {
+            return parent::getBreadcrumbs();
+        }
+
+        return [
+            PatientResource::getUrl('index') => 'Pacientes',
+            PatientResource::getUrl('view', ['record' => $appointment->patient]) => $appointment->patient->full_name,
+            'Cita del '.$appointment->starts_at->format('d/m/Y'),
+        ];
+    }
+
     protected function getHeaderActions(): array
     {
         return [
             ...AppointmentActions::all(),
+            Action::make('patient')
+                ->label('Ficha del paciente')
+                ->icon(Heroicon::OutlinedUser)
+                ->color('gray')
+                ->visible(fn () => PatientResource::canView($this->getRecord()->patient))
+                ->url(fn () => PatientResource::getUrl('view', ['record' => $this->getRecord()->patient])),
             Action::make('notes')
                 ->label('Editar notas')
                 ->icon(Heroicon::OutlinedPencilSquare)
