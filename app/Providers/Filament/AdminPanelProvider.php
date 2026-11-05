@@ -67,6 +67,22 @@ class AdminPanelProvider extends PanelProvider
         FaqResource::class,
     ];
 
+    /**
+     * Escala del azul de la marca armada a mano: Color::hex() deja #1e4f91 en el tono 800 y los
+     * botones (tono 600) salían celestes con texto oscuro.
+     *
+     * @return array<int, string>
+     */
+    private static function brandPalette(): array
+    {
+        $shades = [
+            50 => '#eef4fb', 100 => '#dbe6f4', 200 => '#b9cde8', 300 => '#8eadd8', 400 => '#5f87c2', 500 => '#3a68a9',
+            600 => '#1e4f91', 700 => '#173e73', 800 => '#133260', 900 => '#10294f', 950 => '#0b1f3a',
+        ];
+
+        return array_map(fn (string $hex): string => Color::convertToOklch($hex), $shades);
+    }
+
     public function panel(Panel $panel): Panel
     {
         return $panel
@@ -77,8 +93,8 @@ class AdminPanelProvider extends PanelProvider
             ->login()
             ->brandName(fn () => Setting::get('clinic.name'))
             ->colors([
-                // El azul del recetario, el mismo de la página web (#1e4f91); los botones llevan texto blanco.
-                'primary' => Color::hex('#1e4f91'),
+                // El azul del recetario, el mismo de la página web, en el tono 600 (el de los botones, con texto blanco).
+                'primary' => self::brandPalette(),
             ])
             ->defaultAvatarProvider(InitialsAvatarProvider::class)
             ->strictAuthorization()
