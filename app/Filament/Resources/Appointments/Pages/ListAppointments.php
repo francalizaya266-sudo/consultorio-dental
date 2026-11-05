@@ -30,10 +30,15 @@ class ListAppointments extends ListRecords
             'upcoming' => Tab::make('Próximas')
                 ->modifyQueryUsing(fn (Builder $query) => $query->where('starts_at', '>=', today())->whereIn('status', AppointmentStatus::changeable())),
             'pending' => Tab::make('Por confirmar')
-                ->badgeColor('danger')
+                ->badgeColor('warning')
                 ->badge(fn () => AppointmentResource::getEloquentQuery()->where('status', AppointmentStatus::Pending)->whereNotNull('unconfirmed_flagged_at')->where('starts_at', '>=', now())->count() ?: null)
                 ->badgeTooltip('Sin confirmar a un día de la cita: conviene llamar')
                 ->modifyQueryUsing(fn (Builder $query) => $query->where('status', AppointmentStatus::Pending)->where('starts_at', '>=', now())),
+            'unclosed' => Tab::make('Sin cerrar')
+                ->badgeColor('warning')
+                ->badge(fn () => AppointmentResource::getEloquentQuery()->leftOpen()->count() ?: null)
+                ->badgeTooltip('De días pasados: marca si vino o si no asistió')
+                ->modifyQueryUsing(fn (Builder $query) => $query->leftOpen()),
             'all' => Tab::make('Todas'),
         ];
     }

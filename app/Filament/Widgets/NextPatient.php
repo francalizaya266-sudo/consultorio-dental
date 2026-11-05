@@ -52,6 +52,9 @@ class NextPatient extends Widget implements HasActions, HasSchemas
     }
 
     /** @return array<string, mixed> */
+    /** Las atenciones abiertas que se ven en Hoy; el resto queda a un clic en Atenciones. */
+    private const OPEN_SHOWN = 3;
+
     protected function getViewData(): array
     {
         /** @var User $user */
@@ -60,10 +63,14 @@ class NextPatient extends Widget implements HasActions, HasSchemas
         $next = $day->next();
         $waiting = $day->waiting();
 
+        $open = $day->openConsultations();
+
         return [
             'next' => $next ? $this->nextData($day, $next) : null,
             'othersWaiting' => max(0, $waiting - ($next?->status === AppointmentStatus::CheckedIn ? 1 : 0)),
-            'open' => $day->openConsultations()->map(function (Consultation $consultation) {
+            'openCount' => $open->count(),
+            'openUrl' => ConsultationResource::getUrl('index', ['filters' => ['open' => ['isActive' => true]]]),
+            'open' => $open->take(self::OPEN_SHOWN)->map(function (Consultation $consultation) {
                 $since = $consultation->attended_at ?? $consultation->created_at;
 
                 return [

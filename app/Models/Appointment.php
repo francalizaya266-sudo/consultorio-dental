@@ -133,6 +133,13 @@ class Appointment extends Model
         return $query->where('starts_at', '>=', now())->whereIn('status', AppointmentStatus::changeable());
     }
 
+    /** Citas de días pasados que nadie cerró: no se marcó si vino, si se atendió o si faltó. */
+    #[Scope]
+    protected function leftOpen(Builder $query): Builder
+    {
+        return $query->where('starts_at', '<', today())->whereIn('status', AppointmentStatus::open());
+    }
+
     /** Minutos que lleva en sala desde que llegó; null si no está esperando. */
     public function waitingMinutes(): ?int
     {

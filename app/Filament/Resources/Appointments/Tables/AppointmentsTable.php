@@ -41,6 +41,7 @@ class AppointmentsTable
                     ->query(fn (Builder $query) => $query->where('is_new_patient', true)),
             ])
             ->recordActions(AppointmentActions::all())
+            ->toolbarActions([AppointmentActions::noShowBulk()])
             ->stackedOnMobile()
             ->poll('30s')
             ->emptyStateHeading('No hay citas')

@@ -114,10 +114,18 @@ class PatientsAndSetupPanelTest extends TestCase
         $this->assertSame(1, Payment::count());
     }
 
-    public function test_a_day_without_payments_offers_the_other_days_in_one_click(): void
+    public function test_payments_open_on_the_last_week_and_older_ones_are_one_click_away(): void
     {
-        $payment = Payment::factory()->for(Patient::factory())->create(['paid_at' => now()->subDays(3)]);
+        $thisWeek = Payment::factory()->for(Patient::factory())->create(['paid_at' => now()->subDays(3)]);
+        $payment = Payment::factory()->for(Patient::factory())->create(['paid_at' => now()->subDays(20)]);
         $this->actingAs(User::factory()->reception()->create());
+
+        Livewire::test(ManagePayments::class)
+            ->assertCanSeeTableRecords([$thisWeek])
+            ->assertCanNotSeeTableRecords([$payment])
+            ->assertSee('Últimos 7 días');
+
+        Payment::query()->whereKey($thisWeek->getKey())->delete();
 
         Livewire::test(ManagePayments::class)
             ->assertCanNotSeeTableRecords([$payment])

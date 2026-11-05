@@ -43,6 +43,12 @@ class EditPatient extends EditRecord
         ];
     }
 
+    /** Al editar solo van los datos: las citas, los cargos y los pagos ya están en la ficha. */
+    protected function getAllRelationManagers(): array
+    {
+        return [];
+    }
+
     protected function getRedirectUrl(): string
     {
         return $this->getResource()::getUrl('view', ['record' => $this->getRecord()]);

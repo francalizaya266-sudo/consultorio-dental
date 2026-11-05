@@ -54,6 +54,12 @@ enum AppointmentStatus: string implements HasColor, HasLabel
         return [self::Pending, self::Confirmed];
     }
 
+    /** @return list<self> Estados que todavía esperan un cierre: vino y se atendió, o no vino. */
+    public static function open(): array
+    {
+        return [self::Pending, self::Confirmed, self::CheckedIn, self::InProgress];
+    }
+
     public function isChangeable(): bool
     {
         return in_array($this, self::changeable(), true);

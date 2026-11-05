@@ -63,7 +63,8 @@ class PaymentsTable
                 Filter::make('paid_at')
                     ->label('Fecha')
                     ->schema([
-                        DatePicker::make('from')->label('Desde')->default(today()),
+                        // Una semana por defecto: el día solo ya está en "Cierre del día" y un día sin pagos dejaba la lista vacía.
+                        DatePicker::make('from')->label('Desde')->default(today()->subDays(6)),
                         DatePicker::make('until')->label('Hasta')->default(today()),
                     ])
                     ->columns(2)
@@ -76,6 +77,10 @@ class PaymentsTable
 
                         if (! $from && ! $until) {
                             return [];
+                        }
+
+                        if ($from === today()->subDays(6)->toDateString() && $until === today()->toDateString()) {
+                            return [Indicator::make('Últimos 7 días')->removeField('from')->removeField('until')];
                         }
 
                         $label = $from === $until
