@@ -45,6 +45,10 @@ class AppointmentForm
                             ->visible(fn (Get $get) => (bool) $get('new_patient'))
                             ->schema(self::newPatientFields()),
                         self::planItemSelect(),
+                        // Junto al paciente, donde recepción lo pregunta (antes quedaba al final, en Detalles).
+                        Select::make('origin')
+                            ->label('¿Cómo nos encontró?')
+                            ->options(AppointmentOrigin::class),
                     ]),
                 Section::make('Horario')
                     ->columns(2)
@@ -53,9 +57,6 @@ class AppointmentForm
                     ->columns(2)
                     ->collapsible()
                     ->schema([
-                        Select::make('origin')
-                            ->label('¿Cómo nos encontró?')
-                            ->options(AppointmentOrigin::class),
                         Toggle::make('fixed_date')
                             ->label('Fecha fija (el paciente no la mueve solo)')
                             ->inline(false),

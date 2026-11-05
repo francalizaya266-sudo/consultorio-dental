@@ -41,7 +41,11 @@
             <span class="s-completed">Atendida</span>
             <span class="s-block">No se atiende</span>
         </div>
-        <p class="agenda-help">Toca una cita para ver sus datos y botones, o un espacio libre para agendar ahí. Arrastra una cita para cambiarla de horario (en celular, mantenla presionada y luego arrástrala).</p>
+        {{-- La ayuda se abre cuando se necesita: el que usa la agenda todos los días ya la sabe. --}}
+        <details class="agenda-help">
+            <summary>Cómo usar la agenda</summary>
+            <p>Toca una cita para ver sus datos y botones, o un espacio libre para agendar ahí. Arrastra una cita para cambiarla de horario (en celular, mantenla presionada y luego arrástrala).</p>
+        </details>
     </div>
 
     <script>

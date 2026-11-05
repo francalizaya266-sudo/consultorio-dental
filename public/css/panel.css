@@ -66,7 +66,13 @@
 .agenda-heading { font-size: 1.05rem; font-weight: 600; color: var(--gray-950); }
 .dark .agenda-heading { color: #fff; }
 .agenda-info { display: flex; flex-wrap: wrap; gap: .4rem 1.5rem; align-items: center; justify-content: space-between; }
-.agenda-help { font-size: .8rem; color: var(--gray-500); }
+.agenda-help { font-size: .875rem; color: var(--gray-600); }
+.agenda-help summary { cursor: pointer; font-weight: 500; color: var(--primary-600); list-style: none; }
+.agenda-help summary::-webkit-details-marker { display: none; }
+.agenda-help summary::before { content: "?"; display: inline-grid; place-items: center; width: 1.1rem; height: 1.1rem; margin-right: .35rem; border-radius: 9999px; background: var(--primary-50); font-size: .7rem; font-weight: 700; }
+.agenda-help p { margin: .35rem 0 0; max-width: 60ch; }
+.dark .agenda-help summary { color: var(--primary-400); }
+.dark .agenda-help summary::before { background: rgb(255 255 255 / .08); }
 .agenda-frame { overflow: auto; max-height: calc(100vh - 15rem); border: 1px solid var(--gray-200); border-radius: .75rem; background: #fff; }
 .dark .agenda-frame { border-color: rgb(255 255 255 / .1); background: var(--gray-900); }
 .agenda-grid { display: grid; min-width: 100%; position: relative; }
@@ -82,7 +88,7 @@
 .dark .agenda-times { background: var(--gray-900); border-color: rgb(255 255 255 / .1); }
 .agenda-times span { position: absolute; right: .4rem; transform: translateY(-50%); font-size: .75rem; color: var(--gray-500); font-variant-numeric: tabular-nums; }
 .agenda-times span.is-first { transform: translateY(.15rem); }
-.agenda-col { position: relative; border-right: 1px solid var(--gray-100); background: repeating-linear-gradient(to bottom, transparent 0, transparent calc(var(--hour) - 1px), var(--gray-100) calc(var(--hour) - 1px), var(--gray-100) var(--hour)), var(--gray-50); cursor: copy; }
+.agenda-col { position: relative; border-right: 1px solid var(--gray-100); background: repeating-linear-gradient(to bottom, transparent 0, transparent calc(var(--hour) - 1px), var(--gray-100) calc(var(--hour) - 1px), var(--gray-100) var(--hour)), repeating-linear-gradient(135deg, var(--gray-100) 0 6px, var(--gray-50) 6px 12px); cursor: copy; }
 .dark .agenda-col { border-color: rgb(255 255 255 / .05); background: repeating-linear-gradient(to bottom, transparent 0, transparent calc(var(--hour) - 1px), rgb(255 255 255 / .05) calc(var(--hour) - 1px), rgb(255 255 255 / .05) var(--hour)), var(--gray-950); }
 .agenda-col.is-over { outline: 2px dashed var(--primary-500); outline-offset: -2px; }
 .agenda-col.is-refused { outline: 2px dashed var(--danger-400); outline-offset: -2px; }
@@ -95,12 +101,12 @@
 .dark .agenda-work { background: var(--gray-900); }
 .agenda-block { position: absolute; left: 0; right: 0; pointer-events: none; background: repeating-linear-gradient(135deg, rgb(148 163 184 / .25) 0 6px, transparent 6px 12px); border-top: 1px solid var(--gray-300); border-bottom: 1px solid var(--gray-300); font-size: .75rem; color: var(--gray-600); padding: .2rem .4rem; overflow: hidden; }
 .agenda-now { position: absolute; left: 0; right: 0; height: 2px; background: var(--danger-500); z-index: 1; pointer-events: none; }
-.agenda-appt { position: absolute; left: 4px; right: 4px; border-radius: .45rem; border: 1px solid; border-left-width: 4px; padding: .2rem .45rem; font-size: .8125rem; line-height: 1.2; overflow: hidden; color: var(--gray-900); text-decoration: none; display: block; cursor: pointer; box-shadow: 0 1px 2px rgb(0 0 0 / .06); }
+.agenda-appt { position: absolute; left: 4px; right: 4px; border-radius: .45rem; border: 1px solid; border-left-width: 4px; padding: .2rem .45rem; font-size: .875rem; line-height: 1.25; overflow: hidden; color: var(--gray-900); text-decoration: none; display: block; cursor: pointer; box-shadow: 0 1px 2px rgb(0 0 0 / .06); }
 .agenda-appt.is-movable { cursor: grab; touch-action: pan-x pan-y; -webkit-touch-callout: none; user-select: none; -webkit-user-select: none; }
 .agenda-appt.is-lifted { opacity: .35; }
 .agenda-appt:hover { box-shadow: 0 2px 8px rgb(0 0 0 / .15); z-index: 2; }
 .agenda-appt b { display: block; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.agenda-appt small { display: block; font-size: .75rem; color: var(--gray-600); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.agenda-appt small { display: block; font-size: .8125rem; color: var(--gray-700); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 /* En una cita de media hora o menos entran dos líneas: el estado y el celular quedan en el globo al pasar el mouse. */
 .agenda-appt.is-short small + small { display: none; }
 .agenda-appt .tag { display: inline-block; font-size: .68rem; font-weight: 600; border-radius: .25rem; padding: 0 .25rem; margin-left: .2rem; vertical-align: 1px; }
@@ -456,3 +462,8 @@ a.dash-name:hover { color: var(--primary-600); }
 .dash-next-facts dt { color: var(--gray-500); }
 .dash-next-facts dd { margin: 0; color: var(--gray-950); overflow-wrap: anywhere; }
 .dark .dash-next-facts dd { color: #fff; }
+
+/* ---------- Nueva cita: horarios libres como botones ---------- */
+
+.slot-buttons { display: grid !important; grid-template-columns: repeat(auto-fill, minmax(5.5rem, 1fr)); gap: .5rem; }
+.slot-buttons label { justify-content: center; font-variant-numeric: tabular-nums; }
