@@ -33,6 +33,7 @@ class PaymentsRelationManager extends RelationManager
     public function table(Table $table): Table
     {
         return $table
+            ->stackedOnMobile()
             ->modifyQueryUsing(fn (Builder $query) => $query->with(['treatment', 'receivedBy']))
             ->columns([
                 TextColumn::make('paid_at')

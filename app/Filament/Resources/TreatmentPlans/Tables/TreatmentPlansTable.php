@@ -40,6 +40,7 @@ class TreatmentPlansTable
         $clinical = $user->canSeeClinical();
 
         return $table
+            ->stackedOnMobile()
             ->defaultSort('created_at', 'desc')
             ->columns([
                 TextColumn::make('patient')

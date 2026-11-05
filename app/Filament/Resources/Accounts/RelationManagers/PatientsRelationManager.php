@@ -52,6 +52,7 @@ class PatientsRelationManager extends RelationManager
     public function table(Table $table): Table
     {
         return $table
+            ->stackedOnMobile()
             ->modifyQueryUsing(fn (Builder $query) => $query->with('account'))
             ->columns([
                 TextColumn::make('first_name')

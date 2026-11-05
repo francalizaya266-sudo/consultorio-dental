@@ -73,6 +73,7 @@ class FaqResource extends Resource
     public static function table(Table $table): Table
     {
         return $table
+            ->stackedOnMobile()
             ->columns([
                 TextColumn::make('question')
                     ->label('Pregunta')

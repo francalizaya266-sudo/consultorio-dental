@@ -70,6 +70,7 @@ class MessageTemplateResource extends Resource
     public static function table(Table $table): Table
     {
         return $table
+            ->stackedOnMobile()
             ->columns([
                 TextColumn::make('key')
                     ->label('Aviso')

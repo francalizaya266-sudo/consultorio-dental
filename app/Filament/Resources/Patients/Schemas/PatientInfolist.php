@@ -4,6 +4,7 @@ namespace App\Filament\Resources\Patients\Schemas;
 
 use App\Filament\Resources\Accounts\AccountResource;
 use App\Filament\Support\ClinicalAlerts;
+use App\Filament\Support\PatientSummary;
 use App\Filament\Support\PatientTimeline;
 use App\Models\Charge;
 use App\Models\Patient;
@@ -25,71 +26,81 @@ class PatientInfolist
         return $schema
             ->columns(3)
             ->components([
+                // Bajo el nombre, en etiquetas: saldo, próxima cita, control, plan a medias, cumpleaños y origen.
+                View::make('filament.patients.summary')
+                    ->viewData(fn (Patient $record) => [
+                        'chips' => PatientSummary::chips($record, auth()->user()),
+                        'contact' => PatientSummary::contact($record),
+                    ])
+                    ->columnSpanFull(),
                 // La alerta médica arriba de todo, para quien atiende al paciente.
                 Group::make(fn (Patient $record) => auth()->user()->can('viewClinical', $record) ? array_filter([ClinicalAlerts::callout($record)]) : [])
                     ->columnSpanFull(),
-                Section::make('Datos del paciente')
-                    ->columnSpan(2)
-                    ->columns(2)
-                    ->schema([
-                        TextEntry::make('full_name')
-                            ->label('Nombre'),
-                        TextEntry::make('document_number')
-                            ->label('Documento')
-                            ->formatStateUsing(fn (Patient $record) => $record->document_type?->getLabel().' '.$record->document_number)
-                            ->hidden(fn ($state) => blank($state)),
-                        TextEntry::make('birth_date')
-                            ->label('Fecha de nacimiento')
-                            ->date('d/m/Y')
-                            ->helperText(fn (Patient $record) => $record->age !== null ? $record->age.' años' : null)
-                            ->hidden(fn ($state) => blank($state)),
-                        TextEntry::make('sex')
-                            ->label('Sexo')
-                            ->hidden(fn ($state) => blank($state)),
-                        TextEntry::make('email')
-                            ->label('Correo')
-                            ->hidden(fn ($state) => blank($state)),
-                        TextEntry::make('address')
-                            ->label('Dirección')
-                            ->state(fn (Patient $record) => collect([$record->address, $record->district])->filter()->implode(', '))
-                            ->hidden(fn ($state) => blank($state)),
-                        TextEntry::make('emergency_contact_name')
-                            ->label('Contacto de emergencia')
-                            ->state(fn (Patient $record) => collect([$record->emergency_contact_name, $record->emergency_contact_phone])->filter()->implode(' · '))
-                            ->hidden(fn ($state) => blank($state)),
-                        TextEntry::make('origin')
-                            ->label('¿Cómo nos encontró?')
-                            ->hidden(fn ($state) => blank($state)),
-                        TextEntry::make('first_visit_at')
-                            ->label('Primera visita')
-                            ->date('d/m/Y')
-                            ->placeholder('Aún no viene'),
-                        TextEntry::make('last_visit_at')
-                            ->label('Última visita')
-                            ->date('d/m/Y')
-                            ->hidden(fn ($state) => blank($state)),
-                        TextEntry::make('admin_notes')
-                            ->label('Notas internas')
-                            ->hidden(fn ($state) => blank($state))
-                            ->columnSpanFull(),
-                    ]),
+                // A la izquierda, los datos y la línea de tiempo; a la derecha, el celular y la cuenta.
+                Group::make([
+                    // Etiqueta y dato en la misma línea: la ficha entra en media pantalla.
+                    Section::make('Datos del paciente')
+                        ->columns(['default' => 1, 'md' => 2])
+                        ->compact()
+                        ->inlineLabel()
+                        ->schema([
+                            TextEntry::make('document_number')
+                                ->label('Documento')
+                                ->formatStateUsing(fn (Patient $record) => $record->document_type?->getLabel().' '.$record->document_number)
+                                ->hidden(fn ($state) => blank($state)),
+                            TextEntry::make('birth_date')
+                                ->label('Nacimiento')
+                                ->formatStateUsing(fn (Patient $record) => $record->birth_date->format('d/m/Y').($record->age !== null ? ' · '.$record->age.' años' : ''))
+                                ->hidden(fn ($state) => blank($state)),
+                            TextEntry::make('sex')
+                                ->label('Sexo')
+                                ->hidden(fn ($state) => blank($state)),
+                            TextEntry::make('email')
+                                ->label('Correo')
+                                ->hidden(fn ($state) => blank($state)),
+                            TextEntry::make('address')
+                                ->label('Dirección')
+                                ->state(fn (Patient $record) => collect([$record->address, $record->district])->filter()->implode(', '))
+                                ->hidden(fn ($state) => blank($state)),
+                            TextEntry::make('emergency_contact_name')
+                                ->label('Contacto de emergencia')
+                                ->state(fn (Patient $record) => collect([$record->emergency_contact_name, $record->emergency_contact_phone])->filter()->implode(' · '))
+                                ->hidden(fn ($state) => blank($state)),
+                            TextEntry::make('origin')
+                                ->label('¿Cómo nos encontró?')
+                                ->hidden(fn ($state) => blank($state)),
+                            TextEntry::make('first_visit_at')
+                                ->label('Primera visita')
+                                ->date('d/m/Y')
+                                ->hidden(fn ($state) => blank($state)),
+                            TextEntry::make('last_visit_at')
+                                ->label('Última visita')
+                                ->date('d/m/Y')
+                                ->hidden(fn ($state) => blank($state)),
+                            TextEntry::make('admin_notes')
+                                ->label('Notas internas')
+                                ->hidden(fn ($state) => blank($state))
+                                ->columnSpanFull(),
+                        ]),
+                    Section::make('Línea de tiempo')
+                        ->description('Citas, atenciones, pagos y mensajes, de lo más nuevo a lo más antiguo.')
+                        ->icon(Heroicon::OutlinedClock)
+                        ->collapsible()
+                        ->schema([
+                            View::make('filament.patients.timeline')
+                                ->viewData(fn (Patient $record) => ['events' => PatientTimeline::for($record, auth()->user())]),
+                        ]),
+                ])
+                    ->columnSpan(['default' => 'full', 'lg' => 2]),
                 Group::make([self::phoneAndFamily(), self::account()])
-                    ->columnSpan(1),
-                Section::make('Línea de tiempo')
-                    ->description('Citas, atenciones, pagos y mensajes, de lo más nuevo a lo más antiguo.')
-                    ->icon(Heroicon::OutlinedClock)
-                    ->columnSpanFull()
-                    ->collapsible()
-                    ->schema([
-                        View::make('filament.patients.timeline')
-                            ->viewData(fn (Patient $record) => ['events' => PatientTimeline::for($record, auth()->user())]),
-                    ]),
+                    ->columnSpan(['default' => 'full', 'lg' => 1]),
             ]);
     }
 
     private static function phoneAndFamily(): Section
     {
         return Section::make('Celular y familia')
+            ->compact()
             ->schema([
                 TextEntry::make('account.phone')
                     ->label('Celular')
@@ -123,6 +134,7 @@ class PatientInfolist
     private static function account(): Section
     {
         return Section::make('Cuenta')
+            ->compact()
             ->visible(fn () => auth()->user()->can('viewAny', Charge::class))
             ->schema([
                 TextEntry::make('balance')

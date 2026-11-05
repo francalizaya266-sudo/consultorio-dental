@@ -88,6 +88,7 @@ class ScheduleBlockResource extends Resource
     public static function table(Table $table): Table
     {
         return $table
+            ->stackedOnMobile()
             ->columns([
                 TextColumn::make('starts_at')
                     ->label('Desde')

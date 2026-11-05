@@ -40,6 +40,7 @@ class AppointmentsRelationManager extends RelationManager
         $user = auth()->user();
 
         return $table
+            ->stackedOnMobile()
             ->modifyQueryUsing(fn (Builder $query) => $query
                 ->with(['doctor', 'treatment', 'patient.account'])
                 ->when(! $user->managesAllAgendas(), fn (Builder $q) => $q->where('doctor_id', $user->doctorId())))

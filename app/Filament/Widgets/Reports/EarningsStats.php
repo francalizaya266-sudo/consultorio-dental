@@ -16,6 +16,12 @@ class EarningsStats extends StatsOverviewWidget
 
     protected ?string $pollingInterval = null;
 
+    /** Con pocos días, las comparaciones van sin verde ni rojo: se dice por qué. */
+    protected function getDescription(): ?string
+    {
+        return $this->reportPeriod()->isTooShortToJudge() ? 'Con tan pocos días, las diferencias todavía no dicen mucho.' : null;
+    }
+
     protected function getStats(): array
     {
         $report = $this->earnings();

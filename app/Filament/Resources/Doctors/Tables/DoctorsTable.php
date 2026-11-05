@@ -19,6 +19,7 @@ class DoctorsTable
     public static function configure(Table $table): Table
     {
         return $table
+            ->stackedOnMobile()
             ->modifyQueryUsing(fn (Builder $query) => $query->with(['user', 'schedules'])->withCount('treatments'))
             ->columns([
                 ColorColumn::make('agenda_color')

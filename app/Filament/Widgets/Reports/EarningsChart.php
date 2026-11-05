@@ -9,6 +9,8 @@ class EarningsChart extends ReportChart
 {
     protected string $unit = 'money';
 
+    protected string $tone = 'money';
+
     protected int|string|array $columnSpan = 'full';
 
     protected ?string $maxHeight = '240px';

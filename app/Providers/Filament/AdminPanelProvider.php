@@ -17,6 +17,7 @@ use App\Filament\Resources\TreatmentPackages\TreatmentPackageResource;
 use App\Filament\Resources\Treatments\TreatmentResource;
 use App\Filament\Resources\Users\UserResource;
 use App\Filament\Support\InitialsAvatarProvider;
+use App\Filament\Support\MobileBar;
 use App\Http\Controllers\Backup\BackupDownloadController;
 use App\Http\Controllers\Clinical\ClinicalFileController;
 use App\Http\Controllers\Clinical\PrintController;
@@ -115,6 +116,7 @@ class AdminPanelProvider extends PanelProvider
                     ->visible(fn () => self::firstUrl(self::WEB) !== null),
             ])
             ->renderHook(PanelsRenderHook::HEAD_END, fn () => view('filament.panel-styles'))
+            ->renderHook(PanelsRenderHook::BODY_END, fn () => auth()->check() ? view('filament.mobile-bar', ['items' => MobileBar::items()]) : '')
             ->discoverResources(in: app_path('Filament/Resources'), for: 'App\Filament\Resources')
             ->discoverPages(in: app_path('Filament/Pages'), for: 'App\Filament\Pages')
             ->pages([

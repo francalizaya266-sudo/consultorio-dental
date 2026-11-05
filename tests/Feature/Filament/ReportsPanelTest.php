@@ -8,6 +8,7 @@ use App\Enums\PaymentMethod;
 use App\Filament\Pages\Earnings;
 use App\Filament\Pages\Settings;
 use App\Filament\Pages\Summary;
+use App\Filament\Support\StatComparison;
 use App\Filament\Widgets\MonthOverview;
 use App\Filament\Widgets\Reports\BusiestHoursChart;
 use App\Filament\Widgets\Reports\EarningsChart;
@@ -28,6 +29,8 @@ use App\Models\Payment;
 use App\Models\Setting;
 use App\Models\Treatment;
 use App\Models\User;
+use App\Services\Reports\ReportPeriod;
+use App\Support\Money;
 use Carbon\CarbonImmutable;
 use Filament\Facades\Filament;
 use Illuminate\Foundation\Testing\LazilyRefreshDatabase;
@@ -212,5 +215,25 @@ class ReportsPanelTest extends TestCase
             ->assertHasNoFormErrors();
 
         $this->assertTrue(Setting::get('reports.doctors_see_own'));
+    }
+
+    public function test_a_change_over_only_a_few_days_is_shown_without_green_or_red(): void
+    {
+        $firstDays = new ReportPeriod(CarbonImmutable::parse('2026-10-01'), CarbonImmutable::parse('2026-10-03'));
+        $wholeMonth = new ReportPeriod(CarbonImmutable::parse('2026-09-01'), CarbonImmutable::parse('2026-09-30'));
+
+        $early = StatComparison::make('Cobrado', 150, 100, $firstDays, Money::format(...));
+        $this->assertSame(['+50 % vs. 1–3 oct.', 'gray', 'heroicon-m-arrow-trending-up'], [$early->getDescription(), $early->getColor(), $early->getDescriptionIcon()]);
+
+        $this->assertSame('success', StatComparison::make('Cobrado', 150, 100, $wholeMonth, Money::format(...))->getColor());
+        $this->assertSame('danger', StatComparison::points('Inasistencias', 20, 10, $wholeMonth, higherIsBetter: false)->getColor());
+        $this->assertSame('gray', StatComparison::points('Inasistencias', 20, 10, $firstDays, higherIsBetter: false)->getColor());
+
+        // En la pantalla se dice por qué van sin color.
+        $this->actingAs(User::factory()->admin()->create());
+        $note = 'Con tan pocos días, las diferencias todavía no dicen mucho.';
+        Livewire::test(SummaryStats::class, ['pageFilters' => ['period' => 'custom', 'from' => '2026-10-01', 'to' => '2026-10-03']])->assertSee($note);
+        Livewire::test(EarningsStats::class, ['pageFilters' => ['period' => 'week']])->assertSee($note);
+        Livewire::test(SummaryStats::class, ['pageFilters' => ['period' => 'month']])->assertDontSee($note);
     }
 }

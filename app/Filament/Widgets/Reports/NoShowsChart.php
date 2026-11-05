@@ -9,6 +9,8 @@ class NoShowsChart extends ReportChart
 
     protected string $unit = 'percent';
 
+    protected string $tone = 'loss';
+
     protected function getType(): string
     {
         return 'line';

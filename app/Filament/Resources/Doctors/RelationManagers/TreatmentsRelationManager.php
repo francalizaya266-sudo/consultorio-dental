@@ -32,6 +32,7 @@ class TreatmentsRelationManager extends RelationManager
     public function table(Table $table): Table
     {
         return $table
+            ->stackedOnMobile()
             ->recordTitleAttribute('name')
             ->columns([
                 TextColumn::make('name')

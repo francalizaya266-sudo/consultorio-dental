@@ -166,6 +166,7 @@ class TreatmentPackageResource extends Resource
     public static function table(Table $table): Table
     {
         return $table
+            ->stackedOnMobile()
             ->modifyQueryUsing(fn (Builder $query) => $query->with('items.treatment'))
             ->columns([
                 TextColumn::make('name')

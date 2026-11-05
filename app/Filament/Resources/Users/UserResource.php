@@ -86,6 +86,7 @@ class UserResource extends Resource
     public static function table(Table $table): Table
     {
         return $table
+            ->stackedOnMobile()
             ->columns([
                 TextColumn::make('name')
                     ->label('Nombre')

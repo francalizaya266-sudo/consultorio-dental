@@ -17,6 +17,7 @@ class AccountsTable
     public static function configure(Table $table): Table
     {
         return $table
+            ->stackedOnMobile()
             ->modifyQueryUsing(fn (Builder $query) => $query->with('patients')->withCount('patients'))
             ->columns([
                 TextColumn::make('phone')

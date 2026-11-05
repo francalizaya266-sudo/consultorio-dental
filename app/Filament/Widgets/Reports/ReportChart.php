@@ -12,19 +12,24 @@ use Illuminate\Support\Js;
 /**
  * Base de los gráficos de reportes: una sola forma de dibujar y de escribir los números.
  *
- * Colores (validados para daltonismo, en modo claro y oscuro): la serie 1 es el azul de la
- * clínica; la 2, naranja. Barras finas con la punta redondeada, sin bordes, grilla tenue y
- * el valor completo al pasar el mouse. Debajo de cada gráfico hay una tabla para lectores de pantalla.
+ * Colores (en modo claro y oscuro) con significado: la serie 1 es azul para la actividad (citas,
+ * horarios, ocupación), verde para la plata que entra y rojo para lo que se pierde (inasistencias);
+ * la 2, naranja. Barras finas con la punta redondeada, sin bordes, grilla tenue y el valor completo
+ * al pasar el mouse. Debajo de cada gráfico hay una tabla para lectores de pantalla.
  */
 abstract class ReportChart extends ChartWidget
 {
     use ReadsReportFilters;
 
-    /** [claro, oscuro] por serie, en orden fijo. */
-    private const SERIES_COLORS = [
-        ['#2563eb', '#3b82f6'],
-        ['#eb6834', '#d95926'],
+    /** [claro, oscuro] de la serie 1 según lo que muestra el gráfico. */
+    private const TONES = [
+        'activity' => ['#2563eb', '#3b82f6'],
+        'money' => ['#059669', '#10b981'],
+        'loss' => ['#e11d48', '#f43f5e'],
     ];
+
+    /** [claro, oscuro] de la serie 2. */
+    private const SECOND_SERIES = ['#eb6834', '#d95926'];
 
     /** Fondo de la tarjeta, para separar segmentos apilados con un hilo del mismo color. */
     private const SURFACE = ['#ffffff', '#18181b'];
@@ -33,6 +38,12 @@ abstract class ReportChart extends ChartWidget
 
     /** Los reportes no cambian mientras se miran: se recalculan al cambiar los filtros. */
     protected ?string $pollingInterval = null;
+
+    /** 'activity', 'money' o 'loss': de qué color va la serie principal (ver TONES). */
+    protected string $tone = 'activity';
+
+    /** @var list<string> Categorías que no son un dato (como "Sin dato"): van en gris para no competir con las demás. */
+    protected array $mutedLabels = [];
 
     /** 'money', 'percent' o 'count'. */
     protected string $unit = 'count';
@@ -129,7 +140,7 @@ abstract class ReportChart extends ChartWidget
         $valueAxis = $this->horizontal ? 'x' : 'y';
         $categoryAxis = $this->horizontal ? 'y' : 'x';
         $config = Js::from([
-            'colors' => self::SERIES_COLORS,
+            'colors' => [self::TONES[$this->tone], self::SECOND_SERIES],
             'surface' => self::SURFACE,
             'unit' => $this->unit,
             'noun' => $this->noun,
@@ -139,6 +150,7 @@ abstract class ReportChart extends ChartWidget
             'horizontal' => $this->horizontal,
             'max' => $this->unit === 'percent' && $this->horizontal ? 100 : null,
             'hoverMode' => $this->hoverMode,
+            'muted' => $this->mutedLabels,
             'titlePrefix' => $this->tooltipTitlePrefix,
         ]);
 
@@ -148,6 +160,8 @@ abstract class ReportChart extends ChartWidget
                 const c = {$config};
                 const dark = () => document.documentElement.classList.contains('dark');
                 const color = (i) => c.colors[i % c.colors.length][dark() ? 1 : 0];
+                const muted = (ctx) => c.muted.includes(ctx.chart.data.labels[ctx.dataIndex]);
+                const barColor = (ctx) => muted(ctx) ? (dark() ? '#52525b' : '#d4d4d8') : color(ctx.datasetIndex);
                 const whole = new Intl.NumberFormat('es-PE', { maximumFractionDigits: 0 });
                 const decimal = new Intl.NumberFormat('es-PE', { maximumFractionDigits: 1 });
                 const money = new Intl.NumberFormat('es-PE', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -197,8 +211,8 @@ abstract class ReportChart extends ChartWidget
                     },
                     datasets: {
                         bar: {
-                            backgroundColor: (ctx) => color(ctx.datasetIndex),
-                            hoverBackgroundColor: (ctx) => color(ctx.datasetIndex),
+                            backgroundColor: barColor,
+                            hoverBackgroundColor: barColor,
                             borderWidth: c.stacked ? { top: 2 } : 0,
                             borderColor: () => c.surface[dark() ? 1 : 0],
                             borderRadius: c.stacked ? 0 : 4,

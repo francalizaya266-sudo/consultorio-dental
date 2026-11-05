@@ -25,6 +25,7 @@ class CampaignsTable
         };
 
         return $table
+            ->stackedOnMobile()
             ->modifyQueryUsing(fn (Builder $query) => $query->with('package')->withCount(['appointments' => fn (Builder $a) => $a->where('status', '!=', AppointmentStatus::Cancelled)]))
             ->columns([
                 TextColumn::make('name')

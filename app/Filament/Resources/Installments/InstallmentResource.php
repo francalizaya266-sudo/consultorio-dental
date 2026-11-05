@@ -43,6 +43,7 @@ class InstallmentResource extends Resource
     public static function table(Table $table): Table
     {
         return $table
+            ->stackedOnMobile()
             ->modifyQueryUsing(fn (Builder $query) => $query->with('plan.patient.account', 'plan.installments'))
             ->defaultSort('due_on')
             ->columns([

@@ -25,6 +25,9 @@ final class ReportPeriod
     /** Hasta este largo se agrupa por día; más largo, por mes. */
     private const DAILY_UP_TO_DAYS = 62;
 
+    /** Con menos días que esto, una sola cita o un solo pago mueve mucho el porcentaje. */
+    public const FEW_DAYS = 7;
+
     public readonly CarbonImmutable $from;
 
     public readonly CarbonImmutable $to;
@@ -71,6 +74,12 @@ final class ReportPeriod
     public function days(): int
     {
         return (int) $this->from->diffInDays($this->to->startOfDay()) + 1;
+    }
+
+    /** Un tramo tan corto que su cambio frente al anterior todavía no dice si va mejor o peor. */
+    public function isTooShortToJudge(): bool
+    {
+        return $this->days() < self::FEW_DAYS;
     }
 
     public function groupsByMonth(): bool
