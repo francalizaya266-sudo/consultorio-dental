@@ -38,8 +38,10 @@ use App\Models\Patient;
 use App\Models\Treatment;
 use App\Models\User;
 use Database\Seeders\CatalogSeeder;
+use Filament\Auth\Pages\EditProfile;
 use Filament\Facades\Filament;
 use Illuminate\Foundation\Testing\LazilyRefreshDatabase;
+use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Validator;
 use Livewire\Livewire;
 use PHPUnit\Framework\Attributes\DataProvider;
@@ -183,6 +185,58 @@ class PanelAccessTest extends TestCase
         $user = User::factory()->reception()->create(['is_active' => false]);
 
         $this->actingAs($user)->get(Dashboard::getUrl())->assertForbidden();
+    }
+
+    public function test_each_person_changes_their_own_password_from_my_profile(): void
+    {
+        $reception = User::factory()->reception()->create();
+        $this->actingAs($reception);
+
+        $this->get(Filament::getProfileUrl())->assertOk()->assertSee('Mi perfil');
+
+        Livewire::test(EditProfile::class)
+            ->fillForm([
+                'password' => 'clave-nueva-2026',
+                'passwordConfirmation' => 'clave-nueva-2026',
+                'currentPassword' => 'password',
+            ])
+            ->call('save')
+            ->assertHasNoFormErrors();
+
+        $this->assertTrue(Hash::check('clave-nueva-2026', $reception->fresh()->password));
+    }
+
+    public function test_errors_explain_what_happened_in_spanish_and_offer_a_way_out(): void
+    {
+        $this->seed(CatalogSeeder::class);
+
+        // El paciente con un enlace roto sigue en la web.
+        $this->get('/esto-no-existe')
+            ->assertNotFound()
+            ->assertSee('No encontramos esta página')
+            ->assertSee('Ir al inicio')
+            ->assertSee('Reservar cita');
+
+        // En el panel, sin el menú de la web y de vuelta al panel.
+        $this->actingAs(User::factory()->reception()->create())
+            ->get(Settings::getUrl())
+            ->assertForbidden()
+            ->assertSee('No tienes acceso a esta sección')
+            ->assertSee('Volver al panel')
+            ->assertDontSee('Reservar cita');
+    }
+
+    public function test_pages_tell_the_browser_how_to_protect_them(): void
+    {
+        $this->get('/')
+            ->assertHeader('X-Frame-Options', 'SAMEORIGIN')
+            ->assertHeader('X-Content-Type-Options', 'nosniff')
+            ->assertHeader('Referrer-Policy', 'strict-origin-when-cross-origin')
+            ->assertHeaderMissing('Strict-Transport-Security');
+
+        $this->get('https://localhost/panel/login')
+            ->assertHeader('X-Frame-Options', 'SAMEORIGIN')
+            ->assertHeader('Strict-Transport-Security', 'max-age=15552000');
     }
 
     public function test_a_doctor_profile_page_lists_its_treatments(): void

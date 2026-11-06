@@ -586,6 +586,19 @@ final class TreatmentPlanService
             ->get();
     }
 
+    /** Lo siguiente por agendar de lo que el paciente aceptó: el primer procedimiento pendiente que todavía no tiene cita. */
+    public function nextToSchedule(Patient $patient): ?TreatmentPlanItem
+    {
+        return TreatmentPlanItem::query()
+            ->with('plan')
+            ->whereHas('plan', fn ($query) => $query->whereIn('status', TreatmentPlan::ACCEPTED_STATUSES)->where('patient_id', $patient->getKey()))
+            ->whereIn('status', TreatmentPlanItem::OPEN_STATUSES)
+            ->whereDoesntHave('appointments', fn ($query) => $query->where('starts_at', '>=', now())->whereIn('status', AppointmentStatus::changeable()))
+            ->orderBy('treatment_plan_id')
+            ->orderBy('sort_order')
+            ->first();
+    }
+
     /** Recalcula el avance de los procedimientos de la atención (al terminarla o reabrirla). */
     public function syncConsultation(Consultation $consultation): void
     {

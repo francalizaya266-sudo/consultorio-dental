@@ -81,7 +81,7 @@ final class AppointmentActions
             ->label('Confirmar')
             ->icon(Heroicon::OutlinedCheck)
             ->color('success')
-            ->visible(fn (Appointment $record) => $record->status === AppointmentStatus::Pending)
+            ->visible(fn (Appointment $record) => $record->status === AppointmentStatus::Pending && ! $record->isFromAnEarlierDay())
             ->authorize('update')
             ->action(fn (Appointment $record) => Notify::run(
                 fn () => app(AppointmentService::class)->confirmByStaff($record, auth()->user()),
@@ -103,17 +103,20 @@ final class AppointmentActions
             ));
     }
 
-    /** El doctor de la cita abre la atención clínica (con su plantilla y odontograma); recepción solo cambia el estado. */
+    /**
+     * El doctor de la cita abre la atención clínica (con su plantilla y odontograma); recepción solo cambia el estado.
+     * Si la cita era de un día anterior y nadie la cerró, el doctor la registra igual, con la fecha de la cita.
+     */
     public static function start(): Action
     {
         return Action::make('start')
-            ->label('Atender')
+            ->label(fn (Appointment $record) => $record->isFromAnEarlierDay() ? 'Registrar atención' : 'Atender')
             ->icon(Heroicon::OutlinedPlay)
             ->color('primary')
             ->visible(fn (Appointment $record) => self::attendsClinically($record)
-                ? ($record->starts_at->isToday() && in_array($record->status, [AppointmentStatus::Pending, AppointmentStatus::Confirmed, AppointmentStatus::CheckedIn], true))
+                ? (($record->starts_at->isToday() || $record->isLeftOpen()) && in_array($record->status, [AppointmentStatus::Pending, AppointmentStatus::Confirmed, AppointmentStatus::CheckedIn], true))
                     || ($record->status === AppointmentStatus::InProgress && $record->loadMissing('consultation')->consultation === null)
-                : $record->status === AppointmentStatus::CheckedIn)
+                : $record->status === AppointmentStatus::CheckedIn && ! $record->isFromAnEarlierDay())
             ->authorize('update')
             ->action(function (Appointment $record, Action $action) {
                 if (! self::attendsClinically($record)) {
@@ -169,14 +172,19 @@ final class AppointmentActions
             ->url(fn (Appointment $record) => ConsultationResource::urlFor($record->consultation));
     }
 
+    /** Recepción cierra la cita sin historia escrita. También la de un día anterior que quedó sin cerrar, si el paciente sí vino. */
     public static function complete(): Action
     {
         return Action::make('complete')
             ->label('Atendido')
             ->icon(Heroicon::OutlinedCheckBadge)
             ->color('gray')
-            ->visible(fn (Appointment $record) => in_array($record->status, [AppointmentStatus::CheckedIn, AppointmentStatus::InProgress], true)
+            ->visible(fn (Appointment $record) => (in_array($record->status, [AppointmentStatus::CheckedIn, AppointmentStatus::InProgress], true) || $record->isLeftOpen())
                 && ! self::attendsClinically($record))
+            ->requiresConfirmation(fn (Appointment $record) => $record->isFromAnEarlierDay())
+            ->modalHeading(fn (Appointment $record) => '¿El paciente vino el '.$record->starts_at->translatedFormat('l j \d\e F').'?')
+            ->modalDescription(fn (Appointment $record) => 'La cita queda atendida con su fecha y se registra lo programado: '.($record->planItem?->label(withTooth: false) ?? $record->treatment->name).'. Si no vino, usa "No asistió".')
+            ->modalSubmitActionLabel('Sí, se atendió')
             ->authorize('update')
             ->action(fn (Appointment $record) => Notify::run(
                 fn () => app(AppointmentService::class)->markCompleted($record, auth()->user()),

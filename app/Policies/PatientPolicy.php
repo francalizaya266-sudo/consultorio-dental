@@ -4,6 +4,7 @@ namespace App\Policies;
 
 use App\Models\Patient;
 use App\Models\User;
+use Illuminate\Auth\Access\Response;
 
 /** Fichas de pacientes: recepción y administración ven a todos; cada doctor, a sus pacientes. Lo clínico tiene su propia política. */
 class PatientPolicy
@@ -28,9 +29,14 @@ class PatientPolicy
         return $this->treats($user, $model);
     }
 
-    public function delete(User $user, Patient $model): bool
+    /** Solo el administrador, y solo lo registrado por error: lo que ya tiene historia se conserva. */
+    public function delete(User $user, Patient $model): Response|bool
     {
-        return $user->isAdmin();
+        if (! $user->isAdmin()) {
+            return false;
+        }
+
+        return $model->hasHistory() ? Response::deny('Este paciente ya tiene citas, pagos o historia clínica, y eso se conserva. Solo se elimina un paciente registrado por error, sin nada a su nombre.') : true;
     }
 
     public function restore(User $user, Patient $model): bool

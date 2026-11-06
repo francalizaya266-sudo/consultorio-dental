@@ -14,8 +14,10 @@ class EditDoctor extends EditRecord
     protected function getHeaderActions(): array
     {
         return [
+            // Con citas o historias no se elimina: el botón explica que se apaga "Activo".
             DeleteAction::make()
-                ->modalDescription('Deja de aparecer en la agenda y en la web. Sus citas e historias se conservan.'),
+                ->authorizationNotification()
+                ->modalDescription('Deja de aparecer en la agenda y en la web. Se puede recuperar.'),
             RestoreAction::make(),
         ];
     }

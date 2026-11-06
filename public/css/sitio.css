@@ -674,3 +674,11 @@ a.chip { text-decoration: none; display: inline-flex; align-items: center; }
     body { font-size: 1.125rem; }
     main { padding-top: 40px; }
 }
+
+/* Páginas de error: la del sitio va con su encabezado; la simple (panel, 500, 503) va sola y centrada. */
+.error-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 24px; }
+.error-site { padding: 24px 0 48px; }
+.error-page { min-height: 100svh; display: grid; place-items: center; padding: 24px var(--gutter); background: var(--surface); }
+.error-card { width: 100%; max-width: 32rem; padding: 32px 28px; border-radius: var(--radius); background: var(--ground); box-shadow: 0 1px 2px rgb(12 26 46 / .06), 0 8px 24px rgb(12 26 46 / .06); }
+.error-card h1 { font-size: clamp(1.75rem, 6vw, 2.25rem); letter-spacing: -.03em; line-height: 1.1; }
+.error-brand { color: var(--accent); font-weight: 700; }

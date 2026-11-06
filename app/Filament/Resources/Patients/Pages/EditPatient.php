@@ -37,8 +37,10 @@ class EditPatient extends EditRecord
                     Notification::make()->success()->title('Celular actualizado')->send();
                     $this->refreshFormData(['relationship']);
                 }),
+            // Solo un paciente registrado por error: con citas, pagos o historia, el botón explica por qué no.
             DeleteAction::make()
-                ->modalDescription('El paciente deja de aparecer en las listas. Su historia se conserva y se puede recuperar.'),
+                ->authorizationNotification()
+                ->modalDescription('El paciente deja de aparecer en las listas. Se puede recuperar.'),
             RestoreAction::make(),
         ];
     }

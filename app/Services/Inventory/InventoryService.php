@@ -221,14 +221,15 @@ final class InventoryService
     }
 
     /**
-     * Lo que se espera usar en la atención: la receta del tratamiento de la cita y de cada
-     * procedimiento del plan trabajado hoy. Si la atención se reabrió, lo que se registró al terminarla.
-     * Los implantes van de a una unidad, para elegir su número de serie.
+     * Lo que se espera usar en la atención: la receta de lo que se hizo hoy (los tratamientos marcados y
+     * cada procedimiento del plan trabajado), no de lo programado. Si la atención se reabrió, lo que se
+     * registró al terminarla. Los implantes van de a una unidad, para elegir su número de serie.
      *
      * @param  list<int|string>|null  $planItemIds  Lo marcado en pantalla, aunque no se haya guardado.
+     * @param  list<int|string>|null  $treatmentIds  Igual, para los tratamientos fuera del plan.
      * @return list<array{supply_id: int, quantity: float, batch_id: int|null}>
      */
-    public function plannedUsage(Consultation $consultation, ?array $planItemIds = null): array
+    public function plannedUsage(Consultation $consultation, ?array $planItemIds = null, ?array $treatmentIds = null): array
     {
         $lastReverted = StockMovement::query()->where('consultation_id', $consultation->getKey())->where('type', StockMovementType::Use)->max('reverted_at');
 
@@ -250,13 +251,11 @@ final class InventoryService
         }
 
         $planItemIds ??= $consultation->planItems()->pluck('treatment_plan_items.id')->all();
-        $treatments = TreatmentPlanItem::query()->whereKey($planItemIds)->pluck('treatment_id')->filter()->all();
-        $appointment = $consultation->loadMissing('appointment')->appointment;
-
-        // Como en el cobro: si la cita ya es una sesión del plan, no se cuenta dos veces.
-        if ($appointment && $appointment->treatment_plan_item_id === null && ! in_array($appointment->treatment_id, $treatments, true)) {
-            $treatments[] = $appointment->treatment_id;
-        }
+        $treatmentIds ??= $consultation->treatments()->pluck('treatments.id')->all();
+        $treatments = [
+            ...TreatmentPlanItem::query()->whereKey($planItemIds)->pluck('treatment_id')->filter()->all(),
+            ...array_map('intval', $treatmentIds),
+        ];
 
         $serialized = Supply::query()->where('tracks_serial', true)->pluck('id')->all();
 

@@ -248,21 +248,25 @@ class TreatmentPlanPaymentsTest extends TestCase
         );
     }
 
-    public function test_the_appointment_treatment_is_not_charged_again_when_it_is_worked_from_the_plan(): void
+    public function test_a_plan_session_booked_as_a_loose_appointment_is_worked_and_charged_from_the_plan(): void
     {
         $control = $this->treatment('control-de-ortodoncia');
         $control->update(['price_from' => 200]);
         $plan = $this->plan([['Control de ortodoncia', 'control-de-ortodoncia', 180, 3]]);
         $this->plans()->sign($plan, ['payment_mode' => PlanPaymentMode::PerSession], $this->signer(), $this->signature(), $this->doctor->user);
 
-        // La cita se agendó sin elegir la sesión del plan, pero el doctor marcó el control del plan.
+        // La cita se agendó sin elegir la sesión del plan: al atender, ya viene marcado el control del plan.
         $appointment = Appointment::factory()->confirmed()->for($this->patient)->for($this->doctor)->for($control)->create(['starts_at' => '2026-11-02 10:00', 'ends_at' => '2026-11-02 10:30']);
         $this->travelTo('2026-11-02 10:00');
         $consultation = $this->consultations()->startFromAppointment($appointment, $this->doctor->user);
-        $consultation->planItems()->attach($plan->items->sole());
+
+        $this->assertEquals([$plan->items->sole()->id], $consultation->planItems()->pluck('treatment_plan_items.id')->all());
+        $this->assertCount(0, $consultation->treatments);
+
         $this->consultations()->close($consultation, $this->doctor->user);
 
         $this->assertSame([['Control de ortodoncia · sesión 1 de 3', '60.00']], $this->charges());
+        $this->assertSame(1, $plan->items->sole()->fresh()->sessions_done);
     }
 
     /** @param  list<array{0: string, 1: string, 2: float, 3: int}>  $items  Descripción, tratamiento, precio y sesiones. */

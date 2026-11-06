@@ -92,6 +92,8 @@ class AdminPanelProvider extends PanelProvider
             ->path('panel')
             ->unsavedChangesAlerts()
             ->login()
+            // "Mi perfil" en el menú del usuario: cada uno cambia su propia clave sin pedírsela al administrador.
+            ->profile(isSimple: false)
             ->brandName(fn () => Setting::get('clinic.name'))
             // Con logo subido en Ajustes, el panel lo muestra en lugar del nombre.
             ->brandLogo(fn () => app(ClinicInfo::class)->logoUrl())

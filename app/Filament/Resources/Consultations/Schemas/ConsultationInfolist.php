@@ -8,6 +8,7 @@ use App\Livewire\OdontogramChart;
 use App\Models\Consultation;
 use App\Models\ConsultationDiagnosis;
 use App\Models\PrescriptionItem;
+use App\Models\Treatment;
 use App\Models\TreatmentPlanItem;
 use App\Services\Clinical\PrescriptionService;
 use App\Services\Inventory\InventoryService;
@@ -61,9 +62,12 @@ class ConsultationInfolist
                             ]),
                         TextEntry::make('diagnosis_notes')->label('Notas del diagnóstico')->hidden(fn ($state) => blank($state))->columnSpanFull(),
                         TextEntry::make('procedures')->label('Evolución (qué se hizo)')->hidden(fn ($state) => blank($state))->columnSpanFull(),
-                        TextEntry::make('planItems')
-                            ->label('Del plan de tratamiento se trabajó')
-                            ->state(fn (Consultation $record) => $record->planItems->map(fn (TreatmentPlanItem $item) => $item->label())->all())
+                        TextEntry::make('done')
+                            ->label('Lo que se hizo')
+                            ->state(fn (Consultation $record) => [
+                                ...$record->treatments->map(fn (Treatment $treatment) => $treatment->name)->all(),
+                                ...$record->planItems->map(fn (TreatmentPlanItem $item) => $item->label().' · del plan')->all(),
+                            ])
                             ->listWithLineBreaks()
                             ->bulleted()
                             ->hidden(fn ($state) => blank($state))
@@ -97,7 +101,7 @@ class ConsultationInfolist
                             ->weight('bold'),
                         TextEntry::make('attended_at')->label('Fecha')->dateTime('l d/m/Y · H:i'),
                         TextEntry::make('doctor.name')->label('Doctor'),
-                        TextEntry::make('appointment.treatment.name')->label('Tratamiento de la cita')->placeholder('Sin cita'),
+                        TextEntry::make('appointment.treatment.name')->label('Programado en la cita')->placeholder('Sin cita'),
                         TextEntry::make('closed_at')
                             ->label('Estado')
                             ->state(fn (Consultation $record) => $record->closed_at ? 'Terminada el '.$record->closed_at->format('d/m/Y H:i') : 'Sin terminar')

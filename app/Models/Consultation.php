@@ -75,4 +75,13 @@ class Consultation extends Model
     {
         return $this->belongsToMany(TreatmentPlanItem::class, 'consultation_plan_items')->withTimestamps();
     }
+
+    /**
+     * Tratamientos que se hicieron fuera del plan: llega con lo programado en la cita y el doctor
+     * lo corrige. Se cobran y descuentan sus materiales al terminar.
+     */
+    public function treatments(): BelongsToMany
+    {
+        return $this->belongsToMany(Treatment::class, 'consultation_treatments')->withTimestamps();
+    }
 }

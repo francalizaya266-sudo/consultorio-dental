@@ -55,6 +55,14 @@ class Doctor extends Model
         return $this->hasMany(Appointment::class);
     }
 
+    /** Ya atendió o tiene citas: su nombre sale en la agenda y en las historias, así que no se elimina. */
+    public function hasHistory(): bool
+    {
+        return $this->appointments()->exists()
+            || collect([Consultation::class, TreatmentPlan::class, Prescription::class])
+                ->contains(fn (string $model) => $model::query()->where('doctor_id', $this->getKey())->exists());
+    }
+
     /** Duración del tratamiento para este doctor (o la general del tratamiento). */
     public function durationFor(Treatment $treatment): int
     {
