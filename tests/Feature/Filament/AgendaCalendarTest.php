@@ -268,6 +268,66 @@ class AgendaCalendarTest extends TestCase
         $this->assertFalse(Patient::query()->where('first_name', 'Ana')->exists());
     }
 
+    public function test_an_appointment_past_its_time_and_not_closed_says_so_on_the_card_and_in_the_panel(): void
+    {
+        $this->freezeMonday();
+        $this->travelTo(CarbonImmutable::parse('2026-11-02 12:00', 'America/Lima'));
+        $treatment = Treatment::factory()->create();
+        $doctor = $this->doctorOffering($treatment);
+        $forgotten = Appointment::factory()->for($doctor)->for($treatment)->confirmed()->at('2026-11-02 10:00')->create();
+        Appointment::factory()->for($doctor)->for($treatment)->confirmed()->at('2026-11-02 15:00')->create();
+        Appointment::factory()->for($doctor)->for($treatment)->at('2026-11-02 09:00')->create(['status' => AppointmentStatus::Completed]);
+
+        $this->actingAs(User::factory()->reception()->create());
+
+        Livewire::test(Agenda::class)
+            ->assertSeeHtml('agenda-appt s-confirmed')
+            ->assertDontSeeHtml('border-left-color')
+            ->mountAction(TestAction::make('appointment')->arguments(['id' => $forgotten->id]))
+            ->assertMountedActionModalSee('Sin cerrar: marca si vino');
+
+        // Solo la de las 10:00: la de la tarde aún no llega y la atendida ya se cerró.
+        $this->assertSame(1, substr_count(Livewire::test(Agenda::class)->html(), 'class="tag tag-unclosed"'));
+    }
+
+    public function test_the_heading_is_the_day_shown_and_the_week_uses_short_names(): void
+    {
+        $this->freezeMonday();
+        $treatment = Treatment::factory()->create();
+        $doctor = $this->doctorOffering($treatment);
+        $patient = Patient::factory()->create(['first_name' => 'Benjamín Andrés', 'last_name' => 'Del Valle Salinas']);
+        Appointment::factory()->for($doctor)->for($treatment)->for($patient)->at('2026-11-04 10:00')->create();
+
+        $this->actingAs(User::factory()->reception()->create());
+
+        Livewire::test(Agenda::class)
+            ->assertSee('Lunes 2 de noviembre')
+            ->set('mode', 'week')
+            ->assertSee('Semana del 2 de noviembre')
+            ->assertSeeHtml('<b>Benjamín Del Valle<')
+            ->assertSee('10:00 · '.$treatment->name);
+    }
+
+    public function test_new_appointment_from_the_header_comes_with_the_day_being_viewed(): void
+    {
+        $this->freezeMonday();
+        $treatment = Treatment::factory()->create();
+        $doctor = $this->doctorOffering($treatment);
+        $this->doctorOffering($treatment);
+
+        $this->actingAs(User::factory()->reception()->create());
+
+        Livewire::test(Agenda::class, ['date' => '2026-11-05'])
+            ->assertActionVisible('newAppointment')
+            ->mountAction('newAppointment')
+            ->assertActionDataSet(['date' => '2026-11-05', 'doctor_id' => null]);
+
+        Livewire::withQueryParams(['date' => '2026-11-05', 'mode' => 'week', 'doctor' => $doctor->id])
+            ->test(Agenda::class)
+            ->mountAction('newAppointment')
+            ->assertActionDataSet(['date' => '2026-11-05', 'doctor_id' => $doctor->id]);
+    }
+
     public function test_with_a_single_doctor_the_doctor_is_already_chosen(): void
     {
         $this->freezeMonday();

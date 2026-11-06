@@ -61,16 +61,22 @@
 
 /* ---------- Agenda en calendario ---------- */
 
+.agenda-controls { display: grid; gap: .75rem; }
 .agenda-toolbar { display: flex; flex-wrap: wrap; gap: .75rem; align-items: center; justify-content: space-between; }
 .agenda-toolbar-group { display: flex; flex-wrap: wrap; gap: .5rem; align-items: center; }
-.agenda-heading { font-size: 1.05rem; font-weight: 600; color: var(--gray-950); }
-.dark .agenda-heading { color: #fff; }
+/* Día / Semana como control segmentado, del mismo alto que la fecha y los botones de al lado. */
+.agenda-modes.fi-tabs { padding: .2rem; gap: .2rem; border-radius: .6rem; background: var(--gray-100); box-shadow: none; }
+.agenda-modes .fi-tabs-item { padding: .3rem .85rem; border-radius: .45rem; font-size: .875rem; }
+.agenda-modes .fi-tabs-item.fi-active { background: #fff; box-shadow: 0 1px 2px rgb(0 0 0 / .08), 0 0 0 1px rgb(0 0 0 / .04); }
+.dark .agenda-modes.fi-tabs { background: rgb(255 255 255 / .06); }
+.dark .agenda-modes .fi-tabs-item.fi-active { background: var(--gray-800); box-shadow: none; }
 .agenda-info { display: flex; flex-wrap: wrap; gap: .4rem 1.5rem; align-items: center; justify-content: space-between; }
 .agenda-help { font-size: .875rem; color: var(--gray-600); }
 .agenda-help summary { cursor: pointer; font-weight: 500; color: var(--primary-600); list-style: none; }
 .agenda-help summary::-webkit-details-marker { display: none; }
 .agenda-help summary::before { content: "?"; display: inline-grid; place-items: center; width: 1.1rem; height: 1.1rem; margin-right: .35rem; border-radius: 9999px; background: var(--primary-50); font-size: .7rem; font-weight: 700; }
 .agenda-help p { margin: .35rem 0 0; max-width: 60ch; }
+.agenda-help .agenda-legend { display: none; margin-top: .6rem; }
 .dark .agenda-help summary { color: var(--primary-400); }
 .dark .agenda-help summary::before { background: rgb(255 255 255 / .08); }
 .agenda-frame { overflow: auto; max-height: calc(100vh - 15rem); border: 1px solid var(--gray-200); border-radius: .75rem; background: #fff; }
@@ -101,6 +107,7 @@
 .dark .agenda-work { background: var(--gray-900); }
 .agenda-block { position: absolute; left: 0; right: 0; pointer-events: none; background: repeating-linear-gradient(135deg, rgb(148 163 184 / .25) 0 6px, transparent 6px 12px); border-top: 1px solid var(--gray-300); border-bottom: 1px solid var(--gray-300); font-size: .75rem; color: var(--gray-600); padding: .2rem .4rem; overflow: hidden; }
 .agenda-now { position: absolute; left: 0; right: 0; height: 2px; background: var(--danger-500); z-index: 1; pointer-events: none; }
+.agenda-now::before { content: ""; position: absolute; left: -.3rem; top: 50%; width: .6rem; height: .6rem; border-radius: 9999px; background: var(--danger-500); transform: translateY(-50%); }
 .agenda-appt { position: absolute; left: 4px; right: 4px; border-radius: .45rem; border: 1px solid; border-left-width: 4px; padding: .2rem .45rem; font-size: .875rem; line-height: 1.25; overflow: hidden; color: var(--gray-900); text-decoration: none; display: block; cursor: pointer; box-shadow: 0 1px 2px rgb(0 0 0 / .06); }
 .agenda-appt.is-movable { cursor: grab; touch-action: pan-x pan-y; -webkit-touch-callout: none; user-select: none; -webkit-user-select: none; }
 .agenda-appt.is-lifted { opacity: .35; }
@@ -114,20 +121,29 @@
 .agenda-appt .tag-new { background: var(--info-100); color: var(--info-700); }
 .agenda-appt .tag-owes { background: var(--warning-100); color: var(--warning-800); }
 .agenda-appt .tag-note { background: var(--gray-200); color: var(--gray-700); }
+/* Ya pasó su hora y nadie la cerró: es lo único que pide algo, por eso va lleno. */
+.agenda-appt .tag-unclosed { background: var(--danger-600); color: #fff; }
+/* En una columna angosta (la semana) las etiquetas no entran junto al nombre: el nombre queda entero
+   y lo que pide algo (sin cerrar, llamar) se ve como un punto rojo en la esquina. */
+.agenda-col { container-type: inline-size; }
+@container (max-width: 12rem) {
+    .agenda-appt .tag { display: none; }
+    .agenda-appt.is-unclosed b, .agenda-appt.needs-call b { padding-right: .6rem; }
+    .agenda-appt.is-unclosed::after, .agenda-appt.needs-call::after { content: ""; position: absolute; top: .35rem; right: .3rem; width: .5rem; height: .5rem; border-radius: 9999px; background: var(--danger-600); box-shadow: 0 0 0 2px #fff; }
+    .dark .agenda-appt.is-unclosed::after, .dark .agenda-appt.needs-call::after { box-shadow: 0 0 0 2px var(--gray-900); }
+}
 .agenda-buffer { position: absolute; left: 4px; right: 4px; pointer-events: none; background: repeating-linear-gradient(135deg, rgb(148 163 184 / .2) 0 3px, transparent 3px 6px); border-radius: 0 0 .35rem .35rem; }
 .s-pending { background: #fffbeb; border-color: #fcd34d; }
 .s-confirmed { background: #ecfdf5; border-color: #6ee7b7; }
-.s-checked_in { background: #eff6ff; border-color: #93c5fd; }
+.s-checked_in { background: #f0f9ff; border-color: #7dd3fc; }
 .s-in_progress { background: #eef2ff; border-color: #a5b4fc; }
 .s-completed { background: #f4f4f5; border-color: #d4d4d8; color: var(--gray-500); }
 .s-no_show { background: #fff1f2; border-color: #fda4af; color: var(--gray-500); text-decoration: line-through; }
-.agenda-legend { display: flex; flex-wrap: wrap; gap: .4rem .9rem; font-size: .75rem; color: var(--gray-600); }
-.agenda-legend span::before { content: ""; display: inline-block; width: .7rem; height: .7rem; border-radius: .2rem; border: 1px solid; margin-right: .3rem; vertical-align: -1px; }
-.agenda-legend .s-pending::before { background: #fffbeb; border-color: #fcd34d; }
-.agenda-legend .s-confirmed::before { background: #ecfdf5; border-color: #6ee7b7; }
-.agenda-legend .s-checked_in::before { background: #eff6ff; border-color: #93c5fd; }
-.agenda-legend .s-completed::before { background: #f4f4f5; border-color: #d4d4d8; }
-.agenda-legend .s-block::before { background: repeating-linear-gradient(135deg, rgb(148 163 184 / .5) 0 2px, transparent 2px 4px); border-color: var(--gray-300); }
+/* Cada estado como una cita en miniatura: el mismo fondo y el mismo borde izquierdo. */
+.agenda-legend { display: flex; flex-wrap: wrap; gap: .35rem .4rem; font-size: .75rem; color: var(--gray-700); }
+.agenda-legend span { padding: .05rem .45rem; border: 1px solid var(--gray-200); border-left-width: 3px; border-radius: .3rem; line-height: 1.45; }
+.agenda-legend .s-completed, .agenda-legend .s-no_show { text-decoration: none; }
+.agenda-legend .s-block { background: repeating-linear-gradient(135deg, rgb(148 163 184 / .3) 0 3px, transparent 3px 6px); border-color: var(--gray-300); }
 .agenda-empty { padding: 3rem 1rem; text-align: center; color: var(--gray-500); }
 /* Modo oscuro: el mismo color de cada estado, como tinte sobre el fondo oscuro. */
 .dark .agenda-appt { color: var(--gray-100); box-shadow: none; }
@@ -138,15 +154,32 @@
 .dark .agenda-appt .tag-note { background: rgb(255 255 255 / .12); color: var(--gray-300); }
 .dark .agenda-block { border-color: rgb(255 255 255 / .1); color: var(--gray-400); }
 .dark .agenda-buffer { background: repeating-linear-gradient(135deg, rgb(148 163 184 / .12) 0 3px, transparent 3px 6px); }
-.dark .agenda-legend { color: var(--gray-400); }
-.dark .s-pending, .dark .agenda-legend .s-pending::before { background: rgb(245 158 11 / .14); border-color: rgb(251 191 36 / .5); }
-.dark .s-confirmed, .dark .agenda-legend .s-confirmed::before { background: rgb(16 185 129 / .14); border-color: rgb(52 211 153 / .5); }
-.dark .s-checked_in, .dark .agenda-legend .s-checked_in::before { background: rgb(59 130 246 / .16); border-color: rgb(96 165 250 / .55); }
+.dark .agenda-legend { color: var(--gray-300); }
+.dark .s-pending { background: rgb(245 158 11 / .14); border-color: rgb(251 191 36 / .5); }
+.dark .s-confirmed { background: rgb(16 185 129 / .14); border-color: rgb(52 211 153 / .5); }
+.dark .s-checked_in { background: rgb(14 165 233 / .16); border-color: rgb(56 189 248 / .5); }
 .dark .s-in_progress { background: rgb(99 102 241 / .16); border-color: rgb(129 140 248 / .55); }
-.dark .s-completed, .dark .agenda-legend .s-completed::before { background: rgb(255 255 255 / .05); border-color: rgb(255 255 255 / .15); }
+.dark .s-completed { background: rgb(255 255 255 / .05); border-color: rgb(255 255 255 / .15); }
 .dark .s-completed, .dark .s-no_show { color: var(--gray-400); }
 .dark .s-no_show { background: rgb(244 63 94 / .1); border-color: rgb(251 113 133 / .45); }
-.dark .agenda-legend .s-block::before { border-color: rgb(255 255 255 / .2); }
+.dark .agenda-legend .s-block { border-color: rgb(255 255 255 / .2); }
+/* El borde izquierdo de cada cita es el color de su estado, como en "Hoy" (el doctor ya lo dice la columna). */
+.agenda-appt.s-pending, .agenda-legend .s-pending { border-left-color: var(--warning-500); }
+.agenda-appt.s-confirmed, .agenda-legend .s-confirmed { border-left-color: var(--success-500); }
+.agenda-appt.s-checked_in, .agenda-legend .s-checked_in { border-left-color: var(--info-500); }
+.agenda-appt.s-in_progress, .agenda-legend .s-in_progress { border-left-color: #6366f1; }
+.agenda-appt.s-completed, .agenda-legend .s-completed { border-left-color: var(--gray-400); }
+.agenda-appt.s-no_show { border-left-color: var(--danger-400); }
+/* En el celular la agenda va primero: los colores pasan a "Cómo usar la agenda" y "Nueva cita" ya está en la barra de abajo. */
+@media (max-width: 40rem) {
+    .agenda-page .fi-header .fi-ac { display: none; }
+    .agenda-info > .agenda-legend { display: none; }
+    .agenda-help .agenda-legend { display: flex; }
+    /* Sin desplazamiento propio: "clip" recorta las esquinas redondeadas sin crear otro scroll, y la fila
+       del doctor queda pegada bajo la barra de arriba mientras se baja. */
+    .agenda-frame.is-fit { overflow: clip; max-height: none; }
+    .agenda-frame.is-fit .agenda-head { top: 4rem; }
+}
 
 /* ---------- Agenda: panel al costado con la cita ---------- */
 

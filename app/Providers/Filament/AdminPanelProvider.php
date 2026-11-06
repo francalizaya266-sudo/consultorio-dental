@@ -84,6 +84,22 @@ class AdminPanelProvider extends PanelProvider
         return array_map(fn (string $hex): string => Color::convertToOklch($hex), $shades);
     }
 
+    /**
+     * La escala de Filament corrida un tono hacia lo oscuro. Con la de fábrica, el verde de "Confirmar" o
+     * "WhatsApp" no llegaba al contraste del texto blanco y salía fosforescente con letras negras, y el azul
+     * de "Llegó" era eléctrico al lado del azul de la marca. Así quedan sobrios y con texto blanco.
+     *
+     * @param  array<int, string>  $palette
+     * @return array<int, string>
+     */
+    private static function oneShadeDarker(array $palette): array
+    {
+        return [
+            50 => $palette[50], 100 => $palette[100], 200 => $palette[200], 300 => $palette[300], 400 => $palette[500],
+            500 => $palette[600], 600 => $palette[700], 700 => $palette[800], 800 => $palette[900], 900 => $palette[950], 950 => $palette[950],
+        ];
+    }
+
     public function panel(Panel $panel): Panel
     {
         return $panel
@@ -101,6 +117,8 @@ class AdminPanelProvider extends PanelProvider
             ->colors([
                 // El azul del recetario, el mismo de la página web, en el tono 600 (el de los botones, con texto blanco).
                 'primary' => self::brandPalette(),
+                'success' => self::oneShadeDarker(Color::Emerald),
+                'info' => self::oneShadeDarker(Color::Sky),
             ])
             ->defaultAvatarProvider(InitialsAvatarProvider::class)
             ->strictAuthorization()

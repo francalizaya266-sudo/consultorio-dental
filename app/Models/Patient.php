@@ -134,6 +134,26 @@ class Patient extends Model
         return Attribute::get(fn () => trim("{$this->first_name} {$this->last_name}"));
     }
 
+    /** Primer nombre y primer apellido, para donde no entra el completo: "Benjamín Del Valle", "Rosa Huamán". */
+    protected function shortName(): Attribute
+    {
+        return Attribute::get(function () {
+            $surname = [];
+
+            foreach (preg_split('/\s+/', trim((string) $this->last_name), flags: PREG_SPLIT_NO_EMPTY) as $word) {
+                $surname[] = $word;
+
+                if (! in_array(mb_strtolower($word), ['de', 'del', 'la', 'las', 'los', 'y', 'san', 'santa'], true)) {
+                    break;
+                }
+            }
+
+            $firstName = preg_split('/\s+/', trim((string) $this->first_name), flags: PREG_SPLIT_NO_EMPTY)[0] ?? '';
+
+            return trim($firstName.' '.implode(' ', $surname));
+        });
+    }
+
     protected function age(): Attribute
     {
         return Attribute::get(fn () => $this->birth_date?->age);
