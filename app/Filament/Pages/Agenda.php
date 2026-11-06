@@ -99,6 +99,30 @@ class Agenda extends Page
         }
     }
 
+    /** El título es el día (o la semana) que se ve: así no hace falta una línea aparte para la fecha. */
+    public function getHeading(): string
+    {
+        return $this->mode === 'week'
+            ? 'Semana del '.$this->weekStart()->translatedFormat('j \d\e F')
+            : ucfirst($this->day()->translatedFormat('l j \d\e F'));
+    }
+
+    /** @return list<string> */
+    public function getPageClasses(): array
+    {
+        return ['agenda-page'];
+    }
+
+    /** "Nueva cita" a la vista, sin buscar un espacio libre: llega con el día que se mira (y el doctor en la semana). */
+    protected function getHeaderActions(): array
+    {
+        return [
+            CreateAppointmentAction::make('newAppointment')
+                ->arguments(['date' => $this->date, 'doctor' => $this->mode === 'week' ? $this->doctor : null])
+                ->visible(fn () => AppointmentResource::canCreate()),
+        ];
+    }
+
     /** Se abre al soltar una cita en otro horario: confirma antes de mover y avisar al paciente. */
     public function moveAction(): Action
     {
@@ -148,7 +172,8 @@ class Agenda extends Page
                 .' · '.$record->starts_at->format('H:i').'–'.$record->ends_at->format('H:i'))
             ->modalContent(fn (Appointment $record) => view('filament.pages.agenda-appointment', $this->panelData($record)))
             ->modalSubmitAction(false)
-            ->modalCancelActionLabel('Cerrar')
+            // Se cierra con la X o tocando fuera: un botón "Cerrar" más empujaba los del día a otra línea en el celular.
+            ->modalCancelAction(false)
             ->extraModalFooterActions(fn () => AppointmentActions::panel());
     }
 
@@ -171,9 +196,6 @@ class Agenda extends Page
             'scale' => self::SCALE,
             'hours' => range(intdiv($from, 60), intdiv($to - 1, 60)),
             'doctors' => $this->managesAll() ? $this->doctors()->pluck('name', 'id') : collect(),
-            'heading' => $this->mode === 'week'
-                ? 'Semana del '.$this->weekStart()->translatedFormat('j \d\e F')
-                : ucfirst($this->day()->translatedFormat('l j \d\e F')),
             'weekByDefault' => $this->weekByDefault,
         ];
     }
@@ -244,13 +266,16 @@ class Agenda extends Page
                 'end' => $this->minuteOf($a->ends_at),
                 'until' => $this->minuteOf($a->occupied_until),
                 'time' => $a->starts_at->format('H:i').'–'.$a->ends_at->format('H:i'),
+                'startTime' => $a->starts_at->format('H:i'),
                 'patient' => $a->patient->full_name,
+                'shortName' => $a->patient->short_name,
                 'phone' => $a->patient->account ? Phone::display($a->patient->account->phone) : null,
                 'treatment' => $a->treatment->name,
                 'treatmentId' => $a->treatment_id,
                 'status' => $a->status->value,
                 'statusLabel' => $a->status->getLabel(),
-                'needsCall' => $a->needsCall(),
+                'unclosed' => $a->isPastAndOpen(),
+                'needsCall' => $a->needsCall() && ! $a->isPastAndOpen(),
                 'isNew' => $a->is_new_patient,
                 'owes' => $seesMoney && (float) $a->patient->balance_due > 0 ? Money::short($a->patient->balance_due) : null,
                 'hasNote' => filled($a->patient_note) || filled($a->internal_notes),

@@ -152,6 +152,12 @@ class Appointment extends Model
         return $this->isFromAnEarlierDay() && in_array($this->status, AppointmentStatus::open(), true);
     }
 
+    /** Ya pasó su hora de término y nadie marcó si vino y se atendió, o si faltó. */
+    public function isPastAndOpen(): bool
+    {
+        return $this->ends_at->isPast() && in_array($this->status, AppointmentStatus::open(), true);
+    }
+
     /** Minutos que lleva en sala desde que llegó; null si no está esperando. */
     public function waitingMinutes(): ?int
     {

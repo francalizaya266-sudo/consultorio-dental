@@ -5,14 +5,16 @@
 <div class="appt-panel">
     <div class="appt-panel-chips">
         <x-filament::badge :color="$appointment->status->getColor()">{{ $appointment->status->getLabel() }}</x-filament::badge>
-        @if ($appointment->needsCall())
+        @if ($appointment->isPastAndOpen())
+            <x-filament::badge color="danger" icon="heroicon-m-exclamation-triangle">Sin cerrar: marca si vino</x-filament::badge>
+        @elseif ($appointment->needsCall())
             <x-filament::badge color="danger" icon="heroicon-m-phone">Sin confirmar: llamar</x-filament::badge>
         @endif
         @if ($appointment->is_new_patient)
             <x-filament::badge color="info">Paciente nuevo</x-filament::badge>
         @endif
         @if ($balance !== null && $balance > 0)
-            <x-filament::badge color="danger">Debe {{ Money::short($balance) }}</x-filament::badge>
+            <x-filament::badge color="warning">Debe {{ Money::short($balance) }}</x-filament::badge>
         @endif
     </div>
 

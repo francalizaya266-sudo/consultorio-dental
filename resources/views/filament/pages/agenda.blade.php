@@ -3,49 +3,65 @@
         <div hidden x-data x-init="if (window.innerWidth < 640) $wire.set('mode', 'day')"></div>
     @endif
 
-    <div class="agenda-toolbar">
-        <div class="agenda-toolbar-group">
-            <x-filament::icon-button icon="heroicon-m-chevron-left" color="gray" label="Anterior" wire:click="shift(-1)" />
-            <x-filament::button color="gray" size="sm" wire:click="goToday">Hoy</x-filament::button>
-            <x-filament::icon-button icon="heroicon-m-chevron-right" color="gray" label="Siguiente" wire:click="shift(1)" />
-            <span class="agenda-heading">{{ $heading }}</span>
-        </div>
+    @php
+        $legend = [
+            's-pending' => 'Pendiente',
+            's-confirmed' => 'Confirmada',
+            's-checked_in' => 'En sala',
+            's-in_progress' => 'En atención',
+            's-completed' => 'Atendida',
+            's-block' => 'No se atiende',
+        ];
+    @endphp
 
-        <div class="agenda-toolbar-group">
-            <x-filament::input.wrapper>
-                <x-filament::input type="date" wire:model.live="date" aria-label="Ir a la fecha" />
-            </x-filament::input.wrapper>
-
-            @if ($mode === 'week' && $doctors->count() > 1)
-                <x-filament::input.wrapper>
-                    <x-filament::input.select wire:model.live="doctor" aria-label="Doctor">
-                        @foreach ($doctors as $id => $name)
-                            <option value="{{ $id }}">{{ $name }}</option>
-                        @endforeach
-                    </x-filament::input.select>
+    {{-- La barra y los colores van juntos, pegados a la grilla: en el celular la agenda empieza más arriba. --}}
+    <div class="agenda-controls">
+        <div class="agenda-toolbar">
+            <div class="agenda-toolbar-group">
+                <x-filament::icon-button icon="heroicon-m-chevron-left" color="gray" :label="$mode === 'week' ? 'Semana anterior' : 'Día anterior'" wire:click="shift(-1)" />
+                <x-filament::button color="gray" size="sm" wire:click="goToday">Hoy</x-filament::button>
+                <x-filament::icon-button icon="heroicon-m-chevron-right" color="gray" :label="$mode === 'week' ? 'Semana siguiente' : 'Día siguiente'" wire:click="shift(1)" />
+                <x-filament::input.wrapper class="agenda-date">
+                    <x-filament::input type="date" wire:model.live="date" aria-label="Ir a la fecha" />
                 </x-filament::input.wrapper>
-            @endif
+            </div>
 
-            <x-filament::tabs>
-                <x-filament::tabs.item :active="$mode === 'day'" wire:click="$set('mode', 'day')">Día</x-filament::tabs.item>
-                <x-filament::tabs.item :active="$mode === 'week'" wire:click="$set('mode', 'week')">Semana</x-filament::tabs.item>
-            </x-filament::tabs>
-        </div>
-    </div>
+            <div class="agenda-toolbar-group">
+                @if ($mode === 'week' && $doctors->count() > 1)
+                    <x-filament::input.wrapper>
+                        <x-filament::input.select wire:model.live="doctor" aria-label="Doctor">
+                            @foreach ($doctors as $id => $name)
+                                <option value="{{ $id }}">{{ $name }}</option>
+                            @endforeach
+                        </x-filament::input.select>
+                    </x-filament::input.wrapper>
+                @endif
 
-    <div class="agenda-info">
-        <div class="agenda-legend">
-            <span class="s-pending">Pendiente</span>
-            <span class="s-confirmed">Confirmada</span>
-            <span class="s-checked_in">En sala / en atención</span>
-            <span class="s-completed">Atendida</span>
-            <span class="s-block">No se atiende</span>
+                <x-filament::tabs class="agenda-modes" label="Vista">
+                    <x-filament::tabs.item :active="$mode === 'day'" wire:click="$set('mode', 'day')">Día</x-filament::tabs.item>
+                    <x-filament::tabs.item :active="$mode === 'week'" wire:click="$set('mode', 'week')">Semana</x-filament::tabs.item>
+                </x-filament::tabs>
+            </div>
         </div>
-        {{-- La ayuda se abre cuando se necesita: el que usa la agenda todos los días ya la sabe. --}}
-        <details class="agenda-help">
-            <summary>Cómo usar la agenda</summary>
-            <p>Toca una cita para ver sus datos y botones, o un espacio libre para agendar ahí. Arrastra una cita para cambiarla de horario (en celular, mantenla presionada y luego arrástrala).</p>
-        </details>
+
+        <div class="agenda-info">
+            <div class="agenda-legend">
+                @foreach ($legend as $class => $label)
+                    <span class="{{ $class }}">{{ $label }}</span>
+                @endforeach
+            </div>
+            {{-- La ayuda se abre cuando se necesita: el que usa la agenda todos los días ya la sabe. En el celular, los colores van aquí. --}}
+            <details class="agenda-help">
+                <summary>Cómo usar la agenda</summary>
+                <p>Toca una cita para ver sus datos y botones, o un espacio libre para agendar ahí. Arrastra una cita para cambiarla de horario (en celular, mantenla presionada y luego arrástrala).</p>
+                <p>"Sin cerrar" (en la semana, un punto rojo): ya pasó su hora y falta marcar si vino. Ábrela y usa "Llegó" y "Atendido", o "No asistió".</p>
+                <div class="agenda-legend">
+                    @foreach ($legend as $class => $label)
+                        <span class="{{ $class }}">{{ $label }}</span>
+                    @endforeach
+                </div>
+            </details>
+        </div>
     </div>
 
     <script>
@@ -65,11 +81,29 @@
                 refresher: null,
 
                 // Se refresca sola cada 30 s, salvo mientras alguien arrastra una cita o tiene una ventana abierta.
+                // Al abrir el día de hoy, la grilla baja sola hasta la hora actual.
                 init() {
                     this.refresher = setInterval(() => {
                         if (document.hidden || this.press || this.dragging || this.$wire.mountedActions?.length) return;
                         this.$wire.$refresh();
                     }, 30000);
+                    this.$nextTick(() => this.scrollToNow());
+                },
+
+                scrollToNow() {
+                    const now = this.$root.querySelector('.agenda-now');
+                    if (! now) return;
+                    if (this.scrollsAlone()) {
+                        const top = now.getBoundingClientRect().top - this.$root.getBoundingClientRect().top + this.$root.scrollTop;
+                        this.$root.scrollTop = Math.max(0, top - this.$root.clientHeight / 3);
+                    } else if (now.getBoundingClientRect().top > window.innerHeight - 120) {
+                        window.scrollTo({ top: window.scrollY + now.getBoundingClientRect().top - window.innerHeight / 3 });
+                    }
+                },
+
+                /** La grilla se desplaza sola (computadora, semana) o con la página (el día en el celular). */
+                scrollsAlone() {
+                    return this.$root.scrollHeight > this.$root.clientHeight + 1;
                 },
 
                 destroy() {
@@ -168,10 +202,11 @@
                     if (! this.dragging) return;
                     const frame = this.$root.getBoundingClientRect();
                     const { clientX: x, clientY: y } = this.pointer;
-                    const dy = y > Math.min(frame.bottom, window.innerHeight) - 40 ? 10 : (y < frame.top + 90 ? -10 : 0);
+                    const dy = y > Math.min(frame.bottom, window.innerHeight) - 40 ? 10 : (y < Math.max(frame.top, 0) + 90 ? -10 : 0);
                     const dx = x > frame.right - 40 ? 10 : (x < frame.left + 90 ? -10 : 0);
                     if (dx || dy) {
-                        this.$root.scrollBy(dx, dy);
+                        this.$root.scrollBy(dx, this.scrollsAlone() ? dy : 0);
+                        if (! this.scrollsAlone()) window.scrollBy(0, dy);
                         this.track(this.pointer);
                     }
                     requestAnimationFrame(() => this.autoScroll());
@@ -212,8 +247,9 @@
             $nowMinute = now()->hour * 60 + now()->minute;
         @endphp
 
+        {{-- Con una o dos columnas del día, en el celular la grilla no tiene su propio desplazamiento: se baja con la página. --}}
         <div
-            class="agenda-frame"
+            @class(['agenda-frame', 'is-fit' => $mode === 'day' && count($columns) <= 2])
             :class="{ 'is-dragging': dragging }"
             data-from="{{ $from }}"
             data-scale="{{ $scale }}"
@@ -279,9 +315,9 @@
                             <a
                                 wire:key="appt-{{ $appt['id'] }}"
                                 href="{{ $appt['url'] }}"
-                                @class(['agenda-appt', 's-'.$appt['status'], 'is-movable' => $appt['draggable'], 'is-short' => $appt['end'] - $appt['start'] <= 30])
-                                style="top: {{ ($appt['start'] - $from) * $scale }}px; height: {{ max(($appt['end'] - $appt['start']) * $scale - 2, 18) }}px; border-left-color: {{ $column['color'] }}"
-                                title="{{ $appt['time'] }} · {{ $appt['patient'] }} · {{ $appt['treatment'] }} · {{ $appt['statusLabel'] }}{{ $appt['phone'] ? ' · '.$appt['phone'] : '' }}"
+                                @class(['agenda-appt', 's-'.$appt['status'], 'is-movable' => $appt['draggable'], 'is-short' => $appt['end'] - $appt['start'] <= 30, 'is-unclosed' => $appt['unclosed'], 'needs-call' => $appt['needsCall']])
+                                style="top: {{ ($appt['start'] - $from) * $scale }}px; height: {{ max(($appt['end'] - $appt['start']) * $scale - 2, 18) }}px"
+                                title="{{ $appt['time'] }} · {{ $appt['patient'] }} · {{ $appt['treatment'] }} · {{ $appt['statusLabel'] }}{{ $appt['phone'] ? ' · '.$appt['phone'] : '' }}{{ $appt['unclosed'] ? ' · Sin cerrar: falta marcar si vino' : '' }}"
                                 draggable="false"
                                 x-on:click="open($event, {{ $appt['id'] }})"
                                 @if ($appt['draggable'])
@@ -292,8 +328,9 @@
                                     x-on:pointerdown="start($event, $el)"
                                 @endif
                             >
-                                <b>{{ $appt['patient'] }}@if ($appt['needsCall'])<span class="tag tag-call">Llamar</span>@endif @if ($appt['isNew'])<span class="tag tag-new">Nuevo</span>@endif @if ($appt['owes'])<span class="tag tag-owes">Debe {{ $appt['owes'] }}</span>@endif @if ($appt['hasNote'])<span class="tag tag-note">Nota</span>@endif</b>
-                                <small>{{ $appt['time'] }} · {{ $appt['treatment'] }}</small>
+                                {{-- En la semana la columna es angosta: nombre corto y solo la hora de inicio (el alto de la tarjeta ya dice cuánto dura). --}}
+                                <b>{{ $mode === 'week' ? $appt['shortName'] : $appt['patient'] }}@if ($appt['unclosed'])<span class="tag tag-unclosed">Sin cerrar</span>@endif @if ($appt['needsCall'])<span class="tag tag-call">Llamar</span>@endif @if ($appt['isNew'])<span class="tag tag-new">Nuevo</span>@endif @if ($appt['owes'])<span class="tag tag-owes">Debe {{ $appt['owes'] }}</span>@endif @if ($appt['hasNote'])<span class="tag tag-note">Nota</span>@endif</b>
+                                <small>{{ $mode === 'week' ? $appt['startTime'] : $appt['time'] }} · {{ $appt['treatment'] }}</small>
                                 <small>{{ $appt['statusLabel'] }}@if ($appt['phone']) · {{ $appt['phone'] }}@endif</small>
                             </a>
                         @endforeach

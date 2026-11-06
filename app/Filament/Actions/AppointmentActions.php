@@ -64,7 +64,8 @@ final class AppointmentActions
             self::continueConsultation(),
             self::complete(),
             CheckoutAction::make(),
-            self::whatsapp(),
+            // A la vista pero en gris: el botón de color es el paso del día (llegó, atender, cobrar).
+            self::whatsapp()->color('gray'),
             ActionGroup::make([
                 self::patientProfile(),
                 self::viewConsultation(),
