@@ -1,6 +1,7 @@
 <x-filament-panels::page>
-    @if ($weekByDefault)
-        <div hidden x-data x-init="if (window.innerWidth < 640) $wire.set('mode', 'day')"></div>
+    {{-- Sin una vista pedida, en el celular se abre la lista del día: la grilla no entra bien en la pantalla. --}}
+    @if ($modeByDefault && $mode !== 'list')
+        <div hidden x-data x-init="if (window.innerWidth < 640) $wire.set('mode', 'list')"></div>
     @endif
 
     @php
@@ -14,6 +15,14 @@
         ];
     @endphp
 
+    {{-- En la computadora, al lado de la agenda va el panel para buscar horas libres; en pantallas más chicas no entra. --}}
+    {{-- El panel se puede esconder (la semana gana ancho); cada computadora recuerda cómo lo dejaron. --}}
+    <div
+        class="agenda-layout"
+        x-data="{ railHidden: (() => { try { return localStorage.getItem('agenda-rail') === 'hidden' } catch (e) { return false } })() }"
+        :class="{ 'is-rail-hidden': railHidden }"
+    >
+    <div class="agenda-main">
     {{-- La barra y los colores van juntos, pegados a la grilla: en el celular la agenda empieza más arriba. --}}
     <div class="agenda-controls">
         <div class="agenda-toolbar">
@@ -47,7 +56,21 @@
                 <x-filament::tabs class="agenda-modes" label="Vista">
                     <x-filament::tabs.item :active="$mode === 'day'" wire:click="$set('mode', 'day')">Día</x-filament::tabs.item>
                     <x-filament::tabs.item :active="$mode === 'week'" wire:click="$set('mode', 'week')">Semana</x-filament::tabs.item>
+                    <x-filament::tabs.item :active="$mode === 'list'" wire:click="$set('mode', 'list')">Lista</x-filament::tabs.item>
                 </x-filament::tabs>
+
+                <div class="agenda-nav agenda-rail-toggle">
+                    <button
+                        type="button"
+                        class="agenda-nav-btn is-icon"
+                        x-on:click="railHidden = ! railHidden; try { localStorage.setItem('agenda-rail', railHidden ? 'hidden' : 'shown') } catch (e) {}"
+                        :aria-pressed="(! railHidden).toString()"
+                        :title="railHidden ? 'Mostrar el panel para buscar horas libres' : 'Esconder el panel para buscar horas libres'"
+                        aria-label="Panel para buscar horas libres"
+                    >
+                        <x-filament::icon icon="heroicon-m-view-columns" class="agenda-nav-icon" />
+                    </button>
+                </div>
             </div>
         </div>
 
@@ -59,7 +82,7 @@
             </div>
             {{-- La ayuda se abre cuando se necesita: el que usa la agenda todos los días ya la sabe. En el celular, los colores van aquí. --}}
             <details class="agenda-help">
-                <summary>Cómo usar la agenda</summary>
+                <summary><span class="agenda-help-long">Cómo usar la agenda</span><span class="agenda-help-short">Ayuda</span></summary>
                 <p>Toca una cita para ver sus datos y botones, o un espacio libre para agendar ahí. Arrastra una cita para cambiarla de horario (en celular, mantenla presionada y luego arrástrala).</p>
                 <p>"Sin cerrar" (en la semana, un punto rojo): ya pasó su hora y falta marcar si vino. Ábrela y usa "Llegó" y "Atendido", o "No asistió".</p>
                 <div class="agenda-legend">
@@ -73,6 +96,38 @@
 
     <script>
         document.addEventListener('alpine:init', () => {
+            /** El día en lista: se refresca solo como la grilla y, al llegar, baja hasta la línea de ahora si no se ve. */
+            Alpine.data('agendaList', () => ({
+                refresher: null,
+
+                init() {
+                    this.refresher = setInterval(() => {
+                        if (document.hidden || this.$wire.mountedActions?.length) return;
+                        this.$wire.$refresh();
+                    }, 30000);
+                },
+
+                destroy() {
+                    clearInterval(this.refresher);
+                },
+
+                arrive() {
+                    this.$nextTick(() => {
+                        const now = this.$root.querySelector('.agenda-list-now');
+                        if (now && now.getBoundingClientRect().top > window.innerHeight - 120) {
+                            window.scrollTo({ top: window.scrollY + now.getBoundingClientRect().top - window.innerHeight / 4 });
+                        }
+                    });
+                },
+
+                /** Abre el panel de la cita. Con Ctrl o ⌘ se abre la ficha completa en otra pestaña. */
+                open(event, id) {
+                    if (event.ctrlKey || event.metaKey || event.shiftKey) return;
+                    event.preventDefault();
+                    this.$wire.mountAction('appointment', { id });
+                },
+            }));
+
             /**
              * Grilla de la agenda. Una cita se mueve con el mouse apenas se arrastra; con el dedo,
              * hay que mantenerla presionada un momento para no confundirlo con desplazar la pantalla.
@@ -279,6 +334,8 @@
 
     @if (count($columns) === 0)
         <div class="agenda-frame agenda-empty">No hay doctores activos para mostrar.</div>
+    @elseif ($mode === 'list')
+        @include('filament.pages.agenda-list', ['list' => $list])
     @else
         @php
             $height = ($to - $from) * $scale;
@@ -408,4 +465,8 @@
             </div>
         </div>
     @endif
+    </div>
+
+    @include('filament.pages.agenda-rail', ['rail' => $rail])
+    </div>
 </x-filament-panels::page>

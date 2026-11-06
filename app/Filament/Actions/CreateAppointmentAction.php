@@ -85,7 +85,8 @@ final class CreateAppointmentAction
     }
 
     /**
-     * Lo que llega puesto: el doctor (el propio, el que se tocó o el único), el día y la hora.
+     * Lo que llega puesto: el doctor (el propio, el que se tocó o el único), el día y la hora. Desde "Buscar hueco"
+     * llega también el tratamiento, y entonces la hora ya queda elegida.
      *
      * @param  array<string, mixed>  $arguments
      * @return array<string, mixed>
@@ -101,16 +102,21 @@ final class CreateAppointmentAction
         $doctorId = $user->managesAllAgendas()
             ? ($activeDoctors->contains((int) ($arguments['doctor'] ?? 0)) ? (int) $arguments['doctor'] : null)
             : $user->doctorId();
+        $doctorId ??= $activeDoctors->count() === 1 ? $activeDoctors->first() : null;
+        $treatmentId = Treatment::query()->active()->whereKey((int) ($arguments['treatment'] ?? 0))->value('id');
+        $time = preg_match('/^\d{2}:\d{2}$/', $time) ? $time : null;
 
         return [
             'new_patient' => false,
             'patient_id' => filled($arguments['patient'] ?? null) ? (int) $arguments['patient'] : null,
             'patient' => ['relationship' => PatientRelationship::Self->value],
-            'doctor_id' => $doctorId ?? ($activeDoctors->count() === 1 ? $activeDoctors->first() : null),
+            'treatment_id' => $treatmentId,
+            'doctor_id' => $doctorId,
             'date' => preg_match('/^\d{4}-\d{2}-\d{2}$/', $date) && CarbonImmutable::parse($date)->gte(today())
                 ? $date
                 : today()->toDateString(),
-            'preferred_time' => preg_match('/^\d{2}:\d{2}$/', $time) ? $time : null,
+            'preferred_time' => $time,
+            'slot' => $treatmentId && $doctorId && $time ? $time : null,
             'manual' => false,
             'fixed_date' => false,
         ];
