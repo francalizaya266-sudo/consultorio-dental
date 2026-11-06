@@ -4,17 +4,23 @@ namespace App\Filament\Pages;
 
 use App\Enums\AppointmentStatus;
 use App\Filament\Actions\AppointmentActions;
+use App\Filament\Actions\CheckoutAction;
 use App\Filament\Actions\CreateAppointmentAction;
 use App\Filament\Resources\Appointments\AppointmentResource;
 use App\Filament\Resources\Patients\PatientResource;
+use App\Filament\Resources\WaitlistEntries\WaitlistEntryActions;
+use App\Filament\Resources\WaitlistEntries\WaitlistEntryResource;
 use App\Filament\Support\ClinicalAlerts;
 use App\Filament\Support\Notify;
 use App\Models\Appointment;
 use App\Models\Charge;
 use App\Models\Doctor;
 use App\Models\ScheduleBlock;
+use App\Models\Treatment;
 use App\Models\User;
+use App\Models\WaitlistEntry;
 use App\Services\Agenda\AvailabilityService;
+use App\Services\Agenda\GapFinder;
 use App\Services\Billing\BillingService;
 use App\Services\Booking\AppointmentService;
 use App\Support\Money;
@@ -27,12 +33,14 @@ use Filament\Support\Enums\Width;
 use Filament\Support\Icons\Heroicon;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\DB;
 use Livewire\Attributes\Url;
 
 /**
- * Agenda en calendario: por día (una columna por doctor) o por semana (un doctor).
+ * Agenda en calendario: por día (una columna por doctor), por semana (un doctor) o el día en lista (el celular).
  * Las citas se mueven arrastrándolas. Al tocar una cita se abre un panel al costado con sus datos y
- * botones; al tocar un espacio libre, "Nueva cita" en una ventana sobre la agenda.
+ * botones; al tocar un espacio libre, "Nueva cita" en una ventana sobre la agenda. En la computadora,
+ * al lado va el mini calendario con lo lleno que está cada día, "Buscar hueco" y la lista de espera que cabe.
  */
 class Agenda extends Page
 {
@@ -58,8 +66,26 @@ class Agenda extends Page
     #[Url]
     public ?int $doctor = null;
 
-    /** La vista semanal se eligió sola (no la pidió el usuario): en un celular se cambia a la del día. */
-    protected bool $weekByDefault = false;
+    /** Tratamiento elegido en "Buscar hueco". */
+    public ?int $findTreatment = null;
+
+    /** Mes del mini calendario (Y-m) cuando se mira otro que el del día; vacío, el del día. */
+    public string $month = '';
+
+    /** La vista se eligió sola (no la pidió el usuario): en un celular se cambia a la lista del día. */
+    protected bool $modeByDefault = false;
+
+    /**
+     * Lo que toca hacer con la cita según su estado, en orden: en la lista va el primer botón que la persona puede usar
+     * (la recepción y el doctor ven pasos distintos, y en una cita de un día anterior solo se puede cerrar).
+     */
+    private const NEXT_STEPS = [
+        'pending' => ['listConfirm', 'listArrived', 'listStart', 'listComplete'],
+        'confirmed' => ['listArrived', 'listStart', 'listComplete'],
+        'checked_in' => ['listStart', 'listComplete'],
+        'in_progress' => ['listContinue', 'listStart', 'listComplete'],
+        'completed' => ['listCheckout'],
+    ];
 
     /** @var array<int, Appointment|null> Citas abiertas en el panel durante esta petición. */
     protected array $panelAppointments = [];
@@ -67,29 +93,48 @@ class Agenda extends Page
     public function mount(): void
     {
         $this->date = $this->safeDate($this->date)->toDateString();
-        $this->mode = in_array($this->mode, ['day', 'week'], true) ? $this->mode : 'day';
+        $this->mode = in_array($this->mode, ['day', 'week', 'list'], true) ? $this->mode : 'day';
         $this->doctor = $this->managesAll() ? ($this->doctor ?? $this->doctors()->first()?->getKey()) : $this->ownDoctorId();
 
-        // El doctor ve primero su semana.
-        if (! $this->managesAll() && ! request()->has('mode')) {
-            $this->mode = 'week';
-            $this->weekByDefault = true;
+        if (! request()->has('mode')) {
+            $this->modeByDefault = true;
+
+            // El doctor ve primero su semana.
+            if (! $this->managesAll()) {
+                $this->mode = 'week';
+            }
         }
     }
 
     public function shift(int $steps): void
     {
         $this->date = $this->day()->addDays($steps * ($this->mode === 'week' ? 7 : 1))->toDateString();
+        $this->month = '';
     }
 
     public function goToday(): void
     {
         $this->date = today()->toDateString();
+        $this->month = '';
     }
 
     public function updatedDate(): void
     {
         $this->date = $this->safeDate($this->date)->toDateString();
+        $this->month = '';
+    }
+
+    /** Mini calendario: otro mes, sin cambiar el día que se mira. */
+    public function shiftMonth(int $steps): void
+    {
+        $this->month = $this->calendarMonth()->addMonthsNoOverflow($steps)->format('Y-m');
+    }
+
+    /** "Buscar hueco": elige el tratamiento (de la lista o con un toque; otro toque en el mismo lo quita). */
+    public function findFor(int|string|null $treatment, bool $toggle = true): void
+    {
+        $treatment = is_numeric($treatment) ? (int) $treatment : null;
+        $this->findTreatment = $toggle && $treatment === $this->findTreatment ? null : $treatment;
     }
 
     public function updatedDoctor(): void
@@ -177,10 +222,75 @@ class Agenda extends Page
             ->extraModalFooterActions(fn () => AppointmentActions::panel());
     }
 
-    /** Se abre al tocar un espacio libre: ya viene con el doctor, el día y la hora. */
+    /** Se abre al tocar un espacio libre o una hora de "Buscar hueco": ya viene con el doctor, el día, la hora (y el tratamiento). */
     public function createAppointmentAction(): Action
     {
         return CreateAppointmentAction::make();
+    }
+
+    /** Ofrecer por WhatsApp la hora libre a alguien de la lista de espera, desde el panel de la agenda. */
+    public function offerAction(): Action
+    {
+        return WaitlistEntryActions::offer()
+            ->record(fn (array $arguments) => WaitlistEntry::query()->with(['patient.account', 'treatment'])->whereHas('patient')->find($arguments['entry'] ?? null))
+            ->hidden(fn (?WaitlistEntry $record) => $record === null);
+    }
+
+    /*
+     * El botón del siguiente paso en la lista del día: las mismas acciones del panel de la cita, con otro nombre
+     * para no confundirse con las del panel.
+     */
+
+    public function listConfirmAction(): Action
+    {
+        return $this->forListedAppointment(AppointmentActions::confirm(), 'listConfirm');
+    }
+
+    public function listArrivedAction(): Action
+    {
+        return $this->forListedAppointment(AppointmentActions::arrived(), 'listArrived');
+    }
+
+    public function listStartAction(): Action
+    {
+        return $this->forListedAppointment(AppointmentActions::start(), 'listStart');
+    }
+
+    public function listContinueAction(): Action
+    {
+        return $this->forListedAppointment(AppointmentActions::continueConsultation(), 'listContinue');
+    }
+
+    public function listCompleteAction(): Action
+    {
+        return $this->forListedAppointment(AppointmentActions::complete(), 'listComplete');
+    }
+
+    public function listCheckoutAction(): Action
+    {
+        return $this->forListedAppointment(CheckoutAction::make(), 'listCheckout');
+    }
+
+    /** El primer paso que esta persona puede dar con la cita (o ninguno, si ya no queda nada por hacer). */
+    public function nextStep(int $id, string $status): ?Action
+    {
+        foreach (self::NEXT_STEPS[$status] ?? [] as $name) {
+            $action = ($this->getAction($name))(['id' => $id]);
+
+            if ($action->isVisible()) {
+                return $action;
+            }
+        }
+
+        return null;
+    }
+
+    private function forListedAppointment(Action $action, string $name): Action
+    {
+        return $action
+            ->name($name)
+            ->record(fn (array $arguments) => $this->panelAppointment($arguments['id'] ?? null))
+            ->hidden(fn (?Appointment $record) => $record === null || ! auth()->user()->can('view', $record));
     }
 
     /** @return array<string, mixed> */
@@ -196,8 +306,281 @@ class Agenda extends Page
             'scale' => self::SCALE,
             'hours' => range(intdiv($from, 60), intdiv($to - 1, 60)),
             'doctors' => $this->managesAll() ? $this->doctors()->pluck('name', 'id') : collect(),
-            'weekByDefault' => $this->weekByDefault,
+            'modeByDefault' => $this->modeByDefault,
+            'rail' => $this->rail(),
+            'list' => $this->mode === 'list' ? $this->listOfTheDay($columns) : null,
         ];
+    }
+
+    /**
+     * El panel al costado: el mes con lo lleno de cada día, "Buscar hueco" y quién de la lista de espera cabe.
+     * En la semana, solo del doctor que se mira.
+     *
+     * @return array<string, mixed>
+     */
+    private function rail(): array
+    {
+        $finder = app(GapFinder::class);
+        $doctors = $this->railDoctors();
+        $month = $this->calendarMonth();
+        $first = $month->startOfWeek(CarbonImmutable::MONDAY);
+        $last = $month->endOfMonth()->endOfWeek(CarbonImmutable::SUNDAY);
+        $load = $finder->occupancy($doctors, $first, $last);
+        $selected = $this->mode === 'week'
+            ? [$this->weekStart()->toDateString(), $this->weekStart()->addDays(6)->toDateString()]
+            : [$this->date, $this->date];
+
+        $days = [];
+
+        for ($day = $first; $day->lte($last); $day = $day->addDay()) {
+            $date = $day->toDateString();
+            $days[] = [
+                'date' => $date,
+                'number' => $day->day,
+                'label' => ucfirst($day->translatedFormat('l j \d\e F')).self::loadLabel($load[$date] ?? null),
+                'load' => $load[$date] ?? null,
+                'level' => self::loadLevel($load[$date] ?? null),
+                'isOtherMonth' => $day->month !== $month->month,
+                'isToday' => $day->isToday(),
+                'isPast' => $day->lt(today()),
+                'isSelected' => $date >= $selected[0] && $date <= $selected[1],
+                'isRangeStart' => $date === $selected[0],
+                'isRangeEnd' => $date === $selected[1],
+            ];
+        }
+
+        [$quick, $others] = $this->findableTreatments($doctors);
+        $treatment = $this->findTreatment ? $quick->concat($others)->firstWhere('id', $this->findTreatment) : null;
+
+        /** @var User $user */
+        $user = auth()->user();
+
+        return [
+            'month' => ucfirst($month->translatedFormat('F Y')),
+            'days' => $days,
+            'quick' => $quick,
+            'others' => $others,
+            'treatment' => $treatment,
+            'slots' => $treatment ? array_map(fn (array $day) => [
+                'label' => $day['date']->isToday() ? 'Hoy' : ($day['date']->isTomorrow() ? 'Mañana' : ucfirst($day['date']->translatedFormat('l j'))),
+                'date' => $day['date']->toDateString(),
+                'slots' => array_map(fn (array $slot) => [
+                    'time' => $slot['time'],
+                    'recommended' => $slot['recommended'],
+                    'doctor' => $slot['doctor']->getKey(),
+                    'doctorName' => $slot['doctor']->name,
+                    'initials' => self::initials($slot['doctor']->name),
+                    'color' => $slot['doctor']->agenda_color ?: '#1e4f91',
+                ], $day['slots']),
+            ], $finder->nextSlots($treatment, $doctors, $this->day())) : null,
+            'severalDoctors' => $doctors->count() > 1,
+            'waitlist' => $user->can('viewAny', WaitlistEntry::class) ? $finder->waitlistFits($doctors, $this->day()) : [],
+            'waitlistUrl' => $user->can('viewAny', WaitlistEntry::class) ? WaitlistEntryResource::getUrl() : null,
+            'dayName' => $this->day()->isToday() ? 'hoy' : ($this->day()->isTomorrow() ? 'mañana' : 'el '.$this->day()->translatedFormat('l j')),
+            'searchDays' => GapFinder::SEARCH_DAYS,
+            'canCreate' => AppointmentResource::canCreate(),
+        ];
+    }
+
+    /** @return Collection<int, Doctor> */
+    private function railDoctors(): Collection
+    {
+        return $this->mode === 'week' ? $this->doctors()->where('id', $this->doctor)->values() : $this->doctors();
+    }
+
+    /**
+     * Para "Buscar hueco": los cuatro tratamientos que más se agendan (a la vista, un toque) y los demás en una lista.
+     * Solo los que hace alguno de los doctores que se miran.
+     *
+     * @param  Collection<int, Doctor>  $doctors
+     * @return array{0: Collection<int, Treatment>, 1: Collection<int, Treatment>}
+     */
+    private function findableTreatments(Collection $doctors): array
+    {
+        $offered = Treatment::query()
+            ->active()
+            ->whereHas('doctors', fn (Builder $query) => $query->whereKey($doctors->modelKeys()))
+            ->orderBy('sort_order')
+            ->orderBy('name')
+            ->get();
+
+        $popular = Appointment::query()
+            ->whereIn('doctor_id', $doctors->modelKeys())
+            ->where('starts_at', '>=', now()->subDays(90))
+            ->select('treatment_id', DB::raw('count(*) as total'))
+            ->groupBy('treatment_id')
+            ->orderByDesc('total')
+            ->pluck('treatment_id');
+
+        $quick = $offered
+            ->sortBy(fn (Treatment $treatment) => [$popular->search($treatment->getKey()) === false ? PHP_INT_MAX : $popular->search($treatment->getKey()), $treatment->sort_order])
+            ->take(4)
+            ->values();
+
+        return [$quick, $offered->reject(fn (Treatment $treatment) => $quick->contains($treatment))->values()];
+    }
+
+    /**
+     * El día en lista, para el celular: las citas de todos los doctores en orden de hora, los bloqueos, los huecos
+     * donde aún entra una cita (con "Agendar") y la línea de ahora.
+     *
+     * @param  list<array<string, mixed>>  $columns
+     * @return array<string, mixed>
+     */
+    private function listOfTheDay(array $columns): array
+    {
+        $day = $this->day();
+        $several = count($columns) > 1;
+        $nowMinute = now()->hour * 60 + now()->minute;
+        $items = [];
+        $free = 0;
+
+        $this->preloadPanel(collect($columns)->flatMap(fn (array $column) => array_column($column['appointments'], 'id'))->all());
+
+        foreach ($columns as $column) {
+            $doctor = $several ? ['name' => $column['title'], 'initials' => $column['initials'], 'color' => $column['color']] : null;
+
+            foreach ($column['appointments'] as $appointment) {
+                $items[] = ['type' => 'appointment', 'at' => $appointment['start'], 'order' => 1, 'doctor' => $doctor, 'length' => self::duration($appointment['end'] - $appointment['start'])] + $appointment;
+            }
+
+            foreach ($column['blocks'] as $block) {
+                $wholeDay = $block['start'] === 0 && $block['end'] >= 24 * 60;
+                $items[] = [
+                    'type' => 'block',
+                    'at' => $wholeDay ? -1 : $block['start'],
+                    'order' => 0,
+                    'doctor' => $doctor,
+                    'time' => $wholeDay ? 'Todo el día' : self::clock($block['start']).' – '.self::clock(min($block['end'], 24 * 60 - 1)),
+                    'label' => $block['label'],
+                ];
+            }
+
+            if ($day->gte(today())) {
+                $doctorModel = $this->doctors()->firstWhere('id', $column['doctorId']);
+
+                foreach (app(AvailabilityService::class)->dayGaps($doctorModel, $day, $day->isToday() ? now() : null)['gaps'] as $gap) {
+                    $minutes = (int) $gap['start']->diffInMinutes($gap['end']);
+                    $free += $minutes;
+                    $items[] = [
+                        'type' => 'gap',
+                        'at' => $this->minuteOf($gap['start']),
+                        'order' => 2,
+                        'doctor' => $doctor,
+                        'doctorId' => $column['doctorId'],
+                        'start' => $gap['start']->format('H:i'),
+                        'time' => $gap['start']->format('H:i').' – '.$gap['end']->format('H:i'),
+                        'length' => self::duration($minutes),
+                    ];
+                }
+            }
+        }
+
+        if ($day->isToday()) {
+            $items[] = ['type' => 'now', 'at' => $nowMinute, 'order' => -1, 'time' => now()->format('H:i')];
+        }
+
+        usort($items, fn (array $a, array $b) => [$a['at'], $a['order']] <=> [$b['at'], $b['order']]);
+
+        $appointments = collect($items)->where('type', 'appointment');
+        $waiting = $appointments->where('status', AppointmentStatus::CheckedIn->value)->count();
+
+        return [
+            'items' => $items,
+            'summary' => collect([
+                $appointments->isEmpty() ? 'Sin citas' : $appointments->count().' '.($appointments->count() === 1 ? 'cita' : 'citas'),
+                $waiting ? $waiting.' en sala' : null,
+                $free ? self::duration($free).' '.($free < 120 && $free >= 60 ? 'libre' : 'libres') : null,
+            ])->filter()->implode(' · '),
+            'week' => $this->weekStrip(),
+            'canCreate' => AppointmentResource::canCreate(),
+            'empty' => collect($columns)->contains(fn (array $column) => $column['working'] !== []) ? 'No hay citas este día.' : 'Nadie atiende este día.',
+        ];
+    }
+
+    /**
+     * Los días de la semana arriba de la lista, con lo lleno de cada uno. Los días que nadie atiende no van (salvo el que se mira).
+     *
+     * @return list<array<string, mixed>>
+     */
+    private function weekStrip(): array
+    {
+        $start = $this->weekStart();
+        $load = app(GapFinder::class)->occupancy($this->doctors(), $start, $start->addDays(6));
+        $letters = ['L', 'M', 'X', 'J', 'V', 'S', 'D'];
+
+        return collect(range(0, 6))
+            ->map(fn (int $i) => $start->addDays($i))
+            ->filter(fn (CarbonImmutable $day) => ($load[$day->toDateString()] ?? null) !== null || $day->toDateString() === $this->date)
+            ->map(fn (CarbonImmutable $day) => [
+                'date' => $day->toDateString(),
+                'letter' => $letters[$day->dayOfWeekIso - 1],
+                'number' => $day->day,
+                'label' => ucfirst($day->translatedFormat('l j')).self::loadLabel($load[$day->toDateString()] ?? null),
+                'load' => $load[$day->toDateString()] ?? null,
+                'level' => self::loadLevel($load[$day->toDateString()] ?? null),
+                'isSelected' => $day->toDateString() === $this->date,
+                'isToday' => $day->isToday(),
+                'isPast' => $day->lt(today()),
+            ])
+            ->values()
+            ->all();
+    }
+
+    /**
+     * Las citas de la lista se cargan juntas (con lo que piden sus botones), no una por una.
+     *
+     * @param  list<int>  $ids
+     */
+    private function preloadPanel(array $ids): void
+    {
+        Appointment::query()
+            ->with(['patient.account', 'patient.medicalBackground', 'treatment', 'doctor', 'consultation'])
+            ->whereKey($ids)
+            ->get()
+            ->each(fn (Appointment $appointment) => $this->panelAppointments[$appointment->getKey()] = $appointment);
+    }
+
+    private function calendarMonth(): CarbonImmutable
+    {
+        return preg_match('/^\d{4}-\d{2}$/', $this->month)
+            ? CarbonImmutable::createFromFormat('!Y-m', $this->month)->startOfMonth()
+            : $this->day()->startOfMonth();
+    }
+
+    /** Lo lleno de un día en cuatro pasos, para el color de su barra. */
+    private static function loadLevel(?int $load): string
+    {
+        return match (true) {
+            $load === null => 'closed',
+            $load >= 90 => 'full',
+            $load >= 60 => 'busy',
+            $load > 0 => 'some',
+            default => 'empty',
+        };
+    }
+
+    private static function loadLabel(?int $load): string
+    {
+        return match (true) {
+            $load === null => ' · no se atiende',
+            $load >= 90 => ' · lleno',
+            default => ' · '.$load.' % ocupado',
+        };
+    }
+
+    private static function duration(int $minutes): string
+    {
+        if ($minutes < 60) {
+            return $minutes.' min';
+        }
+
+        return intdiv($minutes, 60).' h'.($minutes % 60 ? ' '.($minutes % 60) : '');
+    }
+
+    private static function clock(int $minute): string
+    {
+        return sprintf('%02d:%02d', intdiv($minute, 60), $minute % 60);
     }
 
     /**
@@ -286,6 +669,7 @@ class Agenda extends Page
                 'patient' => $a->patient->full_name,
                 'shortName' => $a->patient->short_name,
                 'phone' => $a->patient->account ? Phone::display($a->patient->account->phone) : null,
+                'phoneLink' => $a->patient->account ? 'tel:'.Phone::normalize($a->patient->account->phone) : null,
                 'treatment' => $a->treatment->name,
                 'treatmentId' => $a->treatment_id,
                 'status' => $a->status->value,

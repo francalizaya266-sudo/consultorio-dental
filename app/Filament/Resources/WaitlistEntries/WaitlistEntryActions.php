@@ -25,7 +25,7 @@ use Livewire\Component;
 final class WaitlistEntryActions
 {
     /**
-     * Llega con el primer horario libre que le sirve. Al cambiar el doctor, el día o la hora, el
+     * Llega con el primer horario libre que le sirve (o con el que se tocó en la agenda). Al cambiar el doctor, el día o la hora, el
      * mensaje se vuelve a escribir; al abrir WhatsApp queda como avisado con ese horario.
      */
     public static function offer(): Action
@@ -40,7 +40,7 @@ final class WaitlistEntryActions
             ->modalDescription('Elige el horario. Se abrirá WhatsApp con el mensaje listo: solo presiona Enviar.')
             ->modalSubmitActionLabel('Abrir WhatsApp')
             ->modalWidth(Width::TwoExtraLarge)
-            ->fillForm(function (WaitlistEntry $record) {
+            ->fillForm(function (WaitlistEntry $record, array $arguments) {
                 $service = app(WaitlistService::class);
                 $first = $service->firstSlot($record);
                 $state = [
@@ -49,6 +49,11 @@ final class WaitlistEntryActions
                     'date' => ($first['slot']->startsAt ?? $record->firstDate())->toDateString(),
                     'slot' => $first ? $first['slot']->label() : null,
                 ];
+
+                // Desde la agenda llega la hora que se vio libre ese día.
+                if (isset($arguments['doctor'], $arguments['date'], $arguments['time'])) {
+                    $state = ['doctor_id' => (int) $arguments['doctor'], 'date' => (string) $arguments['date'], 'slot' => (string) $arguments['time']] + $state;
+                }
 
                 return $state + ['body' => self::body($record, $state)];
             })
