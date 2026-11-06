@@ -194,6 +194,8 @@ class TreatmentPlanPanelTest extends TestCase
             ->dispatch('odontogram-plan-items-worked', items: [$item->id])
             ->assertSchemaStateSet(['planItems' => [(string) $item->id]])
             ->assertNotified('Marcado como trabajado hoy: Curación con resina · pieza 36 (O).')
+            // Sin cita, la atención no se termina sin motivo.
+            ->fillForm(['chief_complaint' => 'Dolor al masticar'])
             ->callAction('close');
 
         $this->assertSame(1, $item->fresh()->sessions_done);

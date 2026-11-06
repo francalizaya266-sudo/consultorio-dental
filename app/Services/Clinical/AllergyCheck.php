@@ -80,6 +80,16 @@ final class AllergyCheck
             ->all();
     }
 
+    /**
+     * Si el texto nombra algo que empieza como alguna de estas raíces, sin tildes ni mayúsculas.
+     *
+     * @param  list<string>  $stems
+     */
+    public static function mentionsAny(?string $text, array $stems): bool
+    {
+        return self::mentions(self::words($text), $stems);
+    }
+
     /** @return list<string> */
     private static function words(?string $text): array
     {

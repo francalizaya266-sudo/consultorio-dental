@@ -602,13 +602,15 @@ button.agenda-slot:focus-visible { outline: 2px solid var(--primary-600); outlin
 .consult-charge-suggested { display: block; font-size: .75rem; color: var(--gray-500); }
 .consult-charge-total { border-top-width: 2px; padding-top: .5rem; }
 .consult-charge-total > div:last-child { padding-right: .75rem; font-variant-numeric: tabular-nums; }
+/* Lo que hay que revisar antes de empezar (anticoagulantes, embarazo…): una idea por renglón. */
+.consult-risks { margin: .25rem 0 0; padding-left: 1.1rem; list-style: disc; display: grid; gap: .3rem; }
 /*
  * Tablet horizontal y computadora: odontograma a la izquierda, notas a la derecha. El odontograma se queda a la
  * vista mientras se escribe: se pega debajo de la barra (o por abajo, si es más alto que la pantalla).
  */
 @media (min-width: 64rem) {
     .consultation-split > .fi-grid { align-items: start; }
-    .consultation-split > .fi-grid > .fi-grid-col:first-child { position: sticky; top: var(--split-top, 10rem); }
+    .consultation-split:not(.is-single) > .fi-grid > .fi-grid-col:first-child { position: sticky; top: var(--split-top, 10rem); }
     .consultation-split .od-scroll .od-svg { min-width: 26rem; }
 }
 

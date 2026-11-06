@@ -18,8 +18,10 @@ class TreatmentFactory extends Factory
      */
     public function definition(): array
     {
+        // Ni blanqueamiento ni controles: el nombre cambia lo que muestra Atender (TreatmentKind), y una prueba
+        // que no lo pide no debe ver la pantalla de otra cita. Quien los necesita, los crea con su nombre.
         return [
-            'name' => $name = fake()->unique()->randomElement(['Limpieza dental', 'Curación con resina', 'Extracción simple', 'Blanqueamiento', 'Endodoncia', 'Control de ortodoncia']).' '.fake()->unique()->numberBetween(1, 9999),
+            'name' => $name = fake()->unique()->randomElement(['Limpieza dental', 'Curación con resina', 'Extracción simple', 'Corona de porcelana', 'Endodoncia', 'Implante dental']).' '.fake()->unique()->numberBetween(1, 9999),
             'slug' => Str::slug($name),
             'summary' => fake()->sentence(),
             'price_from' => fake()->randomElement([80, 120, 150, 250, 450, 800]),

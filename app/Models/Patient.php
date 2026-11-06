@@ -159,6 +159,12 @@ class Patient extends Model
         return Attribute::get(fn () => $this->birth_date?->age);
     }
 
+    /** Menor de 12: la receta va por su peso y no se le copian recetas de adulto. */
+    public function isChild(): bool
+    {
+        return $this->age !== null && $this->age < 12;
+    }
+
     /** Odontograma de niño o de adulto según la edad. */
     public function suggestedDentition(): Dentition
     {

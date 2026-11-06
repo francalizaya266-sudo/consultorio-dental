@@ -3,6 +3,7 @@
 namespace App\Services\Clinical;
 
 use App\Enums\AppointmentStatus;
+use App\Enums\VisitType;
 use App\Exceptions\ClinicalException;
 use App\Models\Appointment;
 use App\Models\ClinicalTemplate;
@@ -27,6 +28,9 @@ final class ConsultationService
 {
     /** Campos de la atención que una plantilla puede precargar. */
     public const TEMPLATE_FIELDS = ['chief_complaint', 'clinical_exam', 'diagnosis_notes', 'procedures', 'indications', 'next_steps'];
+
+    /** Así empieza el motivo de una sesión del plan, que se escribe solo. */
+    public const PLANNED_VISIT_REASON = 'Continúa su plan de tratamiento: ';
 
     /** Horas en que el doctor puede reabrir una atención cerrada para corregirla. */
     public const REOPEN_HOURS = 24;
@@ -80,7 +84,8 @@ final class ConsultationService
         DB::transaction(function () use ($consultation, $template) {
             $consultation->update($this->templateValues($consultation, $template));
 
-            if ($medications = $this->prescriptions->fromTemplate($template)) {
+            // A un niño no se le copia la receta de la plantilla: va en jarabe y por su peso.
+            if (! $consultation->patient->isChild() && $medications = $this->prescriptions->fromTemplate($template)) {
                 $this->prescriptions->syncForConsultation($consultation, PrescriptionService::merge($this->prescriptions->itemsOf($consultation), $medications));
             }
         });
@@ -175,10 +180,14 @@ final class ConsultationService
 
         if ($template = $this->templateFor($treatment, $by)) {
             $consultation->update($this->templateValues($consultation, $template));
-            $this->prescriptions->syncForConsultation($consultation, $this->prescriptions->fromTemplate($template));
+
+            if (! $patient->isChild()) {
+                $this->prescriptions->syncForConsultation($consultation, $this->prescriptions->fromTemplate($template));
+            }
         }
 
         $this->markScheduledAsDone($consultation, $patient, $treatment, $appointment);
+        $this->noteVisitReason($consultation);
         $this->odontograms->forConsultation($consultation);
 
         return $consultation;
@@ -213,6 +222,45 @@ final class ConsultationService
         } else {
             $consultation->treatments()->attach($treatment);
         }
+    }
+
+    /** El motivo que se escribe solo en una sesión del plan o en un control: si sigue así, nadie anotó nada nuevo. */
+    public static function isAutomaticReason(Consultation $consultation, ?string $reason): bool
+    {
+        $reason = trim((string) $reason);
+
+        return $reason === ''
+            || str_starts_with($reason, self::PLANNED_VISIT_REASON)
+            || $reason === $consultation->mainTreatment()?->name.'.';
+    }
+
+    /**
+     * En una sesión del plan o en un control, el motivo es ese: la historia dice por qué vino sin que nadie lo
+     * escriba. En la sesión del plan, además, la evolución empieza con la pieza que se trabaja.
+     */
+    private function noteVisitReason(Consultation $consultation): void
+    {
+        $type = $consultation->visitType();
+
+        if (filled($consultation->chief_complaint) || ! $type->repeatsAnotherVisit()) {
+            return;
+        }
+
+        if ($type === VisitType::Control) {
+            $consultation->update(['chief_complaint' => $consultation->mainTreatment()?->name.'.']);
+
+            return;
+        }
+
+        $planned = $consultation->plannedWork();
+        $item = $planned->count() === 1 ? $planned->first() : null;
+
+        $consultation->update([
+            'chief_complaint' => self::PLANNED_VISIT_REASON.$planned->map(fn (TreatmentPlanItem $item) => $item->label())->implode(', ').'.',
+            'procedure_details' => $item && filled($item->tooth) && $consultation->procedureKind()->hasTooth()
+                ? array_filter(['tooth' => $item->tooth, 'surfaces' => $item->surfaces], 'filled')
+                : $consultation->procedure_details,
+        ]);
     }
 
     /** @return array<string, string> */

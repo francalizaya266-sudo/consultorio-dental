@@ -6,6 +6,8 @@ use App\Enums\DiagnosisType;
 use App\Enums\PlanItemStatus;
 use App\Enums\SnippetField;
 use App\Enums\SnippetStatus;
+use App\Enums\TreatmentKind;
+use App\Enums\VisitType;
 use App\Exceptions\ClinicalException;
 use App\Filament\Actions\SendWhatsAppAction;
 use App\Filament\Actions\UploadClinicalFilesAction;
@@ -31,15 +33,21 @@ use App\Models\TreatmentPlanItem;
 use App\Models\User;
 use App\Services\Billing\BillingService;
 use App\Services\Clinical\AllergyCheck;
+use App\Services\Clinical\ConsultationService;
+use App\Services\Clinical\MedicationCheck;
+use App\Services\Clinical\PediatricDose;
 use App\Services\Clinical\PrescriptionService;
 use App\Services\Clinical\TreatmentPlanService;
+use App\Services\Clinical\TreatmentRisks;
 use App\Support\CampaignText;
 use App\Support\Money;
+use Closure;
 use Filament\Actions\Action;
 use Filament\Forms\Components\CheckboxList;
 use Filament\Forms\Components\Repeater;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\TextInput;
+use Filament\Forms\Components\Toggle;
 use Filament\Forms\Components\ToggleButtons;
 use Filament\Notifications\Notification;
 use Filament\Schemas\Components\Actions;
@@ -59,8 +67,10 @@ use Filament\Support\Enums\FontWeight;
 use Filament\Support\Enums\Width;
 use Filament\Support\Icons\Heroicon;
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Support\Arr;
 use Illuminate\Support\Collection;
 use Illuminate\Support\HtmlString;
+use Illuminate\Support\Str;
 
 /**
  * Pantalla de la atención: todo lo que el doctor escribe mientras atiende, en el orden en que pasa la cita.
@@ -95,7 +105,12 @@ class ConsultationForm
                 View::make('filament.clinical.consultation-bar')
                     ->viewData(fn (?Consultation $record, $livewire) => self::barData($record, $livewire)),
 
-                self::step(1, 'Antes de empezar', 'Lo que cuenta el paciente y lo que encuentras al examinarlo.'),
+                self::step(1, 'Antes de empezar', fn (?Consultation $record) => match ($record?->visitType()) {
+                    VisitType::PlanSession => 'Es una sesión de su plan: revisa sus antecedentes y anota solo lo que haya de nuevo.',
+                    VisitType::Control => 'Es un control: pregúntale cómo le ha ido y anota solo si hay algo nuevo.',
+                    VisitType::Urgent => 'Sin cita o de urgencia: qué le pasa, desde cuándo, cuánto le duele y sus signos vitales.',
+                    default => 'Lo que cuenta el paciente y lo que encuentras al examinarlo.',
+                }),
 
                 Callout::make('Faltan los antecedentes médicos')
                     ->key('backgroundMissing')
@@ -104,9 +119,19 @@ class ConsultationForm
                     ->actions([self::askBackgroundAction()])
                     ->visible(fn (?Consultation $record) => $record && ! $record->patient->medicalBackground),
 
+                Callout::make('Revisa antes de empezar')
+                    ->key('risks')
+                    ->description(fn (?Consultation $record) => self::bulletList($record ? self::risks($record) : []))
+                    ->icon(Heroicon::OutlinedShieldExclamation)
+                    ->warning()
+                    ->visible(fn (?Consultation $record) => $record && self::risks($record) !== []),
+
                 Section::make('Motivo y examen')
                     ->id('motivo')
                     ->icon(Heroicon::OutlinedChatBubbleLeftEllipsis)
+                    ->description(fn (?Consultation $record) => self::reasonHint($record))
+                    ->collapsible(fn (?Consultation $record) => (bool) $record?->visitType()->repeatsAnotherVisit())
+                    ->collapsed(fn (?Consultation $record) => self::foldsReason($record), shouldMakeComponentCollapsible: false)
                     ->columns(['default' => 1, 'lg' => 2])
                     ->schema([
                         Callout::make('Al reservar escribió')
@@ -139,7 +164,7 @@ class ConsultationForm
                                 QuickTextarea::make('current_illness')
                                     ->label('Enfermedad actual')
                                     ->snippets(SnippetField::Any),
-                                Grid::make(['default' => 1, 'sm' => 3])
+                                Grid::make(['default' => 2, 'sm' => 4])
                                     ->schema([
                                         TextInput::make('vital_signs.blood_pressure')
                                             ->label('Presión arterial')
@@ -157,6 +182,13 @@ class ConsultationForm
                                             ->numeric()
                                             ->minValue(30)
                                             ->maxValue(45),
+                                        TextInput::make('vital_signs.pain')
+                                            ->label('Dolor')
+                                            ->helperText('De 0 (nada) a 10')
+                                            ->suffix('/10')
+                                            ->integer()
+                                            ->minValue(0)
+                                            ->maxValue(10),
                                     ]),
                             ]),
                     ]),
@@ -178,10 +210,12 @@ class ConsultationForm
                             ->viewData(fn (?Consultation $record) => ['files' => $record?->files()->latest('id')->get() ?? collect()]),
                     ]),
 
-                self::step(2, 'Lo que hiciste', 'Odontograma, diagnóstico, lo que se cobra y cómo fue.'),
+                self::step(2, 'Lo que hiciste', fn (?Consultation $record) => self::hidesOdontogram($record)
+                    ? 'Diagnóstico, lo que se cobra y cómo fue.'
+                    : 'Odontograma, diagnóstico, lo que se cobra y cómo fue.'),
 
                 Grid::make(['default' => 1, 'lg' => 5])
-                    ->extraAttributes(['class' => 'consultation-split'])
+                    ->extraAttributes(fn (?Consultation $record) => ['class' => self::hidesOdontogram($record) ? 'consultation-split is-single' : 'consultation-split'])
                     ->schema([
                         Group::make([
                             Section::make('Odontograma')
@@ -192,13 +226,15 @@ class ConsultationForm
                                     Livewire::make(OdontogramChart::class, ['editable' => true])
                                         ->key('odontogram'),
                                 ]),
-                        ])->columnSpan(['lg' => 3]),
+                        ])
+                            ->columnSpan(['lg' => 3])
+                            ->hidden(fn (?Consultation $record) => self::hidesOdontogram($record)),
                         Group::make([
                             Section::make('Diagnóstico')
                                 ->id('diagnostico')
                                 ->key('diagnosis')
                                 ->icon(Heroicon::OutlinedClipboardDocumentCheck)
-                                ->description('Los del odontograma se agregan desde las sugerencias, debajo del dibujo.')
+                                ->description(fn (?Consultation $record) => self::diagnosisHint($record))
                                 ->schema([
                                     Repeater::make('diagnoses')
                                         ->hiddenLabel()
@@ -291,7 +327,7 @@ class ConsultationForm
                                         ->visible(fn (?Consultation $record) => $record && self::workableItems($record)->isNotEmpty()),
                                     Text::make('No tiene un plan de tratamiento vigente. Si hace falta, ármalo desde las sugerencias que salen debajo del odontograma.')
                                         ->color('gray')
-                                        ->visible(fn (?Consultation $record) => ! $record || self::workableItems($record)->isEmpty()),
+                                        ->visible(fn (?Consultation $record) => ! $record || (self::workableItems($record)->isEmpty() && ! self::hidesOdontogram($record))),
                                     Group::make(fn (Get $get, ?Consultation $record) => $record ? self::chargeLines($record, $get('treatments'), $get('planItems'), $get('prices')) : [])
                                         ->extraAttributes(['class' => 'consult-charges']),
                                 ]),
@@ -301,6 +337,10 @@ class ConsultationForm
                                 ->icon(Heroicon::OutlinedWrenchScrewdriver)
                                 ->description('Cómo fue: anestesia, técnica, materiales e incidencias.')
                                 ->schema([
+                                    Grid::make(['default' => 2, 'sm' => 3])
+                                        ->key('procedureDetails')
+                                        ->schema(fn (?Consultation $record) => self::procedureDetailFields($record))
+                                        ->visible(fn (?Consultation $record) => $record && $record->procedureKind()->detailFields() !== []),
                                     QuickTextarea::make('procedures')
                                         ->hiddenLabel()
                                         ->label('Nota de evolución')
@@ -310,7 +350,7 @@ class ConsultationForm
                                         ->placeholder('Ej.: resina en 36 la próxima sesión')
                                         ->snippets(SnippetField::Any),
                                 ]),
-                        ])->columnSpan(['lg' => 2]),
+                        ])->columnSpan(fn (?Consultation $record) => self::hidesOdontogram($record) ? 'full' : ['lg' => 2]),
                     ]),
 
                 self::step(3, 'Para el paciente', 'Lo que se lleva a casa. Las indicaciones y la receta se imprimen o se envían juntas.'),
@@ -330,6 +370,32 @@ class ConsultationForm
                             ->danger()
                             ->actions([self::askBackgroundAction()])
                             ->visible(fn (Get $get, ?Consultation $record) => $record && ! $record->patient->medicalBackground && self::hasMedications($get('prescription_items'))),
+                        Group::make([
+                            Callout::make(fn (?Consultation $record) => 'Tiene '.$record?->patient->age.' años: la dosis va por su peso')
+                                ->key('childDose')
+                                ->description('Anota su peso y elige el jarabe: la dosis se calcula sola y la puedes corregir. Las recetas de adulto de las plantillas no se copian.')
+                                ->icon(Heroicon::OutlinedScale)
+                                ->info(),
+                            Flex::make([
+                                TextInput::make('vital_signs.weight')
+                                    ->label('Peso')
+                                    ->suffix('kg')
+                                    ->numeric()
+                                    ->minValue(2)
+                                    ->maxValue(80)
+                                    ->live(onBlur: true)
+                                    ->grow(false),
+                                Actions::make(self::childMedicationActions())
+                                    ->key('childMedications'),
+                            ])->from('sm')->verticallyAlignEnd(),
+                            Callout::make('Falta su peso')
+                                ->key('childWithoutWeight')
+                                ->description('Sin el peso no se puede revisar la dosis de la receta.')
+                                ->danger()
+                                ->visible(fn (Get $get) => self::hasMedications($get('prescription_items')) && blank($get('vital_signs.weight'))),
+                        ])
+                            ->key('child')
+                            ->visible(fn (?Consultation $record) => (bool) $record?->patient->isChild()),
                         Repeater::make('prescription_items')
                             ->label('Receta')
                             ->addActionLabel('Agregar medicamento')
@@ -351,11 +417,11 @@ class ConsultationForm
                                     ->placeholder('1 tableta cada 8 horas por 3 días')
                                     ->maxLength(255)
                                     ->columnSpan(3),
-                                // Avisa si el medicamento choca con una alergia registrada.
-                                Text::make(fn (Get $get, EditConsultation $livewire) => '⚠ '.AllergyCheck::warning($livewire->getRecord()->patient, $get('medication')))
+                                // Avisa si el medicamento choca con una alergia, la edad, el embarazo o una enfermedad.
+                                Text::make(fn (Get $get, EditConsultation $livewire) => '⚠ '.implode(' ', self::medicationWarnings($livewire->getRecord()->patient, $get('medication'))))
                                     ->color('danger')
                                     ->weight(FontWeight::Bold)
-                                    ->visible(fn (Get $get, EditConsultation $livewire) => AllergyCheck::warning($livewire->getRecord()->patient, $get('medication')) !== null)
+                                    ->visible(fn (Get $get, EditConsultation $livewire) => self::medicationWarnings($livewire->getRecord()->patient, $get('medication')) !== [])
                                     ->columnSpanFull(),
                             ]),
                         Actions::make(fn () => self::medicationSnippets()
@@ -369,22 +435,221 @@ class ConsultationForm
                                     $item = app(PrescriptionService::class)->fromSnippet($snippet);
                                     $set('prescription_items', PrescriptionService::merge($get('prescription_items') ?? [], [$item]));
                                     $snippet->recordUse(auth()->user());
-
-                                    if ($warning = AllergyCheck::warning($livewire->getRecord()->patient, $item['medication'])) {
-                                        Notification::make()->danger()->title($warning)->persistent()->send();
-                                    }
+                                    self::notifyWarnings($livewire->getRecord()->patient, $item['medication']);
                                 }))
-                            ->all()),
+                            ->all())
+                            ->visible(fn (?Consultation $record) => ! $record?->patient->isChild()),
                     ]),
             ]);
     }
 
-    /** Separador de cada paso de la atención: número, nombre y para qué sirve. */
-    private static function step(int $number, string $title, string $description): View
+    /**
+     * Separador de cada paso de la atención: número, nombre y para qué sirve.
+     *
+     * @param  string|Closure(?Consultation): string  $description
+     */
+    private static function step(int $number, string $title, string|Closure $description): View
     {
         return View::make('filament.clinical.consultation-step')
             ->key('step'.$number)
-            ->viewData(['number' => $number, 'title' => $title, 'description' => $description]);
+            ->viewData(fn (?Consultation $record) => ['number' => $number, 'title' => $title, 'description' => $description instanceof Closure ? $description($record) : $description]);
+    }
+
+    /**
+     * Motivo y examen se pliega en una sesión del plan: ya están en la atención donde se diagnosticó. Se queda
+     * abierto si el paciente escribió algo al reservar, si ya se anotó algo más que el motivo automático o si
+     * hay que tomarle los signos vitales (van dentro).
+     */
+    public static function foldsReason(?Consultation $record): bool
+    {
+        if (! $record || ! $record->visitType()->repeatsAnotherVisit()) {
+            return false;
+        }
+
+        $note = trim((string) $record->appointment?->patient_note);
+
+        return blank($record->clinical_exam)
+            && ! self::opensVitals($record)
+            && ($note === '' || str_contains((string) $record->chief_complaint, $note))
+            && ConsultationService::isAutomaticReason($record, $record->chief_complaint);
+    }
+
+    /** Qué viene a hacer: de su plan (y desde cuándo), un control, una urgencia o, si es primera vez, por qué hay que anotarlo. */
+    private static function reasonHint(?Consultation $record): ?string
+    {
+        $type = $record?->visitType();
+
+        if ($type === VisitType::Control) {
+            return 'Cita de control: anota solo si cuenta alguna molestia o algo nuevo.';
+        }
+
+        if ($type === VisitType::Urgent) {
+            return 'Anota qué le duele o qué le pasa y desde cuándo. Sin motivo no se puede terminar la atención.';
+        }
+
+        $planned = $record?->plannedWork();
+
+        if ($type === VisitType::PlanSession && $planned?->isNotEmpty()) {
+            $since = $planned->map(fn (TreatmentPlanItem $item) => $item->plan->consultation?->attended_at ?? $item->plan->accepted_at)->filter()->min();
+
+            return 'Sesión de su plan'.($since ? ' del '.$since->format('d/m') : '').': '
+                .$planned->map(fn (TreatmentPlanItem $item) => $item->label())->implode(', ')
+                .'. Anota aquí solo si cuenta algo nuevo.';
+        }
+
+        return $type === VisitType::FirstVisit
+            ? 'No viene de un plan: lo que siente y lo que encuentras es lo que respalda en su historia el tratamiento de hoy.'
+            : null;
+    }
+
+    /**
+     * Lo que hay que revisar hoy por sus antecedentes y el tratamiento (anticoagulantes en una extracción,
+     * embarazo en un blanqueamiento). En un control no se trabaja, así que no hay nada que revisar.
+     *
+     * @return list<string>
+     */
+    public static function risks(Consultation $record): array
+    {
+        return once(fn () => TreatmentRisks::for($record->patient, $record->procedureKind(), self::consentStatus($record) !== null));
+    }
+
+    /**
+     * En un control de ortodoncia o en un blanqueamiento el odontograma no cambia: no se muestra y la columna
+     * de la derecha toma todo el ancho.
+     */
+    public static function hidesOdontogram(?Consultation $record): bool
+    {
+        if (! $record) {
+            return false;
+        }
+
+        $kind = TreatmentKind::for($record->mainTreatment());
+
+        return $kind === TreatmentKind::Whitening
+            || ($kind === TreatmentKind::Orthodontics && $record->visitType() === VisitType::Control);
+    }
+
+    /**
+     * Avisos de un medicamento de la receta: alergias, edad, embarazo, enfermedades y lo que ya toma.
+     *
+     * @return list<string>
+     */
+    public static function medicationWarnings(?Patient $patient, ?string $medication): array
+    {
+        return array_values(array_filter([AllergyCheck::warning($patient, $medication), ...MedicationCheck::warnings($patient, $medication)]));
+    }
+
+    private static function notifyWarnings(?Patient $patient, ?string $medication): void
+    {
+        foreach (self::medicationWarnings($patient, $medication) as $warning) {
+            Notification::make()->danger()->title($warning)->persistent()->send();
+        }
+    }
+
+    /**
+     * Jarabes para niños, con la dosis calculada por su peso.
+     *
+     * @return list<Action>
+     */
+    private static function childMedicationActions(): array
+    {
+        return collect(PediatricDose::MEDICATIONS)
+            ->map(fn (array $drug, string $key) => Action::make('addChildMedication'.Str::studly($key))
+                ->label($drug['label'])
+                ->icon(Heroicon::OutlinedPlus)
+                ->size('sm')
+                ->color('gray')
+                ->outlined()
+                ->action(function (Get $get, Set $set, EditConsultation $livewire) use ($key) {
+                    $weight = (float) $get('vital_signs.weight');
+
+                    if ($weight < 2 || $weight > 80) {
+                        Notification::make()->warning()->title('Primero anota su peso: la dosis se calcula con él.')->send();
+
+                        return;
+                    }
+
+                    $item = PediatricDose::item($key, $weight);
+                    $set('prescription_items', PrescriptionService::merge($get('prescription_items') ?? [], [$item]));
+                    self::notifyWarnings($livewire->getRecord()->patient, $item['medication']);
+                }))
+            ->values()
+            ->all();
+    }
+
+    /**
+     * Los datos propios del tratamiento (pieza y color en una resina, lote en un implante), arriba de la evolución.
+     *
+     * @return list<Component>
+     */
+    private static function procedureDetailFields(?Consultation $record): array
+    {
+        if (! $record) {
+            return [];
+        }
+
+        return collect($record->procedureKind()->detailFields())
+            ->map(fn (array $field, string $key) => match ($field['type']) {
+                'toggle' => Toggle::make("procedure_details.{$key}")
+                    ->label($field['label'])
+                    ->inline(false),
+                'select' => Select::make("procedure_details.{$key}")
+                    ->label($field['label'])
+                    ->options($field['options'] ?? []),
+                'number' => TextInput::make("procedure_details.{$key}")
+                    ->label($field['label'])
+                    ->numeric()
+                    ->minValue(0)
+                    ->suffix($field['suffix'] ?? null),
+                default => TextInput::make("procedure_details.{$key}")
+                    ->label($field['label'])
+                    ->placeholder($field['placeholder'] ?? null)
+                    ->maxLength(120),
+            })
+            ->values()
+            ->all();
+    }
+
+    /** @param  list<string>  $items */
+    private static function bulletList(array $items): HtmlString
+    {
+        return new HtmlString('<ul class="consult-risks">'.collect($items)->map(fn (string $item) => '<li>'.e($item).'</li>')->implode('').'</ul>');
+    }
+
+    private static function diagnosisHint(?Consultation $record): string
+    {
+        $planned = $record ? self::plannedDiagnoses($record) : [];
+
+        return match (true) {
+            $planned !== [] => 'Del plan: '.implode(', ', $planned).'. Agrega aquí solo lo que encuentres de nuevo.',
+            self::hidesOdontogram($record) => 'Agrégalo solo si encuentras algo.',
+            default => 'Los del odontograma se agregan desde las sugerencias, debajo del dibujo.',
+        };
+    }
+
+    /**
+     * Diagnósticos de la atención donde se armó el plan, de las piezas que hoy se trabajan.
+     *
+     * @return list<string>
+     */
+    public static function plannedDiagnoses(Consultation $record): array
+    {
+        $planned = $record->plannedWork();
+        $teeth = $planned->pluck('tooth')->filter()->map(fn (mixed $tooth) => (string) $tooth)->all();
+
+        if ($teeth === []) {
+            return [];
+        }
+
+        return $planned->map(fn (TreatmentPlanItem $item) => $item->plan->consultation)
+            ->filter()
+            ->unique(fn (Consultation $origin) => $origin->getKey())
+            ->flatMap(fn (Consultation $origin) => $origin->diagnoses()->with('icd10Code')->get())
+            ->filter(fn ($diagnosis) => in_array((string) $diagnosis->tooth, $teeth, true))
+            ->map(fn ($diagnosis) => ($diagnosis->icd10Code?->description ?? $diagnosis->description).' · '.$diagnosis->tooth)
+            ->unique()
+            ->values()
+            ->all();
     }
 
     /** Abre la ventana de antecedentes de la página (la misma desde cualquier aviso). */
@@ -420,7 +685,7 @@ class ConsultationForm
             'hasBackground' => $patient?->medicalBackground !== null,
             'consent' => $record ? self::consentStatus($record) : null,
             'autosavedAt' => $livewire->autosavedAt ?? null,
-            'sections' => self::SECTIONS,
+            'sections' => self::hidesOdontogram($record) ? Arr::except(self::SECTIONS, 'odontograma') : self::SECTIONS,
             'filled' => $record ? self::filledSections($record, $data) : [],
             'historyUrl' => $patient ? PatientResource::getUrl('clinical', ['record' => $patient]) : null,
         ];
@@ -456,14 +721,15 @@ class ConsultationForm
      */
     public static function filledSections(Consultation $consultation, array $data): array
     {
-        $any = fn (mixed ...$values) => collect($values)->flatten()->contains(fn (mixed $value) => filled(is_string($value) ? trim($value) : $value));
+        // Un interruptor apagado no cuenta como dato escrito.
+        $any = fn (mixed ...$values) => collect($values)->flatten()->contains(fn (mixed $value) => $value !== false && filled(is_string($value) ? trim($value) : $value));
 
         return array_keys(array_filter([
-            'motivo' => $any($data['chief_complaint'] ?? null, $data['clinical_exam'] ?? null, $data['current_illness'] ?? null, $data['vital_signs'] ?? []),
+            'motivo' => $any($data['chief_complaint'] ?? null, $data['clinical_exam'] ?? null, $data['current_illness'] ?? null, Arr::except($data['vital_signs'] ?? [], 'weight')),
             'archivos' => $consultation->files()->exists(),
             'diagnostico' => filled($data['diagnoses'] ?? []) || $any($data['diagnosis_notes'] ?? null),
             'plan' => filled($data['treatments'] ?? []) || filled($data['planItems'] ?? []),
-            'evolucion' => $any($data['procedures'] ?? null, $data['next_steps'] ?? null),
+            'evolucion' => $any($data['procedures'] ?? null, $data['next_steps'] ?? null, $data['procedure_details'] ?? []),
             'indicaciones' => $any($data['indications'] ?? null) || self::hasMedications($data['prescription_items'] ?? []),
         ]));
     }
@@ -481,9 +747,11 @@ class ConsultationForm
             return false;
         }
 
+        // El peso del niño se anota en la receta: no abre los signos vitales.
         return filled($record->current_illness)
-            || collect($record->vital_signs ?? [])->filter(fn (mixed $value) => filled($value))->isNotEmpty()
-            || self::riskConditions($record) !== [];
+            || collect(Arr::except($record->vital_signs ?? [], 'weight'))->filter(fn (mixed $value) => filled($value))->isNotEmpty()
+            || self::riskConditions($record) !== []
+            || $record->visitType() === VisitType::Urgent;
     }
 
     private static function vitalsHint(?Consultation $record): string

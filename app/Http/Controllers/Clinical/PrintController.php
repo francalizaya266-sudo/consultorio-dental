@@ -35,6 +35,8 @@ class PrintController extends Controller
             'patient' => $prescription->patient,
             'doctor' => $prescription->doctor,
             'phone' => $prescription->patient->account ? Phone::display($prescription->patient->account->phone) : null,
+            // En la receta de un niño va su peso: con él se calculó la dosis.
+            'weight' => filled($weight = $prescription->consultation?->vital_signs['weight'] ?? null) ? $weight.' kg' : null,
             // Como en el recetario: "K02.1 Caries de la dentina (pieza 36)".
             'diagnosis' => $prescription->consultation?->diagnoses
                 ->map(fn ($diagnosis) => ($diagnosis->icd10Code ? "{$diagnosis->icd10Code->code} {$diagnosis->icd10Code->description}" : $diagnosis->description).($diagnosis->tooth ? " (pieza {$diagnosis->tooth})" : ''))

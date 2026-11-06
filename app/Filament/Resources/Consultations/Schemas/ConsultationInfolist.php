@@ -39,11 +39,7 @@ class ConsultationInfolist
                         TextEntry::make('clinical_exam')->label('Examen clínico')->hidden(fn ($state) => blank($state))->columnSpanFull(),
                         TextEntry::make('vitals')
                             ->label('Signos vitales')
-                            ->state(fn (Consultation $record) => collect([
-                                filled($record->vital_signs['blood_pressure'] ?? null) ? 'PA '.$record->vital_signs['blood_pressure'] : null,
-                                filled($record->vital_signs['heart_rate'] ?? null) ? 'Pulso '.$record->vital_signs['heart_rate'].' lpm' : null,
-                                filled($record->vital_signs['temperature'] ?? null) ? $record->vital_signs['temperature'].' °C' : null,
-                            ])->filter()->implode(' · ') ?: null)
+                            ->state(fn (Consultation $record) => $record->vitalsSummary())
                             ->hidden(fn ($state) => blank($state))
                             ->columnSpanFull(),
                         RepeatableEntry::make('diagnoses')
@@ -61,6 +57,11 @@ class ConsultationInfolist
                                     ])->filter()->implode(' · ')),
                             ]),
                         TextEntry::make('diagnosis_notes')->label('Notas del diagnóstico')->hidden(fn ($state) => blank($state))->columnSpanFull(),
+                        TextEntry::make('procedure_summary')
+                            ->label('Datos del tratamiento')
+                            ->state(fn (Consultation $record) => $record->procedureSummary())
+                            ->hidden(fn ($state) => blank($state))
+                            ->columnSpanFull(),
                         TextEntry::make('procedures')->label('Evolución (qué se hizo)')->hidden(fn ($state) => blank($state))->columnSpanFull(),
                         TextEntry::make('done')
                             ->label('Lo que se hizo')

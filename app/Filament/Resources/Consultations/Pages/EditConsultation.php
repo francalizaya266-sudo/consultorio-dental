@@ -3,6 +3,7 @@
 namespace App\Filament\Resources\Consultations\Pages;
 
 use App\Enums\DiagnosisType;
+use App\Enums\VisitType;
 use App\Exceptions\ClinicalException;
 use App\Filament\Actions\EditMedicalBackgroundAction;
 use App\Filament\Actions\SignConsentAction;
@@ -281,7 +282,13 @@ class EditConsultation extends EditRecord
                 ? ['supplies_used' => app(InventoryService::class)->plannedUsage($this->getConsultation(), $this->data['planItems'] ?? null, $this->data['treatments'] ?? null)]
                 : [])
             ->schema(fn () => self::tracksInventory() ? [SuppliesUsedField::make()] : [])
-            ->action(function (array $data) {
+            ->action(function (array $data, Action $action) {
+                // Sin cita o de urgencia, la historia tiene que decir por qué vino.
+                if ($this->getConsultation()->visitType() === VisitType::Urgent && blank($this->data['chief_complaint'] ?? null)) {
+                    Notification::make()->danger()->title('Falta el motivo')->body('En una atención sin cita o de urgencia, anota qué le pasa antes de terminar.')->send();
+                    $action->halt();
+                }
+
                 $this->save(shouldRedirect: false, shouldSendSavedNotification: false);
                 $consultation = $this->getConsultation();
 
@@ -339,10 +346,13 @@ class EditConsultation extends EditRecord
                 $template = ClinicalTemplate::find($data['template']);
 
                 if ($template) {
+                    // A un niño no se le copia la receta de la plantilla: va en jarabe y por su peso.
+                    $medications = $this->getConsultation()->patient->isChild() ? [] : app(PrescriptionService::class)->fromTemplate($template);
+
                     $this->data = [
                         ...$this->data,
                         ...ConsultationService::mergeTemplate($this->data, $template),
-                        'prescription_items' => PrescriptionService::merge($this->data['prescription_items'] ?? [], app(PrescriptionService::class)->fromTemplate($template)),
+                        'prescription_items' => PrescriptionService::merge($this->data['prescription_items'] ?? [], $medications),
                     ];
                     Notification::make()->success()->title('Plantilla aplicada. Revisa y guarda.')->send();
                 }
