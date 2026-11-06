@@ -10,6 +10,7 @@ use App\Models\Charge;
 use App\Models\Consultation;
 use App\Models\Patient;
 use App\Models\Payment;
+use App\Models\Treatment;
 use App\Models\TreatmentPlan;
 use App\Models\TreatmentPlanInstallment;
 use App\Models\TreatmentPlanItem;
@@ -21,8 +22,9 @@ use Illuminate\Support\Facades\DB;
 
 /**
  * Cargos y pagos. Lo realizado se carga solo al terminar la atención (o al marcar la cita
- * como atendida): la sesión del procedimiento del plan, con el precio acordado, o el
- * tratamiento de la cita con su precio y la promoción. Lo que el paciente aceptó pagar con
+ * como atendida): lo que el doctor dejó marcado como hecho, es decir, las sesiones del plan
+ * con el precio acordado y los tratamientos sueltos con su precio y la promoción. Lo programado
+ * en la cita llega marcado, pero lo que no se hizo no se cobra. Lo que el paciente aceptó pagar con
  * cronograma (pago único o cuotas) no se carga por sesión: se carga cada pago al vencer.
  * Recepción lo revisa al cobrar. Saldo = cargos − pagos, sin los anulados; los pagos cubren
  * primero los cargos más antiguos. Nada se borra: se anula con motivo.
@@ -34,10 +36,10 @@ final class BillingService
 
     private const CHECKOUT_DISCOUNT = 'Descuento al cobrar';
 
-    /** Carga lo trabajado en la atención. Si se reabre y se vuelve a cerrar, no se carga dos veces. */
+    /** Carga lo que se hizo en la atención. Si se reabre y se vuelve a cerrar, no se carga dos veces. */
     public function chargeConsultation(Consultation $consultation, User $by): void
     {
-        $consultation->loadMissing(['appointment.treatment', 'appointment.campaign', 'planItems.plan']);
+        $consultation->loadMissing(['appointment.campaign', 'planItems.plan', 'treatments']);
 
         DB::transaction(function () use ($consultation, $by) {
             $charges = Charge::query()->where('consultation_id', $consultation->getKey())->get();
@@ -58,18 +60,71 @@ final class BillingService
                 $add('item-'.$item->getKey(), fn () => $this->chargePlanSession($item, $by, $consultation->appointment, $consultation));
             }
 
-            $appointment = $consultation->appointment;
-            $workedTreatments = $consultation->planItems->pluck('treatment_id')->filter()->all();
-
-            // Si lo trabajado del plan es el mismo tratamiento de la cita, la cita ya está en el plan.
-            if ($appointment && $appointment->treatment_plan_item_id === null && ! in_array($appointment->treatment_id, $workedTreatments, true)) {
-                $add('treatment-'.$appointment->treatment_id, fn () => $this->chargeTreatment($appointment, $by, $consultation));
+            foreach ($consultation->treatments as $treatment) {
+                $add('treatment-'.$treatment->getKey(), fn () => $this->charge($treatment, $consultation->patient_id, $consultation->doctor_id, $by, $consultation->appointment, $consultation));
             }
 
             $charges
                 ->filter(fn (Charge $c) => $c->voided_at === null && ! in_array(self::key($c), $expected, true))
                 ->each(fn (Charge $c) => $this->void($c, $by, self::CORRECTED));
         });
+    }
+
+    /**
+     * Lo que cargará la atención al terminarla con lo marcado como hecho, para que el doctor lo vea mientras
+     * atiende. Si ya se terminó una vez y se reabrió, lo que ya se cargó.
+     *
+     * @param  list<int|string>  $treatmentIds
+     * @param  list<int|string>  $planItemIds
+     * @return list<array{label: string, amount: float|null}> Sin monto: ya se paga con la forma de pago del plan.
+     */
+    public function previewConsultation(Consultation $consultation, array $treatmentIds, array $planItemIds): array
+    {
+        // Como al terminar: lo que ya se cargó no se vuelve a cargar, y lo que recepción quitó no vuelve.
+        $charged = Charge::query()
+            ->where('consultation_id', $consultation->getKey())
+            ->where(fn ($query) => $query->whereNull('voided_at')->orWhereNot('void_reason', self::CORRECTED))
+            ->orderByRaw('voided_at is not null')
+            ->get()
+            ->unique(fn (Charge $c) => self::key($c))
+            ->keyBy(fn (Charge $c) => self::key($c))
+            ->map(fn (Charge $c) => ['label' => $c->description.($c->voided_at ? ' · se quitó al cobrar' : ''), 'amount' => $c->voided_at ? 0.0 : $c->net()]);
+        $campaign = $consultation->appointment?->campaign;
+        $lines = [];
+
+        $items = TreatmentPlanItem::query()->with('plan')->whereKey($planItemIds)->orderBy('treatment_plan_id')->orderBy('sort_order')->get();
+
+        foreach ($items as $item) {
+            if ($line = $charged->get('item-'.$item->getKey())) {
+                $lines[] = $line;
+
+                continue;
+            }
+
+            if ($item->in_payment_schedule) {
+                $lines[] = ['label' => $item->label().' · incluida en su forma de pago', 'amount' => null];
+
+                continue;
+            }
+
+            [$amount, $session] = $this->nextSession($item);
+            $sessions = max(1, (int) $item->sessions_planned);
+            $lines[] = ['label' => $item->label().($sessions > 1 ? " · sesión {$session} de {$sessions}" : ''), 'amount' => $amount];
+        }
+
+        foreach (Treatment::query()->whereKey($treatmentIds)->orderBy('name')->get() as $treatment) {
+            if ($line = $charged->get('treatment-'.$treatment->getKey())) {
+                $lines[] = $line;
+
+                continue;
+            }
+
+            $price = (float) $treatment->price_from;
+            $discount = $price > 0 ? ($campaign?->discountOn($price, $treatment->getKey()) ?? 0.0) : 0.0;
+            $lines[] = ['label' => $treatment->name.($discount > 0 ? ' · con '.$campaign->name : ''), 'amount' => round(max(0, $price - $discount), 2)];
+        }
+
+        return $lines;
     }
 
     /** Cita marcada como atendida sin atención clínica escrita: se carga su tratamiento o la sesión del plan. */
@@ -122,23 +177,28 @@ final class BillingService
     }
 
     /** El tratamiento de la cita a su precio de lista, con el descuento de la promoción con que reservó. */
-    public function chargeTreatment(Appointment $appointment, User $by, ?Consultation $consultation = null): ?Charge
+    public function chargeTreatment(Appointment $appointment, User $by): ?Charge
     {
-        $treatment = $appointment->treatment;
+        return $this->charge($appointment->treatment, $appointment->patient_id, $appointment->doctor_id, $by, $appointment);
+    }
+
+    /** Un tratamiento a su precio de lista, con el descuento de la promoción con que se reservó la cita, si lo incluye. */
+    private function charge(?Treatment $treatment, int $patientId, int $doctorId, User $by, ?Appointment $appointment, ?Consultation $consultation = null): ?Charge
+    {
         $price = (float) $treatment?->price_from;
 
         if ($price <= 0) {
             return null;
         }
 
-        $discount = $appointment->campaign?->discountOn($price, $treatment->getKey()) ?? 0.0;
+        $discount = $appointment?->campaign?->discountOn($price, $treatment->getKey()) ?? 0.0;
 
         return Charge::create([
-            'patient_id' => $appointment->patient_id,
-            'appointment_id' => $appointment->getKey(),
+            'patient_id' => $patientId,
+            'appointment_id' => $appointment?->getKey(),
             'consultation_id' => $consultation?->getKey(),
             'treatment_id' => $treatment->getKey(),
-            'doctor_id' => $appointment->doctor_id,
+            'doctor_id' => $doctorId,
             'description' => $treatment->name,
             'amount' => $price,
             'discount' => $discount,

@@ -140,6 +140,18 @@ class Appointment extends Model
         return $query->where('starts_at', '<', today())->whereIn('status', AppointmentStatus::open());
     }
 
+    /** Era de un día anterior: lo que se registre ahora (que vino, que se atendió) queda con su fecha y su hora. */
+    public function isFromAnEarlierDay(): bool
+    {
+        return $this->starts_at->lt(today());
+    }
+
+    /** Como en "leftOpen": de un día pasado y nadie la cerró. */
+    public function isLeftOpen(): bool
+    {
+        return $this->isFromAnEarlierDay() && in_array($this->status, AppointmentStatus::open(), true);
+    }
+
     /** Minutos que lleva en sala desde que llegó; null si no está esperando. */
     public function waitingMinutes(): ?int
     {

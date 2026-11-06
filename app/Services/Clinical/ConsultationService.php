@@ -10,6 +10,8 @@ use App\Models\Consultation;
 use App\Models\Doctor;
 use App\Models\Patient;
 use App\Models\Treatment;
+use App\Models\TreatmentPlan;
+use App\Models\TreatmentPlanItem;
 use App\Models\User;
 use App\Services\Billing\BillingService;
 use App\Services\Booking\AppointmentService;
@@ -18,7 +20,8 @@ use Illuminate\Support\Facades\DB;
 
 /**
  * Atenciones clínicas: se abren desde la cita (o sin cita), llegan con la plantilla del
- * tratamiento y el odontograma de la consulta anterior, y al terminar cierran la cita.
+ * tratamiento, el odontograma de la consulta anterior y lo programado ya marcado como hecho.
+ * El doctor corrige lo que se hizo de verdad; al terminar, eso se cobra y cierra la cita.
  */
 final class ConsultationService
 {
@@ -166,7 +169,8 @@ final class ConsultationService
             'patient_id' => $patient->getKey(),
             'doctor_id' => $doctor->getKey(),
             'appointment_id' => $appointment?->getKey(),
-            'attended_at' => now(),
+            // Si se registra otro día (la cita quedó sin cerrar), queda con la fecha y la hora de la cita.
+            'attended_at' => $appointment?->isFromAnEarlierDay() ? $appointment->starts_at : now(),
         ]);
 
         if ($template = $this->templateFor($treatment, $by)) {
@@ -174,14 +178,41 @@ final class ConsultationService
             $this->prescriptions->syncForConsultation($consultation, $this->prescriptions->fromTemplate($template));
         }
 
-        // Si la cita es una sesión del plan, ya queda marcada como lo que se trabaja hoy.
-        if ($appointment?->planItem?->isOpen() && $appointment->planItem->plan->isOpen()) {
-            $consultation->planItems()->attach($appointment->treatment_plan_item_id);
-        }
-
+        $this->markScheduledAsDone($consultation, $patient, $treatment, $appointment);
         $this->odontograms->forConsultation($consultation);
 
         return $consultation;
+    }
+
+    /**
+     * Lo programado llega marcado como hecho, y el doctor quita lo que no se hizo: la sesión del plan si la
+     * cita es una; si es suelta pero su tratamiento está pendiente en un solo procedimiento de un plan
+     * aceptado, ese procedimiento (así se cobra al precio del plan y el plan avanza); si no, el tratamiento.
+     */
+    private function markScheduledAsDone(Consultation $consultation, Patient $patient, ?Treatment $treatment, ?Appointment $appointment): void
+    {
+        if ($appointment?->treatment_plan_item_id !== null) {
+            $item = $appointment->planItem;
+
+            if ($item?->isOpen() && $item->plan->isOpen()) {
+                $consultation->planItems()->attach($item);
+            }
+
+            return;
+        }
+
+        if (! $treatment) {
+            return;
+        }
+
+        $pending = $this->plans->workableItems($patient)->filter(fn (TreatmentPlanItem $item) => $item->treatment_id === $treatment->getKey()
+            && in_array($item->plan->status, TreatmentPlan::ACCEPTED_STATUSES, true));
+
+        if ($pending->count() === 1) {
+            $consultation->planItems()->attach($pending->first());
+        } else {
+            $consultation->treatments()->attach($treatment);
+        }
     }
 
     /** @return array<string, string> */

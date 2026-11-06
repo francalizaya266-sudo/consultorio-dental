@@ -21,9 +21,11 @@ use App\Models\Icd10Code;
 use App\Models\Patient;
 use App\Models\Prescription;
 use App\Models\TextSnippet;
+use App\Models\Treatment;
 use App\Models\TreatmentPackage;
 use App\Models\TreatmentPlanItem;
 use App\Models\User;
+use App\Services\Billing\BillingService;
 use App\Services\Clinical\AllergyCheck;
 use App\Services\Clinical\PrescriptionService;
 use App\Services\Clinical\TreatmentPlanService;
@@ -49,8 +51,10 @@ use Filament\Schemas\Schema;
 use Filament\Support\Enums\FontWeight;
 use Filament\Support\Enums\Width;
 use Filament\Support\Icons\Heroicon;
+use Illuminate\Contracts\Support\Htmlable;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Collection;
+use Illuminate\Support\HtmlString;
 
 /**
  * Pantalla de la atención: todo lo que el doctor escribe mientras atiende. Arriba, una barra fija con el
@@ -64,7 +68,7 @@ class ConsultationForm
         'motivo' => 'Motivo',
         'odontograma' => 'Odontograma',
         'diagnostico' => 'Diagnóstico',
-        'plan' => 'Plan',
+        'plan' => 'Lo hecho',
         'evolucion' => 'Evolución',
         'indicaciones' => 'Indicaciones',
         'archivos' => 'Fotos',
@@ -175,16 +179,30 @@ class ConsultationForm
                                         ->snippets(SnippetField::Diagnosis),
                                 ]),
 
-                            Section::make('Plan de tratamiento')
+                            Section::make('Lo que se hizo hoy')
                                 ->id('plan')
                                 ->key('plan')
                                 ->icon(Heroicon::OutlinedClipboardDocumentList)
-                                ->description('Marca lo que se trabajó hoy. Al terminar la atención, el avance del plan se actualiza solo.')
+                                ->description('Llega con lo programado en la cita. Quita lo que no se hizo y agrega lo que se hizo de más: al terminar se cobra, sale del inventario y avanza el plan solo con lo marcado.')
                                 ->headerActions([self::addPackageAction()])
                                 ->schema([
+                                    Select::make('treatments')
+                                        ->label('Tratamientos')
+                                        ->relationship('treatments', 'name', modifyQueryUsing: fn (Builder $query, ?Consultation $record) => $query
+                                            ->where(fn (Builder $treatments) => $treatments
+                                                ->where('treatments.is_active', true)
+                                                ->when($record, fn (Builder $treatments) => $treatments->orWhereHas('consultations', fn (Builder $c) => $c->whereKey($record->getKey()))))
+                                            ->reorder()
+                                            ->orderBy('treatments.sort_order')
+                                            ->orderBy('treatments.name'))
+                                        ->getOptionLabelFromRecordUsing(fn (Treatment $record) => $record->name.((float) $record->price_from > 0 ? ' · '.str_replace(' ', "\u{00A0}", Money::format($record->price_from)) : ''))
+                                        ->multiple()
+                                        ->preload()
+                                        ->searchable()
+                                        ->placeholder('Agrega lo que se hizo fuera del plan')
+                                        ->live(),
                                     CheckboxList::make('planItems')
-                                        ->label('Lo que se trabajó hoy')
-                                        ->hiddenLabel()
+                                        ->label('Del plan de tratamiento')
                                         ->relationship('planItems', 'description', modifyQueryUsing: fn (Builder $query, ?Consultation $record) => $query
                                             ->with('plan')
                                             ->whereHas('plan', fn (Builder $plan) => $plan->open()->where('patient_id', $record?->patient_id))
@@ -200,10 +218,13 @@ class ConsultationForm
                                             $record->plan->title,
                                         ])->filter()->implode(' · '))
                                         ->bulkToggleable(false)
+                                        ->live()
+                                        ->afterStateUpdated(fn (?array $state, ?array $old, Get $get, Set $set) => $set('treatments', self::withoutWhatThePlanCovers($get('treatments'), array_diff($state ?? [], $old ?? []))))
                                         ->visible(fn (?Consultation $record) => $record && self::workableItems($record)->isNotEmpty()),
-                                    Text::make('El paciente no tiene un plan de tratamiento vigente. Ármalo desde las sugerencias que salen debajo del odontograma.')
+                                    Text::make('No tiene un plan de tratamiento vigente. Si hace falta, ármalo desde las sugerencias que salen debajo del odontograma.')
                                         ->color('gray')
                                         ->visible(fn (?Consultation $record) => ! $record || self::workableItems($record)->isEmpty()),
+                                    Text::make(fn (Get $get, ?Consultation $record) => $record ? self::chargePreviewList($record, $get('treatments'), $get('planItems')) : ''),
                                 ]),
 
                             Section::make('Evolución')
@@ -313,6 +334,78 @@ class ConsultationForm
             ->where('field', SnippetField::Prescription)
             ->limit(QuickTextarea::VISIBLE_OPTIONS)
             ->get();
+    }
+
+    /**
+     * Lo que se cargará al terminar con lo marcado ahora en pantalla, en una línea.
+     *
+     * @param  mixed  $treatments  Ids de los tratamientos marcados.
+     * @param  mixed  $planItems  Ids de los procedimientos del plan marcados.
+     */
+    public static function chargePreview(Consultation $consultation, mixed $treatments, mixed $planItems): string
+    {
+        $lines = app(BillingService::class)->previewConsultation($consultation, array_values((array) $treatments), array_values((array) $planItems));
+
+        if ($lines === []) {
+            return 'Al terminar no se carga nada: no hay nada marcado como hecho.';
+        }
+
+        $parts = collect($lines)->map(fn (array $line) => $line['label'].match (true) {
+            $line['amount'] === null => '',
+            $line['amount'] > 0 => ' '.Money::format($line['amount']),
+            default => ' sin costo',
+        });
+
+        return 'Al terminar se carga: '.$parts->implode(' · ').'. Total '.Money::format(collect($lines)->sum(fn (array $line) => (float) $line['amount'])).'.';
+    }
+
+    /**
+     * Lo mismo, como lista para la columna angosta de la atención: un renglón por concepto y el total.
+     *
+     * @param  mixed  $treatments  Ids de los tratamientos marcados.
+     * @param  mixed  $planItems  Ids de los procedimientos del plan marcados.
+     */
+    public static function chargePreviewList(Consultation $consultation, mixed $treatments, mixed $planItems): Htmlable
+    {
+        $lines = app(BillingService::class)->previewConsultation($consultation, array_values((array) $treatments), array_values((array) $planItems));
+
+        if ($lines === []) {
+            return new HtmlString('<strong>Al terminar no se carga nada:</strong> no hay nada marcado como hecho.');
+        }
+
+        $amount = fn (?float $value) => '<span style="white-space: nowrap">'.e(Money::format($value)).'</span>';
+        $rows = collect($lines)->map(fn (array $line) => '<li>'.e($line['label']).match (true) {
+            $line['amount'] === null => '',
+            $line['amount'] > 0 => ' · '.$amount($line['amount']),
+            default => ' · sin costo',
+        }.'</li>')->implode('');
+
+        return new HtmlString('<strong>Al terminar se carga:</strong><ul style="list-style: disc; padding-inline-start: 1.25rem; margin-block: .25rem">'.$rows.'</ul><strong>Total '.$amount(collect($lines)->sum(fn (array $line) => (float) $line['amount'])).'</strong>');
+    }
+
+    /**
+     * Si se marca del plan el mismo tratamiento que estaba aparte (lo programado en una cita suelta), deja de ir
+     * aparte: es esa sesión del plan, y se cobra una sola vez, al precio del plan.
+     *
+     * @param  mixed  $treatments  Ids de los tratamientos marcados aparte.
+     * @param  array<int|string>  $newPlanItems  Ids de los procedimientos del plan recién marcados.
+     * @return list<string>
+     */
+    public static function withoutWhatThePlanCovers(mixed $treatments, array $newPlanItems): array
+    {
+        $treatments = array_map('strval', array_values((array) $treatments));
+        $covered = TreatmentPlanItem::query()->whereKey($newPlanItems)->pluck('treatment_id')->filter()->map(fn (int $id) => (string) $id)->all();
+        $kept = array_values(array_diff($treatments, $covered));
+
+        if (count($kept) < count($treatments)) {
+            Notification::make()
+                ->info()
+                ->title(Treatment::query()->whereKey(array_diff($treatments, $kept))->pluck('name')->implode(', ').' ya va como sesión del plan.')
+                ->body('Se quitó de los tratamientos aparte para no cobrarlo dos veces.')
+                ->send();
+        }
+
+        return $kept;
     }
 
     /** @return Collection<int, TreatmentPlanItem> */

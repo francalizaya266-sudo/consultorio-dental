@@ -72,7 +72,7 @@ class ViewConsultation extends ViewRecord
                 ->icon(Heroicon::OutlinedCalendarDays)
                 ->color('gray')
                 ->visible(fn () => auth()->user()->can('create', Appointment::class))
-                ->url(fn () => AppointmentResource::getUrl('create', ['patient' => $this->getConsultation()->patient_id, 'doctor' => $this->getConsultation()->doctor_id])),
+                ->url(fn () => AppointmentResource::nextVisitUrl($this->getConsultation()->patient, $this->getConsultation()->doctor_id)),
             Action::make('clinicalRecord')
                 ->label('Historia clínica')
                 ->icon(Heroicon::OutlinedFolderOpen)

@@ -354,20 +354,28 @@ class AppointmentService
         ]);
     }
 
-    /** Empieza la atención (se guarda la hora real para comparar con lo programado). */
+    /**
+     * Empieza la atención (se guarda la hora real para comparar con lo programado). Si la cita era de un día
+     * anterior y se registra después, se toma la hora programada: la real ya no se sabe.
+     */
     public function markStarted(Appointment $appointment, User $by): void
     {
+        $at = $appointment->isFromAnEarlierDay() ? $appointment->starts_at : now();
+
         $this->transition($appointment, $by, AppointmentStatus::InProgress, [AppointmentStatus::Pending, AppointmentStatus::Confirmed, AppointmentStatus::CheckedIn], [
-            'checked_in_at' => $appointment->checked_in_at ?? now(),
-            'started_at' => now(),
+            'checked_in_at' => $appointment->checked_in_at ?? $at,
+            'started_at' => $at,
         ]);
     }
 
+    /** Se atendió. Una cita de un día anterior que quedó sin cerrar también se puede marcar después, aunque no se confirmara. */
     public function markCompleted(Appointment $appointment, User $by): void
     {
-        $this->transition($appointment, $by, AppointmentStatus::Completed, [AppointmentStatus::Confirmed, AppointmentStatus::CheckedIn, AppointmentStatus::InProgress], [
+        $from = [AppointmentStatus::Confirmed, AppointmentStatus::CheckedIn, AppointmentStatus::InProgress];
+
+        $this->transition($appointment, $by, AppointmentStatus::Completed, $appointment->isFromAnEarlierDay() ? AppointmentStatus::open() : $from, [
             'started_at' => $appointment->started_at ?? $appointment->checked_in_at ?? $appointment->starts_at,
-            'finished_at' => now(),
+            'finished_at' => $appointment->isFromAnEarlierDay() ? $appointment->ends_at : now(),
         ]);
 
         $patient = $appointment->patient;

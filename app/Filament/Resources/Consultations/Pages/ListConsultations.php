@@ -43,7 +43,7 @@ class ListConsultations extends ListRecords
                     ->required(),
                 Select::make('treatment_id')
                     ->label('Tratamiento (opcional)')
-                    ->helperText('Si tiene plantilla, se precarga.')
+                    ->helperText('Llega marcado en "Lo que se hizo hoy" para cobrarse al terminar. Si tiene plantilla, se precarga.')
                     ->options(fn () => Treatment::query()->active()->orderBy('sort_order')->pluck('name', 'id')),
             ])))
             ->action(function (array $data, Action $action) use ($patient) {

@@ -7,6 +7,7 @@ use App\Exceptions\ClinicalException;
 use App\Filament\Actions\SignConsentAction;
 use App\Filament\Resources\Appointments\AppointmentResource;
 use App\Filament\Resources\Consultations\ConsultationResource;
+use App\Filament\Resources\Consultations\Schemas\ConsultationForm;
 use App\Filament\Resources\Consultations\Schemas\SuppliesUsedField;
 use App\Filament\Resources\Patients\PatientResource;
 use App\Models\ClinicalTemplate;
@@ -236,10 +237,11 @@ class EditConsultation extends EditRecord
 
         $worked = app(TreatmentPlanService::class)->workableItems($consultation->patient, $consultation)->whereIn('id', $items);
         $current = array_map('strval', $this->data['planItems'] ?? []);
+        $added = [];
 
         foreach ($worked as $item) {
             if (! in_array((string) $item->getKey(), $current, true)) {
-                $current[] = (string) $item->getKey();
+                $current[] = $added[] = (string) $item->getKey();
             }
         }
 
@@ -249,9 +251,11 @@ class EditConsultation extends EditRecord
             Notification::make()
                 ->success()
                 ->title('Marcado como trabajado hoy: '.$worked->map->label()->implode(', ').'.')
-                ->body('Se cobra al terminar la atención. Si no se hizo hoy, desmárcalo en el plan.')
+                ->body('Se cobra al terminar la atención. Si no se hizo hoy, desmárcalo en "Lo que se hizo hoy".')
                 ->send();
         }
+
+        $this->data['treatments'] = ConsultationForm::withoutWhatThePlanCovers($this->data['treatments'] ?? [], $added);
     }
 
     /** Guarda, cierra la atención, marca la cita como atendida y ofrece programar la siguiente. */
@@ -264,13 +268,13 @@ class EditConsultation extends EditRecord
             // Sin inventario es solo una confirmación; con inventario, además, lo que sale de él.
             ->requiresConfirmation(fn () => ! self::tracksInventory())
             ->modalHeading('¿Terminar la atención?')
-            ->modalDescription(fn () => self::tracksInventory()
+            ->modalDescription(fn () => ConsultationForm::chargePreview($this->getConsultation(), $this->data['treatments'] ?? [], $this->data['planItems'] ?? []).' '.(self::tracksInventory()
                 ? 'Se guarda lo escrito, la cita queda como atendida y estos materiales salen del inventario. Borra lo que no usaste y agrega lo que usaste de más. Si algo quedó mal, puedes reabrirla durante 24 horas.'
-                : 'Se guarda lo escrito y la cita queda como atendida. Si algo quedó mal, puedes reabrirla durante 24 horas.')
+                : 'Se guarda lo escrito y la cita queda como atendida. Si algo quedó mal, puedes reabrirla durante 24 horas.'))
             ->modalWidth(fn () => self::tracksInventory() ? Width::ThreeExtraLarge : null)
             ->modalSubmitActionLabel('Sí, terminar')
             ->fillForm(fn () => self::tracksInventory()
-                ? ['supplies_used' => app(InventoryService::class)->plannedUsage($this->getConsultation(), $this->data['planItems'] ?? null)]
+                ? ['supplies_used' => app(InventoryService::class)->plannedUsage($this->getConsultation(), $this->data['planItems'] ?? null, $this->data['treatments'] ?? null)]
                 : [])
             ->schema(fn () => self::tracksInventory() ? [SuppliesUsedField::make()] : [])
             ->action(function (array $data) {
@@ -285,15 +289,19 @@ class EditConsultation extends EditRecord
                     return;
                 }
 
+                $next = app(TreatmentPlanService::class)->nextToSchedule($consultation->patient);
+
                 Notification::make()
                     ->success()
                     ->title('Atención terminada')
-                    ->body('¿El paciente necesita otra cita? Prográmala ahora para que se lleve la fecha.')
+                    ->body($next
+                        ? 'Sigue '.$next->label().' de su plan. Prográmala ahora para que se lleve la fecha.'
+                        : '¿El paciente necesita otra cita? Prográmala ahora para que se lleve la fecha.')
                     ->actions([
                         Action::make('book')
                             ->label('Programar próxima cita')
                             ->button()
-                            ->url(AppointmentResource::getUrl('create', ['patient' => $consultation->patient_id, 'doctor' => $consultation->doctor_id])),
+                            ->url(AppointmentResource::nextVisitUrl($consultation->patient, $consultation->doctor_id)),
                     ])
                     ->persistent()
                     ->send();

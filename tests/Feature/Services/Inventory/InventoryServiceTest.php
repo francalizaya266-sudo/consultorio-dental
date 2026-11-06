@@ -103,8 +103,11 @@ class InventoryServiceTest extends TestCase
         $second = $plan->items()->create(['treatment_id' => $resin->id, 'description' => 'Resina 26', 'unit_price' => 120]);
         $consultation = $this->consultations()->startFromAppointment($appointment, $doctor->user);
 
-        // Dos resinas del plan hoy: dos veces la receta; la cita es de lo mismo y no suma una tercera.
-        $this->assertSame([['supply_id' => $composite->id, 'quantity' => 1.0, 'batch_id' => null]], $this->inventory()->plannedUsage($consultation, [$first->id, $second->id]));
+        // Con dos resinas pendientes no se sabe cuál es la de la cita: llega como tratamiento aparte, una receta.
+        $this->assertSame([['supply_id' => $composite->id, 'quantity' => 0.5, 'batch_id' => null]], $this->inventory()->plannedUsage($consultation));
+
+        // Se marcan las dos del plan (y la pantalla quita la de aparte): dos veces la receta, no tres.
+        $this->assertSame([['supply_id' => $composite->id, 'quantity' => 1.0, 'batch_id' => null]], $this->inventory()->plannedUsage($consultation, [$first->id, $second->id], []));
     }
 
     public function test_an_appointment_marked_as_attended_by_reception_uses_its_recipe_but_not_implants(): void
