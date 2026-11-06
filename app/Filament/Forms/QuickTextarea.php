@@ -178,6 +178,10 @@ class QuickTextarea extends Textarea
         return Action::make('saveAsOption')
             ->label('Guardar como opción')
             ->icon(Heroicon::OutlinedBookmark)
+            // Un ícono discreto: aparece en todos los campos, y como enlace con texto llenaba la pantalla.
+            ->iconButton()
+            ->color('gray')
+            ->tooltip('Guardar este texto como opción')
             ->visible(fn (QuickTextarea $component) => ! $component->isDisabled())
             ->modalHeading('Guardar como opción')
             ->modalDescription('Queda como opción tuya en este campo. Si le pones un atajo, al escribir /atajo y un espacio se completa solo.')

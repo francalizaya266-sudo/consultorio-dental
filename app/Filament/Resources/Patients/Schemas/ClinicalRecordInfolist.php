@@ -3,24 +3,17 @@
 namespace App\Filament\Resources\Patients\Schemas;
 
 use App\Enums\Sex;
+use App\Filament\Actions\EditMedicalBackgroundAction;
 use App\Filament\Support\ClinicalAlerts;
 use App\Livewire\OdontogramChart;
 use App\Models\MedicalBackground;
 use App\Models\Patient;
 use App\Models\StockMovement;
 use App\Services\Inventory\InventoryService;
-use Filament\Actions\Action;
-use Filament\Forms\Components\CheckboxList;
-use Filament\Forms\Components\Textarea;
-use Filament\Forms\Components\TextInput;
-use Filament\Forms\Components\Toggle;
 use Filament\Infolists\Components\TextEntry;
-use Filament\Notifications\Notification;
-use Filament\Schemas\Components\Grid;
 use Filament\Schemas\Components\Group;
 use Filament\Schemas\Components\Livewire;
 use Filament\Schemas\Components\Section;
-use Filament\Schemas\Components\Utilities\Get;
 use Filament\Schemas\Schema;
 use Filament\Support\Icons\Heroicon;
 
@@ -39,7 +32,7 @@ class ClinicalRecordInfolist
                     ->description(fn (Patient $record) => $record->medicalBackground
                         ? 'Actualizado el '.$record->medicalBackground->updated_at->format('d/m/Y').($record->medicalBackground->updatedBy ? ' por '.$record->medicalBackground->updatedBy->name : '')
                         : 'Todavía no se registraron.')
-                    ->headerActions([self::editBackgroundAction()])
+                    ->headerActions([EditMedicalBackgroundAction::make(fn (Patient $record) => $record)])
                     ->columns(3)
                     ->collapsible()
                     ->collapsed(fn (Patient $record) => $record->medicalBackground !== null)
@@ -97,65 +90,5 @@ class ClinicalRecordInfolist
                         Livewire::make(OdontogramChart::class)->key('odontogram'),
                     ]),
             ]);
-    }
-
-    private static function editBackgroundAction(): Action
-    {
-        return Action::make('editBackground')
-            ->label(fn (Patient $record) => $record->medicalBackground ? 'Editar' : 'Registrar antecedentes')
-            ->icon(Heroicon::OutlinedPencilSquare)
-            ->authorize(fn (Patient $record) => auth()->user()->can('updateClinical', $record))
-            ->modalHeading('Antecedentes médicos')
-            ->modalSubmitActionLabel('Guardar')
-            ->fillForm(fn (Patient $record) => $record->medicalBackground?->only([
-                'conditions', 'allergies', 'medications', 'surgeries', 'is_pregnant', 'pregnancy_weeks', 'is_breastfeeding', 'smoker', 'notes',
-            ]) ?? [])
-            ->schema(fn (Patient $record) => [
-                CheckboxList::make('conditions')
-                    ->label('Enfermedades')
-                    ->options(MedicalBackground::CONDITIONS)
-                    ->columns(2),
-                Textarea::make('allergies')
-                    ->label('Alergias')
-                    ->placeholder('Ej.: penicilina, látex. Escribe "Ninguna" si no tiene.')
-                    ->rows(2),
-                Textarea::make('medications')
-                    ->label('Medicamentos que toma')
-                    ->placeholder('Ej.: anticoagulantes, insulina')
-                    ->rows(2),
-                Textarea::make('surgeries')
-                    ->label('Operaciones o internamientos')
-                    ->rows(2),
-                Grid::make(3)
-                    ->schema([
-                        Toggle::make('smoker')->label('Fuma'),
-                        Toggle::make('is_pregnant')
-                            ->label('Embarazada')
-                            ->live()
-                            ->visible($record->sex !== Sex::Male),
-                        TextInput::make('pregnancy_weeks')
-                            ->label('Semanas')
-                            ->numeric()
-                            ->minValue(1)
-                            ->maxValue(42)
-                            ->visible(fn (Get $get) => (bool) $get('is_pregnant')),
-                        Toggle::make('is_breastfeeding')
-                            ->label('Dando de lactar')
-                            ->visible($record->sex !== Sex::Male),
-                    ]),
-                Textarea::make('notes')
-                    ->label('Otras notas')
-                    ->rows(2),
-            ])
-            ->action(function (array $data, Patient $record) {
-                $record->medicalBackground()->updateOrCreate([], [
-                    ...$data,
-                    'pregnancy_weeks' => ($data['is_pregnant'] ?? false) ? ($data['pregnancy_weeks'] ?? null) : null,
-                    'updated_by_user_id' => auth()->id(),
-                ]);
-                $record->unsetRelation('medicalBackground');
-
-                Notification::make()->success()->title('Antecedentes guardados')->send();
-            });
     }
 }

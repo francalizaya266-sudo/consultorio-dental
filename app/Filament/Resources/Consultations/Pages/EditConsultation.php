@@ -4,12 +4,12 @@ namespace App\Filament\Resources\Consultations\Pages;
 
 use App\Enums\DiagnosisType;
 use App\Exceptions\ClinicalException;
+use App\Filament\Actions\EditMedicalBackgroundAction;
 use App\Filament\Actions\SignConsentAction;
 use App\Filament\Resources\Appointments\AppointmentResource;
 use App\Filament\Resources\Consultations\ConsultationResource;
 use App\Filament\Resources\Consultations\Schemas\ConsultationForm;
 use App\Filament\Resources\Consultations\Schemas\SuppliesUsedField;
-use App\Filament\Resources\Patients\PatientResource;
 use App\Models\ClinicalTemplate;
 use App\Models\Consultation;
 use App\Models\Supply;
@@ -66,20 +66,18 @@ class EditConsultation extends EditRecord
     /** Medicamentos del formulario: se guardan aparte, en la receta de la atención. */
     private array $prescriptionItems = [];
 
+    /** Notas del diagnóstico: se abren con "Agregar una nota" (o solas, si ya tienen algo). */
+    public bool $showDiagnosisNotes = false;
+
     public function getTitle(): string|Htmlable
     {
         return 'Atención de '.$this->getConsultation()->patient->full_name;
     }
 
-    public function getSubheading(): string|Htmlable|null
+    /** Sin encabezado grande: la barra fija hace de encabezado, con el nombre, la cita y Terminar. */
+    public function getHeading(): string|Htmlable
     {
-        $consultation = $this->getConsultation();
-
-        return collect([
-            $consultation->attended_at->translatedFormat('l d/m/Y · H:i'),
-            $consultation->appointment?->treatment?->name,
-            $consultation->patient->age !== null ? $consultation->patient->age.' años' : null,
-        ])->filter()->implode(' · ');
+        return '';
     }
 
     public function getBreadcrumb(): string
@@ -87,29 +85,26 @@ class EditConsultation extends EditRecord
         return 'Atender';
     }
 
+    /** Las acciones viven en la barra fija (siempre a la vista), no arriba ni al final de la página. */
     protected function getHeaderActions(): array
     {
-        return [
-            $this->templateAction(),
-            SignConsentAction::make(fn () => $this->getConsultation()->patient, fn () => $this->getConsultation()->appointment?->treatment)
-                ->label('Consentimiento')
-                ->color('gray'),
-            Action::make('clinicalRecord')
-                ->label('Historia clínica')
-                ->icon(Heroicon::OutlinedFolderOpen)
-                ->color('gray')
-                ->url(fn () => PatientResource::getUrl('clinical', ['record' => $this->getConsultation()->patient]))
-                ->openUrlInNewTab(),
-            $this->closeAction(),
-        ];
+        return [];
     }
 
     protected function getFormActions(): array
     {
-        return [
-            $this->getSaveFormAction()->label('Guardar'),
-            $this->closeAction(),
-        ];
+        return [];
+    }
+
+    public function signConsentAction(): Action
+    {
+        return SignConsentAction::make(fn () => $this->getConsultation()->patient, fn () => $this->getConsultation()->appointment?->treatment)
+            ->label('Consentimiento');
+    }
+
+    public function editBackgroundAction(): Action
+    {
+        return EditMedicalBackgroundAction::make(fn () => $this->getConsultation()->patient);
     }
 
     protected function mutateFormDataBeforeFill(array $data): array
@@ -135,6 +130,7 @@ class EditConsultation extends EditRecord
     {
         app(PrescriptionService::class)->syncForConsultation($this->getConsultation(), $this->prescriptionItems);
         $this->savedFingerprint = $this->fingerprint();
+        $this->autosavedAt = now()->format('H:i');
     }
 
     /**
@@ -267,7 +263,7 @@ class EditConsultation extends EditRecord
     }
 
     /** Guarda, cierra la atención, marca la cita como atendida y ofrece programar la siguiente. */
-    private function closeAction(): Action
+    public function closeAction(): Action
     {
         return Action::make('close')
             ->label('Terminar atención')
@@ -319,7 +315,7 @@ class EditConsultation extends EditRecord
     }
 
     /** Suma al formulario el texto de una plantilla (sin borrar lo escrito). */
-    private function templateAction(): Action
+    public function templateAction(): Action
     {
         return Action::make('template')
             ->label('Usar plantilla')
