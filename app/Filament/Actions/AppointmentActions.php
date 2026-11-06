@@ -4,7 +4,9 @@ namespace App\Filament\Actions;
 
 use App\Enums\AppointmentStatus;
 use App\Enums\MessageTemplateKey;
+use App\Filament\Resources\Appointments\Pages\ViewAppointment;
 use App\Filament\Resources\Consultations\ConsultationResource;
+use App\Filament\Resources\Patients\PatientResource;
 use App\Filament\Support\Notify;
 use App\Filament\Support\SlotPicker;
 use App\Models\Appointment;
@@ -20,6 +22,7 @@ use Filament\Actions\BulkAction;
 use Filament\Forms\Components\Textarea;
 use Filament\Forms\Components\Toggle;
 use Filament\Notifications\Notification;
+use Filament\Resources\RelationManagers\RelationManager;
 use Filament\Support\Icons\Heroicon;
 use Illuminate\Support\Collection;
 
@@ -37,6 +40,7 @@ final class AppointmentActions
             self::complete(),
             CheckoutAction::make(),
             ActionGroup::make([
+                self::patientProfile(),
                 self::viewConsultation(),
                 self::whatsapp(),
                 self::move(),
@@ -62,6 +66,7 @@ final class AppointmentActions
             CheckoutAction::make(),
             self::whatsapp(),
             ActionGroup::make([
+                self::patientProfile(),
                 self::viewConsultation(),
                 self::move(),
                 self::noShow(),
@@ -139,6 +144,17 @@ final class AppointmentActions
                 && self::attendsClinically($record)
                 && self::openConsultation($record) !== null)
             ->url(fn (Appointment $record) => ConsultationResource::getUrl('edit', ['record' => $record->consultation]));
+    }
+
+    /** De la cita a la ficha del paciente. No aparece donde la ficha ya está a la vista. */
+    public static function patientProfile(): Action
+    {
+        return Action::make('patientProfile')
+            ->label('Ficha del paciente')
+            ->icon(Heroicon::OutlinedUser)
+            ->hidden(fn ($livewire) => $livewire instanceof ViewAppointment || $livewire instanceof RelationManager)
+            ->visible(fn (Appointment $record) => PatientResource::canView($record->patient))
+            ->url(fn (Appointment $record) => PatientResource::getUrl('view', ['record' => $record->patient]));
     }
 
     public static function viewConsultation(): Action
