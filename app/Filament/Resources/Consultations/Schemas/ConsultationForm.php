@@ -39,6 +39,8 @@ use Filament\Forms\Components\TextInput;
 use Filament\Forms\Components\ToggleButtons;
 use Filament\Notifications\Notification;
 use Filament\Schemas\Components\Actions;
+use Filament\Schemas\Components\Component;
+use Filament\Schemas\Components\Flex;
 use Filament\Schemas\Components\Grid;
 use Filament\Schemas\Components\Group;
 use Filament\Schemas\Components\Livewire;
@@ -51,7 +53,6 @@ use Filament\Schemas\Schema;
 use Filament\Support\Enums\FontWeight;
 use Filament\Support\Enums\Width;
 use Filament\Support\Icons\Heroicon;
-use Illuminate\Contracts\Support\Htmlable;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Collection;
 use Illuminate\Support\HtmlString;
@@ -200,7 +201,8 @@ class ConsultationForm
                                         ->preload()
                                         ->searchable()
                                         ->placeholder('Agrega lo que se hizo fuera del plan')
-                                        ->live(),
+                                        ->live()
+                                        ->afterStateUpdated(fn (Get $get, Set $set, ?Consultation $record) => $record ? $set('prices', self::pricesFor($record, $get('treatments'), $get('planItems'), $get('prices'))) : null),
                                     CheckboxList::make('planItems')
                                         ->label('Del plan de tratamiento')
                                         ->relationship('planItems', 'description', modifyQueryUsing: fn (Builder $query, ?Consultation $record) => $query
@@ -219,12 +221,19 @@ class ConsultationForm
                                         ])->filter()->implode(' · '))
                                         ->bulkToggleable(false)
                                         ->live()
-                                        ->afterStateUpdated(fn (?array $state, ?array $old, Get $get, Set $set) => $set('treatments', self::withoutWhatThePlanCovers($get('treatments'), array_diff($state ?? [], $old ?? []))))
+                                        ->afterStateUpdated(function (?array $state, ?array $old, Get $get, Set $set, ?Consultation $record): void {
+                                            $set('treatments', $treatments = self::withoutWhatThePlanCovers($get('treatments'), array_diff($state ?? [], $old ?? [])));
+
+                                            if ($record) {
+                                                $set('prices', self::pricesFor($record, $treatments, $state, $get('prices')));
+                                            }
+                                        })
                                         ->visible(fn (?Consultation $record) => $record && self::workableItems($record)->isNotEmpty()),
                                     Text::make('No tiene un plan de tratamiento vigente. Si hace falta, ármalo desde las sugerencias que salen debajo del odontograma.')
                                         ->color('gray')
                                         ->visible(fn (?Consultation $record) => ! $record || self::workableItems($record)->isEmpty()),
-                                    Text::make(fn (Get $get, ?Consultation $record) => $record ? self::chargePreviewList($record, $get('treatments'), $get('planItems')) : ''),
+                                    Group::make(fn (Get $get, ?Consultation $record) => $record ? self::chargeLines($record, $get('treatments'), $get('planItems'), $get('prices')) : [])
+                                        ->extraAttributes(['class' => 'consult-charges']),
                                 ]),
 
                             Section::make('Evolución')
@@ -342,9 +351,9 @@ class ConsultationForm
      * @param  mixed  $treatments  Ids de los tratamientos marcados.
      * @param  mixed  $planItems  Ids de los procedimientos del plan marcados.
      */
-    public static function chargePreview(Consultation $consultation, mixed $treatments, mixed $planItems): string
+    public static function chargePreview(Consultation $consultation, mixed $treatments, mixed $planItems, mixed $prices = []): string
     {
-        $lines = app(BillingService::class)->previewConsultation($consultation, array_values((array) $treatments), array_values((array) $planItems));
+        $lines = app(BillingService::class)->previewConsultation($consultation, array_values((array) $treatments), array_values((array) $planItems), (array) $prices);
 
         if ($lines === []) {
             return 'Al terminar no se carga nada: no hay nada marcado como hecho.';
@@ -360,27 +369,107 @@ class ConsultationForm
     }
 
     /**
-     * Lo mismo, como lista para la columna angosta de la atención: un renglón por concepto y el total.
+     * Lo que se cargará al terminar, una línea por cosa hecha con su precio. Llega el sugerido (el del plan o el
+     * de lista) y el dentista lo cambia a su criterio, para más o para menos; si no lo toca, queda el sugerido.
+     * Lo ya cargado (si se reabrió) y lo que va en la forma de pago del plan solo se muestra: eso se ve al cobrar.
      *
      * @param  mixed  $treatments  Ids de los tratamientos marcados.
      * @param  mixed  $planItems  Ids de los procedimientos del plan marcados.
+     * @param  mixed  $prices  El precio de cada línea en pantalla ("item-12", "treatment-5").
+     * @return list<Component>
      */
-    public static function chargePreviewList(Consultation $consultation, mixed $treatments, mixed $planItems): Htmlable
+    public static function chargeLines(Consultation $consultation, mixed $treatments, mixed $planItems, mixed $prices): array
     {
-        $lines = app(BillingService::class)->previewConsultation($consultation, array_values((array) $treatments), array_values((array) $planItems));
+        $lines = app(BillingService::class)->previewConsultation($consultation, array_values((array) $treatments), array_values((array) $planItems), (array) $prices);
 
         if ($lines === []) {
-            return new HtmlString('<strong>Al terminar no se carga nada:</strong> no hay nada marcado como hecho.');
+            return [Text::make(new HtmlString('<strong>Al terminar no se carga nada:</strong> no hay nada marcado como hecho.'))];
         }
 
-        $amount = fn (?float $value) => '<span style="white-space: nowrap">'.e(Money::format($value)).'</span>';
-        $rows = collect($lines)->map(fn (array $line) => '<li>'.e($line['label']).match (true) {
-            $line['amount'] === null => '',
-            $line['amount'] > 0 => ' · '.$amount($line['amount']),
-            default => ' · sin costo',
-        }.'</li>')->implode('');
+        $rows = [Text::make('Al terminar se carga')->weight(FontWeight::Bold)];
 
-        return new HtmlString('<strong>Al terminar se carga:</strong><ul style="list-style: disc; padding-inline-start: 1.25rem; margin-block: .25rem">'.$rows.'</ul><strong>Total '.$amount(collect($lines)->sum(fn (array $line) => (float) $line['amount'])).'</strong>');
+        foreach ($lines as $line) {
+            $changed = $line['editable'] && abs((float) $line['amount'] - (float) $line['suggested']) >= 0.005;
+            $label = Text::make(new HtmlString(e($line['label']).($changed ? '<small class="consult-charge-suggested">Sugerido '.e(Money::format($line['suggested'])).'</small>' : '')));
+
+            $rows[] = Flex::make([
+                $label,
+                $line['editable']
+                    ? TextInput::make('prices.'.$line['key'])
+                        ->label('Precio de '.$line['label'])
+                        ->hiddenLabel()
+                        ->prefix('S/')
+                        ->numeric()
+                        ->inputMode('decimal')
+                        ->step(0.01)
+                        ->minValue(0)
+                        ->maxValue(99999)
+                        ->live(onBlur: true)
+                        // Si lo borra, vuelve el sugerido.
+                        ->afterStateUpdated(fn (TextInput $component, mixed $state) => blank($state) ? $component->state(self::priceText($line['suggested'])) : null)
+                        ->extraFieldWrapperAttributes(['class' => 'consult-charge-price'])
+                        ->grow(false)
+                    : Text::make(match (true) {
+                        $line['amount'] === null => 'En su forma de pago',
+                        $line['amount'] > 0 => Money::format($line['amount']),
+                        default => 'Sin costo',
+                    })->grow(false),
+            ])->verticallyAlignCenter()->extraAttributes(['class' => 'consult-charge-line']);
+        }
+
+        $total = collect($lines)->sum(fn (array $line) => (float) $line['amount']);
+        $suggested = collect($lines)->sum(fn (array $line) => (float) $line['suggested']);
+
+        $rows[] = Flex::make([
+            Text::make(new HtmlString('<strong>Total</strong>'.(abs($total - $suggested) >= 0.005 ? '<small class="consult-charge-suggested">Sugerido '.e(Money::format($suggested)).'</small>' : ''))),
+            Text::make(Money::format($total))->weight(FontWeight::Bold)->grow(false),
+        ])->verticallyAlignCenter()->extraAttributes(['class' => 'consult-charge-line consult-charge-total']);
+
+        return $rows;
+    }
+
+    /**
+     * El precio de cada línea marcada: el que el dentista ya puso o, en lo recién marcado, el sugerido.
+     * Lo que se desmarcó se olvida.
+     *
+     * @param  mixed  $treatments  Ids de los tratamientos marcados.
+     * @param  mixed  $planItems  Ids de los procedimientos del plan marcados.
+     * @param  mixed  $prices  Los precios en pantalla.
+     * @return array<string, string>
+     */
+    public static function pricesFor(Consultation $consultation, mixed $treatments, mixed $planItems, mixed $prices): array
+    {
+        $prices = (array) $prices;
+
+        return collect(app(BillingService::class)->previewConsultation($consultation, array_values((array) $treatments), array_values((array) $planItems)))
+            ->filter(fn (array $line) => $line['editable'])
+            ->mapWithKeys(fn (array $line) => [$line['key'] => is_numeric($prices[$line['key']] ?? null) ? (string) $prices[$line['key']] : self::priceText($line['suggested'])])
+            ->all();
+    }
+
+    /**
+     * Lo que se guarda: solo los precios que el dentista cambió. Lo demás se carga al sugerido del momento de terminar.
+     *
+     * @param  mixed  $treatments  Ids de los tratamientos marcados.
+     * @param  mixed  $planItems  Ids de los procedimientos del plan marcados.
+     * @param  mixed  $prices  Los precios en pantalla.
+     * @return array<string, float>|null
+     */
+    public static function changedPrices(Consultation $consultation, mixed $treatments, mixed $planItems, mixed $prices): ?array
+    {
+        $prices = (array) $prices;
+
+        $changed = collect(app(BillingService::class)->previewConsultation($consultation, array_values((array) $treatments), array_values((array) $planItems)))
+            ->filter(fn (array $line) => $line['editable'] && is_numeric($prices[$line['key']] ?? null) && abs(round(max(0, (float) $prices[$line['key']]), 2) - (float) $line['suggested']) >= 0.005)
+            ->mapWithKeys(fn (array $line) => [$line['key'] => round(max(0, (float) $prices[$line['key']]), 2)])
+            ->all();
+
+        return $changed === [] ? null : $changed;
+    }
+
+    private static function priceText(?float $amount): string
+    {
+        return number_format((float) $amount, 2, '.', '');
     }
 
     /**

@@ -14,7 +14,7 @@ use Illuminate\Database\Eloquent\Relations\HasOne;
 use Illuminate\Database\Eloquent\SoftDeletes;
 
 /** Atención clínica: motivo, examen, diagnóstico, evolución e indicaciones. */
-#[Fillable(['patient_id', 'doctor_id', 'appointment_id', 'attended_at', 'chief_complaint', 'current_illness', 'clinical_exam', 'vital_signs', 'diagnosis_notes', 'procedures', 'indications', 'next_steps', 'closed_at'])]
+#[Fillable(['patient_id', 'doctor_id', 'appointment_id', 'attended_at', 'chief_complaint', 'current_illness', 'clinical_exam', 'vital_signs', 'diagnosis_notes', 'procedures', 'indications', 'next_steps', 'prices', 'closed_at'])]
 class Consultation extends Model
 {
     /** @use HasFactory<ConsultationFactory> */
@@ -25,6 +25,7 @@ class Consultation extends Model
         return [
             'attended_at' => 'datetime',
             'vital_signs' => 'array',
+            'prices' => 'array',
             'closed_at' => 'datetime',
         ];
     }

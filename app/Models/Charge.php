@@ -12,7 +12,7 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 /** Cargo al paciente por lo realizado. No se borra: se anula. */
-#[Fillable(['patient_id', 'appointment_id', 'consultation_id', 'treatment_plan_item_id', 'treatment_id', 'doctor_id', 'description', 'amount', 'discount', 'discount_reason', 'campaign_id', 'charged_at', 'created_by_user_id', 'voided_at', 'voided_by_user_id', 'void_reason'])]
+#[Fillable(['patient_id', 'appointment_id', 'consultation_id', 'treatment_plan_item_id', 'treatment_id', 'doctor_id', 'description', 'amount', 'discount', 'discount_reason', 'suggested_amount', 'campaign_id', 'charged_at', 'created_by_user_id', 'voided_at', 'voided_by_user_id', 'void_reason'])]
 class Charge extends Model
 {
     /** @use HasFactory<ChargeFactory> */
@@ -23,6 +23,7 @@ class Charge extends Model
         return [
             'amount' => 'decimal:2',
             'discount' => 'decimal:2',
+            'suggested_amount' => 'decimal:2',
             'charged_at' => 'datetime',
             'voided_at' => 'datetime',
         ];
@@ -84,5 +85,14 @@ class Charge extends Model
     public function net(): float
     {
         return round((float) $this->amount - (float) $this->discount, 2);
+    }
+
+    /**
+     * Cuánto bajó (o, negativo, subió) el dentista el precio sugerido. En una sesión del plan esa diferencia
+     * queda saldada: no pasa a las sesiones que siguen.
+     */
+    public function priceChange(): float
+    {
+        return $this->suggested_amount === null ? 0.0 : round((float) $this->suggested_amount - (float) $this->amount, 2);
     }
 }
