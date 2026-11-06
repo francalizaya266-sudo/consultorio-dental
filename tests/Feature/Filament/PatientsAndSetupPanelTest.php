@@ -7,16 +7,19 @@ use App\Enums\AppointmentStatus;
 use App\Enums\PatientRelationship;
 use App\Enums\PaymentMethod;
 use App\Enums\SnippetStatus;
+use App\Filament\Pages\Agenda;
 use App\Filament\Pages\Dashboard;
 use App\Filament\Pages\Settings;
 use App\Filament\Resources\Accounts\Pages\ViewAccount;
 use App\Filament\Resources\Doctors\Pages\EditDoctor;
 use App\Filament\Resources\Patients\Pages\CreatePatient;
+use App\Filament\Resources\Patients\Pages\EditPatient;
 use App\Filament\Resources\Patients\Pages\ListPatients;
 use App\Filament\Resources\Patients\PatientResource;
 use App\Filament\Resources\Payments\Pages\ManagePayments;
 use App\Filament\Resources\ScheduleBlocks\Pages\ManageScheduleBlocks;
 use App\Filament\Resources\TextSnippets\Pages\ManageTextSnippets;
+use App\Filament\Resources\Treatments\Pages\ManageTreatments;
 use App\Filament\Support\MobileBar;
 use App\Models\Account;
 use App\Models\Appointment;
@@ -112,6 +115,44 @@ class PatientsAndSetupPanelTest extends TestCase
 
         $this->assertNotNull($payment->fresh()->voided_at);
         $this->assertSame(1, Payment::count());
+    }
+
+    public function test_only_what_was_registered_by_mistake_can_be_deleted_so_the_agenda_keeps_working(): void
+    {
+        $this->freezeMonday();
+        $treatment = Treatment::factory()->create(['name' => 'Limpieza dental']);
+        $unusedTreatment = Treatment::factory()->create();
+        $doctor = $this->doctorOffering($treatment);
+        $unusedDoctor = Doctor::factory()->create();
+        $patient = Patient::factory()->create();
+        $mistake = Patient::factory()->create();
+        Appointment::factory()->for($patient)->for($doctor)->for($treatment)->at('2026-11-02 10:00')->confirmed()->create();
+        $this->actingAs(User::factory()->admin(isDentist: true)->create());
+
+        Livewire::test(ManageTreatments::class)
+            ->callAction(TestAction::make('delete')->table($treatment))
+            ->assertNotified('Este tratamiento ya tiene citas o cobros. Para que no se ofrezca más, apaga "Activo": así se conserva su historial.')
+            ->callAction(TestAction::make('delete')->table($unusedTreatment));
+
+        Livewire::test(EditDoctor::class, ['record' => $doctor->getKey()])->callAction('delete');
+        Livewire::test(EditDoctor::class, ['record' => $unusedDoctor->getKey()])->callAction('delete');
+        Livewire::test(EditPatient::class, ['record' => $patient->getKey()])->callAction('delete');
+        Livewire::test(EditPatient::class, ['record' => $mistake->getKey()])->callAction('delete');
+
+        $this->assertNotSoftDeleted($treatment);
+        $this->assertNotSoftDeleted($doctor);
+        $this->assertNotSoftDeleted($patient);
+        $this->assertSoftDeleted($unusedTreatment);
+        $this->assertSoftDeleted($unusedDoctor);
+        $this->assertSoftDeleted($mistake);
+
+        // Lo que tiene la cita sigue en pie, así que Hoy y la agenda abren.
+        $this->get(Dashboard::getUrl())->assertOk()->assertSee('Limpieza dental');
+        $this->get(Agenda::getUrl())->assertOk();
+
+        // Recepción ni siquiera ve el botón.
+        $this->actingAs(User::factory()->reception()->create());
+        Livewire::test(EditPatient::class, ['record' => $patient->getKey()])->assertActionHidden('delete');
     }
 
     public function test_payments_open_on_the_last_week_and_older_ones_are_one_click_away(): void

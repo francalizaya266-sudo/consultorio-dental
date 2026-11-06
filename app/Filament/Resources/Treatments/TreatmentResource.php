@@ -11,6 +11,7 @@ use App\Models\Treatment;
 use App\Services\Inventory\InventoryService;
 use App\Support\Money;
 use BackedEnum;
+use Filament\Actions\ActionGroup;
 use Filament\Actions\DeleteAction;
 use Filament\Actions\EditAction;
 use Filament\Actions\RestoreAction;
@@ -183,8 +184,12 @@ class TreatmentResource extends Resource
             ->recordActions([
                 TreatmentRecipeAction::make(),
                 EditAction::make(),
-                DeleteAction::make(),
-                RestoreAction::make(),
+                // Borrar va en el menú para que la fila entre entera. Con citas o cobros no se borra: avisa que se apaga "Activo".
+                ActionGroup::make([
+                    DeleteAction::make()
+                        ->authorizationNotification(),
+                    RestoreAction::make(),
+                ]),
             ]);
     }
 

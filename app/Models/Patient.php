@@ -111,6 +111,18 @@ class Patient extends Model
         return $this->hasMany(WaitlistEntry::class);
     }
 
+    /**
+     * Ya tiene citas, historia clínica o movimientos de caja. Eso se conserva por ley y lo muestran
+     * la agenda y la caja, así que el paciente ya no se puede eliminar.
+     */
+    public function hasHistory(): bool
+    {
+        return collect([
+            $this->appointments(), $this->consultations(), $this->odontograms(), $this->treatmentPlans(),
+            $this->clinicalFiles(), $this->consents(), $this->prescriptions(), $this->charges(), $this->payments(),
+        ])->contains(fn (HasMany $records) => $records->exists());
+    }
+
     /** Avisos de WhatsApp preparados para este paciente (los de la cuenta sin paciente no). */
     public function whatsappMessages(): HasMany
     {

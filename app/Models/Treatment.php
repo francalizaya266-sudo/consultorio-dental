@@ -59,6 +59,14 @@ class Treatment extends Model
         return $this->hasMany(Campaign::class);
     }
 
+    /** Ya se agendó, se presupuestó o se cobró: las citas y la caja lo nombran, así que no se elimina. */
+    public function hasHistory(): bool
+    {
+        return $this->appointments()->exists()
+            || collect([TreatmentPlanItem::class, TreatmentPackageItem::class, Charge::class, Payment::class])
+                ->contains(fn (string $model) => $model::query()->where('treatment_id', $this->getKey())->exists());
+    }
+
     public function smileCases(): HasMany
     {
         return $this->hasMany(SmileCase::class);
