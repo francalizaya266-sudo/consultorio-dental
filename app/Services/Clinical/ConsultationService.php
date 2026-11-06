@@ -3,6 +3,7 @@
 namespace App\Services\Clinical;
 
 use App\Enums\AppointmentStatus;
+use App\Enums\VisitType;
 use App\Exceptions\ClinicalException;
 use App\Models\Appointment;
 use App\Models\ClinicalTemplate;
@@ -83,7 +84,8 @@ final class ConsultationService
         DB::transaction(function () use ($consultation, $template) {
             $consultation->update($this->templateValues($consultation, $template));
 
-            if ($medications = $this->prescriptions->fromTemplate($template)) {
+            // A un niño no se le copia la receta de la plantilla: va en jarabe y por su peso.
+            if (! $consultation->patient->isChild() && $medications = $this->prescriptions->fromTemplate($template)) {
                 $this->prescriptions->syncForConsultation($consultation, PrescriptionService::merge($this->prescriptions->itemsOf($consultation), $medications));
             }
         });
@@ -178,11 +180,14 @@ final class ConsultationService
 
         if ($template = $this->templateFor($treatment, $by)) {
             $consultation->update($this->templateValues($consultation, $template));
-            $this->prescriptions->syncForConsultation($consultation, $this->prescriptions->fromTemplate($template));
+
+            if (! $patient->isChild()) {
+                $this->prescriptions->syncForConsultation($consultation, $this->prescriptions->fromTemplate($template));
+            }
         }
 
         $this->markScheduledAsDone($consultation, $patient, $treatment, $appointment);
-        $this->notePlannedVisit($consultation);
+        $this->noteVisitReason($consultation);
         $this->odontograms->forConsultation($consultation);
 
         return $consultation;
@@ -219,16 +224,43 @@ final class ConsultationService
         }
     }
 
-    /** En una sesión del plan, el motivo es ese: la historia dice por qué vino sin que nadie lo escriba. */
-    private function notePlannedVisit(Consultation $consultation): void
+    /** El motivo que se escribe solo en una sesión del plan o en un control: si sigue así, nadie anotó nada nuevo. */
+    public static function isAutomaticReason(Consultation $consultation, ?string $reason): bool
     {
-        $planned = $consultation->plannedWork();
+        $reason = trim((string) $reason);
 
-        if ($planned->isEmpty() || filled($consultation->chief_complaint)) {
+        return $reason === ''
+            || str_starts_with($reason, self::PLANNED_VISIT_REASON)
+            || $reason === $consultation->mainTreatment()?->name.'.';
+    }
+
+    /**
+     * En una sesión del plan o en un control, el motivo es ese: la historia dice por qué vino sin que nadie lo
+     * escriba. En la sesión del plan, además, la evolución empieza con la pieza que se trabaja.
+     */
+    private function noteVisitReason(Consultation $consultation): void
+    {
+        $type = $consultation->visitType();
+
+        if (filled($consultation->chief_complaint) || ! $type->repeatsAnotherVisit()) {
             return;
         }
 
-        $consultation->update(['chief_complaint' => self::PLANNED_VISIT_REASON.$planned->map(fn (TreatmentPlanItem $item) => $item->label())->implode(', ').'.']);
+        if ($type === VisitType::Control) {
+            $consultation->update(['chief_complaint' => $consultation->mainTreatment()?->name.'.']);
+
+            return;
+        }
+
+        $planned = $consultation->plannedWork();
+        $item = $planned->count() === 1 ? $planned->first() : null;
+
+        $consultation->update([
+            'chief_complaint' => self::PLANNED_VISIT_REASON.$planned->map(fn (TreatmentPlanItem $item) => $item->label())->implode(', ').'.',
+            'procedure_details' => $item && filled($item->tooth) && $consultation->procedureKind()->hasTooth()
+                ? array_filter(['tooth' => $item->tooth, 'surfaces' => $item->surfaces], 'filled')
+                : $consultation->procedure_details,
+        ]);
     }
 
     /** @return array<string, string> */

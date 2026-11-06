@@ -106,20 +106,14 @@
                 @if (filled($consultation->chief_complaint))<dt>Motivo</dt><dd>{{ $consultation->chief_complaint }}</dd>@endif
                 @if (filled($consultation->current_illness))<dt>Enfermedad actual</dt><dd>{{ $consultation->current_illness }}</dd>@endif
                 @if (filled($consultation->clinical_exam))<dt>Examen clínico</dt><dd>{{ $consultation->clinical_exam }}</dd>@endif
-                @php
-                    $vitals = collect([
-                        filled($consultation->vital_signs['blood_pressure'] ?? null) ? 'PA '.$consultation->vital_signs['blood_pressure'] : null,
-                        filled($consultation->vital_signs['heart_rate'] ?? null) ? 'Pulso '.$consultation->vital_signs['heart_rate'].' lpm' : null,
-                        filled($consultation->vital_signs['temperature'] ?? null) ? $consultation->vital_signs['temperature'].' °C' : null,
-                    ])->filter()->implode(' · ');
-                @endphp
-                @if ($vitals)<dt>Signos vitales</dt><dd>{{ $vitals }}</dd>@endif
+                @if ($vitals = $consultation->vitalsSummary())<dt>Signos vitales</dt><dd>{{ $vitals }}</dd>@endif
                 @if ($consultation->diagnoses->isNotEmpty())
                     <dt>Diagnóstico</dt>
                     <dd>{{ $consultation->diagnoses->map(fn ($d) => collect([$d->icd10Code ? "{$d->icd10Code->code} {$d->icd10Code->description}" : $d->description, $d->tooth ? "pieza {$d->tooth}" : null, $d->type?->getLabel()])->filter()->implode(' · '))->implode("\n") }}</dd>
                 @endif
                 @if (filled($consultation->diagnosis_notes))<dt>Notas del diagnóstico</dt><dd>{{ $consultation->diagnosis_notes }}</dd>@endif
                 @if ($consultation->planItems->isNotEmpty())<dt>Del plan se trabajó</dt><dd>{{ $consultation->planItems->map->label()->implode("\n") }}</dd>@endif
+                @if ($details = $consultation->procedureSummary())<dt>Datos del tratamiento</dt><dd>{{ $details }}</dd>@endif
                 @if (filled($consultation->procedures))<dt>Evolución</dt><dd>{{ $consultation->procedures }}</dd>@endif
                 @if (filled($consultation->indications))<dt>Indicaciones</dt><dd>{{ $consultation->indications }}</dd>@endif
                 @if ($consultation->prescription)

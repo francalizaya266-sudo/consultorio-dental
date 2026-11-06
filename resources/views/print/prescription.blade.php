@@ -1,4 +1,4 @@
-<x-print-layout title="Receta" size="A5" :doctor="$doctor" :patient="$patient" :date="$prescription->issued_at" :details="['Teléfono' => $phone]">
+<x-print-layout title="Receta" size="A5" :doctor="$doctor" :patient="$patient" :date="$prescription->issued_at" :details="['Teléfono' => $phone, 'Peso' => $weight]">
     <style>
         .rp { font-size: 1.6rem; font-weight: 800; font-style: italic; color: var(--brand); margin-bottom: 6px; }
         ol { margin: 0; padding-left: 22px; }

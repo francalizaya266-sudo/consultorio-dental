@@ -167,6 +167,7 @@ class AttendScreenTest extends TestCase
 
         // El motivo se escribe solo y lo que ya está en la atención del diagnóstico no se repite.
         $this->assertSame('Continúa su plan de tratamiento: Curación con resina · pieza 36 (O).', $consultation->chief_complaint);
+        $this->assertSame(['tooth' => '36', 'surfaces' => 'O'], $consultation->procedure_details);
         $this->assertTrue(ConsultationForm::foldsReason($consultation));
         $this->assertSame(['Caries de la dentina · 36'], ConsultationForm::plannedDiagnoses($consultation));
 
@@ -194,7 +195,7 @@ class AttendScreenTest extends TestCase
 
         $this->assertFalse(ConsultationForm::foldsReason($consultation));
         Livewire::test(EditConsultation::class, ['record' => $consultation->getRouteKey()])
-            ->assertSee('No viene de un plan: lo que siente y lo que encuentras es lo que respalda en su historia la extracción simple de hoy.')
+            ->assertSee('No viene de un plan: lo que siente y lo que encuentras es lo que respalda en su historia el tratamiento de hoy.')
             ->assertSee('Lo que cuenta el paciente y lo que encuentras al examinarlo.')
             ->assertDontSee('Sesión de su plan');
 
