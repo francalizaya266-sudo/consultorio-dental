@@ -343,4 +343,65 @@ class AgendaCalendarTest extends TestCase
             ->mountAction('createAppointment')
             ->assertActionDataSet(['doctor_id' => $doctor->id, 'date' => '2026-11-02']);
     }
+
+    public function test_the_week_shows_each_day_with_its_number_and_how_many_appointments_it_has(): void
+    {
+        $this->freezeMonday();
+        $treatment = Treatment::factory()->create();
+        $doctor = $this->doctorOffering($treatment);
+        Appointment::factory()->for($doctor)->for($treatment)->for(Patient::factory())->at('2026-11-03 10:00')->create();
+        Appointment::factory()->for($doctor)->for($treatment)->for(Patient::factory())->at('2026-11-03 11:00')->create();
+
+        $this->actingAs(User::factory()->reception()->create());
+
+        Livewire::withQueryParams(['mode' => 'week', 'doctor' => $doctor->id])
+            ->test(Agenda::class)
+            ->assertSeeHtml('agenda-head is-week is-today')
+            ->assertSeeInOrder(['Lun.', 'Sin citas', 'Mar.', '2 citas', 'Mié.', 'Sin citas']);
+    }
+
+    public function test_the_day_shows_the_doctor_with_initials_and_how_many_appointments_they_have(): void
+    {
+        $this->freezeMonday();
+        $treatment = Treatment::factory()->create();
+        $doctor = $this->doctorOffering($treatment);
+        $doctor->update(['name' => 'Dra. Ana María Torres Ruiz']);
+        Appointment::factory()->for($doctor)->for($treatment)->for(Patient::factory())->at('2026-11-02 10:00')->create();
+
+        $this->actingAs(User::factory()->reception()->create());
+
+        Livewire::test(Agenda::class)
+            ->assertSeeHtml('aria-hidden="true">AT</span>')
+            ->assertSee('1 cita');
+    }
+
+    public function test_the_current_time_is_marked_on_today_and_hides_the_hour_it_covers(): void
+    {
+        $this->travelTo(CarbonImmutable::parse('2026-11-02 10:05', 'America/Lima'));
+        $this->doctorOffering(Treatment::factory()->create());
+
+        $this->actingAs(User::factory()->reception()->create());
+
+        Livewire::test(Agenda::class)
+            ->assertSeeHtml('class="agenda-now-label"')
+            ->assertSeeHtml('class="is-hidden"')
+            ->assertSee('10:05');
+
+        Livewire::test(Agenda::class, ['date' => '2026-11-03'])
+            ->assertDontSeeHtml('agenda-now-label');
+    }
+
+    public function test_the_grid_knows_the_free_time_for_the_new_appointment_preview(): void
+    {
+        $this->freezeMonday();
+        $treatment = Treatment::factory()->create();
+        $doctor = $this->doctorOffering($treatment);
+        ScheduleBlock::query()->create(['doctor_id' => $doctor->id, 'type' => 'course', 'starts_at' => '2026-11-02 16:00', 'ends_at' => '2026-11-02 17:00', 'reason' => 'Curso']);
+
+        $this->actingAs(User::factory()->reception()->create());
+
+        Livewire::test(Agenda::class)
+            ->assertSeeHtml('data-working="[[540,780],[900,1140]]"')
+            ->assertSeeHtml('data-busy="[[960,1020]]"');
+    }
 }

@@ -18,9 +18,16 @@
     <div class="agenda-controls">
         <div class="agenda-toolbar">
             <div class="agenda-toolbar-group">
-                <x-filament::icon-button icon="heroicon-m-chevron-left" color="gray" :label="$mode === 'week' ? 'Semana anterior' : 'Día anterior'" wire:click="shift(-1)" />
-                <x-filament::button color="gray" size="sm" wire:click="goToday">Hoy</x-filament::button>
-                <x-filament::icon-button icon="heroicon-m-chevron-right" color="gray" :label="$mode === 'week' ? 'Semana siguiente' : 'Día siguiente'" wire:click="shift(1)" />
+                {{-- Atrás, hoy y adelante en un solo control: se usan juntos todo el día. --}}
+                <div class="agenda-nav" role="group" aria-label="{{ $mode === 'week' ? 'Cambiar de semana' : 'Cambiar de día' }}">
+                    <button type="button" class="agenda-nav-btn is-icon" wire:click="shift(-1)" aria-label="{{ $mode === 'week' ? 'Semana anterior' : 'Día anterior' }}" title="{{ $mode === 'week' ? 'Semana anterior' : 'Día anterior' }}">
+                        <x-filament::icon icon="heroicon-m-chevron-left" class="agenda-nav-icon" />
+                    </button>
+                    <button type="button" class="agenda-nav-btn" wire:click="goToday">Hoy</button>
+                    <button type="button" class="agenda-nav-btn is-icon" wire:click="shift(1)" aria-label="{{ $mode === 'week' ? 'Semana siguiente' : 'Día siguiente' }}" title="{{ $mode === 'week' ? 'Semana siguiente' : 'Día siguiente' }}">
+                        <x-filament::icon icon="heroicon-m-chevron-right" class="agenda-nav-icon" />
+                    </button>
+                </div>
                 <x-filament::input.wrapper class="agenda-date">
                     <x-filament::input type="date" wire:model.live="date" aria-label="Ir a la fecha" />
                 </x-filament::input.wrapper>
@@ -47,7 +54,7 @@
         <div class="agenda-info">
             <div class="agenda-legend">
                 @foreach ($legend as $class => $label)
-                    <span class="{{ $class }}">{{ $label }}</span>
+                    <span class="{{ $class }}"><i aria-hidden="true"></i>{{ $label }}</span>
                 @endforeach
             </div>
             {{-- La ayuda se abre cuando se necesita: el que usa la agenda todos los días ya la sabe. En el celular, los colores van aquí. --}}
@@ -57,7 +64,7 @@
                 <p>"Sin cerrar" (en la semana, un punto rojo): ya pasó su hora y falta marcar si vino. Ábrela y usa "Llegó" y "Atendido", o "No asistió".</p>
                 <div class="agenda-legend">
                     @foreach ($legend as $class => $label)
-                        <span class="{{ $class }}">{{ $label }}</span>
+                        <span class="{{ $class }}"><i aria-hidden="true"></i>{{ $label }}</span>
                     @endforeach
                 </div>
             </details>
@@ -78,16 +85,30 @@
                 pointer: null,
                 droppedAt: 0,
                 preview: { top: 0, height: 0, time: '' },
+                hover: null,
                 refresher: null,
 
                 // Se refresca sola cada 30 s, salvo mientras alguien arrastra una cita o tiene una ventana abierta.
-                // Al abrir el día de hoy, la grilla baja sola hasta la hora actual.
                 init() {
                     this.refresher = setInterval(() => {
                         if (document.hidden || this.press || this.dragging || this.$wire.mountedActions?.length) return;
                         this.$wire.$refresh();
                     }, 30000);
-                    this.$nextTick(() => this.scrollToNow());
+                },
+
+                /** Cada vez que se cambia de día o de vista, la grilla va a hoy y a la hora actual. */
+                arrive() {
+                    this.$nextTick(() => {
+                        this.scrollToToday();
+                        this.scrollToNow();
+                    });
+                },
+
+                /** En la semana, si no entran todos los días (en el celular), la grilla empieza en hoy; en otra semana, en el lunes. */
+                scrollToToday() {
+                    if (this.$root.scrollWidth <= this.$root.clientWidth + 1) return;
+                    const today = this.$root.querySelector('.agenda-head.is-today');
+                    this.$root.scrollLeft = today ? today.offsetLeft - this.$root.querySelector('.agenda-times').offsetWidth : 0;
                 },
 
                 scrollToNow() {
@@ -129,9 +150,25 @@
                     return String(Math.floor(minutes / 60)).padStart(2, '0') + ':' + String(minutes % 60).padStart(2, '0');
                 },
 
+                /**
+                 * Con el mouse sobre un hueco libre del horario de atención, la cita nueva se ve antes de hacer clic
+                 * (en cuartos de hora, hasta media hora o lo que quede libre). Sobre citas, bloqueos o fuera de horario no aparece.
+                 */
+                hoverAt(event, column) {
+                    this.hover = null;
+                    if (event.pointerType !== 'mouse' || this.press || this.dragging || event.target.closest('.agenda-appt')) return;
+                    const start = Math.floor((this.from + (event.clientY - column.getBoundingClientRect().top) / this.scale) / 15) * 15;
+                    const range = JSON.parse(column.dataset.working).find(([from, to]) => start >= from && start + 15 <= to);
+                    const busy = JSON.parse(column.dataset.busy);
+                    if (! range || busy.some(([from, to]) => start < to && start + 15 > from)) return;
+                    const end = Math.min(start + 30, range[1], ...busy.map(([from]) => from).filter((from) => from > start));
+                    this.hover = { key: column.dataset.key, top: (start - this.from) * this.scale, height: (end - start) * this.scale - 2, time: this.label(start) };
+                },
+
                 create(event, column, doctor, date) {
                     if (event.target.closest('.agenda-appt') || this.justDropped()) return;
-                    this.$wire.mountAction('createAppointment', { doctor, date, time: this.label(this.minuteAt(event.clientY, column)) });
+                    const time = this.hover?.key === column.dataset.key ? this.hover.time : this.label(this.minuteAt(event.clientY, column));
+                    this.$wire.mountAction('createAppointment', { doctor, date, time });
                 },
 
                 /** Abre el panel de la cita. Con Ctrl o ⌘ se abre la ficha completa en otra pestaña. */
@@ -149,6 +186,7 @@
                     if (event.pointerType === 'mouse' && event.button !== 0) return;
                     const rect = card.getBoundingClientRect();
                     this.cancel();
+                    this.hover = null;
                     this.press = {
                         id: Number(card.dataset.id),
                         key: card.closest('.agenda-col').dataset.key,
@@ -245,6 +283,8 @@
         @php
             $height = ($to - $from) * $scale;
             $nowMinute = now()->hour * 60 + now()->minute;
+            $columnWidth = $mode === 'week' ? '7rem' : '9.5rem';
+            $showsNow = $nowMinute > $from && $nowMinute < $to && collect($columns)->contains(fn (array $column) => $column['date'] === today()->toDateString());
         @endphp
 
         {{-- Con una o dos columnas del día, en el celular la grilla no tiene su propio desplazamiento: se baja con la página. --}}
@@ -261,22 +301,40 @@
             x-on:touchmove="if (dragging) $event.preventDefault()"
             x-on:contextmenu="if (press || dragging) $event.preventDefault()"
         >
-            <div class="agenda-grid" style="grid-template-columns: 3.25rem repeat({{ count($columns) }}, minmax({{ $mode === 'week' ? '7rem' : '9.5rem' }}, 1fr)); --hour: {{ 60 * $scale }}px;">
+            {{-- Tan ancha como todas sus columnas: si no entran, las horas quedan pegadas a la izquierda hasta el último día. --}}
+            <div class="agenda-grid" wire:key="grid-{{ $mode }}-{{ $date }}" x-init="arrive()" style="grid-template-columns: 3.25rem repeat({{ count($columns) }}, minmax({{ $columnWidth }}, 1fr)); width: max(100%, calc(3.25rem + {{ count($columns) }} * {{ $columnWidth }})); --hour: {{ 60 * $scale }}px;">
                 <div class="agenda-head agenda-corner"></div>
 
                 @foreach ($columns as $column)
-                    <div @class(['agenda-head', 'is-today' => $column['isToday'] && $mode === 'week'])>
-                        <div class="agenda-head-title"><i style="background: {{ $column['color'] }}"></i>{{ $column['title'] }}</div>
-                        @if ($column['subtitle'])
-                            <div class="agenda-head-sub">{{ $column['subtitle'] }}</div>
+                    @php
+                        $count = count($column['appointments']);
+                        $countLabel = $count === 0 ? 'Sin citas' : $count.' '.($count === 1 ? 'cita' : 'citas');
+                    @endphp
+                    {{-- En la semana, el número del día grande (hoy, en un círculo); en el día, el doctor con sus iniciales. --}}
+                    <div @class(['agenda-head', 'is-week' => $mode === 'week', 'is-today' => $column['isToday'] && $mode === 'week', 'is-past' => $column['isPast'] && $mode === 'week'])>
+                        @if ($mode === 'week')
+                            <span class="agenda-head-num" @if ($column['isToday']) aria-label="Hoy" @endif>{{ $column['dayNumber'] }}</span>
+                            <span class="agenda-head-text">
+                                <span class="agenda-head-title">{{ $column['weekday'] }}</span>
+                                <span class="agenda-head-sub">{{ $countLabel }}</span>
+                            </span>
+                        @else
+                            <span class="agenda-head-avatar" style="--doc: {{ $column['color'] }}" aria-hidden="true">{{ $column['initials'] }}</span>
+                            <span class="agenda-head-text">
+                                <span class="agenda-head-title">{{ $column['title'] }}</span>
+                                <span class="agenda-head-sub">{{ collect([$column['subtitle'], $countLabel])->filter()->implode(' · ') }}</span>
+                            </span>
                         @endif
                     </div>
                 @endforeach
 
                 <div class="agenda-times" style="height: {{ $height }}px">
                     @foreach ($hours as $hour)
-                        <span @class(['is-first' => $hour * 60 === $from]) style="top: {{ ($hour * 60 - $from) * $scale }}px">{{ sprintf('%02d:00', $hour) }}</span>
+                        <span @class(['is-first' => $hour * 60 === $from, 'is-hidden' => $showsNow && abs($hour * 60 - $nowMinute) < 12]) style="top: {{ ($hour * 60 - $from) * $scale }}px">{{ sprintf('%02d:00', $hour) }}</span>
                     @endforeach
+                    @if ($showsNow)
+                        <span class="agenda-now-label" style="top: {{ ($nowMinute - $from) * $scale }}px">{{ now()->format('H:i') }}</span>
+                    @endif
                 </div>
 
                 @foreach ($columns as $column)
@@ -286,10 +344,21 @@
                         data-key="{{ $column['key'] }}"
                         data-doctor="{{ $column['doctorId'] }}"
                         data-treatments="{{ implode(',', $column['treatments']) }}"
+                        data-working="{{ json_encode(array_map(fn (array $range) => [$range['start'], $range['end']], $column['working'])) }}"
+                        data-busy="{{ json_encode([...array_map(fn (array $appt) => [$appt['start'], $appt['until']], $column['appointments']), ...array_map(fn (array $block) => [$block['start'], $block['end']], $column['blocks'])]) }}"
                         :class="{ 'is-over': over === @js($column['key']), 'is-refused': refused === @js($column['key']) }"
                         style="height: {{ $height }}px"
                         x-on:click="create($event, $el, {{ $column['doctorId'] }}, @js($column['date']))"
+                        x-on:pointermove="hoverAt($event, $el)"
+                        x-on:pointerleave="hover = null"
                     >
+                        <div
+                            class="agenda-ghost"
+                            x-cloak
+                            x-show="hover?.key === @js($column['key'])"
+                            :style="{ top: (hover?.top ?? 0) + 'px', height: (hover?.height ?? 0) + 'px' }"
+                        ><span x-text="'+ ' + (hover?.time ?? '')"></span></div>
+
                         <div
                             class="agenda-drop"
                             x-cloak

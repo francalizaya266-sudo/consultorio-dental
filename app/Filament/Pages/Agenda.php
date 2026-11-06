@@ -221,8 +221,12 @@ class Agenda extends Page
                 'key' => $doctor->getKey().'|'.$day->toDateString(),
                 'title' => $this->mode === 'week' ? ucfirst($day->translatedFormat('D j')) : $doctor->name,
                 'subtitle' => $this->mode === 'week' ? null : $doctor->specialty,
+                'weekday' => ucfirst($day->translatedFormat('D')),
+                'dayNumber' => $day->day,
                 'isToday' => $day->isToday(),
+                'isPast' => $day->lt(today()),
                 'color' => $doctor->agenda_color ?: '#1e4f91',
+                'initials' => self::initials($doctor->name),
                 'date' => $day->toDateString(),
                 'doctorId' => $doctor->getKey(),
                 'treatments' => $doctor->treatments->modelKeys(),
@@ -244,6 +248,18 @@ class Agenda extends Page
             ->reject(fn (array $column) => $this->mode === 'week' && $column['working'] === [] && $column['appointments'] === [])
             ->values()
             ->all();
+    }
+
+    /** Iniciales del doctor para su círculo en la cabecera: "Dr. Jassmanny Neil Vega Jaen" queda "JV" (el nombre y el primer apellido). */
+    private static function initials(string $name): string
+    {
+        $words = collect(preg_split('/\s+/u', trim($name)) ?: [])
+            ->reject(fn (string $word) => preg_match('/^(dr|dra|dr\(a\)|od|c\.?d)\.?$/iu', $word) === 1)
+            ->values();
+
+        $surname = $words->count() >= 4 ? $words->get(2) : $words->last();
+
+        return mb_strtoupper(mb_substr((string) $words->first(), 0, 1).($words->count() > 1 ? mb_substr((string) $surname, 0, 1) : ''));
     }
 
     /** @return Collection<int, array<string, mixed>> */
