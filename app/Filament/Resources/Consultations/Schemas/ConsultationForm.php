@@ -12,12 +12,16 @@ use App\Filament\Actions\UploadClinicalFilesAction;
 use App\Filament\Forms\QuickTextarea;
 use App\Filament\Resources\Consultations\ConsultationResource;
 use App\Filament\Resources\Consultations\Pages\EditConsultation;
+use App\Filament\Resources\Patients\PatientResource;
 use App\Filament\Resources\Patients\Schemas\TreatmentPlanForm;
 use App\Filament\Support\ClinicalAlerts;
 use App\Livewire\OdontogramChart;
 use App\Models\Campaign;
+use App\Models\Consent;
+use App\Models\ConsentTemplate;
 use App\Models\Consultation;
 use App\Models\Icd10Code;
+use App\Models\MedicalBackground;
 use App\Models\Patient;
 use App\Models\Prescription;
 use App\Models\TextSnippet;
@@ -39,6 +43,7 @@ use Filament\Forms\Components\TextInput;
 use Filament\Forms\Components\ToggleButtons;
 use Filament\Notifications\Notification;
 use Filament\Schemas\Components\Actions;
+use Filament\Schemas\Components\Callout;
 use Filament\Schemas\Components\Component;
 use Filament\Schemas\Components\Flex;
 use Filament\Schemas\Components\Grid;
@@ -58,23 +63,29 @@ use Illuminate\Support\Collection;
 use Illuminate\Support\HtmlString;
 
 /**
- * Pantalla de la atención: todo lo que el doctor escribe mientras atiende. Arriba, una barra fija con el
- * paciente, sus alertas, las secciones y los botones de guardar y terminar. En la tablet horizontal
- * (y en la computadora) el odontograma va a la izquierda y las notas a la derecha.
+ * Pantalla de la atención: todo lo que el doctor escribe mientras atiende, en el orden en que pasa la cita.
+ * Arriba, una barra fija con el paciente, sus alertas, las secciones y Terminar. Después, tres pasos: antes de
+ * empezar (motivo, examen, radiografías), lo que hiciste (con el odontograma fijo a la izquierda en la tablet
+ * y la computadora) y lo que se lleva el paciente (indicaciones y receta, que salen juntas).
  */
 class ConsultationForm
 {
     /** @var array<string, string> Secciones de la barra fija: ancla → nombre. */
     public const SECTIONS = [
         'motivo' => 'Motivo',
+        'archivos' => 'Rx y fotos',
         'odontograma' => 'Odontograma',
         'diagnostico' => 'Diagnóstico',
-        'plan' => 'Lo hecho',
+        'plan' => 'Tratamientos',
         'evolucion' => 'Evolución',
-        'indicaciones' => 'Indicaciones',
-        'archivos' => 'Fotos',
-        'receta' => 'Receta',
+        'indicaciones' => 'Para el paciente',
     ];
+
+    /** Aviso al imprimir o enviar la receta de un paciente sin antecedentes. */
+    private const WITHOUT_BACKGROUND = 'No sabemos si tiene alergias: no hay antecedentes registrados. Pregúntale antes de entregarle la receta.';
+
+    /** Enfermedades con las que conviene tomar la presión y el pulso antes de empezar. */
+    private const VITALS_CONDITIONS = ['hypertension', 'heart_disease', 'diabetes', 'bleeding_disorder', 'kidney_disease', 'thyroid'];
 
     public static function configure(Schema $schema): Schema
     {
@@ -82,51 +93,92 @@ class ConsultationForm
             ->columns(1)
             ->components([
                 View::make('filament.clinical.consultation-bar')
-                    ->viewData(fn (?Consultation $record, $livewire) => [
-                        'patient' => $record?->patient,
-                        'alerts' => $record ? ClinicalAlerts::for($record->patient) : [],
-                        'autosavedAt' => $livewire->autosavedAt ?? null,
-                        'sections' => self::SECTIONS,
-                    ]),
+                    ->viewData(fn (?Consultation $record, $livewire) => self::barData($record, $livewire)),
 
-                Group::make(fn (?Consultation $record) => array_filter([ClinicalAlerts::callout($record?->patient)])),
+                self::step(1, 'Antes de empezar', 'Lo que cuenta el paciente y lo que encuentras al examinarlo.'),
+
+                Callout::make('Faltan los antecedentes médicos')
+                    ->key('backgroundMissing')
+                    ->description('Pregunta por alergias, enfermedades y medicamentos antes de empezar. Se registra aquí mismo, sin salir de la atención.')
+                    ->warning()
+                    ->actions([self::askBackgroundAction()])
+                    ->visible(fn (?Consultation $record) => $record && ! $record->patient->medicalBackground),
 
                 Section::make('Motivo y examen')
                     ->id('motivo')
                     ->icon(Heroicon::OutlinedChatBubbleLeftEllipsis)
-                    ->columns(2)
+                    ->columns(['default' => 1, 'lg' => 2])
                     ->schema([
+                        Callout::make('Al reservar escribió')
+                            ->key('patientNote')
+                            ->description(fn (?Consultation $record) => '«'.trim((string) $record?->appointment?->patient_note).'»')
+                            ->icon(Heroicon::OutlinedChatBubbleBottomCenterText)
+                            ->info()
+                            ->actions([
+                                Action::make('usePatientNote')
+                                    ->label('Usar como motivo')
+                                    ->link()
+                                    ->action(fn (Get $get, Set $set, Consultation $record) => $set('chief_complaint', collect([trim((string) $get('chief_complaint')), trim((string) $record->appointment?->patient_note)])->filter()->implode("\n"))),
+                            ])
+                            ->visible(fn (Get $get, ?Consultation $record) => filled($note = trim((string) $record?->appointment?->patient_note)) && ! str_contains((string) $get('chief_complaint'), $note))
+                            ->columnSpanFull(),
                         QuickTextarea::make('chief_complaint')
                             ->label('Motivo de consulta')
                             ->snippets(SnippetField::ChiefComplaint),
-                        QuickTextarea::make('current_illness')
-                            ->label('Enfermedad actual')
-                            ->snippets(SnippetField::Any),
                         QuickTextarea::make('clinical_exam')
                             ->label('Examen clínico')
-                            ->snippets(SnippetField::ClinicalExam)
-                            ->columnSpanFull(),
-                        Grid::make(3)
+                            ->snippets(SnippetField::ClinicalExam),
+                        Section::make('Enfermedad actual y signos vitales')
+                            ->key('vitals')
+                            ->description(fn (?Consultation $record) => self::vitalsHint($record))
+                            ->compact()
+                            ->secondary()
+                            ->collapsed(fn (?Consultation $record) => ! self::opensVitals($record))
                             ->columnSpanFull()
                             ->schema([
-                                TextInput::make('vital_signs.blood_pressure')
-                                    ->label('Presión arterial')
-                                    ->placeholder('120/80')
-                                    ->maxLength(10),
-                                TextInput::make('vital_signs.heart_rate')
-                                    ->label('Pulso')
-                                    ->suffix('lpm')
-                                    ->numeric()
-                                    ->minValue(20)
-                                    ->maxValue(250),
-                                TextInput::make('vital_signs.temperature')
-                                    ->label('Temperatura')
-                                    ->suffix('°C')
-                                    ->numeric()
-                                    ->minValue(30)
-                                    ->maxValue(45),
+                                QuickTextarea::make('current_illness')
+                                    ->label('Enfermedad actual')
+                                    ->snippets(SnippetField::Any),
+                                Grid::make(['default' => 1, 'sm' => 3])
+                                    ->schema([
+                                        TextInput::make('vital_signs.blood_pressure')
+                                            ->label('Presión arterial')
+                                            ->placeholder('120/80')
+                                            ->maxLength(10),
+                                        TextInput::make('vital_signs.heart_rate')
+                                            ->label('Pulso')
+                                            ->suffix('lpm')
+                                            ->numeric()
+                                            ->minValue(20)
+                                            ->maxValue(250),
+                                        TextInput::make('vital_signs.temperature')
+                                            ->label('Temperatura')
+                                            ->suffix('°C')
+                                            ->numeric()
+                                            ->minValue(30)
+                                            ->maxValue(45),
+                                    ]),
                             ]),
                     ]),
+
+                Section::make('Radiografías y fotos')
+                    ->id('archivos')
+                    ->key('files')
+                    ->icon(Heroicon::OutlinedPhoto)
+                    ->compact()
+                    ->collapsible()
+                    ->headerActions([
+                        UploadClinicalFilesAction::make(fn (Consultation $record) => $record->patient, fn (Consultation $record) => $record)
+                            ->label('Subir')
+                            ->link()
+                            ->visible(fn (?Consultation $record) => $record && auth()->user()->can('update', $record)),
+                    ])
+                    ->schema([
+                        View::make('filament.clinical.files-grid')
+                            ->viewData(fn (?Consultation $record) => ['files' => $record?->files()->latest('id')->get() ?? collect()]),
+                    ]),
+
+                self::step(2, 'Lo que hiciste', 'Odontograma, diagnóstico, lo que se cobra y cómo fue.'),
 
                 Grid::make(['default' => 1, 'lg' => 5])
                     ->extraAttributes(['class' => 'consultation-split'])
@@ -177,14 +229,22 @@ class ConsultationForm
                                         ]),
                                     QuickTextarea::make('diagnosis_notes')
                                         ->label('Notas del diagnóstico')
-                                        ->snippets(SnippetField::Diagnosis),
+                                        ->snippets(SnippetField::Diagnosis)
+                                        ->visible(fn (Get $get, $livewire) => filled($get('diagnosis_notes')) || ($livewire->showDiagnosisNotes ?? true)),
+                                    Actions::make([
+                                        Action::make('addDiagnosisNotes')
+                                            ->label('Agregar una nota')
+                                            ->icon(Heroicon::OutlinedPlus)
+                                            ->link()
+                                            ->action(fn ($livewire) => $livewire->showDiagnosisNotes = true),
+                                    ])->visible(fn (Get $get, $livewire) => blank($get('diagnosis_notes')) && ! ($livewire->showDiagnosisNotes ?? true)),
                                 ]),
 
-                            Section::make('Lo que se hizo hoy')
+                            Section::make('Tratamientos y cobro')
                                 ->id('plan')
                                 ->key('plan')
                                 ->icon(Heroicon::OutlinedClipboardDocumentList)
-                                ->description('Llega con lo programado en la cita. Quita lo que no se hizo y agrega lo que se hizo de más: al terminar se cobra, sale del inventario y avanza el plan solo con lo marcado.')
+                                ->description('Llega con lo programado. Deja marcado solo lo que se hizo: eso se cobra, sale del inventario y avanza el plan.')
                                 ->headerActions([self::addPackageAction()])
                                 ->schema([
                                     Select::make('treatments')
@@ -236,24 +296,15 @@ class ConsultationForm
                                         ->extraAttributes(['class' => 'consult-charges']),
                                 ]),
 
-                            Section::make('Evolución')
+                            Section::make('Nota de evolución')
                                 ->id('evolucion')
                                 ->icon(Heroicon::OutlinedWrenchScrewdriver)
-                                ->description('Qué se hizo hoy.')
+                                ->description('Cómo fue: anestesia, técnica, materiales e incidencias.')
                                 ->schema([
                                     QuickTextarea::make('procedures')
                                         ->hiddenLabel()
-                                        ->label('Evolución')
+                                        ->label('Nota de evolución')
                                         ->snippets(SnippetField::Procedures),
-                                ]),
-
-                            Section::make('Indicaciones y próximos pasos')
-                                ->id('indicaciones')
-                                ->icon(Heroicon::OutlinedClipboardDocument)
-                                ->schema([
-                                    QuickTextarea::make('indications')
-                                        ->label('Indicaciones para el paciente')
-                                        ->snippets(SnippetField::Indications),
                                     QuickTextarea::make('next_steps')
                                         ->label('Próximos pasos')
                                         ->placeholder('Ej.: resina en 36 la próxima sesión')
@@ -262,35 +313,31 @@ class ConsultationForm
                         ])->columnSpan(['lg' => 2]),
                     ]),
 
-                Section::make('Radiografías y fotos')
-                    ->id('archivos')
-                    ->key('files')
-                    ->icon(Heroicon::OutlinedPhoto)
-                    ->collapsible()
-                    ->headerActions([
-                        UploadClinicalFilesAction::make(fn (Consultation $record) => $record->patient, fn (Consultation $record) => $record)
-                            ->label('Subir')
-                            ->link()
-                            ->visible(fn (?Consultation $record) => $record && auth()->user()->can('update', $record)),
-                    ])
-                    ->schema([
-                        View::make('filament.clinical.files-grid')
-                            ->viewData(fn (?Consultation $record) => ['files' => $record?->files()->latest('id')->get() ?? collect()]),
-                    ]),
+                self::step(3, 'Para el paciente', 'Lo que se lleva a casa. Las indicaciones y la receta se imprimen o se envían juntas.'),
 
-                Section::make('Receta')
-                    ->id('receta')
+                Section::make('Indicaciones y receta')
+                    ->id('indicaciones')
                     ->key('prescription')
                     ->icon(Heroicon::OutlinedBeaker)
-                    ->description('Se imprime o se envía por WhatsApp junto con las indicaciones.')
                     ->headerActions([self::printPrescriptionAction(), self::sendPrescriptionAction()])
                     ->schema([
+                        QuickTextarea::make('indications')
+                            ->label('Indicaciones')
+                            ->snippets(SnippetField::Indications),
+                        Callout::make('No sabemos si tiene alergias')
+                            ->key('prescriptionWithoutBackground')
+                            ->description('Pregúntale antes de recetar y regístralo: así la receta avisa si un medicamento choca con una alergia.')
+                            ->danger()
+                            ->actions([self::askBackgroundAction()])
+                            ->visible(fn (Get $get, ?Consultation $record) => $record && ! $record->patient->medicalBackground && self::hasMedications($get('prescription_items'))),
                         Repeater::make('prescription_items')
-                            ->hiddenLabel()
+                            ->label('Receta')
                             ->addActionLabel('Agregar medicamento')
                             ->defaultItems(0)
+                            ->reorderable(false)
                             ->columns(5)
                             ->extraItemActions([self::saveMedicationAction()])
+                            ->extraAttributes(['class' => 'consult-rx'])
                             ->schema([
                                 TextInput::make('medication')
                                     ->label('Medicamento')
@@ -330,6 +377,132 @@ class ConsultationForm
                             ->all()),
                     ]),
             ]);
+    }
+
+    /** Separador de cada paso de la atención: número, nombre y para qué sirve. */
+    private static function step(int $number, string $title, string $description): View
+    {
+        return View::make('filament.clinical.consultation-step')
+            ->key('step'.$number)
+            ->viewData(['number' => $number, 'title' => $title, 'description' => $description]);
+    }
+
+    /** Abre la ventana de antecedentes de la página (la misma desde cualquier aviso). */
+    private static function askBackgroundAction(): Action
+    {
+        return Action::make('askBackground')
+            ->label('Registrar antecedentes')
+            ->icon(Heroicon::OutlinedHeart)
+            ->button()
+            ->size('sm')
+            ->alpineClickHandler("\$wire.mountAction('editBackground')");
+    }
+
+    /**
+     * Lo que muestra la barra fija: quién es, qué se le hace hoy, sus alertas, el consentimiento y qué secciones
+     * ya tienen algo escrito.
+     *
+     * @return array<string, mixed>
+     */
+    public static function barData(?Consultation $record, mixed $livewire): array
+    {
+        $patient = $record?->patient;
+        $data = (array) ($livewire->data ?? []);
+
+        return [
+            'patient' => $patient,
+            'meta' => $record ? collect([
+                $patient->age !== null ? $patient->age.' años' : null,
+                $record->appointment?->treatment?->name,
+                $record->attended_at->translatedFormat('D d/m · H:i'),
+            ])->filter()->implode(' · ') : null,
+            'alerts' => $patient ? ClinicalAlerts::for($patient) : [],
+            'hasBackground' => $patient?->medicalBackground !== null,
+            'consent' => $record ? self::consentStatus($record) : null,
+            'autosavedAt' => $livewire->autosavedAt ?? null,
+            'sections' => self::SECTIONS,
+            'filled' => $record ? self::filledSections($record, $data) : [],
+            'historyUrl' => $patient ? PatientResource::getUrl('clinical', ['record' => $patient]) : null,
+        ];
+    }
+
+    /**
+     * Si el tratamiento de la cita tiene su consentimiento: true si ya lo firmó para esta cita, false si falta.
+     * Null si no aplica (sin cita, o el tratamiento no tiene consentimiento propio).
+     */
+    public static function consentStatus(Consultation $consultation): ?bool
+    {
+        $appointment = $consultation->appointment;
+        $treatment = $appointment?->treatment;
+
+        if (! $treatment || ! ConsentTemplate::query()->where('is_active', true)->where('treatment_id', $treatment->getKey())->exists()) {
+            return null;
+        }
+
+        return Consent::query()
+            ->where('patient_id', $consultation->patient_id)
+            ->where('treatment_id', $treatment->getKey())
+            ->whereNull('revoked_at')
+            ->where('signed_at', '>=', $appointment->created_at->startOfDay())
+            ->exists();
+    }
+
+    /**
+     * Las secciones que ya tienen algo escrito, para marcarlas en la barra (el odontograma parte del anterior,
+     * así que no cuenta).
+     *
+     * @param  array<string, mixed>  $data
+     * @return list<string>
+     */
+    public static function filledSections(Consultation $consultation, array $data): array
+    {
+        $any = fn (mixed ...$values) => collect($values)->flatten()->contains(fn (mixed $value) => filled(is_string($value) ? trim($value) : $value));
+
+        return array_keys(array_filter([
+            'motivo' => $any($data['chief_complaint'] ?? null, $data['clinical_exam'] ?? null, $data['current_illness'] ?? null, $data['vital_signs'] ?? []),
+            'archivos' => $consultation->files()->exists(),
+            'diagnostico' => filled($data['diagnoses'] ?? []) || $any($data['diagnosis_notes'] ?? null),
+            'plan' => filled($data['treatments'] ?? []) || filled($data['planItems'] ?? []),
+            'evolucion' => $any($data['procedures'] ?? null, $data['next_steps'] ?? null),
+            'indicaciones' => $any($data['indications'] ?? null) || self::hasMedications($data['prescription_items'] ?? []),
+        ]));
+    }
+
+    /** @param  mixed  $items  Los renglones de la receta en pantalla. */
+    public static function hasMedications(mixed $items): bool
+    {
+        return collect((array) $items)->contains(fn (mixed $item) => filled(trim((string) ($item['medication'] ?? ''))));
+    }
+
+    /** Signos vitales a la vista si ya tienen algo o si el paciente tiene una enfermedad que los pide. */
+    private static function opensVitals(?Consultation $record): bool
+    {
+        if (! $record) {
+            return false;
+        }
+
+        return filled($record->current_illness)
+            || collect($record->vital_signs ?? [])->filter(fn (mixed $value) => filled($value))->isNotEmpty()
+            || self::riskConditions($record) !== [];
+    }
+
+    private static function vitalsHint(?Consultation $record): string
+    {
+        $conditions = $record ? self::riskConditions($record) : [];
+
+        return $conditions === []
+            ? 'Para cirugías, urgencias o pacientes con presión alta, diabetes o problemas del corazón.'
+            : 'Tómalos antes de empezar: tiene '.mb_strtolower(implode(', ', $conditions)).'.';
+    }
+
+    /** @return list<string> */
+    private static function riskConditions(Consultation $record): array
+    {
+        return collect($record->patient->medicalBackground?->conditions ?? [])
+            ->intersect(self::VITALS_CONDITIONS)
+            ->map(fn (string $key) => MedicalBackground::CONDITIONS[$key])
+            ->values()
+            ->all();
     }
 
     /** Medicamentos frecuentes (compartidos y propios), los más usados primero. */
@@ -577,6 +750,11 @@ class ConsultationForm
             ->icon(Heroicon::OutlinedPrinter)
             ->color('gray')
             ->link()
+            // Sin antecedentes no se sabe si es alérgico: se puede imprimir igual, pero que sea a sabiendas.
+            ->requiresConfirmation(fn (?Consultation $record) => $record && ! $record->patient->medicalBackground)
+            ->modalHeading('¿Imprimir sin antecedentes?')
+            ->modalDescription(self::WITHOUT_BACKGROUND)
+            ->modalSubmitActionLabel('Imprimir igual')
             ->action(function (Consultation $record, EditConsultation $livewire) {
                 if (! $prescription = self::savedPrescription($record, $livewire)) {
                     return;
@@ -595,6 +773,9 @@ class ConsultationForm
         })
             ->label('WhatsApp')
             ->link()
+            ->modalDescription(fn (Consultation $record) => $record->patient->medicalBackground
+                ? 'Revisa el mensaje. Se abrirá WhatsApp con el texto listo: solo presiona Enviar.'
+                : '⚠ '.self::WITHOUT_BACKGROUND)
             ->visible(fn (?Consultation $record) => $record?->patient->account_id !== null);
     }
 
@@ -616,6 +797,7 @@ class ConsultationForm
     private static function saveMedicationAction(): Action
     {
         return Action::make('saveMedication')
+            ->label('Guardar como opción')
             ->icon(Heroicon::OutlinedBookmark)
             ->tooltip('Guardar como opción')
             ->color('gray')

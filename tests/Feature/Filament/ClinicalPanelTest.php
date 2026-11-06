@@ -244,7 +244,7 @@ class ClinicalPanelTest extends TestCase
         $this->assertSame($doctor->user->id, $patient->medicalBackground->updated_by_user_id);
 
         Livewire::test(EditConsultation::class, ['record' => $consultation->getRouteKey()])
-            ->assertSee('Atención: Alergia: Penicilina · Diabetes')
+            ->assertSee(['⚠ Alergia: Penicilina', '⚠ Diabetes'])
             ->assertDontSee('Toma: Ninguna');
 
         // Recepción no puede tocar los antecedentes.
@@ -283,7 +283,7 @@ class ClinicalPanelTest extends TestCase
             ->fillForm(['procedures' => 'Profilaxis y aplicación de flúor.'])
             ->call('autosave')
             ->assertSet('autosavedAt', '08:00')
-            ->assertSee('Guardado solo a las 08:00');
+            ->assertSee('Guardado a las 08:00');
 
         $this->assertSame('Profilaxis y aplicación de flúor.', $consultation->fresh()->procedures);
 
@@ -304,7 +304,7 @@ class ClinicalPanelTest extends TestCase
         $this->actingAs($doctor->user);
 
         Livewire::test(EditConsultation::class, ['record' => $consultation->getRouteKey()])
-            ->assertSeeInOrder([$appointment->patient->full_name, '⚠ Alergia: Penicilina (ronchas)', 'Motivo', 'Odontograma', 'Receta', 'Terminar atención'])
+            ->assertSeeInOrder([$appointment->patient->full_name, 'Terminar atención', '⚠ Alergia: Penicilina (ronchas)', 'Motivo', 'Odontograma', 'Para el paciente'])
             ->fillForm(['prescription_items' => [['medication' => 'Amoxicilina 500 mg', 'instructions' => '1 cada 8 horas']]])
             ->assertSee('Cuidado con Amoxicilina: el paciente tiene alergia a la penicilina.')
             ->fillForm(['prescription_items' => [['medication' => 'Ibuprofeno 400 mg', 'instructions' => null]]])
