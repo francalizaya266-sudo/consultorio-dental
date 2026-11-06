@@ -65,11 +65,10 @@ class AttentionFollowsScheduleTest extends TestCase
 
         // Iba a ser una resina, pero el doctor decidió extraer: cambia lo programado por lo que hizo.
         Livewire::test(EditConsultation::class, ['record' => $consultation->getRouteKey()])
-            ->assertSee('Lo que se hizo hoy')
-            ->assertSeeHtml('<li>Curación con resina · <span style="white-space: nowrap">S/ 150.00</span></li>')
+            ->assertSee(['Lo que se hizo hoy', 'Al terminar se carga'])
+            ->assertSet('data.prices', ['treatment-'.$resin->id => '150.00'])
             ->fillForm(['treatments' => [$extraction->id]])
-            ->assertSeeHtml('<li>Extracción simple · <span style="white-space: nowrap">S/ 130.00</span></li>')
-            ->assertDontSeeHtml('<li>Curación con resina')
+            ->assertSet('data.prices', ['treatment-'.$extraction->id => '130.00'])
             ->callAction('close')
             ->assertHasNoFormErrors();
 
@@ -91,7 +90,7 @@ class AttentionFollowsScheduleTest extends TestCase
 
         Livewire::test(EditConsultation::class, ['record' => $consultation->getRouteKey()])
             ->fillForm(['treatments' => [$evaluation->id, $cleaning->id]])
-            ->assertSeeHtml('<strong>Total <span style="white-space: nowrap">S/ 170.00</span></strong>')
+            ->assertSee('S/ 170.00')
             ->callAction('close');
 
         $this->assertEqualsCanonicalizing([['Evaluación o primera consulta', '50.00'], ['Limpieza dental', '120.00']], $this->charges($appointment));

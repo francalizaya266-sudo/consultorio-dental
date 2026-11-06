@@ -117,9 +117,16 @@ class EditConsultation extends EditRecord
         return [...$data, 'prescription_items' => app(PrescriptionService::class)->itemsOf($this->getConsultation())];
     }
 
+    /** Cada línea de lo hecho llega con su precio: el que puso el dentista o, si no lo cambió, el sugerido. */
+    protected function afterFill(): void
+    {
+        $this->data['prices'] = ConsultationForm::pricesFor($this->getConsultation(), $this->data['treatments'] ?? [], $this->data['planItems'] ?? [], $this->getConsultation()->prices ?? []);
+    }
+
     protected function mutateFormDataBeforeSave(array $data): array
     {
         $this->prescriptionItems = Arr::pull($data, 'prescription_items') ?? [];
+        $data['prices'] = ConsultationForm::changedPrices($this->getConsultation(), $this->data['treatments'] ?? [], $this->data['planItems'] ?? [], $this->data['prices'] ?? []);
 
         return $data;
     }
@@ -256,6 +263,7 @@ class EditConsultation extends EditRecord
         }
 
         $this->data['treatments'] = ConsultationForm::withoutWhatThePlanCovers($this->data['treatments'] ?? [], $added);
+        $this->data['prices'] = ConsultationForm::pricesFor($consultation, $this->data['treatments'], $current, $this->data['prices'] ?? []);
     }
 
     /** Guarda, cierra la atención, marca la cita como atendida y ofrece programar la siguiente. */
@@ -268,7 +276,7 @@ class EditConsultation extends EditRecord
             // Sin inventario es solo una confirmación; con inventario, además, lo que sale de él.
             ->requiresConfirmation(fn () => ! self::tracksInventory())
             ->modalHeading('¿Terminar la atención?')
-            ->modalDescription(fn () => ConsultationForm::chargePreview($this->getConsultation(), $this->data['treatments'] ?? [], $this->data['planItems'] ?? []).' '.(self::tracksInventory()
+            ->modalDescription(fn () => ConsultationForm::chargePreview($this->getConsultation(), $this->data['treatments'] ?? [], $this->data['planItems'] ?? [], $this->data['prices'] ?? []).' '.(self::tracksInventory()
                 ? 'Se guarda lo escrito, la cita queda como atendida y estos materiales salen del inventario. Borra lo que no usaste y agrega lo que usaste de más. Si algo quedó mal, puedes reabrirla durante 24 horas.'
                 : 'Se guarda lo escrito y la cita queda como atendida. Si algo quedó mal, puedes reabrirla durante 24 horas.'))
             ->modalWidth(fn () => self::tracksInventory() ? Width::ThreeExtraLarge : null)

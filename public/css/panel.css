@@ -225,6 +225,16 @@
 .dark .cb-sections a { background: rgb(255 255 255 / .06); color: var(--gray-300); }
 .dark .cb-sections a:hover, .dark .cb-sections a.is-current { background: rgb(59 130 246 / .18); color: var(--primary-300); }
 .fi-sc-section[id] { scroll-margin-top: calc(var(--topbar-height, 4rem) + 7rem); }
+/* "Al terminar se carga": una fila por cosa hecha, con su precio a la derecha (el dentista lo puede cambiar). */
+.consult-charges > .fi-sc { gap: .35rem; }
+.consult-charge-line { padding: .25rem 0; border-top: 1px solid var(--gray-100); font-size: .875rem; }
+.dark .consult-charge-line { border-color: rgb(255 255 255 / .06); }
+.consult-charge-line .fi-sc-text { overflow-wrap: anywhere; }
+.consult-charge-price { width: 8.5rem; }
+.consult-charge-price input { text-align: right; font-variant-numeric: tabular-nums; }
+.consult-charge-suggested { display: block; font-size: .75rem; color: var(--gray-500); }
+.consult-charge-total { border-top-width: 2px; padding-top: .5rem; }
+.consult-charge-total > div:last-child { padding-right: .75rem; font-variant-numeric: tabular-nums; }
 /* Tablet horizontal y computadora: odontograma a la izquierda, notas a la derecha. */
 @media (min-width: 1024px) {
     .consultation-split .od-scroll .od-svg { min-width: 26rem; }

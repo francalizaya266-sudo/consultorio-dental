@@ -36,12 +36,16 @@ final class BillingService
 
     private const CHECKOUT_DISCOUNT = 'Descuento al cobrar';
 
-    /** Carga lo que se hizo en la atención. Si se reabre y se vuelve a cerrar, no se carga dos veces. */
+    /**
+     * Carga lo que se hizo en la atención, al precio que puso el dentista o, si no lo cambió, al sugerido.
+     * Si se reabre y se vuelve a cerrar, no se carga dos veces.
+     */
     public function chargeConsultation(Consultation $consultation, User $by): void
     {
         $consultation->loadMissing(['appointment.campaign', 'planItems.plan', 'treatments']);
+        $prices = $consultation->prices ?? [];
 
-        DB::transaction(function () use ($consultation, $by) {
+        DB::transaction(function () use ($consultation, $by, $prices) {
             $charges = Charge::query()->where('consultation_id', $consultation->getKey())->get();
             $expected = [];
 
@@ -57,11 +61,11 @@ final class BillingService
             };
 
             foreach ($consultation->planItems as $item) {
-                $add('item-'.$item->getKey(), fn () => $this->chargePlanSession($item, $by, $consultation->appointment, $consultation));
+                $add('item-'.$item->getKey(), fn () => $this->chargePlanSession($item, $by, $consultation->appointment, $consultation, self::priceIn($prices, 'item-'.$item->getKey())));
             }
 
             foreach ($consultation->treatments as $treatment) {
-                $add('treatment-'.$treatment->getKey(), fn () => $this->charge($treatment, $consultation->patient_id, $consultation->doctor_id, $by, $consultation->appointment, $consultation));
+                $add('treatment-'.$treatment->getKey(), fn () => $this->charge($treatment, $consultation->patient_id, $consultation->doctor_id, $by, $consultation->appointment, $consultation, self::priceIn($prices, 'treatment-'.$treatment->getKey())));
             }
 
             $charges
@@ -72,13 +76,15 @@ final class BillingService
 
     /**
      * Lo que cargará la atención al terminarla con lo marcado como hecho, para que el doctor lo vea mientras
-     * atiende. Si ya se terminó una vez y se reabrió, lo que ya se cargó.
+     * atiende: el precio sugerido de cada cosa y el que puso él, si lo cambió. Si ya se terminó una vez y se
+     * reabrió, lo que ya se cargó (eso ya no se cambia aquí, sino al cobrar).
      *
      * @param  list<int|string>  $treatmentIds
      * @param  list<int|string>  $planItemIds
-     * @return list<array{label: string, amount: float|null}> Sin monto: ya se paga con la forma de pago del plan.
+     * @param  array<string, mixed>  $prices  El precio que puso el dentista, por línea ("item-12", "treatment-5").
+     * @return list<array{key: string, label: string, amount: float|null, suggested: float|null, editable: bool}> Sin monto: ya se paga con la forma de pago del plan.
      */
-    public function previewConsultation(Consultation $consultation, array $treatmentIds, array $planItemIds): array
+    public function previewConsultation(Consultation $consultation, array $treatmentIds, array $planItemIds, array $prices = []): array
     {
         // Como al terminar: lo que ya se cargó no se vuelve a cargar, y lo que recepción quitó no vuelve.
         $charged = Charge::query()
@@ -88,7 +94,13 @@ final class BillingService
             ->get()
             ->unique(fn (Charge $c) => self::key($c))
             ->keyBy(fn (Charge $c) => self::key($c))
-            ->map(fn (Charge $c) => ['label' => $c->description.($c->voided_at ? ' · se quitó al cobrar' : ''), 'amount' => $c->voided_at ? 0.0 : $c->net()]);
+            ->map(fn (Charge $c, string $key) => [
+                'key' => $key,
+                'label' => $c->description.($c->voided_at ? ' · se quitó al cobrar' : ''),
+                'amount' => $amount = $c->voided_at ? 0.0 : $c->net(),
+                'suggested' => $amount,
+                'editable' => false,
+            ]);
         $campaign = $consultation->appointment?->campaign;
         $lines = [];
 
@@ -102,14 +114,20 @@ final class BillingService
             }
 
             if ($item->in_payment_schedule) {
-                $lines[] = ['label' => $item->label().' · incluida en su forma de pago', 'amount' => null];
+                $lines[] = ['key' => 'item-'.$item->getKey(), 'label' => $item->label().' · incluida en su forma de pago', 'amount' => null, 'suggested' => null, 'editable' => false];
 
                 continue;
             }
 
             [$amount, $session] = $this->nextSession($item);
             $sessions = max(1, (int) $item->sessions_planned);
-            $lines[] = ['label' => $item->label().($sessions > 1 ? " · sesión {$session} de {$sessions}" : ''), 'amount' => $amount];
+            $lines[] = [
+                'key' => 'item-'.$item->getKey(),
+                'label' => $item->label().($sessions > 1 ? " · sesión {$session} de {$sessions}" : ''),
+                'amount' => self::priceIn($prices, 'item-'.$item->getKey()) ?? $amount,
+                'suggested' => $amount,
+                'editable' => true,
+            ];
         }
 
         foreach (Treatment::query()->whereKey($treatmentIds)->orderBy('name')->get() as $treatment) {
@@ -121,7 +139,13 @@ final class BillingService
 
             $price = (float) $treatment->price_from;
             $discount = $price > 0 ? ($campaign?->discountOn($price, $treatment->getKey()) ?? 0.0) : 0.0;
-            $lines[] = ['label' => $treatment->name.($discount > 0 ? ' · con '.$campaign->name : ''), 'amount' => round(max(0, $price - $discount), 2)];
+            $lines[] = [
+                'key' => 'treatment-'.$treatment->getKey(),
+                'label' => $treatment->name.($discount > 0 ? ' · con '.$campaign->name : ''),
+                'amount' => self::priceIn($prices, 'treatment-'.$treatment->getKey()) ?? round(max(0, $price - $discount), 2),
+                'suggested' => round(max(0, $price - $discount), 2),
+                'editable' => true,
+            ];
         }
 
         return $lines;
@@ -145,9 +169,10 @@ final class BillingService
 
     /**
      * Una sesión del procedimiento: su parte del precio acordado en el plan. La última sesión
-     * carga lo que falta, así el total cargado es exactamente el del presupuesto.
+     * carga lo que falta, así el total cargado es exactamente el del presupuesto. Si el dentista
+     * puso otro precio, se carga ese y la diferencia queda saldada (no pasa a las otras sesiones).
      */
-    public function chargePlanSession(TreatmentPlanItem $item, User $by, ?Appointment $appointment = null, ?Consultation $consultation = null): ?Charge
+    public function chargePlanSession(TreatmentPlanItem $item, User $by, ?Appointment $appointment = null, ?Consultation $consultation = null, ?float $price = null): ?Charge
     {
         // Ya se paga con el cronograma del plan.
         if ($item->in_payment_schedule) {
@@ -155,8 +180,10 @@ final class BillingService
         }
 
         [$amount, $session] = $this->nextSession($item);
+        $changed = $price !== null && abs($price - $amount) >= 0.005;
 
-        if ($amount <= 0) {
+        // Sin costo y sin cambio: nada que cargar. Si el dentista la dejó en cero, sí queda registrada, para que el plan cuadre.
+        if (! $changed && $amount <= 0) {
             return null;
         }
 
@@ -170,7 +197,8 @@ final class BillingService
             'treatment_id' => $item->treatment_id,
             'doctor_id' => $consultation?->doctor_id ?? $appointment?->doctor_id,
             'description' => $item->label().($sessions > 1 ? " · sesión {$session} de {$sessions}" : ''),
-            'amount' => $amount,
+            'amount' => $changed ? $price : $amount,
+            'suggested_amount' => $changed ? $amount : null,
             'charged_at' => now(),
             'created_by_user_id' => $by->getKey(),
         ]);
@@ -182,16 +210,34 @@ final class BillingService
         return $this->charge($appointment->treatment, $appointment->patient_id, $appointment->doctor_id, $by, $appointment);
     }
 
-    /** Un tratamiento a su precio de lista, con el descuento de la promoción con que se reservó la cita, si lo incluye. */
-    private function charge(?Treatment $treatment, int $patientId, int $doctorId, User $by, ?Appointment $appointment, ?Consultation $consultation = null): ?Charge
+    /**
+     * Un tratamiento a su precio de lista, con el descuento de la promoción con que se reservó la cita, si lo incluye.
+     * Si el dentista puso otro precio, ese (y en cero no se carga).
+     */
+    private function charge(?Treatment $treatment, int $patientId, int $doctorId, User $by, ?Appointment $appointment, ?Consultation $consultation = null, ?float $dentistPrice = null): ?Charge
     {
         $price = (float) $treatment?->price_from;
+        $discount = $price > 0 ? ($appointment?->campaign?->discountOn($price, $treatment->getKey()) ?? 0.0) : 0.0;
+        $suggested = round(max(0, $price - $discount), 2);
+
+        if ($treatment && $dentistPrice !== null && abs($dentistPrice - $suggested) >= 0.005) {
+            return $dentistPrice <= 0 ? null : Charge::create([
+                'patient_id' => $patientId,
+                'appointment_id' => $appointment?->getKey(),
+                'consultation_id' => $consultation?->getKey(),
+                'treatment_id' => $treatment->getKey(),
+                'doctor_id' => $doctorId,
+                'description' => $treatment->name,
+                'amount' => $dentistPrice,
+                'suggested_amount' => $suggested,
+                'charged_at' => now(),
+                'created_by_user_id' => $by->getKey(),
+            ]);
+        }
 
         if ($price <= 0) {
             return null;
         }
-
-        $discount = $appointment?->campaign?->discountOn($price, $treatment->getKey()) ?? 0.0;
 
         return Charge::create([
             'patient_id' => $patientId,
@@ -341,7 +387,8 @@ final class BillingService
             && ! ($plan->hasSchedule() && $item->in_payment_schedule));
         $charges = Charge::query()->valid()->whereIn('treatment_plan_item_id', $perSession->modelKeys())->get();
 
-        $total = $perSession->sum(fn (TreatmentPlanItem $item) => $item->subtotal());
+        // Con el precio que puso el dentista en cada sesión, si no fue el sugerido.
+        $total = $perSession->sum(fn (TreatmentPlanItem $item) => $item->subtotal()) - $charges->sum(fn (Charge $charge) => $charge->priceChange());
         $owed = $charges->sum(fn (Charge $charge) => $unpaid->get($charge->getKey())['due'] ?? 0);
         $paid = $charges->sum(fn (Charge $charge) => $charge->net()) - $owed;
         $next = null;
@@ -473,8 +520,9 @@ final class BillingService
     private function nextSession(TreatmentPlanItem $item): array
     {
         $total = $item->subtotal();
-        $previous = Charge::query()->valid()->where('treatment_plan_item_id', $item->getKey())->get(['amount', 'discount']);
-        $remaining = round($total - $previous->sum(fn (Charge $c) => $c->net()), 2);
+        $previous = Charge::query()->valid()->where('treatment_plan_item_id', $item->getKey())->get(['amount', 'discount', 'suggested_amount']);
+        // Lo que el dentista bajó o subió en una sesión ya quedó saldado: no se recupera ni se devuelve después.
+        $remaining = round($total - $previous->sum(fn (Charge $c) => $c->net() + $c->priceChange()), 2);
         $sessions = max(1, (int) $item->sessions_planned);
         $session = $previous->count() + 1;
 
@@ -548,6 +596,18 @@ final class BillingService
             'paid_at' => $data['paid_at'] ?? now(),
             'received_by_user_id' => $by->getKey(),
         ]);
+    }
+
+    /**
+     * El precio que puso el dentista para esa línea, o null si dejó el sugerido.
+     *
+     * @param  array<string, mixed>  $prices
+     */
+    private static function priceIn(array $prices, string $key): ?float
+    {
+        $price = $prices[$key] ?? null;
+
+        return is_numeric($price) ? round(max(0, (float) $price), 2) : null;
     }
 
     private static function key(Charge $charge): string
