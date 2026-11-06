@@ -28,6 +28,9 @@ final class ConsultationService
     /** Campos de la atención que una plantilla puede precargar. */
     public const TEMPLATE_FIELDS = ['chief_complaint', 'clinical_exam', 'diagnosis_notes', 'procedures', 'indications', 'next_steps'];
 
+    /** Así empieza el motivo de una sesión del plan, que se escribe solo. */
+    public const PLANNED_VISIT_REASON = 'Continúa su plan de tratamiento: ';
+
     /** Horas en que el doctor puede reabrir una atención cerrada para corregirla. */
     public const REOPEN_HOURS = 24;
 
@@ -179,6 +182,7 @@ final class ConsultationService
         }
 
         $this->markScheduledAsDone($consultation, $patient, $treatment, $appointment);
+        $this->notePlannedVisit($consultation);
         $this->odontograms->forConsultation($consultation);
 
         return $consultation;
@@ -213,6 +217,18 @@ final class ConsultationService
         } else {
             $consultation->treatments()->attach($treatment);
         }
+    }
+
+    /** En una sesión del plan, el motivo es ese: la historia dice por qué vino sin que nadie lo escriba. */
+    private function notePlannedVisit(Consultation $consultation): void
+    {
+        $planned = $consultation->plannedWork();
+
+        if ($planned->isEmpty() || filled($consultation->chief_complaint)) {
+            return;
+        }
+
+        $consultation->update(['chief_complaint' => self::PLANNED_VISIT_REASON.$planned->map(fn (TreatmentPlanItem $item) => $item->label())->implode(', ').'.']);
     }
 
     /** @return array<string, string> */

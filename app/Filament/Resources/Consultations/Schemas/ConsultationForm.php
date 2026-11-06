@@ -31,10 +31,12 @@ use App\Models\TreatmentPlanItem;
 use App\Models\User;
 use App\Services\Billing\BillingService;
 use App\Services\Clinical\AllergyCheck;
+use App\Services\Clinical\ConsultationService;
 use App\Services\Clinical\PrescriptionService;
 use App\Services\Clinical\TreatmentPlanService;
 use App\Support\CampaignText;
 use App\Support\Money;
+use Closure;
 use Filament\Actions\Action;
 use Filament\Forms\Components\CheckboxList;
 use Filament\Forms\Components\Repeater;
@@ -95,7 +97,9 @@ class ConsultationForm
                 View::make('filament.clinical.consultation-bar')
                     ->viewData(fn (?Consultation $record, $livewire) => self::barData($record, $livewire)),
 
-                self::step(1, 'Antes de empezar', 'Lo que cuenta el paciente y lo que encuentras al examinarlo.'),
+                self::step(1, 'Antes de empezar', fn (?Consultation $record) => $record?->plannedWork()->isNotEmpty()
+                    ? 'Es una sesión de su plan: revisa sus antecedentes y anota solo lo que haya de nuevo.'
+                    : 'Lo que cuenta el paciente y lo que encuentras al examinarlo.'),
 
                 Callout::make('Faltan los antecedentes médicos')
                     ->key('backgroundMissing')
@@ -107,6 +111,9 @@ class ConsultationForm
                 Section::make('Motivo y examen')
                     ->id('motivo')
                     ->icon(Heroicon::OutlinedChatBubbleLeftEllipsis)
+                    ->description(fn (?Consultation $record) => self::reasonHint($record))
+                    ->collapsible(fn (?Consultation $record) => (bool) $record?->plannedWork()->isNotEmpty())
+                    ->collapsed(fn (?Consultation $record) => self::foldsReason($record), shouldMakeComponentCollapsible: false)
                     ->columns(['default' => 1, 'lg' => 2])
                     ->schema([
                         Callout::make('Al reservar escribió')
@@ -198,7 +205,7 @@ class ConsultationForm
                                 ->id('diagnostico')
                                 ->key('diagnosis')
                                 ->icon(Heroicon::OutlinedClipboardDocumentCheck)
-                                ->description('Los del odontograma se agregan desde las sugerencias, debajo del dibujo.')
+                                ->description(fn (?Consultation $record) => self::diagnosisHint($record))
                                 ->schema([
                                     Repeater::make('diagnoses')
                                         ->hiddenLabel()
@@ -380,11 +387,86 @@ class ConsultationForm
     }
 
     /** Separador de cada paso de la atención: número, nombre y para qué sirve. */
-    private static function step(int $number, string $title, string $description): View
+    /** @param  string|Closure(?Consultation): string  $description */
+    private static function step(int $number, string $title, string|Closure $description): View
     {
         return View::make('filament.clinical.consultation-step')
             ->key('step'.$number)
-            ->viewData(['number' => $number, 'title' => $title, 'description' => $description]);
+            ->viewData(fn (?Consultation $record) => ['number' => $number, 'title' => $title, 'description' => $description instanceof Closure ? $description($record) : $description]);
+    }
+
+    /**
+     * Motivo y examen se pliega en una sesión del plan: ya están en la atención donde se diagnosticó. Se queda
+     * abierto si el paciente escribió algo al reservar, si ya se anotó algo más que el motivo automático o si
+     * hay que tomarle los signos vitales (van dentro).
+     */
+    public static function foldsReason(?Consultation $record): bool
+    {
+        if (! $record || $record->plannedWork()->isEmpty()) {
+            return false;
+        }
+
+        $note = trim((string) $record->appointment?->patient_note);
+        $reason = trim((string) $record->chief_complaint);
+
+        return blank($record->clinical_exam)
+            && ! self::opensVitals($record)
+            && ($note === '' || str_contains($reason, $note))
+            && ($reason === '' || str_starts_with($reason, ConsultationService::PLANNED_VISIT_REASON));
+    }
+
+    /** Qué viene a hacer: de su plan (y desde cuándo) o, si no viene de un plan, por qué hay que anotar el motivo. */
+    private static function reasonHint(?Consultation $record): ?string
+    {
+        $planned = $record?->plannedWork();
+
+        if ($planned?->isNotEmpty()) {
+            $since = $planned->map(fn (TreatmentPlanItem $item) => $item->plan->consultation?->attended_at ?? $item->plan->accepted_at)->filter()->min();
+
+            return 'Sesión de su plan'.($since ? ' del '.$since->format('d/m') : '').': '
+                .$planned->map(fn (TreatmentPlanItem $item) => $item->label())->implode(', ')
+                .'. Anota aquí solo si cuenta algo nuevo.';
+        }
+
+        $treatment = $record?->appointment?->treatment;
+
+        return $treatment && ! $treatment->is_evaluation
+            ? 'No viene de un plan: lo que siente y lo que encuentras es lo que respalda en su historia la '.mb_strtolower($treatment->name).' de hoy.'
+            : null;
+    }
+
+    private static function diagnosisHint(?Consultation $record): string
+    {
+        $planned = $record ? self::plannedDiagnoses($record) : [];
+
+        return $planned === []
+            ? 'Los del odontograma se agregan desde las sugerencias, debajo del dibujo.'
+            : 'Del plan: '.implode(', ', $planned).'. Agrega aquí solo lo que encuentres de nuevo.';
+    }
+
+    /**
+     * Diagnósticos de la atención donde se armó el plan, de las piezas que hoy se trabajan.
+     *
+     * @return list<string>
+     */
+    public static function plannedDiagnoses(Consultation $record): array
+    {
+        $planned = $record->plannedWork();
+        $teeth = $planned->pluck('tooth')->filter()->map(fn (mixed $tooth) => (string) $tooth)->all();
+
+        if ($teeth === []) {
+            return [];
+        }
+
+        return $planned->map(fn (TreatmentPlanItem $item) => $item->plan->consultation)
+            ->filter()
+            ->unique(fn (Consultation $origin) => $origin->getKey())
+            ->flatMap(fn (Consultation $origin) => $origin->diagnoses()->with('icd10Code')->get())
+            ->filter(fn ($diagnosis) => in_array((string) $diagnosis->tooth, $teeth, true))
+            ->map(fn ($diagnosis) => ($diagnosis->icd10Code?->description ?? $diagnosis->description).' · '.$diagnosis->tooth)
+            ->unique()
+            ->values()
+            ->all();
     }
 
     /** Abre la ventana de antecedentes de la página (la misma desde cualquier aviso). */

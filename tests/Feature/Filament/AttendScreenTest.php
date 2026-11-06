@@ -2,6 +2,7 @@
 
 namespace Tests\Feature\Filament;
 
+use App\Enums\TreatmentPlanStatus;
 use App\Filament\Resources\Consultations\Pages\EditConsultation;
 use App\Filament\Resources\Consultations\Schemas\ConsultationForm;
 use App\Models\Appointment;
@@ -9,8 +10,10 @@ use App\Models\Consent;
 use App\Models\ConsentTemplate;
 use App\Models\Consultation;
 use App\Models\Doctor;
+use App\Models\Icd10Code;
 use App\Models\Patient;
 use App\Models\Treatment;
+use App\Models\TreatmentPlan;
 use App\Services\Clinical\ConsultationService;
 use Database\Seeders\CatalogSeeder;
 use Filament\Actions\Testing\TestAction;
@@ -145,6 +148,60 @@ class AttendScreenTest extends TestCase
 
         Livewire::test(EditConsultation::class, ['record' => $consultation->getRouteKey()])
             ->assertSee('Tómalos antes de empezar: tiene hipertensión.');
+    }
+
+    public function test_a_session_of_the_plan_folds_the_reason_and_says_what_it_comes_to_do(): void
+    {
+        $resin = Treatment::factory()->create(['name' => 'Curación con resina']);
+        $doctor = $this->doctorOffering($resin);
+        $patient = Patient::factory()->create();
+        $origin = Consultation::factory()->for($doctor)->for($patient)->create(['attended_at' => '2026-10-26 10:00', 'closed_at' => '2026-10-26 10:40']);
+        $origin->diagnoses()->create(['icd10_code_id' => Icd10Code::where('code', 'K02.1')->value('id'), 'tooth' => '36']);
+        $origin->diagnoses()->create(['icd10_code_id' => Icd10Code::where('code', 'K02.1')->value('id'), 'tooth' => '11']);
+        $plan = TreatmentPlan::create(['patient_id' => $patient->id, 'doctor_id' => $doctor->id, 'consultation_id' => $origin->id, 'title' => 'Plan', 'status' => TreatmentPlanStatus::Accepted, 'accepted_at' => '2026-10-26 10:30']);
+        $item = $plan->items()->create(['treatment_id' => $resin->id, 'description' => 'Curación con resina', 'tooth' => '36', 'surfaces' => 'O', 'unit_price' => 150, 'accepted_at' => '2026-10-26 10:30']);
+        $booked = Appointment::factory()->for($doctor)->for($resin)->for($patient)->at('2026-11-02 10:00')->confirmed()->create(['treatment_plan_item_id' => $item->id]);
+
+        $consultation = app(ConsultationService::class)->startFromAppointment($booked, $doctor->user);
+        $this->actingAs($doctor->user);
+
+        // El motivo se escribe solo y lo que ya está en la atención del diagnóstico no se repite.
+        $this->assertSame('Continúa su plan de tratamiento: Curación con resina · pieza 36 (O).', $consultation->chief_complaint);
+        $this->assertTrue(ConsultationForm::foldsReason($consultation));
+        $this->assertSame(['Caries de la dentina · 36'], ConsultationForm::plannedDiagnoses($consultation));
+
+        Livewire::test(EditConsultation::class, ['record' => $consultation->getRouteKey()])
+            ->assertSee([
+                'Es una sesión de su plan',
+                'Sesión de su plan del 26/10: Curación con resina · pieza 36 (O). Anota aquí solo si cuenta algo nuevo.',
+                'Del plan: Caries de la dentina · 36.',
+            ]);
+
+        // Si se anota algo del examen, o si hay que tomarle la presión (va dentro), ya no se pliega.
+        $consultation->update(['clinical_exam' => 'Fractura de la cúspide']);
+        $this->assertFalse(ConsultationForm::foldsReason($consultation->fresh()));
+
+        $consultation->update(['clinical_exam' => null]);
+        $patient->medicalBackground()->create(['conditions' => ['hypertension'], 'allergies' => 'Ninguna']);
+        $this->assertFalse(ConsultationForm::foldsReason($consultation->fresh()));
+    }
+
+    public function test_an_evaluation_or_a_first_visit_keeps_the_reason_open_and_empty(): void
+    {
+        [$doctor, $consultation] = $this->consultation();
+        $consultation->update(['chief_complaint' => null]);
+        $this->actingAs($doctor->user);
+
+        $this->assertFalse(ConsultationForm::foldsReason($consultation));
+        Livewire::test(EditConsultation::class, ['record' => $consultation->getRouteKey()])
+            ->assertSee('No viene de un plan: lo que siente y lo que encuentras es lo que respalda en su historia la extracción simple de hoy.')
+            ->assertSee('Lo que cuenta el paciente y lo que encuentras al examinarlo.')
+            ->assertDontSee('Sesión de su plan');
+
+        $consultation->appointment->treatment->update(['is_evaluation' => true]);
+
+        Livewire::test(EditConsultation::class, ['record' => $consultation->getRouteKey()])
+            ->assertDontSee(['No viene de un plan', 'Sesión de su plan']);
     }
 
     /**

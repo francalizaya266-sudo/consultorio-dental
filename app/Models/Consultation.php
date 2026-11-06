@@ -5,6 +5,7 @@ namespace App\Models;
 use App\Models\Concerns\Auditable;
 use Database\Factories\ConsultationFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
+use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -84,5 +85,25 @@ class Consultation extends Model
     public function treatments(): BelongsToMany
     {
         return $this->belongsToMany(Treatment::class, 'consultation_treatments')->withTimestamps();
+    }
+
+    /**
+     * Lo que viene a hacer de un plan armado antes: entonces es una sesión de ese plan, no una primera vez,
+     * y el motivo y el examen ya están en la atención donde se diagnosticó. Vacío en las evaluaciones.
+     *
+     * @return Collection<int, TreatmentPlanItem>
+     */
+    public function plannedWork(): Collection
+    {
+        if ($this->appointment?->treatment?->is_evaluation) {
+            return new Collection;
+        }
+
+        // Consulta aparte: no deja cargada la relación, que el cobro y el plan leen después de cambiarla.
+        return $this->planItems()
+            ->with('plan.consultation')
+            ->get()
+            ->filter(fn (TreatmentPlanItem $item) => $item->plan->consultation_id !== $this->getKey())
+            ->values();
     }
 }
