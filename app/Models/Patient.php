@@ -28,7 +28,7 @@ use Illuminate\Database\Eloquent\SoftDeletes;
 use Illuminate\Support\Facades\DB;
 
 /** Paciente. Cada familiar tiene su propia historia; comparten el celular de la cuenta. */
-#[Fillable(['account_id', 'relationship', 'first_name', 'last_name', 'document_type', 'document_number', 'birth_date', 'sex', 'email', 'address', 'district', 'occupation', 'emergency_contact_name', 'emergency_contact_phone', 'emergency_contact_relationship', 'origin', 'referral_code', 'referred_by_patient_id', 'admin_notes', 'first_visit_at', 'last_visit_at'])]
+#[Fillable(['account_id', 'relationship', 'first_name', 'last_name', 'document_type', 'document_number', 'birth_date', 'sex', 'email', 'address', 'district', 'occupation', 'emergency_contact_name', 'emergency_contact_phone', 'emergency_contact_relationship', 'guardian_name', 'guardian_document', 'guardian_relationship', 'origin', 'referral_code', 'referred_by_patient_id', 'admin_notes', 'first_visit_at', 'last_visit_at'])]
 class Patient extends Model
 {
     /** @use HasFactory<PatientFactory> */
@@ -38,6 +38,7 @@ class Patient extends Model
     {
         return [
             'relationship' => PatientRelationship::class,
+            'guardian_relationship' => PatientRelationship::class,
             'document_type' => DocumentType::class,
             'sex' => Sex::class,
             'origin' => AppointmentOrigin::class,
@@ -159,6 +160,12 @@ class Patient extends Model
     protected function age(): Attribute
     {
         return Attribute::get(fn () => $this->birth_date?->age);
+    }
+
+    /** Menor de edad: firma por él su apoderado. */
+    public function isMinor(): bool
+    {
+        return $this->age !== null && $this->age < 18;
     }
 
     /** Menor de 12: la receta va por su peso y no se le copian recetas de adulto. */

@@ -49,7 +49,8 @@ class PanelNavigationTest extends TestCase
 
         $this->get(PatientResource::getUrl('index'))
             ->assertOk()
-            ->assertSeeInOrder(['Pacientes', 'Presupuestos y planes', 'Celulares y familias', 'Caja']);
+            ->assertSeeInOrder(['Pacientes', 'Presupuestos y planes', 'Caja'])
+            ->assertDontSee('Celulares y familias');
 
         $this->get(PaymentResource::getUrl('index'))
             ->assertOk()

@@ -4,6 +4,7 @@ namespace App\Filament\Support;
 
 use App\Enums\AppointmentStatus;
 use App\Enums\MessageTemplateKey;
+use App\Enums\PatientRelationship;
 use App\Enums\PaymentMethod;
 use App\Filament\Concerns\HasPatientSummaryActions;
 use App\Filament\Resources\Appointments\AppointmentResource;
@@ -14,6 +15,7 @@ use App\Models\Charge;
 use App\Models\Patient;
 use App\Models\Payment;
 use App\Models\User;
+use App\Services\Clinical\ConsentService;
 use App\Services\Patients\PatientInsights;
 use App\Support\Money;
 use App\Support\Phone;
@@ -142,6 +144,7 @@ final class PatientSummary
             self::birthday($patient, $withActions),
             self::usualVisit($patient, $insights),
             $seesMoney ? self::usualPayment($patient) : null,
+            self::guardian($patient, $user),
             self::origin($patient, $user),
         ])));
     }
@@ -323,6 +326,25 @@ final class PatientSummary
         };
 
         return $label ? ['label' => $label, 'color' => 'gray', 'icon' => 'heroicon-m-credit-card', 'url' => null] : null;
+    }
+
+    /**
+     * Un menor sin apoderado ni titular que firme por él: se pide antes de su primer consentimiento.
+     *
+     * @return Chip|null
+     */
+    private static function guardian(Patient $patient, User $user): ?array
+    {
+        if (! $patient->isMinor() || app(ConsentService::class)->defaultSigner($patient)['signer_relationship'] !== PatientRelationship::Self) {
+            return null;
+        }
+
+        return [
+            'label' => 'Falta: apoderado',
+            'color' => 'warning',
+            'icon' => 'heroicon-m-user-group',
+            'url' => $user->can('update', $patient) ? PatientResource::getUrl('edit', ['record' => $patient]) : null,
+        ];
     }
 
     /**

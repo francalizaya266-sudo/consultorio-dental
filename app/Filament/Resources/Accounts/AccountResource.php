@@ -37,6 +37,9 @@ class AccountResource extends Resource
 
     protected static ?string $navigationLabel = 'Celulares y familias';
 
+    /** Ya no va en el menú: el celular y la familia se ven y se manejan desde la ficha de cada paciente. */
+    protected static bool $shouldRegisterNavigation = false;
+
     protected static ?string $navigationParentItem = 'Pacientes';
 
     protected static ?int $navigationSort = 3;

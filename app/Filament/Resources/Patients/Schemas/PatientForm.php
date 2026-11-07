@@ -11,6 +11,7 @@ use App\Models\Account;
 use App\Models\Patient;
 use App\Services\Patients\PatientRegistrar;
 use App\Support\Phone;
+use Carbon\Carbon;
 use Closure;
 use Filament\Forms\Components\DatePicker;
 use Filament\Forms\Components\Radio;
@@ -69,6 +70,30 @@ class PatientForm
                             ->label('Sexo')
                             ->options(Sex::class),
                     ]),
+                // Para un menor: quién firma por él los consentimientos y el plan.
+                Section::make('Apoderado')
+                    ->description('Es menor de edad: su apoderado firma los consentimientos y el plan de tratamiento.')
+                    ->columns(3)
+                    ->visible(fn (Get $get) => filled($get('birth_date')) && Carbon::parse($get('birth_date'))->age < 18)
+                    ->schema([
+                        TextInput::make('guardian_name')
+                            ->label('Nombre completo')
+                            ->maxLength(150)
+                            ->placeholder(fn (?Patient $record) => self::holderOf($record)?->full_name),
+                        TextInput::make('guardian_document')
+                            ->label('DNI u otro documento')
+                            ->maxLength(20)
+                            ->dehydrateStateUsing(fn (?string $state) => DocumentType::clean($state)),
+                        Select::make('guardian_relationship')
+                            ->label('Es su')
+                            ->options([
+                                PatientRelationship::Parent->value => 'Padre / madre',
+                                PatientRelationship::Grandparent->value => 'Abuelo(a)',
+                                PatientRelationship::Sibling->value => 'Hermano(a)',
+                                PatientRelationship::Other->value => 'Otro (tutor)',
+                            ])
+                            ->default(PatientRelationship::Parent->value),
+                    ]),
                 Section::make('Contacto y otros datos')
                     ->columns(2)
                     ->collapsible()
@@ -96,6 +121,14 @@ class PatientForm
                             ->columnSpanFull(),
                     ]),
             ]);
+    }
+
+    /** El titular del celular del paciente, si no es él mismo: suele ser quien lo trae. */
+    private static function holderOf(?Patient $patient): ?Patient
+    {
+        return $patient?->account_id && $patient->relationship !== PatientRelationship::Self
+            ? Patient::query()->where('account_id', $patient->account_id)->where('relationship', PatientRelationship::Self)->first()
+            : null;
     }
 
     /**

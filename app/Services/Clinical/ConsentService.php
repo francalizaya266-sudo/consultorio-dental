@@ -67,13 +67,22 @@ final class ConsentService
     }
 
     /**
-     * Quién firma por defecto: el paciente, o el titular del celular si es un menor a su cargo.
+     * Quién firma por defecto: el paciente o, si es menor de edad, su apoderado (el registrado en su ficha o,
+     * si no hay, el titular del celular que lo tiene a su cargo).
      *
      * @return array{signer_name: string, signer_document: string|null, signer_relationship: PatientRelationship}
      */
     public function defaultSigner(Patient $patient): array
     {
-        $holder = $patient->relationship !== PatientRelationship::Self && $patient->age !== null && $patient->age < 18
+        if ($patient->isMinor() && filled($patient->guardian_name)) {
+            return [
+                'signer_name' => $patient->guardian_name,
+                'signer_document' => $patient->guardian_document,
+                'signer_relationship' => $patient->guardian_relationship ?? PatientRelationship::Parent,
+            ];
+        }
+
+        $holder = $patient->relationship !== PatientRelationship::Self && $patient->isMinor()
             ? Patient::query()->where('account_id', $patient->account_id)->where('relationship', PatientRelationship::Self)->first()
             : null;
 

@@ -953,6 +953,9 @@ button.pt-chip { border: 0; cursor: pointer; font-family: inherit; }
 button.pt-chip:hover { filter: brightness(.97); text-decoration: underline; text-underline-offset: 2px; }
 button.pt-chip:active, .pt-step-button:active { transform: scale(.97); }
 button.pt-chip { transition: transform 160ms ease-out; }
+.pt-family a { color: var(--primary-600); font-weight: 600; text-decoration: none; }
+.pt-family a:hover { text-decoration: underline; text-underline-offset: 2px; }
+.dark .pt-family a { color: var(--primary-400); }
 @media (pointer: coarse) { .pt-chip { padding: .45rem .8rem; } .pt-contact .fi-link { min-height: 2.75rem; } }
 
 /* ---------- Ganancias: tablas ---------- */

@@ -7,12 +7,15 @@ use App\Enums\PatientRelationship;
 use App\Filament\Pages\Agenda;
 use App\Filament\Resources\Patients\Pages\CreatePatient;
 use App\Filament\Resources\Patients\Pages\EditPatient;
+use App\Filament\Resources\Patients\Pages\ViewPatient;
 use App\Filament\Resources\Patients\PatientResource;
 use App\Models\Account;
 use App\Models\Patient;
 use App\Models\Treatment;
 use App\Models\User;
+use App\Services\Clinical\ConsentService;
 use App\Services\Patients\PatientRegistrar;
+use Filament\Actions\Testing\TestAction;
 use Illuminate\Foundation\Testing\LazilyRefreshDatabase;
 use Livewire\Livewire;
 use Tests\Concerns\CreatesAgenda;
@@ -126,5 +129,54 @@ class PatientRegistrationTest extends TestCase
 
         $this->assertSame(1, Patient::query()->count());
         $this->assertSame('2026-11-03 16:00', $ana->appointments()->sole()->starts_at->format('Y-m-d H:i'));
+    }
+
+    public function test_a_minor_has_a_guardian_who_signs_for_them(): void
+    {
+        $this->freezeMonday();
+        $this->actingAs(User::factory()->reception()->create());
+
+        // Al poner la fecha de nacimiento de un menor, se pide su apoderado.
+        Livewire::test(CreatePatient::class)
+            ->fillForm(['first_name' => 'Mateo', 'last_name' => 'Rojas', 'birth_date' => '2019-05-10'])
+            ->assertSee('Es menor de edad: su apoderado firma los consentimientos y el plan de tratamiento.')
+            ->fillForm(['guardian_name' => 'Carla Rojas Díaz', 'guardian_document' => '4123 4567', 'guardian_relationship' => PatientRelationship::Parent->value])
+            ->call('create')
+            ->assertHasNoFormErrors();
+
+        $mateo = Patient::query()->where('first_name', 'Mateo')->sole();
+        $this->assertSame(['signer_name' => 'Carla Rojas Díaz', 'signer_document' => '41234567', 'signer_relationship' => PatientRelationship::Parent], app(ConsentService::class)->defaultSigner($mateo));
+
+        $this->get(PatientResource::getUrl('view', ['record' => $mateo]))
+            ->assertOk()
+            ->assertSee(['Apoderado', 'Carla Rojas Díaz · Padre / madre · 41234567'])
+            ->assertDontSee('Falta: apoderado');
+
+        // Sin apoderado ni titular que firme, se pide.
+        $lucia = Patient::factory()->create(['first_name' => 'Lucía', 'birth_date' => '2015-01-01']);
+        $this->get(PatientResource::getUrl('view', ['record' => $lucia]))
+            ->assertOk()
+            ->assertSee(['Falta: apoderado', 'Falta: quién firma por él']);
+
+        Livewire::test(CreatePatient::class)
+            ->fillForm(['first_name' => 'Ana', 'last_name' => 'Paz', 'birth_date' => '1990-05-10'])
+            ->assertDontSee('Es menor de edad');
+    }
+
+    public function test_the_family_card_links_each_relative_and_sends_the_my_account_link(): void
+    {
+        $account = Account::factory()->create(['phone' => '+51987654321']);
+        $mother = Patient::factory()->for($account)->create(['first_name' => 'María', 'last_name' => 'Quispe']);
+        $mateo = Patient::factory()->dependentOf($account)->create(['first_name' => 'Mateo', 'last_name' => 'Quispe']);
+        $this->actingAs(User::factory()->reception()->create());
+
+        $this->get(PatientResource::getUrl('view', ['record' => $mother]))
+            ->assertOk()
+            ->assertSee(['Familia con este celular', 'Mateo Quispe</a> · Hijo(a)', PatientResource::getUrl('view', ['record' => $mateo])], escape: false)
+            ->assertSee('Enviar enlace de Mi cuenta');
+
+        Livewire::test(ViewPatient::class, ['record' => $mother->getRouteKey()])
+            ->mountAction(TestAction::make('sendAccessLink')->schemaComponent('family', 'infolist'))
+            ->assertSchemaStateSet(fn (array $state) => $this->assertStringContainsString('este es tu enlace para entrar a Mi cuenta', $state['body']) ?? []);
     }
 }
