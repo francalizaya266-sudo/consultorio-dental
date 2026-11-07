@@ -27,12 +27,9 @@ class AppointmentInfolist
         return $schema
             ->columns(3)
             ->components([
-                // Lo mismo que bajo el nombre en su ficha: saldo, próxima cita, control y cómo escribirle.
+                // Lo mismo que bajo el nombre en su ficha: el siguiente paso, saldo, próxima cita, control y cómo escribirle.
                 View::make('filament.patients.summary')
-                    ->viewData(fn (Appointment $record) => [
-                        'chips' => PatientSummary::chips($record->patient, auth()->user()),
-                        'contact' => PatientSummary::contact($record->patient),
-                    ])
+                    ->viewData(fn (Appointment $record, $livewire) => PatientSummary::viewData($record->patient, auth()->user(), $livewire))
                     ->columnSpanFull(),
                 Section::make('Cita')
                     ->columnSpan(2)

@@ -3,6 +3,7 @@
 namespace App\Services\Clinical;
 
 use App\Enums\PatientRelationship;
+use App\Models\Appointment;
 use App\Models\Consent;
 use App\Models\ConsentTemplate;
 use App\Models\Doctor;
@@ -33,6 +34,26 @@ final class ConsentService
         '{fecha}' => 'Fecha de la firma',
         '{ciudad}' => 'Distrito o ciudad del consultorio (Ajustes)',
     ];
+
+    /**
+     * Si el tratamiento de la cita tiene su consentimiento: true si ya lo firmó para esta cita, false si falta.
+     * Null si no aplica (el tratamiento no tiene consentimiento propio).
+     */
+    public function signedForVisit(Appointment $appointment): ?bool
+    {
+        $treatment = $appointment->treatment;
+
+        if (! $treatment || ! ConsentTemplate::query()->where('is_active', true)->where('treatment_id', $treatment->getKey())->exists()) {
+            return null;
+        }
+
+        return Consent::query()
+            ->where('patient_id', $appointment->patient_id)
+            ->where('treatment_id', $treatment->getKey())
+            ->whereNull('revoked_at')
+            ->where('signed_at', '>=', $appointment->created_at->startOfDay())
+            ->exists();
+    }
 
     /** La plantilla del tratamiento o, si no tiene, la general. */
     public function templateFor(?Treatment $treatment): ?ConsentTemplate

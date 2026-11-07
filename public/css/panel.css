@@ -932,6 +932,23 @@ a.pt-chip:hover { filter: brightness(.97); text-decoration: underline; text-unde
 .dark .pt-chip.is-success { background: rgb(34 197 94 / .1); color: var(--success-300); box-shadow: inset 0 0 0 1px rgb(34 197 94 / .28); }
 .dark .pt-chip.is-info { background: rgb(59 130 246 / .14); color: var(--primary-300); box-shadow: inset 0 0 0 1px rgb(59 130 246 / .32); }
 .pt-contact { display: flex; gap: 1rem; align-items: center; }
+/* El siguiente paso, arriba de las etiquetas: lo único que pide hacer algo ya, con su botón. */
+.pt-step { flex: 1 0 100%; display: flex; align-items: center; gap: .75rem; padding: .65rem .75rem .65rem .9rem; border-radius: .75rem; background: var(--primary-50); box-shadow: inset 0 0 0 1px var(--primary-200); }
+.pt-step-icon { width: 1.25rem; height: 1.25rem; flex: none; color: var(--primary-600); }
+.pt-step-text { flex: 1; min-width: 0; display: flex; flex-wrap: wrap; align-items: baseline; gap: .05rem .5rem; }
+.pt-step-kicker { flex-basis: 100%; font-size: .75rem; font-weight: 600; letter-spacing: .01em; color: var(--primary-700); }
+.pt-step-label { font-size: .9375rem; font-weight: 600; color: var(--gray-950); }
+.pt-step-detail { font-size: .8125rem; color: var(--gray-600); }
+.pt-step-button { flex: none; }
+.dark .pt-step { background: rgb(59 130 246 / .1); box-shadow: inset 0 0 0 1px rgb(59 130 246 / .28); }
+.dark .pt-step-icon, .dark .pt-step-kicker { color: var(--primary-300); }
+.dark .pt-step-label { color: #fff; }
+.dark .pt-step-detail { color: var(--gray-400); }
+@media (max-width: 40rem) { .pt-step { flex-wrap: wrap; } .pt-step-button { margin-left: 2rem; } }
+button.pt-chip { border: 0; cursor: pointer; font-family: inherit; }
+button.pt-chip:hover { filter: brightness(.97); text-decoration: underline; text-underline-offset: 2px; }
+button.pt-chip:active, .pt-step-button:active { transform: scale(.97); }
+button.pt-chip { transition: transform 160ms ease-out; }
 @media (pointer: coarse) { .pt-chip { padding: .45rem .8rem; } .pt-contact .fi-link { min-height: 2.75rem; } }
 
 /* ---------- Ganancias: tablas ---------- */

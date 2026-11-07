@@ -26,12 +26,9 @@ class PatientInfolist
         return $schema
             ->columns(3)
             ->components([
-                // Bajo el nombre, en etiquetas: saldo, próxima cita, control, plan a medias, cumpleaños y origen.
+                // Bajo el nombre: el siguiente paso con su botón y, en etiquetas, saldo, próxima cita, control, faltas, cumpleaños y origen.
                 View::make('filament.patients.summary')
-                    ->viewData(fn (Patient $record) => [
-                        'chips' => PatientSummary::chips($record, auth()->user()),
-                        'contact' => PatientSummary::contact($record),
-                    ])
+                    ->viewData(fn (Patient $record, $livewire) => PatientSummary::viewData($record, auth()->user(), $livewire))
                     ->columnSpanFull(),
                 // La alerta médica arriba de todo, para quien atiende al paciente.
                 Group::make(fn (Patient $record) => auth()->user()->can('viewClinical', $record) ? array_filter([ClinicalAlerts::callout($record)]) : [])

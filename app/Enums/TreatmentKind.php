@@ -83,6 +83,42 @@ enum TreatmentKind: string
         return $this->isSurgical() || in_array($this, [self::Cleaning, self::RootCanal], true);
     }
 
+    /** Cada cuántos meses vuelve a control si esto fue lo último que se le hizo: ortodoncia cada mes, implante al año, lo demás a los 6 meses. */
+    public function checkupMonths(): int
+    {
+        return match ($this) {
+            self::Orthodontics => 1,
+            self::Implant => 12,
+            default => 6,
+        };
+    }
+
+    /** "control de ortodoncia", para el aviso y la ficha. */
+    public function checkupLabel(): string
+    {
+        return match ($this) {
+            self::Orthodontics => 'control de ortodoncia',
+            self::Implant => 'control del implante',
+            default => 'control y limpieza',
+        };
+    }
+
+    /**
+     * Los tratamientos que piden control antes o después de los 6 meses, por meses: [1 => [ids de ortodoncia], 12 => [ids de implante]].
+     *
+     * @return array<int, list<int>>
+     */
+    public static function treatmentsByCheckupMonths(): array
+    {
+        return Treatment::withTrashed()
+            ->get(['id', 'name', 'is_evaluation'])
+            ->toBase()
+            ->groupBy(fn (Treatment $treatment) => self::for($treatment)->checkupMonths())
+            ->except(self::Other->checkupMonths())
+            ->map(fn ($treatments) => $treatments->pluck('id')->all())
+            ->all();
+    }
+
     /** Suele llevar anestesia local. */
     public function usesAnesthesia(): bool
     {

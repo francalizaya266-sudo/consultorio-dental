@@ -9,6 +9,7 @@ use App\Enums\DocumentType;
 use App\Enums\PatientRelationship;
 use App\Enums\PaymentMethod;
 use App\Enums\Sex;
+use App\Enums\TreatmentKind;
 use App\Enums\TreatmentPlanStatus;
 use App\Models\Concerns\Auditable;
 use App\Support\Phone;
@@ -229,12 +230,27 @@ class Patient extends Model
         return $query->whereRaw(self::balanceSql().' > 0');
     }
 
-    /** Para llamarlos a control: hace 6 meses o más que no vienen y no tienen cita por delante. */
+    /**
+     * Para llamarlos a control: no tienen cita por delante y ya pasó el tiempo que pide lo último que se les
+     * hizo (ortodoncia al mes, implante al año, lo demás a los 6 meses; ver TreatmentKind::checkupMonths).
+     */
     #[Scope]
     protected function dueForCheckup(Builder $query): Builder
     {
+        $lastTreatment = '(select a.treatment_id from appointments a where a.patient_id = patients.id and a.status = ? and a.deleted_at is null order by a.starts_at desc limit 1)';
+        $cases = '';
+        $bindings = [];
+
+        foreach (TreatmentKind::treatmentsByCheckupMonths() as $months => $treatmentIds) {
+            $cases .= " when {$lastTreatment} in (".implode(', ', array_fill(0, count($treatmentIds), '?')).') then ?';
+            array_push($bindings, AppointmentStatus::Completed->value, ...$treatmentIds);
+            $bindings[] = now()->subMonths($months);
+        }
+
+        $bindings[] = now()->subMonths(TreatmentKind::Other->checkupMonths());
+
         return $query
-            ->where('last_visit_at', '<=', now()->subMonths(6))
+            ->whereRaw('patients.last_visit_at <= '.($cases === '' ? '?' : "case{$cases} else ? end"), $bindings)
             ->whereDoesntHave('appointments', fn (Builder $a) => $a->where('starts_at', '>=', now())->whereIn('status', AppointmentStatus::changeable()));
     }
 

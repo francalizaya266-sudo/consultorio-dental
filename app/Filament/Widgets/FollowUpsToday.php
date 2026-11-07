@@ -296,7 +296,7 @@ class FollowUpsToday extends Widget implements HasActions, HasSchemas
         return [
             'key' => 'checkup',
             'title' => 'Para su control',
-            'hint' => 'Hace 6 meses o más que no vienen y no tienen cita',
+            'hint' => 'Sin cita y ya les toca: ortodoncia cada mes, implante al año, lo demás a los 6 meses',
             'count' => $count,
             'url' => PatientResource::getUrl('index', ['tab' => 'checkup']),
             'summary' => null,

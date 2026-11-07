@@ -33,7 +33,7 @@ final class SignConsentAction
 {
     /**
      * @param  Closure(): Patient  $patient
-     * @param  Closure(): ?Treatment|null  $treatment  Tratamiento que se propone (el de la cita, por ejemplo).
+     * @param  Closure(): ?Treatment|null  $treatment  Tratamiento que se propone (el de la cita, por ejemplo). Puede pedir $arguments.
      */
     public static function make(Closure $patient, ?Closure $treatment = null, string $name = 'signConsent'): Action
     {
@@ -46,8 +46,8 @@ final class SignConsentAction
             ->modalDescription('Revisa los datos, entrega el celular o la tablet al paciente para que lea y firme.')
             ->modalWidth(Width::ThreeExtraLarge)
             ->modalSubmitActionLabel('Guardar consentimiento firmado')
-            ->fillForm(function () use ($patient, $treatment, $consents) {
-                $proposed = $treatment ? $treatment() : null;
+            ->fillForm(function (Action $action) use ($patient, $treatment, $consents) {
+                $proposed = $treatment ? $action->evaluate($treatment) : null;
                 $signer = $consents->defaultSigner($patient());
 
                 return [

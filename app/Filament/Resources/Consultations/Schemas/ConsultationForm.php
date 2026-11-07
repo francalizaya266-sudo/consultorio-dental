@@ -19,8 +19,6 @@ use App\Filament\Resources\Patients\Schemas\TreatmentPlanForm;
 use App\Filament\Support\ClinicalAlerts;
 use App\Livewire\OdontogramChart;
 use App\Models\Campaign;
-use App\Models\Consent;
-use App\Models\ConsentTemplate;
 use App\Models\Consultation;
 use App\Models\Icd10Code;
 use App\Models\MedicalBackground;
@@ -32,6 +30,7 @@ use App\Models\TreatmentPackage;
 use App\Models\TreatmentPlanItem;
 use App\Models\User;
 use App\Services\Billing\BillingService;
+use App\Services\Clinical\ConsentService;
 use App\Services\Clinical\ConsultationService;
 use App\Services\Clinical\MedicationCheck;
 use App\Services\Clinical\PediatricDose;
@@ -717,19 +716,7 @@ class ConsultationForm
      */
     public static function consentStatus(Consultation $consultation): ?bool
     {
-        $appointment = $consultation->appointment;
-        $treatment = $appointment?->treatment;
-
-        if (! $treatment || ! ConsentTemplate::query()->where('is_active', true)->where('treatment_id', $treatment->getKey())->exists()) {
-            return null;
-        }
-
-        return Consent::query()
-            ->where('patient_id', $consultation->patient_id)
-            ->where('treatment_id', $treatment->getKey())
-            ->whereNull('revoked_at')
-            ->where('signed_at', '>=', $appointment->created_at->startOfDay())
-            ->exists();
+        return $consultation->appointment ? app(ConsentService::class)->signedForVisit($consultation->appointment) : null;
     }
 
     /**
