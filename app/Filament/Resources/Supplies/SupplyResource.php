@@ -226,13 +226,21 @@ class SupplyResource extends Resource
         ];
     }
 
-    /** @return array<string, array<int, string>> Los materiales en uso, agrupados por categoría como en el estante (la unidad va al lado, en la cantidad). */
-    public static function pickerOptions(): array
+    /**
+     * Los materiales en uso, agrupados por categoría como en el estante (la unidad va al lado, en la cantidad).
+     * Con $withStock, cada uno dice cuánto queda que se pueda usar: "Resina A2 · quedan 3 jeringas".
+     *
+     * @return array<string, array<int, string>>
+     */
+    public static function pickerOptions(bool $withStock = false): array
     {
-        return Supply::query()->active()->orderBy('name')->get()
+        return Supply::query()->active()->orderBy('name')
+            ->when($withStock, fn ($query) => $query->withSum(['batches as expired_stock' => fn ($batches) => $batches->expired()], 'remaining'))
+            ->get()
             ->groupBy(fn (Supply $supply) => $supply->category->getLabel())
             ->sortKeys()
-            ->map(fn ($supplies) => $supplies->mapWithKeys(fn (Supply $supply) => [$supply->getKey() => $supply->name])->all())
+            ->map(fn ($supplies) => $supplies->mapWithKeys(fn (Supply $supply) => [$supply->getKey() => $supply->name
+                .($withStock ? ' · quedan '.$supply->quantity(max(0, $supply->usableStock())) : '')])->all())
             ->all();
     }
 

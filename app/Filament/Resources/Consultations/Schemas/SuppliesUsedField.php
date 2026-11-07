@@ -33,7 +33,7 @@ final class SuppliesUsedField
             ->schema([
                 Select::make('supply_id')
                     ->label('Material')
-                    ->options(fn () => SupplyResource::pickerOptions())
+                    ->options(fn () => SupplyResource::pickerOptions(withStock: true))
                     ->searchable()
                     ->required()
                     ->live()
@@ -52,7 +52,8 @@ final class SuppliesUsedField
                     ->required()
                     ->readOnly(fn (Get $get) => self::tracksSerial($get('supply_id')))
                     ->live(onBlur: true)
-                    ->suffix(fn (Get $get) => Supply::unitFor($get('supply_id'), $get('quantity'))),
+                    ->suffix(fn (Get $get) => Supply::unitFor($get('supply_id'), $get('quantity')))
+                    ->helperText(fn (Get $get) => self::shortage($get('supply_id'), $get('quantity'))),
                 Select::make('batch_id')
                     ->label('Serie del implante')
                     ->placeholder('Elige la serie')
@@ -65,6 +66,18 @@ final class SuppliesUsedField
             ->defaultItems(0)
             ->reorderable(false)
             ->addActionLabel('Agregar material');
+    }
+
+    /** "Solo quedan 2 jeringas": sale igual (lo usado se anota), pero conviene saberlo y pedir más. */
+    private static function shortage(mixed $supplyId, mixed $quantity): ?string
+    {
+        $supply = filled($supplyId) && is_numeric($quantity) ? Supply::query()->find($supplyId) : null;
+
+        if (! $supply || (float) $quantity <= $supply->usableStock()) {
+            return null;
+        }
+
+        return ($supply->usableStock() > 0 ? 'Solo quedan '.$supply->quantity($supply->usableStock()) : 'No queda en el inventario').': se anota igual.';
     }
 
     private static function tracksSerial(mixed $supplyId): bool

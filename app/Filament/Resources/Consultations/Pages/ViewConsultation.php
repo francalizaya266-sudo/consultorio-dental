@@ -3,14 +3,18 @@
 namespace App\Filament\Resources\Consultations\Pages;
 
 use App\Exceptions\ClinicalException;
+use App\Filament\Actions\RegisterPaymentAction;
 use App\Filament\Actions\SendWhatsAppAction;
 use App\Filament\Resources\Appointments\AppointmentResource;
 use App\Filament\Resources\Consultations\ConsultationResource;
 use App\Filament\Resources\Patients\PatientResource;
+use App\Filament\Support\VisitCloseOut;
 use App\Models\Appointment;
 use App\Models\Consultation;
 use App\Services\Clinical\ConsultationService;
 use App\Services\Clinical\PrescriptionService;
+use App\Services\StaffAlerts;
+use App\Support\Money;
 use Filament\Actions\Action;
 use Filament\Notifications\Notification;
 use Filament\Resources\Pages\ViewRecord;
@@ -57,6 +61,11 @@ class ViewConsultation extends ViewRecord
 
                     $this->redirect(ConsultationResource::getUrl('edit', ['record' => $this->getConsultation()]));
                 }),
+            // Una atención sin cita también se cobra desde aquí.
+            RegisterPaymentAction::make(fn () => $this->getConsultation()->patient)
+                ->name('collect')
+                ->label('Cobrar')
+                ->hidden(fn () => $this->getConsultation()->closed_at === null),
             Action::make('printPrescription')
                 ->label('Imprimir receta')
                 ->icon(Heroicon::OutlinedPrinter)
@@ -79,6 +88,30 @@ class ViewConsultation extends ViewRecord
                 ->color('gray')
                 ->url(fn () => PatientResource::getUrl('clinical', ['record' => $this->getConsultation()->patient])),
         ];
+    }
+
+    /** Quien atendió no maneja la caja: avisa a recepción que el paciente sale y tiene que pagar. */
+    public function notifyReceptionAction(): Action
+    {
+        return Action::make('notifyReception')
+            ->label('Avisar a recepción')
+            ->visible(fn () => $this->getConsultation()->closed_at !== null)
+            ->action(function () {
+                $consultation = $this->getConsultation();
+                $patient = $consultation->patient;
+
+                app(StaffAlerts::class)->toReception(
+                    $patient->full_name.' terminó su atención: cobrarle',
+                    Money::balance($patient->balance()).' · atendió '.$consultation->doctor->name,
+                    auth()->user(),
+                    ['label' => 'Cobrar', 'url' => $consultation->appointment
+                        ? AppointmentResource::getUrl('view', ['record' => $consultation->appointment])
+                        : PatientResource::getUrl('view', ['record' => $patient])],
+                );
+                VisitCloseOut::markReceptionNotified($consultation);
+
+                Notification::make()->success()->title('Listo: recepción ya sabe que tiene que cobrarle')->send();
+            });
     }
 
     private function getConsultation(): Consultation
