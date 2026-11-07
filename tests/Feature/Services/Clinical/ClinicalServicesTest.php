@@ -53,6 +53,38 @@ class ClinicalServicesTest extends TestCase
         $this->assertTrue($consultation->is($this->consultations()->startFromAppointment($appointment->fresh(), $doctor->user)));
     }
 
+    public function test_the_template_leaves_out_a_medication_that_does_not_suit_the_patient(): void
+    {
+        $treatment = Treatment::where('slug', 'extraccion-simple')->firstOrFail();
+        $doctor = $this->doctorOffering($treatment);
+
+        $healthy = Patient::factory()->create(['birth_date' => now()->subYears(40)]);
+        $appointment = Appointment::factory()->for($doctor)->for($treatment)->for($healthy)->at('2026-11-02 10:00')->confirmed()->create();
+        $consultations = $this->consultations();
+        $consultation = $consultations->startFromAppointment($appointment, $doctor->user);
+
+        $this->assertSame(['Ibuprofeno 400 mg'], $consultation->prescription->items->pluck('medication')->all());
+        $this->assertSame([], $consultations->heldMedications());
+
+        // Con warfarina, el ibuprofeno no se copia solo: el doctor ve por qué y qué usar en su lugar.
+        $onWarfarin = Patient::factory()->create(['birth_date' => now()->subYears(70)]);
+        $onWarfarin->medicalBackground()->create(['allergies' => 'Ninguna', 'medications' => 'Warfarina 5 mg']);
+        $appointment = Appointment::factory()->for($doctor)->for($treatment)->for($onWarfarin)->at('2026-11-02 11:00')->confirmed()->create();
+        $consultations = $this->consultations();
+        $consultation = $consultations->startFromAppointment($appointment, $doctor->user);
+
+        $this->assertNull($consultation->fresh()->prescription);
+        $this->assertSame(
+            ['No se agregó Ibuprofeno 400 mg: aumenta el sangrado con anticoagulantes o problemas de coagulación. Para el dolor puedes usar paracetamol.'],
+            $consultations->heldMedications(),
+        );
+
+        // Lo mismo al volver a aplicar la plantilla.
+        $consultations->applyTemplate($consultation->fresh(), $consultations->templateFor($treatment, $doctor->user));
+        $this->assertNull($consultation->fresh()->prescription);
+        $this->assertCount(1, $consultations->heldMedications());
+    }
+
     public function test_the_next_consultation_starts_from_the_previous_odontogram(): void
     {
         $treatment = Treatment::factory()->create();

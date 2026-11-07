@@ -80,8 +80,8 @@ class Agenda extends Page
      * (la recepción y el doctor ven pasos distintos, y en una cita de un día anterior solo se puede cerrar).
      */
     private const NEXT_STEPS = [
-        'pending' => ['listConfirm', 'listArrived', 'listStart', 'listComplete'],
-        'confirmed' => ['listArrived', 'listStart', 'listComplete'],
+        'pending' => ['listConfirm', 'listMissed', 'listArrived', 'listStart', 'listComplete'],
+        'confirmed' => ['listMissed', 'listArrived', 'listStart', 'listComplete'],
         'checked_in' => ['listStart', 'listComplete'],
         'in_progress' => ['listContinue', 'listStart', 'listComplete'],
         'completed' => ['listCheckout'],
@@ -244,6 +244,11 @@ class Agenda extends Page
     public function listConfirmAction(): Action
     {
         return $this->forListedAppointment(AppointmentActions::confirm(), 'listConfirm');
+    }
+
+    public function listMissedAction(): Action
+    {
+        return $this->forListedAppointment(AppointmentActions::missed(), 'listMissed');
     }
 
     public function listArrivedAction(): Action

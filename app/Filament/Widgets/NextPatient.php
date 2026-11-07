@@ -91,6 +91,9 @@ class NextPatient extends Widget implements HasActions, HasSchemas
         $patient = $appointment->patient;
         $last = $day->lastVisit($appointment);
         $waiting = $appointment->waitingMinutes();
+        // Minutos desde su hora, si ya pasó y todavía no llega (con 5 de tolerancia).
+        $late = (int) $appointment->starts_at->diffInMinutes(now());
+        $late = $waiting === null && $late >= 5 ? $late : null;
 
         return [
             'id' => $appointment->getKey(),
@@ -100,11 +103,13 @@ class NextPatient extends Widget implements HasActions, HasSchemas
             'reason' => $appointment->planItem?->label() ?? $appointment->treatment->name,
             'state' => match (true) {
                 $waiting !== null => 'En sala hace '.Dates::duration($waiting),
+                $late !== null => 'Va '.Dates::duration($late).' tarde',
                 $appointment->status === AppointmentStatus::Confirmed => 'Confirmó, aún no llega',
                 default => 'Aún no confirma',
             },
             'stateColor' => match (true) {
                 $waiting !== null => $waiting >= TodayAppointments::LONG_WAIT_MINUTES ? 'danger' : 'warning',
+                $late !== null => 'warning',
                 $appointment->status === AppointmentStatus::Confirmed => 'success',
                 default => 'gray',
             },

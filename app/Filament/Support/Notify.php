@@ -25,4 +25,23 @@ final class Notify
 
         Notification::make()->success()->title($success)->send();
     }
+
+    /**
+     * Lo que la plantilla traía y no se copió a la receta porque no le conviene al paciente.
+     *
+     * @param  list<string>  $held
+     */
+    public static function heldMedications(array $held): void
+    {
+        if ($held === []) {
+            return;
+        }
+
+        Notification::make()
+            ->warning()
+            ->title('La plantilla traía un medicamento que no le conviene')
+            ->body(implode("\n\n", $held)."\n\nSi aun así lo necesita, agrégalo a mano.")
+            ->persistent()
+            ->send();
+    }
 }

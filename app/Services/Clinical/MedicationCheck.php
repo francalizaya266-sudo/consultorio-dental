@@ -29,6 +29,9 @@ final class MedicationCheck
 
     private const VITAMIN_K_ANTAGONISTS = ['warfarin', 'acenocumarol'];
 
+    /** Para la presión, como se suelen escribir en "medicamentos que toma". */
+    private const ANTIHYPERTENSIVES = ['losartan', 'valsartan', 'telmisartan', 'irbesartan', 'candesartan', 'enalapril', 'captopril', 'lisinopril', 'ramipril', 'amlodipin', 'nifedipin', 'hidroclorotiazid', 'clortalidon', 'furosemid', 'espironolacton', 'atenolol', 'propranolol', 'bisoprolol', 'carvedilol', 'metoprolol', 'nebivolol'];
+
     /** Para los huesos: con ellos, una extracción o un implante pueden no sanar (osteonecrosis). */
     private const BONE_DRUGS = ['alendronat', 'risedronat', 'ibandronat', 'zoledron', 'denosumab', 'bifosfonat'];
 
@@ -97,6 +100,36 @@ final class MedicationCheck
         $drug = Str::of($medication)->trim()->before(' ')->ucfirst();
 
         return ["Cuidado con {$drug}: ".implode('; ', $reasons).'.'];
+    }
+
+    /** Si es un antiinflamatorio (AINE): para el dolor, el paracetamol suele ser la alternativa. */
+    public static function isAntiInflammatory(?string $medication): bool
+    {
+        return AllergyCheck::mentionsAny($medication, self::NSAIDS);
+    }
+
+    /**
+     * Cuidados que no impiden recetarlo pero conviene tener presentes: no se quita de una plantilla.
+     *
+     * @return list<string>
+     */
+    public static function cautions(?Patient $patient, ?string $medication): array
+    {
+        if (! $patient || blank($medication) || ! self::isAntiInflammatory($medication)) {
+            return [];
+        }
+
+        $background = $patient->medicalBackground;
+        $hypertensive = in_array('hypertension', $background?->conditions ?? [], true)
+            || AllergyCheck::mentionsAny($background?->medications, self::ANTIHYPERTENSIVES);
+
+        if (! $hypertensive) {
+            return [];
+        }
+
+        $drug = Str::of($medication)->trim()->before(' ')->ucfirst();
+
+        return ["{$drug} puede subirle la presión y restar efecto a su medicamento para la presión: mejor por pocos días."];
     }
 
     /** Toma anticoagulantes o tiene problemas de coagulación. */

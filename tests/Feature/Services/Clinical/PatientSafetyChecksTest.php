@@ -48,6 +48,17 @@ class PatientSafetyChecksTest extends TestCase
         $this->assertSame([], MedicationCheck::warnings($onWarfarin, 'Amoxicilina 500 mg'));
     }
 
+    public function test_an_anti_inflammatory_for_a_hypertensive_is_a_caution_not_a_block(): void
+    {
+        $onLosartan = $this->patient(60, ['medications' => 'Losartán 50 mg']);
+
+        $this->assertSame([], MedicationCheck::warnings($onLosartan, 'Ibuprofeno 400 mg'));
+        $this->assertSame(['Ibuprofeno puede subirle la presión y restar efecto a su medicamento para la presión: mejor por pocos días.'], MedicationCheck::cautions($onLosartan, 'Ibuprofeno 400 mg'));
+        $this->assertNotSame([], MedicationCheck::cautions($this->patient(60, ['conditions' => ['hypertension']]), 'Naproxeno 550 mg'));
+        $this->assertSame([], MedicationCheck::cautions($onLosartan, 'Paracetamol 500 mg'));
+        $this->assertSame([], MedicationCheck::cautions($this->patient(60), 'Ibuprofeno 400 mg'));
+    }
+
     public function test_before_starting_it_crosses_the_treatment_with_the_background(): void
     {
         $patient = $this->patient(68, ['medications' => 'Apixabán 5 mg', 'conditions' => ['hypertension', 'osteoporosis_meds'], 'smoker' => true]);

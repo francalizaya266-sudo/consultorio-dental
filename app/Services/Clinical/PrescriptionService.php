@@ -5,6 +5,7 @@ namespace App\Services\Clinical;
 use App\Enums\MessageTemplateKey;
 use App\Models\ClinicalTemplate;
 use App\Models\Consultation;
+use App\Models\Patient;
 use App\Models\Prescription;
 use App\Models\PrescriptionItem;
 use App\Models\TextSnippet;
@@ -12,6 +13,7 @@ use App\Models\WhatsappMessage;
 use App\Services\WhatsApp\WhatsAppOutbox;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Str;
 
 /**
  * Receta de la atención: una por atención, con sus medicamentos. Se imprime o se envía
@@ -91,6 +93,54 @@ final class PrescriptionService
             ])
             ->values()
             ->all();
+    }
+
+    /**
+     * Los medicamentos de la plantilla que le convienen a este paciente. Los que chocan con una alergia, su
+     * edad, un embarazo, una enfermedad o lo que ya toma no se copian solos: quedan en "held" con el
+     * motivo, para que el doctor decida. A un niño no se le copia nada: va en jarabe y por su peso.
+     *
+     * @return array{items: list<array{medication: string, instructions: string|null}>, held: list<string>}
+     */
+    public function fromTemplateFor(?ClinicalTemplate $template, Patient $patient): array
+    {
+        if ($patient->isChild()) {
+            return ['items' => [], 'held' => []];
+        }
+
+        [$held, $items] = collect($this->fromTemplate($template))
+            ->partition(fn (array $item) => self::warningsFor($patient, $item['medication']) !== []);
+
+        return [
+            'items' => $items->values()->all(),
+            'held' => $held->map(fn (array $item) => $this->heldNote($patient, $item['medication']))->values()->all(),
+        ];
+    }
+
+    /**
+     * Lo que impide darle este medicamento sin pensarlo: alergias, edad, embarazo, enfermedades y lo que toma.
+     *
+     * @return list<string>
+     */
+    public static function warningsFor(?Patient $patient, ?string $medication): array
+    {
+        return array_values(array_filter([AllergyCheck::warning($patient, $medication), ...MedicationCheck::warnings($patient, $medication)]));
+    }
+
+    /** "No se agregó Ibuprofeno 400 mg: … Para el dolor puedes usar paracetamol." */
+    private function heldNote(Patient $patient, string $medication): string
+    {
+        $reasons = collect(self::warningsFor($patient, $medication))
+            ->map(fn (string $warning) => Str::of($warning)->after(': ')->rtrim('.')->toString())
+            ->implode('; ');
+
+        $note = "No se agregó {$medication}: {$reasons}.";
+
+        if (MedicationCheck::isAntiInflammatory($medication) && self::warningsFor($patient, 'Paracetamol') === []) {
+            $note .= ' Para el dolor puedes usar paracetamol.';
+        }
+
+        return $note;
     }
 
     /** "Ibuprofeno 400 mg: 1 tableta cada 8 horas…" → medicamento e indicación. */

@@ -150,7 +150,9 @@ class AttentionFollowsScheduleTest extends TestCase
         Livewire::test(ViewAppointment::class, ['record' => $saturday->getRouteKey()])
             ->assertActionHidden('start')
             ->assertActionHidden('confirm')
-            ->assertActionVisible('noShow')
+            // Ya pasó su hora: "No asistió" queda a la vista, no escondido en "Más".
+            ->assertActionVisible('missed')
+            ->assertActionHidden('noShow')
             ->callAction('complete');
 
         $this->assertSame(AppointmentStatus::Completed, $saturday->fresh()->status);

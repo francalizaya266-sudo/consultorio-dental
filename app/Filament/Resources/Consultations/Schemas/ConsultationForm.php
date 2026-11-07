@@ -32,7 +32,6 @@ use App\Models\TreatmentPackage;
 use App\Models\TreatmentPlanItem;
 use App\Models\User;
 use App\Services\Billing\BillingService;
-use App\Services\Clinical\AllergyCheck;
 use App\Services\Clinical\ConsultationService;
 use App\Services\Clinical\MedicationCheck;
 use App\Services\Clinical\PediatricDose;
@@ -423,14 +422,25 @@ class ConsultationForm
                                     ->weight(FontWeight::Bold)
                                     ->visible(fn (Get $get, EditConsultation $livewire) => self::medicationWarnings($livewire->getRecord()->patient, $get('medication')) !== [])
                                     ->columnSpanFull(),
+                                // Un cuidado que no impide recetarlo, como un antiinflamatorio en un hipertenso.
+                                Text::make(fn (Get $get, EditConsultation $livewire) => implode(' ', MedicationCheck::cautions($livewire->getRecord()->patient, $get('medication'))))
+                                    ->color('warning')
+                                    ->visible(fn (Get $get, EditConsultation $livewire) => MedicationCheck::cautions($livewire->getRecord()->patient, $get('medication')) !== [])
+                                    ->columnSpanFull(),
                             ]),
-                        Actions::make(fn () => self::medicationSnippets()
+                        Actions::make(fn (?Consultation $record) => self::medicationSnippets()
                             ->map(fn (TextSnippet $snippet) => Action::make('addMedication'.$snippet->getKey())
                                 ->label($snippet->label)
-                                ->icon(Heroicon::OutlinedPlus)
+                                ->icon(fn () => self::snippetWarnings($record, $snippet) === [] ? Heroicon::OutlinedPlus : Heroicon::OutlinedExclamationTriangle)
                                 ->size('sm')
-                                ->color('gray')
+                                ->color(fn () => self::snippetWarnings($record, $snippet) === [] ? 'gray' : 'danger')
                                 ->outlined()
+                                // Antes de agregarlo, no después: si no le conviene, el doctor lo confirma.
+                                ->requiresConfirmation(fn () => self::snippetWarnings($record, $snippet) !== [])
+                                ->modalHeading(fn () => "¿Agregar {$snippet->label} igual?")
+                                ->modalDescription(fn () => implode(' ', self::snippetWarnings($record, $snippet)))
+                                ->modalSubmitActionLabel('Agregar igual')
+                                ->modalCancelActionLabel('No agregar')
                                 ->action(function (Get $get, Set $set, EditConsultation $livewire) use ($snippet) {
                                     $item = app(PrescriptionService::class)->fromSnippet($snippet);
                                     $set('prescription_items', PrescriptionService::merge($get('prescription_items') ?? [], [$item]));
@@ -536,7 +546,17 @@ class ConsultationForm
      */
     public static function medicationWarnings(?Patient $patient, ?string $medication): array
     {
-        return array_values(array_filter([AllergyCheck::warning($patient, $medication), ...MedicationCheck::warnings($patient, $medication)]));
+        return PrescriptionService::warningsFor($patient, $medication);
+    }
+
+    /**
+     * Lo que impide darle al paciente el medicamento de un botón rápido.
+     *
+     * @return list<string>
+     */
+    private static function snippetWarnings(?Consultation $record, TextSnippet $snippet): array
+    {
+        return self::medicationWarnings($record?->patient, app(PrescriptionService::class)->fromSnippet($snippet)['medication']);
     }
 
     private static function notifyWarnings(?Patient $patient, ?string $medication): void
