@@ -36,6 +36,9 @@ class SupplierResource extends Resource
 
     protected static ?string $navigationLabel = 'Proveedores';
 
+    /** No va en el menú: son pocos y se entra desde Compras (también se crean al cargar un material). */
+    protected static bool $shouldRegisterNavigation = false;
+
     protected static ?string $navigationParentItem = 'Inventario';
 
     protected static ?int $navigationSort = 3;

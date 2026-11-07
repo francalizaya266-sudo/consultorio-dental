@@ -6,6 +6,7 @@ use App\Enums\AppointmentStatus;
 use App\Enums\PatientRelationship;
 use App\Enums\PaymentMethod;
 use App\Enums\TreatmentPlanStatus;
+use App\Filament\Pages\OwingBalances;
 use App\Filament\Resources\Appointments\Pages\ViewAppointment;
 use App\Filament\Resources\Patients\Pages\ListPatients;
 use App\Filament\Resources\Patients\Pages\ViewPatient;
@@ -178,7 +179,7 @@ class BillingPanelTest extends TestCase
             ->assertSchemaStateSet(['method' => PaymentMethod::Yape]);
     }
 
-    public function test_the_patient_list_shows_who_owes(): void
+    public function test_owing_balances_are_collected_from_caja_with_who_owes_most_first(): void
     {
         $owes = Patient::factory()->create();
         $settled = Patient::factory()->create();
@@ -190,29 +191,27 @@ class BillingPanelTest extends TestCase
         $owesMore = Patient::factory()->create();
         Charge::factory()->for($owesMore)->create(['amount' => 400]);
 
-        // Primero quien más debe, con el total arriba; se cobra desde la misma lista.
-        Livewire::test(ListPatients::class, ['activeTab' => 'owing'])
+        // En Caja › Saldos pendientes: primero quien más debe, con el total arriba; se cobra desde la misma lista.
+        Livewire::test(OwingBalances::class)
             ->assertCanSeeTableRecords([$owesMore, $owes], inOrder: true)
             ->assertCanNotSeeTableRecords([$settled])
-            ->assertSee(['Debe S/ 150.00', 'Por cobrar: S/ 550.00 entre 2 pacientes'])
-            ->assertTableColumnHidden('next_appointment_at')
+            ->assertSee(['S/ 150.00', 'Por cobrar: S/ 550.00 entre 2 pacientes'])
             ->callAction(TestAction::make('collect')->table($owes), ['method' => PaymentMethod::Cash->value])
-            ->assertHasNoActionErrors()
-            ->assertNotified('Pago registrado');
+            ->assertHasNoErrors()
+            ->assertNotified('Pago registrado')
+            ->assertCanNotSeeTableRecords([$owes]);
 
         $this->assertSame(0.0, $owes->balance());
 
-        // En la lista de todos solo se ve el saldo: cobrar es desde los saldos pendientes o la ficha.
+        // La lista de pacientes muestra el saldo, sin una pestaña aparte.
         Livewire::test(ListPatients::class)
             ->assertSee('Debe S/ 400.00')
-            ->assertTableColumnVisible('next_appointment_at')
-            ->assertActionHidden(TestAction::make('collect')->table($owesMore));
+            ->assertDontSee('Con saldo pendiente');
 
         $this->actingAs($this->doctorOffering(Treatment::factory()->create())->user);
 
-        Livewire::test(ListPatients::class)
-            ->assertTableColumnHidden('balance_due')
-            ->assertDontSee('Con saldo pendiente');
+        Livewire::test(ListPatients::class)->assertTableColumnHidden('balance_due');
+        $this->get(OwingBalances::getUrl())->assertForbidden();
     }
 
     public function test_the_installment_due_today_shows_on_the_appointment_and_is_charged_at_checkout(): void

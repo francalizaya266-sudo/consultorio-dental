@@ -39,6 +39,9 @@ class StockMovementResource extends Resource
 
     protected static ?string $navigationLabel = 'Movimientos';
 
+    /** No va en el menú: cada material muestra los suyos, y para rastrear un lote o una serie se entra desde Inventario. */
+    protected static bool $shouldRegisterNavigation = false;
+
     protected static ?string $navigationParentItem = 'Inventario';
 
     protected static ?int $navigationSort = 1;

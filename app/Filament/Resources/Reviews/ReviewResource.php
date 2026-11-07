@@ -41,7 +41,7 @@ class ReviewResource extends Resource
 
     protected static ?string $navigationParentItem = 'Página web';
 
-    protected static ?int $navigationSort = 3;
+    protected static ?int $navigationSort = 4;
 
     protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedChatBubbleBottomCenterText;
 
@@ -125,7 +125,7 @@ class ReviewResource extends Resource
                 RestoreAction::make(),
             ])
             ->emptyStateHeading('Todavía no hay opiniones')
-            ->emptyStateDescription('Copia aquí las mejores opiniones de su perfil de Google. La web también enlaza a ese perfil (Ajustes → Web).');
+            ->emptyStateDescription('Copia aquí las mejores opiniones de su perfil de Google. La web también enlaza a ese perfil (Página web › Puesta a punto).');
     }
 
     public static function getPages(): array

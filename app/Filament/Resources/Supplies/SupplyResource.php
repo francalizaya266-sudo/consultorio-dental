@@ -4,6 +4,8 @@ namespace App\Filament\Resources\Supplies;
 
 use App\Enums\SupplyCategory;
 use App\Filament\Concerns\HasSpanishLabels;
+use App\Filament\Pages\StockCount;
+use App\Filament\Resources\StockMovements\StockMovementResource;
 use App\Filament\Resources\Suppliers\SupplierResource;
 use App\Filament\Resources\Supplies\Pages\ManageSupplies;
 use App\Filament\Resources\Supplies\Pages\ViewSupply;
@@ -216,6 +218,16 @@ class SupplyResource extends Resource
             BatchesRelationManager::class,
             MovementsRelationManager::class,
         ];
+    }
+
+    /**
+     * "Inventario" queda marcado también en el conteo y en los movimientos, que ya no van en el menú.
+     *
+     * @return list<string>
+     */
+    public static function getNavigationItemActiveRoutePattern(): array
+    {
+        return [static::getRouteBaseName().'.*', StockCount::getRouteName(), StockMovementResource::getRouteBaseName().'.*'];
     }
 
     public static function getPages(): array

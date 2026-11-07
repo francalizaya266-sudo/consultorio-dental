@@ -3,8 +3,8 @@
 namespace App\Filament\Widgets;
 
 use App\Filament\Pages\Earnings;
+use App\Filament\Pages\OwingBalances;
 use App\Filament\Pages\Summary;
-use App\Filament\Resources\Patients\PatientResource;
 use App\Filament\Support\StatComparison;
 use App\Models\User;
 use App\Services\Dashboard\MonthFigures;
@@ -99,7 +99,7 @@ class MonthOverview extends StatsOverviewWidget
         return Stat::make('Por cobrar (a hoy)', Money::format(MonthFigures::outstanding()))
             ->description('Saldos pendientes de todos los pacientes')
             ->icon('heroicon-o-scale')
-            ->url(PatientResource::getUrl('index', ['tab' => 'owing']));
+            ->url(OwingBalances::getUrl());
     }
 
     /** La meta de cobro del mes, si se puso en Ajustes. */

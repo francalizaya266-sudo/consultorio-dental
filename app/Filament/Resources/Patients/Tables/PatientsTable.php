@@ -3,17 +3,13 @@
 namespace App\Filament\Resources\Patients\Tables;
 
 use App\Enums\AppointmentStatus;
-use App\Filament\Actions\RegisterPaymentAction;
-use App\Filament\Resources\Patients\Pages\ListPatients;
 use App\Models\Charge;
 use App\Models\Patient;
-use App\Models\Payment;
 use App\Support\Money;
 use App\Support\Phone;
 use Filament\Actions\EditAction;
 use Filament\Actions\ViewAction;
 use Filament\Tables\Columns\TextColumn;
-use Filament\Tables\Contracts\HasTable;
 use Filament\Tables\Filters\Filter;
 use Filament\Tables\Filters\TrashedFilter;
 use Filament\Tables\Table;
@@ -43,18 +39,15 @@ class PatientsTable
                     ->formatStateUsing(fn (string $state) => Phone::display($state))
                     ->description(fn (Patient $record) => $record->relationship?->getLabel())
                     ->placeholder('Sin celular'),
-                // En los saldos pendientes la lista es para cobrar: deja sitio al saldo y a "Cobrar".
                 TextColumn::make('birth_date')
                     ->label('Edad')
                     ->formatStateUsing(fn (Patient $record) => $record->age !== null ? $record->age.' años' : null)
-                    ->placeholder('—')
-                    ->hidden(fn (HasTable $livewire) => self::isOwingTab($livewire)),
+                    ->placeholder('—'),
                 TextColumn::make('next_appointment_at')
                     ->label('Próxima cita')
                     ->dateTime('D d/m H:i')
                     ->placeholder('—')
-                    ->sortable()
-                    ->hidden(fn (HasTable $livewire) => self::isOwingTab($livewire)),
+                    ->sortable(),
                 TextColumn::make('last_visit_at')
                     ->label('Última visita')
                     ->date('d/m/Y')
@@ -78,31 +71,12 @@ class PatientsTable
                 TrashedFilter::make()
                     ->visible(fn () => auth()->user()->isAdmin()),
             ])
-            ->description(fn (HasTable $livewire) => self::isOwingTab($livewire) ? self::owedTotal() : null)
             ->recordActions([
-                RegisterPaymentAction::make(fn (Patient $record) => $record)
-                    ->name('collect')
-                    ->label('Cobrar')
-                    ->color('success')
-                    ->visible(fn (Patient $record, HasTable $livewire) => self::isOwingTab($livewire) && (float) ($record->balance_due ?? 0) > 0 && auth()->user()->can('create', Payment::class)),
                 ViewAction::make(),
                 EditAction::make(),
             ])
             ->emptyStateHeading('Aún no hay pacientes')
             ->emptyStateDescription('Se crean solos al reservar en la web, o desde "Nuevo paciente".');
-    }
-
-    /** "Por cobrar: S/ 2,350.00 entre 9 pacientes", arriba de la lista de saldos pendientes. */
-    private static function owedTotal(): string
-    {
-        $balances = Patient::query()->owing()->withBalance()->pluck('balance_due');
-
-        return 'Por cobrar: '.Money::format($balances->sum()).' entre '.$balances->count().($balances->count() === 1 ? ' paciente' : ' pacientes');
-    }
-
-    private static function isOwingTab(HasTable $livewire): bool
-    {
-        return $livewire instanceof ListPatients && $livewire->activeTab === 'owing';
     }
 
     private static function seesBalances(): bool

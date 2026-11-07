@@ -6,6 +6,7 @@ use App\Enums\PurchaseOrderStatus;
 use App\Exceptions\InventoryException;
 use App\Filament\Concerns\HasSpanishLabels;
 use App\Filament\Resources\PurchaseOrders\Pages\ManagePurchaseOrders;
+use App\Filament\Resources\Suppliers\SupplierResource;
 use App\Models\PurchaseOrder;
 use App\Models\PurchaseOrderItem;
 use App\Models\Supply;
@@ -179,6 +180,16 @@ class PurchaseOrderResource extends Resource
     public static function getNavigationBadgeTooltip(): ?string
     {
         return 'Pedidos por llegar';
+    }
+
+    /**
+     * "Compras" queda marcado también en Proveedores, que ya no va en el menú.
+     *
+     * @return list<string>
+     */
+    public static function getNavigationItemActiveRoutePattern(): array
+    {
+        return [static::getRouteBaseName().'.*', SupplierResource::getRouteBaseName().'.*'];
     }
 
     public static function getPages(): array

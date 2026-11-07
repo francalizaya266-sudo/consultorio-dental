@@ -4,6 +4,7 @@ namespace App\Filament\Resources\Supplies\Pages;
 
 use App\Filament\Pages\StockCount;
 use App\Filament\Resources\PurchaseOrders\PlaceOrderAction;
+use App\Filament\Resources\StockMovements\StockMovementResource;
 use App\Filament\Resources\Supplies\SupplyResource;
 use App\Models\PurchaseOrder;
 use App\Models\Supply;
@@ -36,6 +37,13 @@ class ManageSupplies extends ManageRecords
                 ->color('gray')
                 ->visible(fn () => StockCount::canAccess() && Supply::query()->exists())
                 ->url(fn () => StockCount::getUrl()),
+            // Para rastrear un lote o una serie (un implante retirado, un lote con alerta): todos los movimientos.
+            Action::make('movements')
+                ->label('Buscar lote o serie')
+                ->icon(Heroicon::OutlinedMagnifyingGlass)
+                ->color('gray')
+                ->visible(fn () => StockMovementResource::canViewAny() && Supply::query()->exists())
+                ->url(fn () => StockMovementResource::getUrl('index')),
             $this->starterAction(),
             CreateAction::make()
                 ->label('Nuevo material')

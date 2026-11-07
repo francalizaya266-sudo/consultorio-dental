@@ -1,4 +1,4 @@
-{{-- Estrellas de Google: el puntaje que copiaron en Ajustes, con enlace a las opiniones si lo hay. --}}
+{{-- Estrellas de Google: el puntaje que copiaron en la puesta a punto de la web, con enlace a las opiniones si lo hay. --}}
 @php
     $tag = $rating['url'] ? 'a' : 'p';
     $score = number_format($rating['rating'], 1, ',', '');

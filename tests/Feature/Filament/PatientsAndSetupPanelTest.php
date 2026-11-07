@@ -7,10 +7,14 @@ use App\Enums\AppointmentStatus;
 use App\Enums\PatientRelationship;
 use App\Enums\PaymentMethod;
 use App\Enums\SnippetStatus;
+use App\Enums\UserRole;
 use App\Filament\Pages\Agenda;
 use App\Filament\Pages\Dashboard;
 use App\Filament\Pages\Settings;
+use App\Filament\Pages\WebSetup;
 use App\Filament\Resources\Accounts\Pages\ViewAccount;
+use App\Filament\Resources\Doctors\DoctorResource;
+use App\Filament\Resources\Doctors\Pages\CreateDoctor;
 use App\Filament\Resources\Doctors\Pages\EditDoctor;
 use App\Filament\Resources\Patients\Pages\CreatePatient;
 use App\Filament\Resources\Patients\Pages\EditPatient;
@@ -20,6 +24,7 @@ use App\Filament\Resources\Payments\Pages\ManagePayments;
 use App\Filament\Resources\ScheduleBlocks\Pages\ManageScheduleBlocks;
 use App\Filament\Resources\TextSnippets\Pages\ManageTextSnippets;
 use App\Filament\Resources\Treatments\Pages\ManageTreatments;
+use App\Filament\Resources\Users\Pages\ManageUsers;
 use App\Filament\Support\MobileBar;
 use App\Models\Account;
 use App\Models\Appointment;
@@ -34,8 +39,10 @@ use App\Models\Treatment;
 use App\Models\User;
 use App\Services\Web\PublicImages;
 use Filament\Actions\Testing\TestAction;
+use Filament\Forms\Components\Select;
 use Illuminate\Foundation\Testing\LazilyRefreshDatabase;
 use Illuminate\Http\UploadedFile;
+use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Storage;
 use Livewire\Livewire;
 use Tests\Concerns\CreatesAgenda;
@@ -265,12 +272,12 @@ class PatientsAndSetupPanelTest extends TestCase
         $this->assertSame(['+51912345678', 'Sonríe sin miedo'], [Setting::get('clinic.whatsapp'), Setting::get('clinic.slogan')]);
     }
 
-    public function test_the_admin_uploads_and_removes_the_logo_in_settings(): void
+    public function test_the_admin_uploads_and_removes_the_logo_in_the_web_setup(): void
     {
         Storage::fake(PublicImages::DISK);
         $this->actingAs(User::factory()->admin()->create());
 
-        Livewire::test(Settings::class)
+        Livewire::test(WebSetup::class)
             ->fillForm(['web' => ['logo' => UploadedFile::fake()->image('logo.png', 600, 200)]])
             ->call('save')
             ->assertHasNoFormErrors();
@@ -282,7 +289,7 @@ class PatientsAndSetupPanelTest extends TestCase
 
         $this->get(route('site.home'))->assertSee('class="logo"', false);
 
-        Livewire::test(Settings::class)
+        Livewire::test(WebSetup::class)
             ->fillForm(['web' => ['logo' => null]])
             ->call('save')
             ->assertHasNoFormErrors();
@@ -291,17 +298,17 @@ class PatientsAndSetupPanelTest extends TestCase
         $this->get(route('site.home'))->assertDontSee('class="logo"', false)->assertSee('class="mark"', false);
     }
 
-    public function test_the_admin_sets_the_home_photo_and_the_google_stars_in_settings(): void
+    public function test_the_admin_sets_the_home_photo_and_the_google_stars_in_the_web_setup(): void
     {
         Storage::fake(PublicImages::DISK);
         $this->actingAs(User::factory()->admin()->create());
 
-        Livewire::test(Settings::class)
+        Livewire::test(WebSetup::class)
             ->fillForm(['clinic' => ['google_rating' => '6']])
             ->call('save')
             ->assertHasFormErrors(['clinic.google_rating']);
 
-        Livewire::test(Settings::class)
+        Livewire::test(WebSetup::class)
             ->fillForm([
                 'web' => ['hero_image' => UploadedFile::fake()->image('consultorio.jpg', 2400, 1200)],
                 'clinic' => ['google_rating' => '4,9', 'google_reviews_count' => '87'],
@@ -314,7 +321,7 @@ class PatientsAndSetupPanelTest extends TestCase
         Storage::disk(PublicImages::DISK)->assertExists(Setting::get('web.hero_image'));
 
         // Sin puntaje, no quedan estrellas a medias en la web.
-        Livewire::test(Settings::class)
+        Livewire::test(WebSetup::class)
             ->fillForm(['clinic' => ['google_rating' => '', 'google_reviews_count' => '']])
             ->call('save')
             ->assertHasNoFormErrors();
@@ -336,6 +343,50 @@ class PatientsAndSetupPanelTest extends TestCase
             ->assertHasNoFormErrors();
 
         $this->assertSame(2, $doctor->schedules()->where('weekday', 1)->count());
+    }
+
+    public function test_a_doctor_is_registered_with_their_access_in_one_step(): void
+    {
+        $this->actingAs(User::factory()->admin()->create());
+
+        Livewire::test(CreateDoctor::class)
+            ->assertSchemaStateSet(['access' => 'new'])
+            ->fillForm(['name' => 'Dra. Ana Torres', 'slug' => 'ana-torres', 'access_email' => 'ana@consultorio.test', 'access_password' => 'corto'])
+            ->call('create')
+            ->assertHasFormErrors(['access_password' => 'min'])
+            ->fillForm(['access_password' => 'clave-segura-1'])
+            ->call('create')
+            ->assertHasNoFormErrors();
+
+        $doctor = Doctor::query()->where('slug', 'ana-torres')->sole();
+        $this->assertSame(['Dra. Ana Torres', 'ana@consultorio.test', UserRole::Doctor], [$doctor->user->name, $doctor->user->email, $doctor->user->role]);
+        $this->assertTrue(Hash::check('clave-segura-1', $doctor->user->password));
+
+        // Sin acceso por ahora: el doctor queda sin usuario, y se le puede dar después desde su ficha.
+        Livewire::test(CreateDoctor::class)
+            ->fillForm(['name' => 'Dr. Luis Paz', 'slug' => 'luis-paz', 'access' => 'none'])
+            ->call('create')
+            ->assertHasNoFormErrors();
+
+        $luis = Doctor::query()->where('slug', 'luis-paz')->sole();
+        $this->assertNull($luis->user_id);
+
+        Livewire::test(EditDoctor::class, ['record' => $luis->getKey()])
+            ->assertSchemaStateSet(['access' => 'none'])
+            ->fillForm(['access' => 'new', 'access_email' => 'ana@consultorio.test', 'access_password' => 'clave-segura-2'])
+            ->call('save')
+            ->assertHasFormErrors(['access_email' => 'unique'])
+            ->fillForm(['access_email' => 'luis@consultorio.test'])
+            ->call('save')
+            ->assertHasNoFormErrors();
+
+        $this->assertSame('luis@consultorio.test', $luis->fresh()->user->email);
+
+        // En Usuarios ya no se da de alta a un doctor: lleva a Doctores.
+        Livewire::test(ManageUsers::class)
+            ->assertActionHasUrl('newDoctor', DoctorResource::getUrl('create'))
+            ->mountAction('create')
+            ->assertFormFieldExists('role', 'mountedActionSchema0', fn (Select $field) => ! array_key_exists(UserRole::Doctor->value, $field->getOptions()));
     }
 
     public function test_patients_away_for_six_months_can_be_listed_to_call_them_back(): void

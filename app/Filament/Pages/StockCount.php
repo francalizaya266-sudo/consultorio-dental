@@ -36,6 +36,9 @@ class StockCount extends Page
 
     protected static ?string $navigationLabel = 'Conteo';
 
+    /** No va en el menú: se entra con "Contar" en Inventario, que queda marcado mientras tanto. */
+    protected static bool $shouldRegisterNavigation = false;
+
     protected static ?string $navigationParentItem = 'Inventario';
 
     protected static ?int $navigationSort = 4;

@@ -6,8 +6,10 @@ use App\Filament\Pages\Agenda;
 use App\Filament\Pages\Backups;
 use App\Filament\Pages\Dashboard;
 use App\Filament\Pages\Earnings;
+use App\Filament\Pages\OwingBalances;
 use App\Filament\Pages\Settings;
 use App\Filament\Pages\Summary;
+use App\Filament\Pages\WebSetup;
 use App\Filament\Resources\Accounts\AccountResource;
 use App\Filament\Resources\Appointments\AppointmentResource;
 use App\Filament\Resources\Campaigns\CampaignResource;
@@ -78,6 +80,7 @@ class PanelAccessTest extends TestCase
             'ficha de celular' => ['accounts.view', [true, true, false]],
             'pagos' => ['payments', [true, true, false]],
             'cuotas por cobrar' => ['installments', [true, true, false]],
+            'saldos pendientes' => ['owing', [true, true, false]],
             'ganancias para imprimir' => ['earnings.print', [true, false, false]],
             'ganancias en Excel' => ['earnings.excel', [true, false, false]],
             'opciones rápidas' => ['snippets', [true, false, true]],
@@ -96,6 +99,7 @@ class PanelAccessTest extends TestCase
             'opiniones' => ['reviews', [true, false, false]],
             'antes y después' => ['cases', [true, false, false]],
             'ajustes' => ['settings', [true, false, false]],
+            'puesta a punto de la web' => ['web', [true, false, false]],
             'copias de seguridad' => ['backups', [true, false, false]],
         ];
     }
@@ -153,6 +157,8 @@ class PanelAccessTest extends TestCase
             'reviews' => ReviewResource::getUrl('index'),
             'cases' => SmileCaseResource::getUrl('index'),
             'settings' => Settings::getUrl(),
+            'web' => WebSetup::getUrl(),
+            'owing' => OwingBalances::getUrl(),
             'backups' => Backups::getUrl(),
         };
 

@@ -3,14 +3,18 @@
 namespace Tests\Feature\Filament;
 
 use App\Filament\Pages\Dashboard;
+use App\Filament\Pages\Settings;
 use App\Filament\Resources\Appointments\AppointmentResource;
 use App\Filament\Resources\Campaigns\CampaignResource;
 use App\Filament\Resources\Patients\PatientResource;
 use App\Filament\Resources\Payments\PaymentResource;
+use App\Filament\Resources\PurchaseOrders\PurchaseOrderResource;
+use App\Filament\Resources\Suppliers\SupplierResource;
 use App\Filament\Resources\Supplies\SupplyResource;
 use App\Filament\Resources\Treatments\TreatmentResource;
 use App\Models\Account;
 use App\Models\Patient;
+use App\Models\Supply;
 use App\Models\Treatment;
 use App\Models\User;
 use Filament\Livewire\GlobalSearch;
@@ -38,10 +42,15 @@ class PanelNavigationTest extends TestCase
             ->assertSeeInOrder(['Configuración', 'Ajustes', 'Tratamientos', 'Textos de consentimiento', 'Página web'])
             ->assertDontSee(['Campañas', 'Antes y después', 'Opiniones', 'Preguntas frecuentes']);
 
+        // La web se edita desde un solo lugar: primero su puesta a punto y el enlace para verla.
         $this->get(CampaignResource::getUrl('index'))
             ->assertOk()
-            ->assertSeeInOrder(['Página web', 'Campañas', 'Antes y después', 'Opiniones', 'Preguntas frecuentes', 'Ver la página'])
+            ->assertSeeInOrder(['Página web', 'Puesta a punto', 'Ver la página', 'Campañas', 'Antes y después', 'Opiniones', 'Preguntas frecuentes'])
             ->assertSee(route('site.home'));
+
+        $this->get(Settings::getUrl())
+            ->assertOk()
+            ->assertDontSee(['Título del inicio', 'Puntaje en Google']);
 
         $this->get(AppointmentResource::getUrl('index'))
             ->assertOk()
@@ -56,9 +65,17 @@ class PanelNavigationTest extends TestCase
             ->assertOk()
             ->assertSeeInOrder(['Caja', 'Saldos pendientes', 'Cuotas por cobrar', 'Cierre del día', 'Inventario']);
 
+        // Conteo y Movimientos se abren desde Inventario; Proveedores, desde Compras.
+        Supply::factory()->create();
         $this->get(SupplyResource::getUrl('index'))
             ->assertOk()
-            ->assertSeeInOrder(['Inventario', 'Movimientos', 'Compras', 'Proveedores', 'Conteo', 'Avisos']);
+            ->assertSeeInOrder(['Inventario', 'Compras', 'Avisos'])
+            ->assertSee(['Contar', 'Buscar lote o serie'])
+            ->assertDontSee(['Conteo', 'Movimientos']);
+
+        $this->get(PurchaseOrderResource::getUrl('index'))
+            ->assertOk()
+            ->assertSee(SupplierResource::getUrl('index'));
     }
 
     public function test_reception_only_sees_its_entries(): void
