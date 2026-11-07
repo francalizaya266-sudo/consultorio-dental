@@ -73,7 +73,6 @@ class PatientForm
                 // Para un menor: quién firma por él los consentimientos y el plan.
                 Section::make('Apoderado')
                     ->description('Es menor de edad: su apoderado firma los consentimientos y el plan de tratamiento.')
-                    ->columns(3)
                     ->visible(fn (Get $get) => filled($get('birth_date')) && Carbon::parse($get('birth_date'))->age < 18)
                     ->schema([
                         TextInput::make('guardian_name')
