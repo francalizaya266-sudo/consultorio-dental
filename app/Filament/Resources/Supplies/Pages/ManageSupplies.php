@@ -48,10 +48,11 @@ class ManageSupplies extends ManageRecords
         return [
             'active' => Tab::make('En uso')
                 ->modifyQueryUsing(fn (Builder $query) => $query->active()),
-            'low' => Tab::make('Por reponer')
-                ->badge(fn () => Supply::query()->belowMinimum()->count() ?: null)
+            // Bajo el mínimo y sin pedir todavía: lo mismo que cuentan el menú y Hoy.
+            'low' => Tab::make('Por pedir')
+                ->badge(fn () => Supply::query()->toReorder()->count() ?: null)
                 ->badgeColor('warning')
-                ->modifyQueryUsing(fn (Builder $query) => $query->belowMinimum()),
+                ->modifyQueryUsing(fn (Builder $query) => $query->toReorder()),
             'expiring' => Tab::make('Por vencer')
                 ->badge(fn () => Supply::query()->expiringSoon()->count() ?: null)
                 ->badgeColor('warning')

@@ -107,7 +107,7 @@ final class PlaceOrderAction
             });
     }
 
-    /** @return array<int, string> Proveedores con algo por reponer primero: "Dental Perú (3 por reponer)". */
+    /** @return array<int, string> Proveedores con algo por pedir primero: "Dental Perú (3 por pedir)". */
     private static function supplierOptions(): array
     {
         return Supplier::query()
@@ -117,7 +117,7 @@ final class PlaceOrderAction
             ->orderBy('name')
             ->get()
             ->filter(fn (Supplier $supplier) => $supplier->low_count > 0)
-            ->mapWithKeys(fn (Supplier $supplier) => [$supplier->getKey() => $supplier->name.' ('.$supplier->low_count.' por reponer)'])
+            ->mapWithKeys(fn (Supplier $supplier) => [$supplier->getKey() => $supplier->name.' ('.$supplier->low_count.' por pedir)'])
             ->all();
     }
 

@@ -14,6 +14,7 @@ use App\Filament\Resources\PurchaseOrders\PurchaseOrderResource;
 use App\Filament\Resources\StockMovements\StockMovementResource;
 use App\Filament\Resources\Suppliers\SupplierResource;
 use App\Filament\Resources\Supplies\Pages\ManageSupplies;
+use App\Filament\Resources\Supplies\Pages\ViewSupply;
 use App\Filament\Resources\Supplies\SupplyResource;
 use App\Filament\Resources\Treatments\Pages\ManageTreatments;
 use App\Filament\Widgets\FollowUpsToday;
@@ -146,6 +147,86 @@ class InventoryPanelTest extends TestCase
         $this->assertSame(PurchaseOrderStatus::Received, $order->fresh()->status);
         $this->assertSame(20.0, (float) $anesthesia->fresh()->stock);
         $this->assertFalse($anesthesia->fresh()->isLow());
+    }
+
+    public function test_what_to_order_is_the_same_count_everywhere_and_what_expired_is_not_counted(): void
+    {
+        $supplier = Supplier::factory()->create(['name' => 'Dental Sur']);
+        $reception = User::factory()->reception()->create();
+        $inventory = app(InventoryService::class);
+        $gloves = Supply::factory()->for($supplier)->create(['name' => 'Guantes de nitrilo', 'unit' => 'par', 'min_stock' => 20]);
+        $anesthesia = Supply::factory()->for($supplier)->create(['name' => 'Lidocaína 2 %', 'unit' => 'carpule', 'min_stock' => 10]);
+        $acid = Supply::factory()->for($supplier)->create(['name' => 'Ácido grabador', 'unit' => 'ml', 'min_stock' => 10]);
+        $inventory->receive($gloves, 5, $reception);
+        $inventory->receive($anesthesia, 4, $reception);
+        $inventory->placeOrder($supplier, [['supply_id' => $anesthesia->id, 'quantity' => 16]], $reception);
+        // Hay 11.4 ml, pero 3 ml vencieron ayer: para usar quedan 8.4, menos que el mínimo.
+        $inventory->receive($acid, 3, $reception, ['expires_on' => '2026-11-01']);
+        $inventory->receive($acid, 8.4, $reception, ['expires_on' => '2027-11-01']);
+        $this->actingAs($reception);
+
+        // La anestesia está bajo el mínimo pero ya viene en camino: no está por pedir.
+        $this->assertSame('2', SupplyResource::getNavigationBadge());
+        $this->assertEqualsCanonicalizing([$acid->id, $gloves->id], $inventory->toReorder()->modelKeys());
+
+        Livewire::test(ManageSupplies::class)
+            ->assertSeeInOrder(['Ácido grabador', '8.4 ml', 'Vencido: 3 ml'])
+            ->assertSee('Pedido: llegan 16 carpules')
+            ->set('activeTab', 'low')
+            ->assertCanSeeTableRecords([$gloves, $acid])
+            ->assertCanNotSeeTableRecords([$anesthesia]);
+
+        Livewire::test(FollowUpsToday::class)
+            ->assertSeeInOrder(['Materiales por pedir', '2'])
+            ->assertSee('Ácido grabador')
+            ->assertSee('Guantes de nitrilo')
+            ->assertDontSee('Lidocaína');
+
+        Livewire::test(ViewSupply::class, ['record' => $acid->getKey()])
+            ->assertSeeInOrder(['Hay', '8.4 ml', 'Vencido aparte: 3 ml. Dalo de baja en Lotes.']);
+
+        $this->assertTrue($acid->fresh()->isLow());
+        $this->assertSame(12.0, $acid->fresh()->suggestedOrder());
+    }
+
+    public function test_an_entry_of_something_that_was_ordered_receives_the_order(): void
+    {
+        $supplier = Supplier::factory()->create(['name' => 'Dental Sur']);
+        $reception = User::factory()->reception()->create();
+        $anesthesia = Supply::factory()->for($supplier)->create(['name' => 'Lidocaína 2 %', 'unit' => 'carpule', 'min_stock' => 10]);
+        app(InventoryService::class)->receive($anesthesia, 4, $reception);
+        $order = app(InventoryService::class)->placeOrder($supplier, [['supply_id' => $anesthesia->id, 'quantity' => 16]], $reception);
+        $item = $order->items->sole();
+        $this->actingAs($reception);
+
+        Livewire::test(ManageSupplies::class)
+            ->mountAction(TestAction::make('receive')->table($anesthesia))
+            ->assertSchemaStateSet(['order_item_id' => $item->id])
+            ->assertMountedActionModalSee('Sí, del pedido #'.$order->id.' a Dental Sur (faltan 16 carpules)')
+            ->fillForm(['quantity' => 10, 'lot' => 'L-902'])
+            ->callMountedAction()
+            ->assertHasNoFormErrors()
+            ->assertNotified('Entrada registrada. Ahora hay 14 carpules.');
+
+        $this->assertSame([PurchaseOrderStatus::Partial, '10.00'], [$order->fresh()->status, $item->fresh()->received_quantity]);
+        $this->assertSame($order->id, $anesthesia->batches()->where('lot', 'L-902')->sole()->purchase_order_id);
+
+        // Lo que llega aparte no toca el pedido.
+        Livewire::test(ManageSupplies::class)
+            ->callAction(TestAction::make('receive')->table($anesthesia), data: ['order_item_id' => 0, 'quantity' => 2])
+            ->assertHasNoFormErrors();
+        $this->assertSame('10.00', $item->fresh()->received_quantity);
+
+        Livewire::test(ManageSupplies::class)
+            ->callAction(TestAction::make('receive')->table($anesthesia), data: ['quantity' => 6])
+            ->assertNotified('Entrada registrada. Ahora hay 22 carpules.');
+
+        $this->assertSame(PurchaseOrderStatus::Received, $order->fresh()->status);
+
+        // Sin pedidos esperando, no pregunta.
+        Livewire::test(ManageSupplies::class)
+            ->mountAction(TestAction::make('receive')->table($anesthesia))
+            ->assertMountedActionModalDontSee('¿Es lo que se pidió?');
     }
 
     public function test_the_doctor_writes_the_recipe_of_a_treatment_and_corrects_what_was_used_when_finishing(): void

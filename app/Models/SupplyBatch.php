@@ -53,6 +53,15 @@ class SupplyBatch extends Model
             ->whereDate('expires_on', '<=', today()->addDays(Supply::EXPIRY_WARNING_DAYS));
     }
 
+    /** Ya venció y todavía queda algo: no se usa, se da de baja. */
+    #[Scope]
+    protected function expired(Builder $query): Builder
+    {
+        return $query->available()
+            ->whereNotNull('expires_on')
+            ->whereDate('expires_on', '<', today());
+    }
+
     public function isExpired(): bool
     {
         return $this->expires_on !== null && $this->expires_on->lt(today());
