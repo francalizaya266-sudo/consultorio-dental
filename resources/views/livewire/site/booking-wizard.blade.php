@@ -20,11 +20,26 @@
         <div class="flash bad" role="alert">{{ $error }}</div>
     @endif
 
+    {{-- La promoción con que llegó se ve en todos los pasos, para que sepa que va con ella. --}}
+    @if ($step < 4 && ($promo = $this->campaign))
+        <div class="flash info">
+            <p>Reservas con la promoción {{ $promo->name }}{{ ($discount = CampaignText::discount($promo)) ? ' · '.$discount : '' }}.</p>
+            @if ($promo->treatment && $this->treatment && ! $this->treatment->is($promo->treatment))
+                <p class="muted small">Se aplica a {{ $promo->treatment->name }}: el doctor lo revisa en esta cita y lo programa contigo.</p>
+            @endif
+        </div>
+    @endif
+
     {{-- Paso 1: qué necesita --}}
     @if ($step === 1)
         <section class="stack" aria-labelledby="paso-1">
             <h1 id="paso-1">¿Qué necesitas?</h1>
             <p class="lead">Elige el motivo de tu cita. Si no estás seguro, empieza con una evaluación.</p>
+
+            {{-- Con el celular recordado ya se sabe si está en tratamiento: se dice ahora, no al final. --}}
+            @if ($current = $this->inTreatment->firstWhere('id', $patientId))
+                @include('livewire.site.partials.in-treatment', ['person' => $current, 'others' => true])
+            @endif
 
             <ul class="choice-list">
                 @forelse ($this->treatments as $treatment)
@@ -99,12 +114,15 @@
                         <span class="label" id="para-quien">¿Para quién es la cita?</span>
                         <div class="chips" role="group" aria-labelledby="para-quien">
                             @foreach ($this->family as $person)
-                                <button type="button" class="chip" aria-pressed="{{ $patientId === $person->id ? 'true' : 'false' }}" wire:click="choosePatient({{ $person->id }})">{{ $person->first_name }}</button>
+                                <button type="button" class="chip" aria-pressed="{{ $patientId === $person->id ? 'true' : 'false' }}" wire:click="choosePatient({{ $person->id }})">{{ $person->first_name }}{{ $this->inTreatment->contains('id', $person->id) ? ' · en tratamiento' : '' }}</button>
                             @endforeach
                             <button type="button" class="chip" aria-pressed="{{ $patientId === null ? 'true' : 'false' }}" wire:click="forSomeoneElse">Otra persona</button>
                         </div>
                         <span class="hint">Celular {{ Phone::display($this->device->account->phone) }}. ¿No eres tú? <a href="{{ route('site.account') }}">Cambiar</a></span>
                     </div>
+                    @if ($current = $this->inTreatment->firstWhere('id', $patientId))
+                        @include('livewire.site.partials.in-treatment', ['person' => $current, 'others' => false])
+                    @endif
                 @else
                     <div class="field">
                         <label for="phone">Tu celular</label>
@@ -214,7 +232,7 @@
                     <span>Quiero recibir promociones por WhatsApp (puedo darme de baja cuando quiera).</span>
                 </label>
 
-                <button type="submit" class="btn block" wire:loading.attr="disabled" wire:target="book">
+                <button type="submit" class="btn block" wire:loading.attr="disabled" wire:target="book" @disabled($this->inTreatment->contains('id', $patientId))>
                     <span wire:loading.remove wire:target="book">Reservar cita</span>
                     <span wire:loading wire:target="book">Reservando…</span>
                 </button>

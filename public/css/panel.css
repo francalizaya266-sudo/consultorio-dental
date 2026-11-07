@@ -1213,3 +1213,7 @@ a.ap-visit:hover { background: var(--gray-50); }
 .dark .ap-visit-here { color: var(--primary-400); }
 .ap-visits-note { margin: 0; padding: .25rem .6rem; font-size: .8rem; color: var(--gray-500); }
 .ap-visits-links { display: flex; flex-wrap: wrap; gap: .25rem 1rem; padding: .5rem .6rem 0; }
+
+/* Un texto de ayuda que avisa (por ejemplo, un tratamiento que no aparecerá en la reserva). */
+.help-warning { color: var(--warning-700); font-weight: 500; }
+.dark .help-warning { color: var(--warning-400); }

@@ -10,8 +10,10 @@
     $discount = CampaignText::discount($campaign);
     $package = CampaignText::package($campaign);
     $campaignPrice = $campaign->treatment ? $campaign->priceFor($campaign->treatment) : null;
+    // Un tratamiento que no se reserva solo empieza por la evaluación, y la promoción va con ella.
+    $byEvaluation = $campaign->treatment !== null && $bookAs !== null && ! $bookAs->is($campaign->treatment);
     $bookingUrl = route('site.booking', array_filter([
-        'tratamiento' => $campaign->treatment?->online_bookable ? $campaign->treatment->slug : null,
+        'tratamiento' => $bookAs?->slug,
         'codigo' => $campaign->promo_code,
         'promo' => $campaign->promo_code ? null : $campaign->slug,
         'origen' => 'campaign',
@@ -79,8 +81,11 @@
                 @if ($campaign->promo_code)
                     <p class="code">Código: <strong>{{ $campaign->promo_code }}</strong></p>
                 @endif
+                @if ($byEvaluation)
+                    <p>{{ $campaign->treatment->name }} se programa después de una evaluación: reservas la evaluación y la promoción queda guardada para tu tratamiento.</p>
+                @endif
                 <div class="row">
-                    <a href="{{ $bookingUrl }}" class="btn">Reservar con esta promoción</a>
+                    <a href="{{ $bookingUrl }}" class="btn">{{ $byEvaluation ? 'Reservar evaluación con la promoción' : 'Reservar con esta promoción' }}</a>
                     @if ($clinic->whatsappUrl())
                         <a href="{{ $clinic->whatsappUrl($campaign->whatsapp_text ?: 'Hola, quiero la promoción "'.$campaign->name.'".') }}" class="btn quiet" rel="noopener">Preguntar por WhatsApp</a>
                     @endif
