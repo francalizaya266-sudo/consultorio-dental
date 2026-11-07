@@ -25,8 +25,10 @@ use App\Services\Billing\BillingService;
 use App\Services\WhatsApp\WhatsAppOutbox;
 use App\Support\Money;
 use App\Support\Signatures;
+use App\Support\Teeth;
 use Carbon\CarbonImmutable;
 use Carbon\CarbonInterface;
+use Illuminate\Support\Arr;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
@@ -521,12 +523,32 @@ final class TreatmentPlanService
         });
     }
 
-    /** Texto del presupuesto para WhatsApp: un renglón por procedimiento con su precio. */
+    /**
+     * Texto del presupuesto para WhatsApp: un renglón por procedimiento, en el orden en que se hacen, con la pieza
+     * por su nombre, el diagnóstico que lo justifica, las sesiones y el precio.
+     * "1. Curación con resina en el primer molar inferior izquierdo (pieza 36), cara oclusal, por caries de la dentina: S/ 150.00".
+     */
     public function text(TreatmentPlan $plan): string
     {
+        $diagnoses = $plan->diagnosesByTooth();
+
         return $plan->items
             ->reject(fn (TreatmentPlanItem $item) => $item->status === PlanItemStatus::Cancelled)
-            ->map(fn (TreatmentPlanItem $item) => '• '.$item->label().($item->quantity > 1 ? " × {$item->quantity}" : '').': '.Money::format($item->subtotal()))
+            ->values()
+            ->map(function (TreatmentPlanItem $item, int $i) use ($diagnoses) {
+                $name = Teeth::nameOf($item->tooth);
+                $where = match (true) {
+                    $name !== null => ' en el '.Str::lcfirst($name).' (pieza '.$item->tooth.')'.(($surfaces = Teeth::surfacesText($item->surfaces)) ? ', '.$surfaces : ''),
+                    filled($item->tooth) => ' · pieza '.$item->tooth,
+                    default => '',
+                };
+                $why = $diagnoses[(string) $item->tooth] ?? [];
+
+                return ($i + 1).'. '.$item->description.($item->quantity > 1 ? " × {$item->quantity}" : '').$where
+                    .($why !== [] ? ', por '.mb_strtolower(Arr::join($why, ', ', ' y ')) : '')
+                    .($item->sessions_planned > 1 ? " · {$item->sessions_planned} sesiones" : '')
+                    .': '.Money::format($item->subtotal());
+            })
             ->implode("\n");
     }
 
@@ -546,6 +568,7 @@ final class TreatmentPlanService
             'doctor' => $plan->doctor->name,
             'plan' => $this->text($plan),
             'total' => Money::format($plan->total()),
+            'vigencia' => ($until = $plan->validUntil()) ? ' (vale hasta el '.$until->translatedFormat('j \d\e F').')' : '',
         ], $plan->patient_id);
     }
 

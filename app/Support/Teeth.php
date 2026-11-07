@@ -80,6 +80,33 @@ final class Teeth
         return $kind.' '.(self::isUpper($tooth) ? 'superior' : 'inferior').' '.(self::isPatientRight($tooth) ? 'derecho' : 'izquierdo').($primary ? ' (de leche)' : '');
     }
 
+    /** El nombre de lo que se anotó como pieza, si es una pieza FDI ("36"); null si es una zona o está vacío. */
+    public static function nameOf(mixed $tooth): ?string
+    {
+        $tooth = trim((string) $tooth);
+
+        if (! preg_match('/^[1-8][1-8]$/', $tooth) || (self::quadrant((int) $tooth) >= 5 && (int) $tooth % 10 > 5)) {
+            return null;
+        }
+
+        return self::name((int) $tooth);
+    }
+
+    /** "OM" → "caras oclusal y mesial"; "V" → "cara vestibular". */
+    public static function surfacesText(?string $surfaces): ?string
+    {
+        $names = collect(mb_str_split(mb_strtoupper(preg_replace('/[^A-Za-z]/', '', (string) $surfaces))))
+            ->map(fn (string $surface) => self::surfaceName($surface))
+            ->unique()
+            ->values();
+
+        return match ($names->count()) {
+            0 => null,
+            1 => 'cara '.$names->first(),
+            default => 'caras '.$names->slice(0, -1)->implode(', ').' y '.$names->last(),
+        };
+    }
+
     public static function surfaceName(string $surface): string
     {
         return match ($surface) {

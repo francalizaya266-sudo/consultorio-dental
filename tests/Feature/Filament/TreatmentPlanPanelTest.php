@@ -2,6 +2,7 @@
 
 namespace Tests\Feature\Filament;
 
+use App\Enums\DiagnosisType;
 use App\Enums\MessageStatus;
 use App\Enums\MessageTemplateKey;
 use App\Enums\PlanPaymentMode;
@@ -27,6 +28,8 @@ use App\Services\Clinical\ClinicalFileService;
 use App\Services\Clinical\ConsultationService;
 use App\Services\Clinical\OdontogramService;
 use App\Services\Clinical\OdontogramSuggestions;
+use App\Services\Clinical\TreatmentPlanService;
+use App\Services\WhatsApp\WhatsAppOutbox;
 use App\Support\Phone;
 use Database\Seeders\CatalogSeeder;
 use Filament\Actions\Testing\TestAction;
@@ -211,6 +214,35 @@ class TreatmentPlanPanelTest extends TestCase
         $page->dispatch('odontogram-suggestions-applied', diagnoses: [['icd10_code_id' => Icd10Code::where('code', 'K02.1')->value('id'), 'tooth' => '36']])
             ->assertNotified('Eso ya estaba agregado.');
         $this->assertSame(1, $consultation->diagnoses()->count());
+    }
+
+    public function test_the_budget_names_each_tooth_says_why_and_until_when_it_is_valid(): void
+    {
+        [$doctor, $patient] = $this->patientWithCariesIn36();
+        $consultation = $patient->consultations()->sole();
+        $consultation->diagnoses()->create(['icd10_code_id' => Icd10Code::where('code', 'K02.1')->value('id'), 'tooth' => '36', 'type' => DiagnosisType::Definitive]);
+        $suggestions = app(OdontogramSuggestions::class);
+        $plan = $suggestions->apply($consultation, $doctor->user, [$suggestions->rows($consultation->odontogram, $consultation)[0]['key']])['plan'];
+        $plan->items()->create(['description' => 'Limpieza dental', 'unit_price' => 80, 'sort_order' => 2]);
+        $plan->items()->create(['description' => 'Endodoncia', 'tooth' => '46', 'unit_price' => 650, 'sessions_planned' => 2, 'sort_order' => 3]);
+        $this->actingAs($doctor->user);
+
+        // La hoja: el odontograma en chico, la pieza por su nombre, por qué se hace y hasta cuándo vale.
+        $this->get(TreatmentPlansRelationManager::printUrl($plan))
+            ->assertOk()
+            ->assertSee(['En rojo, lo que hay que tratar', 'Los procedimientos van en el orden en que se harán.'])
+            ->assertSeeInOrder(['Curación con resina', 'Por: Caries de la dentina', 'Primer molar inferior izquierdo · cara oclusal', 'Limpieza dental', 'Endodoncia', '2 sesiones', 'Primer molar inferior derecho'])
+            ->assertSee('Presupuesto referencial, válido hasta el 2 de diciembre de 2026.');
+
+        // El WhatsApp dice lo mismo, en el mismo orden.
+        $body = app(WhatsAppOutbox::class)->draft(app(TreatmentPlanService::class)->whatsappDraft($plan->fresh()));
+        $this->assertStringContainsString(implode("\n", [
+            '1. Curación con resina en el primer molar inferior izquierdo (pieza 36), cara oclusal, por caries de la dentina: S/ 150.00',
+            '2. Limpieza dental: S/ 80.00',
+            '3. Endodoncia en el primer molar inferior derecho (pieza 46) · 2 sesiones: S/ 650.00',
+            '',
+            'Total: S/ 880.00 (vale hasta el 2 de diciembre)',
+        ]), $body);
     }
 
     public function test_marking_a_planned_finding_treated_marks_it_worked_today(): void
