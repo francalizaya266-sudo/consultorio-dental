@@ -3,8 +3,10 @@
 namespace App\Filament\Resources\Appointments\Pages;
 
 use App\Filament\Actions\AppointmentActions;
+use App\Filament\Concerns\HasPatientSummaryActions;
 use App\Filament\Resources\Appointments\AppointmentResource;
 use App\Filament\Resources\Patients\PatientResource;
+use App\Models\Patient;
 use App\Services\Billing\BillingService;
 use Filament\Actions\Action;
 use Filament\Forms\Components\Textarea;
@@ -15,6 +17,8 @@ use Illuminate\Contracts\Support\Htmlable;
 
 class ViewAppointment extends ViewRecord
 {
+    use HasPatientSummaryActions;
+
     protected static string $resource = AppointmentResource::class;
 
     public function mount(int|string $record): void
@@ -23,6 +27,11 @@ class ViewAppointment extends ViewRecord
 
         // Las cuotas que vencieron entran al saldo aunque el cron del servidor no haya pasado.
         app(BillingService::class)->chargeDueInstallments($this->getRecord()->patient);
+    }
+
+    protected function summaryPatient(): Patient
+    {
+        return $this->getRecord()->patient;
     }
 
     /** "Cita de María Quispe", con el día y la hora debajo. */

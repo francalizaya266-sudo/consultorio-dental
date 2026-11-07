@@ -15,6 +15,9 @@
                 </div>
 
                 <ul class="dash-alerts" aria-label="Antes de atender">
+                    @if ($next['consentMissing'])
+                        <li class="is-warning"><x-filament::icon icon="heroicon-m-pencil-square" /> Falta firmar el consentimiento: se firma al empezar la atención.</li>
+                    @endif
                     @if (! $next['hasBackground'])
                         <li class="is-warning"><x-filament::icon icon="heroicon-m-exclamation-circle" /> Faltan los antecedentes médicos: pregunta por alergias, enfermedades y medicamentos.</li>
                     @elseif ($next['alerts'] === [])

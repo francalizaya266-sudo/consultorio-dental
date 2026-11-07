@@ -4,11 +4,13 @@ namespace App\Services\Dashboard;
 
 use App\Enums\MessageStatus;
 use App\Enums\MessageTemplateKey;
+use App\Enums\TreatmentKind;
 use App\Models\Patient;
 use App\Models\TreatmentPlan;
 use App\Models\TreatmentPlanItem;
 use App\Models\WhatsappMessage;
 use App\Services\Billing\BillingService;
+use App\Services\Patients\PatientInsights;
 use App\Services\WhatsApp\WhatsAppOutbox;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Arr;
@@ -92,7 +94,7 @@ final class FollowUps
     }
 
     /**
-     * Para llamar a control: los que recién pasaron los 6 meses primero (son los que más vuelven).
+     * Para llamar a control (según lo último que se les hizo): los que vinieron hace menos primero (son los que más vuelven).
      *
      * @return array{count: int, patients: Collection<int, Patient>}
      */
@@ -161,6 +163,11 @@ final class FollowUps
                 ->unique()
                 ->all();
             $params['pendiente'] = $pending === [] ? 'lo que falta' : Arr::join($pending, ', ', ' y ');
+        }
+
+        // El control que le toca según lo último que se le hizo: "control de ortodoncia", "control y limpieza".
+        if ($key === MessageTemplateKey::CheckupRecall) {
+            $params['control'] = (app(PatientInsights::class)->checkup($patient)['kind'] ?? TreatmentKind::Other)->checkupLabel();
         }
 
         return $this->outbox->draftForAccount($patient->account, $key, $params, $patient->getKey());

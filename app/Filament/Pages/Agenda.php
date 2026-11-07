@@ -12,6 +12,7 @@ use App\Filament\Resources\WaitlistEntries\WaitlistEntryActions;
 use App\Filament\Resources\WaitlistEntries\WaitlistEntryResource;
 use App\Filament\Support\ClinicalAlerts;
 use App\Filament\Support\Notify;
+use App\Filament\Support\VisitFlags;
 use App\Models\Appointment;
 use App\Models\Charge;
 use App\Models\Doctor;
@@ -700,13 +701,16 @@ class Agenda extends Page
         $user = auth()->user();
         $seesMoney = $user->can('viewAny', Charge::class);
 
-        return Appointment::query()
+        $appointments = Appointment::query()
             ->with(['patient' => fn ($patient) => $patient->with('account')->when($seesMoney, fn ($q) => $q->withBalance()), 'treatment'])
             ->whereBelongsTo($doctor)
             ->whereBetween('starts_at', [$day->startOfDay(), $day->endOfDay()])
             ->where('status', '!=', AppointmentStatus::Cancelled)
             ->orderBy('starts_at')
-            ->get()
+            ->get();
+        $flags = VisitFlags::for($appointments, $user);
+
+        return $appointments
             ->map(fn (Appointment $a) => [
                 'id' => $a->getKey(),
                 'start' => $this->minuteOf($a->starts_at),
@@ -727,6 +731,8 @@ class Agenda extends Page
                 'isNew' => $a->is_new_patient,
                 'owes' => $seesMoney && (float) $a->patient->balance_due > 0 ? Money::short($a->patient->balance_due) : null,
                 'hasNote' => filled($a->patient_note) || filled($a->internal_notes),
+                // Alerta médica (solo para quien ve lo clínico), sesión del plan, pidió cambio y si suele faltar.
+                'flags' => $flags[$a->getKey()],
                 'url' => AppointmentResource::getUrl('view', ['record' => $a]),
                 'draggable' => $a->status->isChangeable() && $user->can('update', $a),
             ])

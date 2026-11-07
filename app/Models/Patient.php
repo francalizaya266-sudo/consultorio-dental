@@ -9,6 +9,7 @@ use App\Enums\DocumentType;
 use App\Enums\PatientRelationship;
 use App\Enums\PaymentMethod;
 use App\Enums\Sex;
+use App\Enums\TreatmentKind;
 use App\Enums\TreatmentPlanStatus;
 use App\Models\Concerns\Auditable;
 use App\Support\Phone;
@@ -27,7 +28,7 @@ use Illuminate\Database\Eloquent\SoftDeletes;
 use Illuminate\Support\Facades\DB;
 
 /** Paciente. Cada familiar tiene su propia historia; comparten el celular de la cuenta. */
-#[Fillable(['account_id', 'relationship', 'first_name', 'last_name', 'document_type', 'document_number', 'birth_date', 'sex', 'email', 'address', 'district', 'occupation', 'emergency_contact_name', 'emergency_contact_phone', 'emergency_contact_relationship', 'origin', 'referral_code', 'referred_by_patient_id', 'admin_notes', 'first_visit_at', 'last_visit_at'])]
+#[Fillable(['account_id', 'relationship', 'first_name', 'last_name', 'document_type', 'document_number', 'birth_date', 'sex', 'email', 'address', 'district', 'occupation', 'emergency_contact_name', 'emergency_contact_phone', 'emergency_contact_relationship', 'guardian_name', 'guardian_document', 'guardian_relationship', 'origin', 'referral_code', 'referred_by_patient_id', 'admin_notes', 'first_visit_at', 'last_visit_at'])]
 class Patient extends Model
 {
     /** @use HasFactory<PatientFactory> */
@@ -37,6 +38,7 @@ class Patient extends Model
     {
         return [
             'relationship' => PatientRelationship::class,
+            'guardian_relationship' => PatientRelationship::class,
             'document_type' => DocumentType::class,
             'sex' => Sex::class,
             'origin' => AppointmentOrigin::class,
@@ -160,6 +162,12 @@ class Patient extends Model
         return Attribute::get(fn () => $this->birth_date?->age);
     }
 
+    /** Menor de edad: firma por él su apoderado. */
+    public function isMinor(): bool
+    {
+        return $this->age !== null && $this->age < 18;
+    }
+
     /** Menor de 12: la receta va por su peso y no se le copian recetas de adulto. */
     public function isChild(): bool
     {
@@ -229,12 +237,27 @@ class Patient extends Model
         return $query->whereRaw(self::balanceSql().' > 0');
     }
 
-    /** Para llamarlos a control: hace 6 meses o más que no vienen y no tienen cita por delante. */
+    /**
+     * Para llamarlos a control: no tienen cita por delante y ya pasó el tiempo que pide lo último que se les
+     * hizo (ortodoncia al mes, implante al año, lo demás a los 6 meses; ver TreatmentKind::checkupMonths).
+     */
     #[Scope]
     protected function dueForCheckup(Builder $query): Builder
     {
+        $lastTreatment = '(select a.treatment_id from appointments a where a.patient_id = patients.id and a.status = ? and a.deleted_at is null order by a.starts_at desc limit 1)';
+        $cases = '';
+        $bindings = [];
+
+        foreach (TreatmentKind::treatmentsByCheckupMonths() as $months => $treatmentIds) {
+            $cases .= " when {$lastTreatment} in (".implode(', ', array_fill(0, count($treatmentIds), '?')).') then ?';
+            array_push($bindings, AppointmentStatus::Completed->value, ...$treatmentIds);
+            $bindings[] = now()->subMonths($months);
+        }
+
+        $bindings[] = now()->subMonths(TreatmentKind::Other->checkupMonths());
+
         return $query
-            ->where('last_visit_at', '<=', now()->subMonths(6))
+            ->whereRaw('patients.last_visit_at <= '.($cases === '' ? '?' : "case{$cases} else ? end"), $bindings)
             ->whereDoesntHave('appointments', fn (Builder $a) => $a->where('starts_at', '>=', now())->whereIn('status', AppointmentStatus::changeable()));
     }
 

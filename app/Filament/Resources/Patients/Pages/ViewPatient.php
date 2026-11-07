@@ -3,9 +3,11 @@
 namespace App\Filament\Resources\Patients\Pages;
 
 use App\Filament\Actions\RegisterPaymentAction;
+use App\Filament\Concerns\HasPatientSummaryActions;
 use App\Filament\Resources\Appointments\AppointmentResource;
 use App\Filament\Resources\Patients\PatientResource;
 use App\Filament\Support\PatientSummary;
+use App\Models\Patient;
 use App\Services\Billing\BillingService;
 use Filament\Actions\Action;
 use Filament\Actions\EditAction;
@@ -14,6 +16,8 @@ use Filament\Support\Icons\Heroicon;
 
 class ViewPatient extends ViewRecord
 {
+    use HasPatientSummaryActions;
+
     protected static string $resource = PatientResource::class;
 
     public function mount(int|string $record): void
@@ -22,6 +26,11 @@ class ViewPatient extends ViewRecord
 
         // Las cuotas que vencieron entran al saldo aunque el cron del servidor no haya pasado.
         app(BillingService::class)->chargeDueInstallments($this->getRecord());
+    }
+
+    protected function summaryPatient(): Patient
+    {
+        return $this->getRecord();
     }
 
     /** Edad, documento, distrito y desde cuándo viene, bajo el nombre. */

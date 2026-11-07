@@ -37,12 +37,15 @@
                                 <div class="agenda-item-title">
                                     <a href="{{ $item['url'] }}" class="agenda-item-name" x-on:click="open($event, {{ $item['id'] }})">{{ $item['patient'] }}</a>
                                     @if ($item['unclosed'])<span class="tag tag-unclosed">Sin cerrar</span>@endif
+                                    @if ($item['flags']['alert'])<span class="tag tag-alert" title="{{ $item['flags']['alert'] }}">Alerta médica</span>@endif
+                                    @if ($item['flags']['reschedule'])<span class="tag tag-change">Pidió cambio</span>@endif
+                                    @if ($item['flags']['noShows'])<span class="tag tag-missed">{{ $item['flags']['noShows'] }}</span>@endif
                                     @if ($item['isNew'])<span class="tag tag-new">Nuevo</span>@endif
                                     @if ($item['owes'])<span class="tag tag-owes">Debe {{ $item['owes'] }}</span>@endif
                                     @if ($item['hasNote'])<span class="tag tag-note">Nota</span>@endif
                                 </div>
                                 <p class="agenda-item-meta">
-                                    {{ $item['treatment'] }}
+                                    {{ $item['treatment'] }}{{ $item['flags']['session'] ? ' · '.mb_strtolower($item['flags']['session']) : '' }}
                                     @if ($item['doctor'])
                                         · <span class="agenda-item-doc" style="--doc: {{ $item['doctor']['color'] }}">{{ $item['doctor']['name'] }}</span>
                                     @endif

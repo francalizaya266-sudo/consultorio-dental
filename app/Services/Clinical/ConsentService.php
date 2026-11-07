@@ -3,6 +3,7 @@
 namespace App\Services\Clinical;
 
 use App\Enums\PatientRelationship;
+use App\Models\Appointment;
 use App\Models\Consent;
 use App\Models\ConsentTemplate;
 use App\Models\Doctor;
@@ -34,6 +35,26 @@ final class ConsentService
         '{ciudad}' => 'Distrito o ciudad del consultorio (Ajustes)',
     ];
 
+    /**
+     * Si el tratamiento de la cita tiene su consentimiento: true si ya lo firmó para esta cita, false si falta.
+     * Null si no aplica (el tratamiento no tiene consentimiento propio).
+     */
+    public function signedForVisit(Appointment $appointment): ?bool
+    {
+        $treatment = $appointment->treatment;
+
+        if (! $treatment || ! ConsentTemplate::query()->where('is_active', true)->where('treatment_id', $treatment->getKey())->exists()) {
+            return null;
+        }
+
+        return Consent::query()
+            ->where('patient_id', $appointment->patient_id)
+            ->where('treatment_id', $treatment->getKey())
+            ->whereNull('revoked_at')
+            ->where('signed_at', '>=', $appointment->created_at->startOfDay())
+            ->exists();
+    }
+
     /** La plantilla del tratamiento o, si no tiene, la general. */
     public function templateFor(?Treatment $treatment): ?ConsentTemplate
     {
@@ -46,13 +67,22 @@ final class ConsentService
     }
 
     /**
-     * Quién firma por defecto: el paciente, o el titular del celular si es un menor a su cargo.
+     * Quién firma por defecto: el paciente o, si es menor de edad, su apoderado (el registrado en su ficha o,
+     * si no hay, el titular del celular que lo tiene a su cargo).
      *
      * @return array{signer_name: string, signer_document: string|null, signer_relationship: PatientRelationship}
      */
     public function defaultSigner(Patient $patient): array
     {
-        $holder = $patient->relationship !== PatientRelationship::Self && $patient->age !== null && $patient->age < 18
+        if ($patient->isMinor() && filled($patient->guardian_name)) {
+            return [
+                'signer_name' => $patient->guardian_name,
+                'signer_document' => $patient->guardian_document,
+                'signer_relationship' => $patient->guardian_relationship ?? PatientRelationship::Parent,
+            ];
+        }
+
+        $holder = $patient->relationship !== PatientRelationship::Self && $patient->isMinor()
             ? Patient::query()->where('account_id', $patient->account_id)->where('relationship', PatientRelationship::Self)->first()
             : null;
 

@@ -19,8 +19,6 @@ use App\Filament\Resources\Patients\Schemas\TreatmentPlanForm;
 use App\Filament\Support\ClinicalAlerts;
 use App\Livewire\OdontogramChart;
 use App\Models\Campaign;
-use App\Models\Consent;
-use App\Models\ConsentTemplate;
 use App\Models\Consultation;
 use App\Models\Icd10Code;
 use App\Models\MedicalBackground;
@@ -32,12 +30,14 @@ use App\Models\TreatmentPackage;
 use App\Models\TreatmentPlanItem;
 use App\Models\User;
 use App\Services\Billing\BillingService;
+use App\Services\Clinical\ConsentService;
 use App\Services\Clinical\ConsultationService;
 use App\Services\Clinical\MedicationCheck;
 use App\Services\Clinical\PediatricDose;
 use App\Services\Clinical\PrescriptionService;
 use App\Services\Clinical\TreatmentPlanService;
 use App\Services\Clinical\TreatmentRisks;
+use App\Services\Patients\PatientInsights;
 use App\Support\CampaignText;
 use App\Support\Money;
 use Closure;
@@ -168,6 +168,7 @@ class ConsultationForm
                                         TextInput::make('vital_signs.blood_pressure')
                                             ->label('Presión arterial')
                                             ->placeholder('120/80')
+                                            ->helperText(fn (?Consultation $record) => self::lastBloodPressureHint($record))
                                             ->maxLength(10),
                                         TextInput::make('vital_signs.heart_rate')
                                             ->label('Pulso')
@@ -347,6 +348,7 @@ class ConsultationForm
                                     QuickTextarea::make('next_steps')
                                         ->label('Próximos pasos')
                                         ->placeholder('Ej.: resina en 36 la próxima sesión')
+                                        ->helperText(fn (?Consultation $record) => self::planAfterHint($record))
                                         ->snippets(SnippetField::Any),
                                 ]),
                         ])->columnSpan(fn (?Consultation $record) => self::hidesOdontogram($record) ? 'full' : ['lg' => 2]),
@@ -717,19 +719,7 @@ class ConsultationForm
      */
     public static function consentStatus(Consultation $consultation): ?bool
     {
-        $appointment = $consultation->appointment;
-        $treatment = $appointment?->treatment;
-
-        if (! $treatment || ! ConsentTemplate::query()->where('is_active', true)->where('treatment_id', $treatment->getKey())->exists()) {
-            return null;
-        }
-
-        return Consent::query()
-            ->where('patient_id', $consultation->patient_id)
-            ->where('treatment_id', $treatment->getKey())
-            ->whereNull('revoked_at')
-            ->where('signed_at', '>=', $appointment->created_at->startOfDay())
-            ->exists();
+        return $consultation->appointment ? app(ConsentService::class)->signedForVisit($consultation->appointment) : null;
     }
 
     /**
@@ -772,6 +762,28 @@ class ConsultationForm
             || collect(Arr::except($record->vital_signs ?? [], 'weight'))->filter(fn (mixed $value) => filled($value))->isNotEmpty()
             || self::riskConditions($record) !== []
             || $record->visitType() === VisitType::Urgent;
+    }
+
+    /** "La última: 140/90 el 12 oct.", para ver si subió. */
+    private static function lastBloodPressureHint(?Consultation $record): ?string
+    {
+        $last = $record ? app(PatientInsights::class)->lastBloodPressure($record) : null;
+
+        return $last ? 'La última: '.$last['value'].' el '.$last['on']->translatedFormat('j M Y') : null;
+    }
+
+    /** "Sigue en su plan: Extracción simple · pieza 38", para escribirlo en los próximos pasos. */
+    private static function planAfterHint(?Consultation $record): ?string
+    {
+        $next = $record ? app(PatientInsights::class)->planAfter($record) : null;
+
+        if (! $next) {
+            return null;
+        }
+
+        $item = $next['item'];
+
+        return 'Sigue en su plan: '.$item->label().($item->sessions_planned > 1 ? ' · sesión '.$next['session'].' de '.$item->sessions_planned : '');
     }
 
     private static function vitalsHint(?Consultation $record): string

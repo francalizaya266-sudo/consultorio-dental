@@ -25,7 +25,7 @@ class ListPatients extends ListRecords
     {
         return array_filter([
             'all' => Tab::make('Todos'),
-            'checkup' => Tab::make('Sin venir hace 6 meses')
+            'checkup' => Tab::make('Les toca control')
                 ->badge(fn () => PatientResource::getEloquentQuery()->dueForCheckup()->count() ?: null)
                 ->badgeColor('gray')
                 ->modifyQueryUsing(fn (Builder $query) => $query->dueForCheckup()),

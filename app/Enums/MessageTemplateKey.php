@@ -67,7 +67,7 @@ enum MessageTemplateKey: string implements HasLabel
             self::InstallmentOverdue => "Hola {nombre}, te escribimos de {consultorio}.\nTu {cuota} de {plan} venció el {fecha} y queda {monto} por pagar.\n\nPuedes pagarla en el consultorio con Yape, Plin, tarjeta o efectivo. Si ya la pagaste, avísanos y lo revisamos.",
             self::PlanFollowUp => "Hola {nombre}, te escribimos de {consultorio}.\n¿Pudiste revisar tu plan de tratamiento con {doctor}? Si tienes dudas sobre el tratamiento o las formas de pago, escríbenos y te ayudamos.\n\nCuando quieras, te reservamos la primera cita.",
             self::PlanNextSession => "Hola {nombre}, te escribimos de {consultorio}.\nEn tu tratamiento queda pendiente: {pendiente}.\n\n¿Te reservamos tu próxima cita? Respóndenos con el día y la hora que te acomodan.",
-            self::CheckupRecall => "Hola {nombre}, te escribimos de {consultorio}.\nYa pasaron más de 6 meses desde tu última visita: es buen momento para tu control y limpieza. ¿Te reservamos una cita?",
+            self::CheckupRecall => "Hola {nombre}, te escribimos de {consultorio}.\nYa es momento de tu {control}. ¿Te reservamos una cita? Respóndenos con el día y la hora que te acomodan.",
             self::Birthday => '¡Feliz cumpleaños, {nombre}! 🎂 Todo el equipo de {consultorio} te desea un gran día.',
         };
     }

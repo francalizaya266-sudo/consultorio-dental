@@ -8,6 +8,7 @@ use App\Filament\Actions\SendWhatsAppAction;
 use App\Models\Account;
 use App\Models\WhatsappMessage;
 use App\Services\WhatsApp\WhatsAppOutbox;
+use Closure;
 use Filament\Actions\Action;
 use Filament\Forms\Components\Textarea;
 use Filament\Notifications\Notification;
@@ -16,18 +17,28 @@ use Filament\Support\Icons\Heroicon;
 /** Bloquear o permitir las reservas web de un celular y enviarle su enlace de Mi cuenta. */
 final class AccountActions
 {
-    /** Enlace personal para entrar a Mi cuenta desde un celular nuevo ("Pedir acceso"). */
-    public static function sendAccessLink(): Action
+    /**
+     * Enlace personal para entrar a Mi cuenta desde un celular nuevo ("Pedir acceso"). Desde la ficha del
+     * paciente, $account da el celular de su familia.
+     *
+     * @param  Closure(mixed): ?Account|null  $account
+     */
+    public static function sendAccessLink(?Closure $account = null): Action
     {
-        return SendWhatsAppAction::compose('sendAccessLink', fn (Account $record) => app(WhatsAppOutbox::class)
-            ->draftForAccount($record, MessageTemplateKey::AccessLink, patientId: $record->holder?->getKey()))
+        $account ??= fn (Account $record) => $record;
+
+        return SendWhatsAppAction::compose('sendAccessLink', function (Action $action) use ($account) {
+            $phone = $action->evaluate($account);
+
+            return $phone ? app(WhatsAppOutbox::class)->draftForAccount($phone, MessageTemplateKey::AccessLink, patientId: $phone->holder?->getKey()) : null;
+        })
             ->label('Enviar enlace de Mi cuenta')
             ->icon(Heroicon::OutlinedKey)
             ->color('gray')
-            ->visible(fn (Account $record) => ! $record->isBlocked())
+            ->visible(fn (Action $action) => ($phone = $action->evaluate($account)) !== null && ! $phone->isBlocked())
             // Si el paciente lo había pedido desde la web, ese aviso ya quedó atendido.
-            ->after(fn (Account $record) => WhatsappMessage::query()
-                ->whereBelongsTo($record)
+            ->after(fn (Action $action) => WhatsappMessage::query()
+                ->whereBelongsTo($action->evaluate($account))
                 ->where('template_key', MessageTemplateKey::AccessLink)
                 ->pending()
                 ->update(['status' => MessageStatus::Cancelled]));

@@ -50,6 +50,7 @@ class PatientsAndSetupPanelTest extends TestCase
         $mother = Patient::factory()->create();
         $this->actingAs(User::factory()->reception()->create());
 
+        // El celular ya tiene a su mamá: se pregunta si es ella antes de registrarlo.
         Livewire::test(CreatePatient::class)
             ->fillForm([
                 'first_name' => 'Mateo',
@@ -57,6 +58,8 @@ class PatientsAndSetupPanelTest extends TestCase
                 'phone' => substr($mother->account->phone, 3),
                 'relationship' => PatientRelationship::Child->value,
             ])
+            ->assertSee('Este celular ya tiene a '.$mother->first_name.': ¿es uno de ellos?')
+            ->fillForm(['same_as' => 'new'])
             ->call('create')
             ->assertHasNoFormErrors();
 
@@ -346,7 +349,7 @@ class PatientsAndSetupPanelTest extends TestCase
         $this->actingAs(User::factory()->reception()->create());
 
         Livewire::test(ListPatients::class)
-            ->assertSee('Sin venir hace 6 meses')
+            ->assertSee('Les toca control')
             ->set('activeTab', 'checkup')
             ->assertCanSeeTableRecords([$away])
             ->assertCanNotSeeTableRecords([$alreadyBooked, $recent, $neverCame]);
@@ -380,7 +383,7 @@ class PatientsAndSetupPanelTest extends TestCase
     public function test_the_patient_file_sums_up_what_matters_in_chips_under_the_name(): void
     {
         $this->freezeMonday();
-        $treatment = Treatment::factory()->create();
+        $treatment = Treatment::factory()->create(['name' => 'Limpieza dental']);
         $doctor = $this->doctorOffering($treatment);
         $patient = Patient::factory()
             ->for(Account::factory()->state(['phone' => '+51987654321']))
@@ -398,14 +401,14 @@ class PatientsAndSetupPanelTest extends TestCase
             ->assertSee('https://wa.me/51987654321')
             ->assertSee(PatientResource::getUrl('edit', ['record' => $patient]));
 
-        // El doctor no ve la plata; sin cita por delante y con 7 meses sin venir, le toca control.
+        // El doctor no ve la plata; sin cita por delante y con 7 meses sin venir desde su limpieza, le toca control.
         $patient->appointments()->where('starts_at', '>=', today())->delete();
         $patient->update(['last_visit_at' => now()->subMonths(7), 'origin' => AppointmentOrigin::Instagram]);
         $this->actingAs($doctor->user);
 
         $this->get(PatientResource::getUrl('view', ['record' => $patient]))
             ->assertOk()
-            ->assertSee(['Le toca control · Última visita hace 7 meses', 'Origen: Instagram'])
+            ->assertSeeInOrder(['Siguiente paso', 'Le toca su control y limpieza', 'Última visita hace 7 meses', 'Agendar', 'Última visita hace 7 meses', 'Origen: Instagram'])
             ->assertDontSee(['Debe S/ 40.00', 'Falta: ¿cómo nos encontró?']);
     }
 

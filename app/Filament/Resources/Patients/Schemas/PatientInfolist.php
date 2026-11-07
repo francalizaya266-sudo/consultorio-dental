@@ -2,12 +2,16 @@
 
 namespace App\Filament\Resources\Patients\Schemas;
 
+use App\Enums\PatientRelationship;
+use App\Filament\Resources\Accounts\AccountActions;
 use App\Filament\Resources\Accounts\AccountResource;
+use App\Filament\Resources\Patients\PatientResource;
 use App\Filament\Support\ClinicalAlerts;
 use App\Filament\Support\PatientSummary;
 use App\Filament\Support\PatientTimeline;
 use App\Models\Charge;
 use App\Models\Patient;
+use App\Services\Clinical\ConsentService;
 use App\Support\Money;
 use App\Support\Phone;
 use Filament\Infolists\Components\TextEntry;
@@ -18,6 +22,7 @@ use Filament\Schemas\Schema;
 use Filament\Support\Enums\FontWeight;
 use Filament\Support\Enums\TextSize;
 use Filament\Support\Icons\Heroicon;
+use Illuminate\Support\HtmlString;
 
 class PatientInfolist
 {
@@ -26,12 +31,9 @@ class PatientInfolist
         return $schema
             ->columns(3)
             ->components([
-                // Bajo el nombre, en etiquetas: saldo, próxima cita, control, plan a medias, cumpleaños y origen.
+                // Bajo el nombre: el siguiente paso con su botón y, en etiquetas, saldo, próxima cita, control, faltas, cumpleaños y origen.
                 View::make('filament.patients.summary')
-                    ->viewData(fn (Patient $record) => [
-                        'chips' => PatientSummary::chips($record, auth()->user()),
-                        'contact' => PatientSummary::contact($record),
-                    ])
+                    ->viewData(fn (Patient $record, $livewire) => PatientSummary::viewData($record, auth()->user(), $livewire))
                     ->columnSpanFull(),
                 // La alerta médica arriba de todo, para quien atiende al paciente.
                 Group::make(fn (Patient $record) => auth()->user()->can('viewClinical', $record) ? array_filter([ClinicalAlerts::callout($record)]) : [])
@@ -97,10 +99,20 @@ class PatientInfolist
             ]);
     }
 
+    /**
+     * El celular de la familia y quiénes lo comparten (cada uno lleva a su ficha), el parentesco y, si es menor,
+     * su apoderado. Desde aquí se le envía el enlace de Mi cuenta: ya no hace falta otra pantalla.
+     */
     private static function phoneAndFamily(): Section
     {
         return Section::make('Celular y familia')
+            ->key('family')
             ->compact()
+            ->headerActions([
+                AccountActions::sendAccessLink(fn (Patient $record) => $record->account)
+                    ->link()
+                    ->visible(fn (Patient $record) => $record->account !== null && ! $record->account->isBlocked() && auth()->user()->can('view', $record->account)),
+            ])
             ->schema([
                 TextEntry::make('account.phone')
                     ->label('Celular')
@@ -117,16 +129,30 @@ class PatientInfolist
                     ->label('Parentesco con el titular')
                     ->hidden(fn ($state) => blank($state)),
                 TextEntry::make('family')
-                    ->label('Otros pacientes con este celular')
+                    ->label('Familia con este celular')
                     ->state(fn (Patient $record) => $record->account
                         ?->patients()
                         ->whereKeyNot($record->getKey())
                         ->orderBy('first_name')
                         ->get()
-                        ->map(fn (Patient $p) => $p->full_name.($p->relationship ? ' ('.$p->relationship->getLabel().')' : ''))
+                        ->map(fn (Patient $relative) => new HtmlString('<a href="'.e(PatientResource::getUrl('view', ['record' => $relative])).'">'.e($relative->full_name).'</a>'
+                            .($relative->relationship ? ' · '.e($relative->relationship->getLabel()) : '')))
                         ->all())
                     ->listWithLineBreaks()
-                    ->placeholder('Ninguno'),
+                    ->extraAttributes(['class' => 'pt-family'])
+                    ->placeholder('Nadie más'),
+                // Quién firma por él: su apoderado o, si no se registró, el titular del celular.
+                TextEntry::make('guardian_name')
+                    ->label('Apoderado')
+                    ->state(function (Patient $record) {
+                        $signer = app(ConsentService::class)->defaultSigner($record);
+
+                        return $signer['signer_relationship'] === PatientRelationship::Self
+                            ? null
+                            : collect([$signer['signer_name'], $signer['signer_relationship']->getLabel(), $signer['signer_document']])->filter()->implode(' · ');
+                    })
+                    ->placeholder('Falta: quién firma por él')
+                    ->visible(fn (Patient $record) => $record->isMinor()),
             ]);
     }
 
