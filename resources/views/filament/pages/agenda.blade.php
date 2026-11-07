@@ -139,7 +139,7 @@
                 refused: null,
                 pointer: null,
                 droppedAt: 0,
-                preview: { top: 0, height: 0, time: '' },
+                preview: { top: 0, height: 0, time: '', outside: false },
                 hover: null,
                 refresher: null,
 
@@ -198,7 +198,7 @@
                 minuteAt(clientY, column, offset = 0) {
                     const minutes = this.from + (clientY - column.getBoundingClientRect().top - offset) / this.scale;
 
-                    return Math.max(0, Math.min(24 * 60 - 5, Math.round(minutes / 5) * 5));
+                    return Math.max(0, Math.min(24 * 60 - 15, Math.round(minutes / 15) * 15));
                 },
 
                 label(minutes) {
@@ -248,6 +248,7 @@
                         doctor: card.closest('.agenda-col').dataset.doctor,
                         treatment: card.dataset.treatment,
                         time: card.dataset.start,
+                        minutes: Number(card.dataset.minutes),
                         x: event.clientX,
                         y: event.clientY,
                         offset: event.clientY - rect.top,
@@ -288,7 +289,9 @@
                     this.refused = column && ! allowed ? column.dataset.key : null;
                     if (! column) return;
                     const minutes = this.minuteAt(point.clientY, column, this.dragging.offset);
-                    this.preview = { top: (minutes - this.from) * this.scale, height: this.dragging.height, time: this.label(minutes) };
+                    // Fuera del horario de atención se puede soltar igual, pero se ve antes (y se vuelve a preguntar).
+                    const inside = JSON.parse(column.dataset.working || '[]').some(([from, to]) => minutes >= from && minutes + this.dragging.minutes <= to);
+                    this.preview = { top: (minutes - this.from) * this.scale, height: this.dragging.height, time: this.label(minutes), outside: ! inside };
                 },
 
                 autoScroll() {
@@ -420,9 +423,9 @@
                             class="agenda-drop"
                             x-cloak
                             x-show="over === @js($column['key']) || refused === @js($column['key'])"
-                            :class="{ 'is-refused': refused === @js($column['key']) }"
+                            :class="{ 'is-refused': refused === @js($column['key']), 'is-outside': preview.outside }"
                             :style="{ top: preview.top + 'px', height: preview.height + 'px' }"
-                        ><span x-text="refused === @js($column['key']) ? 'No realiza este tratamiento' : preview.time"></span></div>
+                        ><span x-text="refused === @js($column['key']) ? 'No realiza este tratamiento' : preview.time + (preview.outside ? ' · fuera de horario' : '')"></span></div>
 
                         @foreach ($column['working'] as $range)
                             <div class="agenda-work" style="top: {{ ($range['start'] - $from) * $scale }}px; height: {{ ($range['end'] - $range['start']) * $scale }}px"></div>
@@ -441,8 +444,8 @@
                             <a
                                 wire:key="appt-{{ $appt['id'] }}"
                                 href="{{ $appt['url'] }}"
-                                @class(['agenda-appt', 's-'.$appt['status'], 'is-movable' => $appt['draggable'], 'is-short' => $appt['end'] - $appt['start'] <= 30, 'is-unclosed' => $appt['unclosed'], 'needs-call' => $appt['needsCall']])
-                                style="top: {{ ($appt['start'] - $from) * $scale }}px; height: {{ max(($appt['end'] - $appt['start']) * $scale - 2, 18) }}px"
+                                @class(['agenda-appt', 's-'.$appt['status'], 'is-movable' => $appt['draggable'], 'is-short' => $appt['end'] - $appt['start'] <= 30, 'is-unclosed' => $appt['unclosed'], 'needs-call' => $appt['needsCall'], 'in-lane' => $appt['lanes'] > 1])
+                                style="top: {{ ($appt['start'] - $from) * $scale }}px; height: {{ max(($appt['end'] - $appt['start']) * $scale - 2, 18) }}px;@if ($appt['lanes'] > 1) --lane: {{ $appt['lane'] }}; --lanes: {{ $appt['lanes'] }};@endif"
                                 title="{{ $appt['time'] }} · {{ $appt['patient'] }} · {{ $appt['treatment'] }} · {{ $appt['statusLabel'] }}{{ $appt['phone'] ? ' · '.$appt['phone'] : '' }}{{ $appt['unclosed'] ? ' · Sin cerrar: falta marcar si vino' : '' }}"
                                 draggable="false"
                                 x-on:click="open($event, {{ $appt['id'] }})"
@@ -450,6 +453,7 @@
                                     data-id="{{ $appt['id'] }}"
                                     data-treatment="{{ $appt['treatmentId'] }}"
                                     data-start="{{ sprintf('%02d:%02d', intdiv($appt['start'], 60), $appt['start'] % 60) }}"
+                                    data-minutes="{{ $appt['end'] - $appt['start'] }}"
                                     :class="{ 'is-lifted': dragging && dragging.id === {{ $appt['id'] }} }"
                                     x-on:pointerdown="start($event, $el)"
                                 @endif

@@ -3,6 +3,7 @@
 namespace Tests\Feature\Filament;
 
 use App\Enums\AppointmentStatus;
+use App\Enums\MessageTemplateKey;
 use App\Exceptions\BookingException;
 use App\Filament\Pages\Agenda;
 use App\Filament\Resources\Appointments\Pages\CreateAppointment;
@@ -12,6 +13,7 @@ use App\Models\Patient;
 use App\Models\ScheduleBlock;
 use App\Models\Treatment;
 use App\Models\User;
+use App\Models\WhatsappMessage;
 use App\Services\Booking\AppointmentService;
 use Carbon\CarbonImmutable;
 use Filament\Actions\Testing\TestAction;
@@ -80,6 +82,59 @@ class AgendaCalendarTest extends TestCase
         $appointment->refresh();
         $this->assertSame('2026-11-04 16:30', $appointment->starts_at->format('Y-m-d H:i'));
         $this->assertTrue($appointment->doctor->is($ramos));
+    }
+
+    public function test_moving_says_from_when_to_when_and_warns_outside_working_hours(): void
+    {
+        $this->freezeMonday();
+        $treatment = Treatment::factory()->create(['duration_minutes' => 30]);
+        $doctor = $this->doctorOffering($treatment);
+        $appointment = Appointment::factory()->for($doctor)->for($treatment)->at('2026-11-04 10:30')->confirmed()->create();
+        $this->actingAs(User::factory()->reception()->create());
+
+        // Dentro del horario: de dónde a dónde, sin advertencia.
+        Livewire::test(Agenda::class, ['date' => '2026-11-04'])
+            ->mountAction('move', arguments: ['id' => $appointment->id, 'column' => "{$doctor->id}|2026-11-04", 'time' => '11:00'])
+            ->assertMountedActionModalSee(['pasa del miércoles 4 de noviembre a las 10:30 al miércoles 4 de noviembre a las 11:00', 'Sí, mover'])
+            ->assertMountedActionModalDontSee('fuera de la atención');
+
+        // En el almuerzo: lo dice, con el horario del doctor, y pide "Mover igual".
+        Livewire::test(Agenda::class, ['date' => '2026-11-04'])
+            ->mountAction('move', arguments: ['id' => $appointment->id, 'column' => "{$doctor->id}|2026-11-04", 'time' => '13:30'])
+            ->assertMountedActionModalSee(['¿Mover la cita fuera del horario?', 'de 09:00 a 13:00 y de 15:00 a 19:00', 'Mover igual']);
+    }
+
+    public function test_a_move_already_agreed_with_the_patient_stays_confirmed_without_a_notice(): void
+    {
+        $this->freezeMonday();
+        $treatment = Treatment::factory()->create(['duration_minutes' => 30]);
+        $doctor = $this->doctorOffering($treatment);
+        $appointment = Appointment::factory()->for($doctor)->for($treatment)->at('2026-11-04 10:30')->confirmed()->create();
+        $this->actingAs(User::factory()->reception()->create());
+
+        Livewire::test(Agenda::class, ['date' => '2026-11-04'])
+            ->callAction('move', ['agreed' => true], arguments: ['id' => $appointment->id, 'column' => "{$doctor->id}|2026-11-04", 'time' => '16:00'])
+            ->assertNotified('Cita movida y confirmada.');
+
+        $appointment->refresh();
+        $this->assertSame('16:00', $appointment->starts_at->format('H:i'));
+        $this->assertSame(AppointmentStatus::Confirmed, $appointment->status);
+        $this->assertSame(0, WhatsappMessage::where('template_key', MessageTemplateKey::Rescheduled)->count());
+    }
+
+    public function test_appointments_at_the_same_time_sit_side_by_side(): void
+    {
+        $cards = Agenda::inLanes(collect([
+            ['id' => 1, 'start' => 600, 'end' => 660],
+            ['id' => 2, 'start' => 600, 'end' => 630],
+            ['id' => 3, 'start' => 630, 'end' => 660],
+            ['id' => 4, 'start' => 700, 'end' => 730],
+        ]));
+
+        $this->assertSame(
+            [1 => [0, 2], 2 => [1, 2], 3 => [1, 2], 4 => [0, 1]],
+            $cards->mapWithKeys(fn (array $c) => [$c['id'] => [$c['lane'], $c['lanes']]])->all(),
+        );
     }
 
     public function test_dropping_on_a_taken_time_explains_why(): void

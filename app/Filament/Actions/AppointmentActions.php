@@ -16,9 +16,11 @@ use App\Models\User;
 use App\Services\Booking\AppointmentService;
 use App\Services\Clinical\ConsultationService;
 use App\Services\WhatsApp\WhatsAppOutbox;
+use App\Support\Dates;
 use Filament\Actions\Action;
 use Filament\Actions\ActionGroup;
 use Filament\Actions\BulkAction;
+use Filament\Forms\Components\Checkbox;
 use Filament\Forms\Components\Textarea;
 use Filament\Forms\Components\Toggle;
 use Filament\Notifications\Notification;
@@ -261,11 +263,11 @@ final class AppointmentActions
     public static function move(): Action
     {
         return Action::make('move')
-            ->label('Cambiar horario')
+            ->label('Mover cita')
             ->icon(Heroicon::OutlinedArrowsRightLeft)
-            ->color('warning')
-            ->modalHeading('Cambiar horario')
-            ->modalDescription('El paciente recibirá el aviso con el nuevo horario para confirmarlo.')
+            ->color('gray')
+            ->modalHeading('Mover cita')
+            ->modalDescription(fn (Appointment $record) => 'Ahora: '.Dates::dayAndTime($record->starts_at).'. Elige el nuevo horario.')
             ->modalSubmitActionLabel('Mover cita')
             ->visible(fn (Appointment $record) => $record->status->isChangeable())
             ->authorize('update')
@@ -273,15 +275,21 @@ final class AppointmentActions
                 'doctor_id' => $record->doctor_id,
                 'date' => $record->starts_at->toDateString(),
             ])
-            ->schema(fn (Appointment $record) => SlotPicker::fields($record))
+            ->schema(fn (Appointment $record) => [
+                ...SlotPicker::fields($record),
+                Checkbox::make('agreed')
+                    ->label('Ya lo acordé con el paciente')
+                    ->helperText('Queda confirmada y no se le pide confirmar. Si no, se prepara el aviso para que confirme.'),
+            ])
             ->action(fn (array $data, Appointment $record, Action $action) => Notify::run(
                 fn () => app(AppointmentService::class)->rescheduleByStaff(
                     $record,
                     SlotPicker::startsAt($data),
                     auth()->user(),
                     Doctor::findOrFail($data['doctor_id']),
+                    (bool) ($data['agreed'] ?? false),
                 ),
-                'Cita movida. El aviso al paciente está listo en Avisos.',
+                ($data['agreed'] ?? false) ? 'Cita movida y confirmada.' : 'Cita movida. El aviso al paciente está listo en Avisos.',
                 $action,
             ));
     }
@@ -293,7 +301,8 @@ final class AppointmentActions
             ->icon(Heroicon::OutlinedXCircle)
             ->color('danger')
             ->modalHeading('Cancelar cita')
-            ->modalSubmitActionLabel('Sí, cancelar')
+            ->modalSubmitActionLabel('Cancelar la cita')
+            ->modalCancelActionLabel('Volver')
             ->visible(fn (Appointment $record) => $record->status->isChangeable())
             ->authorize('update')
             ->schema([

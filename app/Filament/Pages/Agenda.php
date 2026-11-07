@@ -23,11 +23,13 @@ use App\Services\Agenda\AvailabilityService;
 use App\Services\Agenda\GapFinder;
 use App\Services\Billing\BillingService;
 use App\Services\Booking\AppointmentService;
+use App\Support\Dates;
 use App\Support\Money;
 use App\Support\Phone;
 use BackedEnum;
 use Carbon\CarbonImmutable;
 use Filament\Actions\Action;
+use Filament\Forms\Components\Checkbox;
 use Filament\Pages\Page;
 use Filament\Support\Enums\Width;
 use Filament\Support\Icons\Heroicon;
@@ -168,13 +170,17 @@ class Agenda extends Page
         ];
     }
 
-    /** Se abre al soltar una cita en otro horario: confirma antes de mover y avisar al paciente. */
+    /**
+     * Se abre al soltar una cita en otro horario: dice de dónde a dónde pasa, avisa si cae fuera del
+     * horario de atención y pregunta si ya se acordó con el paciente (entonces no se le pide confirmar).
+     */
     public function moveAction(): Action
     {
         return Action::make('move')
             ->requiresConfirmation()
             ->icon(Heroicon::OutlinedArrowsRightLeft)
-            ->modalHeading('¿Mover la cita?')
+            ->modalHeading(fn (array $arguments) => $this->outsideHours($arguments) ? '¿Mover la cita fuera del horario?' : '¿Mover la cita?')
+            ->modalIconColor(fn (array $arguments) => $this->outsideHours($arguments) ? 'warning' : 'primary')
             ->modalDescription(function (array $arguments) {
                 $appointment = Appointment::with(['patient', 'doctor'])->find($arguments['id'] ?? null);
                 [$doctor, $start] = $this->target($arguments);
@@ -184,12 +190,22 @@ class Agenda extends Page
                 }
 
                 $where = $doctor->is($appointment->doctor) ? '' : ' con '.$doctor->name;
+                $text = "{$appointment->patient->full_name} pasa del ".Dates::dayAndTime($appointment->starts_at)
+                    .' al '.Dates::dayAndTime($start).$where.'.';
 
-                return "{$appointment->patient->full_name} pasa al ".$start->translatedFormat('l d \d\e F \a \l\a\s H:i').$where
-                    .'. Se preparará el aviso para que el paciente confirme.';
+                if ($hours = $this->outsideHours($arguments)) {
+                    $text .= " Ese horario está fuera de la atención de {$doctor->name} ({$hours}).";
+                }
+
+                return $text;
             })
-            ->modalSubmitActionLabel('Sí, mover')
-            ->action(function (array $arguments) {
+            ->schema([
+                Checkbox::make('agreed')
+                    ->label('Ya lo acordé con el paciente')
+                    ->helperText('Queda confirmada y no se le pide confirmar. Si no, se prepara el aviso para que confirme.'),
+            ])
+            ->modalSubmitActionLabel(fn (array $arguments) => $this->outsideHours($arguments) ? 'Mover igual' : 'Sí, mover')
+            ->action(function (array $arguments, array $data) {
                 $appointment = Appointment::find($arguments['id'] ?? null);
                 [$doctor, $start] = $this->target($arguments);
 
@@ -197,11 +213,38 @@ class Agenda extends Page
                     return;
                 }
 
+                $agreed = (bool) ($data['agreed'] ?? false);
+
                 Notify::run(
-                    fn () => app(AppointmentService::class)->rescheduleByStaff($appointment, $start, auth()->user(), $doctor),
-                    'Cita movida. El aviso al paciente está listo en Avisos.',
+                    fn () => app(AppointmentService::class)->rescheduleByStaff($appointment, $start, auth()->user(), $doctor, $agreed),
+                    $agreed ? 'Cita movida y confirmada.' : 'Cita movida. El aviso al paciente está listo en Avisos.',
                 );
             });
+    }
+
+    /**
+     * Si la cita, soltada ahí, queda fuera del horario de atención del doctor: devuelve ese horario
+     * ("de 09:00 a 13:00 y de 15:00 a 19:00", o "no atiende ese día"); null si cae dentro.
+     */
+    private function outsideHours(array $arguments): ?string
+    {
+        $appointment = Appointment::with('treatment')->find($arguments['id'] ?? null);
+        [$doctor, $start] = $this->target($arguments);
+
+        if (! $appointment || ! $doctor || ! $start) {
+            return null;
+        }
+
+        $end = $start->addMinutes((int) $appointment->starts_at->diffInMinutes($appointment->ends_at));
+        $ranges = app(AvailabilityService::class)->workingRanges($doctor, $start);
+
+        if ($ranges->contains(fn (array $r) => $start->gte($r['start']) && $end->lte($r['end']))) {
+            return null;
+        }
+
+        return $ranges->isEmpty()
+            ? 'no atiende ese día'
+            : $ranges->map(fn (array $r) => 'de '.$r['start']->format('H:i').' a '.$r['end']->format('H:i'))->join(', ', ' y ');
     }
 
     /** Panel al costado con la cita: datos, saldo y los botones del día, sin salir de la agenda. */
@@ -686,7 +729,47 @@ class Agenda extends Page
                 'hasNote' => filled($a->patient_note) || filled($a->internal_notes),
                 'url' => AppointmentResource::getUrl('view', ['record' => $a]),
                 'draggable' => $a->status->isChangeable() && $user->can('update', $a),
-            ]);
+            ])
+            ->pipe(fn (Collection $cards) => self::inLanes($cards));
+    }
+
+    /**
+     * Citas que coinciden en hora se reparten el ancho de la columna, lado a lado: ninguna tapa a otra.
+     * Cada una lleva su carril ("lane") y cuántos carriles tiene su grupo ("lanes").
+     *
+     * @param  Collection<int, array<string, mixed>>  $cards  Ordenadas por hora de inicio.
+     * @return Collection<int, array<string, mixed>>
+     */
+    public static function inLanes(Collection $cards): Collection
+    {
+        $placed = [];
+        $group = [];
+        $laneEnds = [];
+        $groupEnd = -1;
+
+        $close = function () use (&$placed, &$group, &$laneEnds) {
+            foreach ($group as $card) {
+                $placed[] = [...$card, 'lanes' => count($laneEnds)];
+            }
+            $group = [];
+            $laneEnds = [];
+        };
+
+        foreach ($cards as $card) {
+            if ($card['start'] >= $groupEnd) {
+                $close();
+            }
+
+            $lane = collect($laneEnds)->search(fn (int $end) => $end <= $card['start']);
+            $lane = $lane === false ? count($laneEnds) : $lane;
+            $laneEnds[$lane] = $card['end'];
+            $groupEnd = max($groupEnd, $card['end']);
+            $group[] = [...$card, 'lane' => $lane];
+        }
+
+        $close();
+
+        return collect($placed);
     }
 
     /** La cita del panel, cargada una sola vez por petición. */

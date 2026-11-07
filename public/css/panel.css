@@ -188,6 +188,8 @@
 .agenda-drop.is-refused { background: color-mix(in oklab, var(--danger-500) 8%, transparent); box-shadow: inset 0 0 0 1.5px var(--danger-500); }
 .agenda-drop span { position: absolute; top: -.25rem; left: 0; transform: translateY(-100%); padding: .0625rem .4rem; border-radius: 9999px; background: var(--primary-600); color: #fff; font-size: .6875rem; font-weight: 600; white-space: nowrap; font-variant-numeric: tabular-nums; }
 .agenda-drop.is-refused span { background: var(--danger-600); }
+.agenda-drop.is-outside:not(.is-refused) { background: color-mix(in oklab, var(--warning-500) 12%, transparent); box-shadow: inset 0 0 0 1.5px var(--warning-500); }
+.agenda-drop.is-outside:not(.is-refused) span { background: var(--warning-600); }
 
 /* La cita. */
 .agenda-appt {
@@ -202,6 +204,8 @@
 .agenda-appt::before { content: ""; position: absolute; left: .3125rem; top: .3125rem; bottom: .3125rem; width: .1875rem; border-radius: 9999px; background: var(--c-accent); }
 .agenda-appt b { display: block; font-weight: 600; letter-spacing: -.005em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .agenda-appt small { display: block; font-size: .75rem; color: var(--c-meta); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-variant-numeric: tabular-nums; }
+/* Citas que coinciden en hora, lado a lado: cada una en su carril, ninguna tapa a otra. */
+.agenda-appt.in-lane { left: calc(3px + (100% - 7px) * var(--lane) / var(--lanes)); right: auto; width: calc((100% - 7px) / var(--lanes) - 2px); padding-right: .25rem; }
 /* En una cita de media hora o menos entran dos líneas: el estado y el celular quedan en el globo al pasar el mouse. */
 .agenda-appt.is-short small + small { display: none; }
 .agenda-appt:active { transform: scale(.985); }

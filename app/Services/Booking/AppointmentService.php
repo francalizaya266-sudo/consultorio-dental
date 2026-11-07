@@ -267,7 +267,11 @@ class AppointmentService
      * Recepción o el doctor mueven la cita. El paciente recibe el aviso con el
      * nuevo horario y lo confirma con su enlace.
      */
-    public function rescheduleByStaff(Appointment $appointment, CarbonInterface $startsAt, User $by, ?Doctor $doctor = null): Appointment
+    /**
+     * @param  bool  $agreed  El nuevo horario ya se acordó con el paciente (por teléfono, en persona): queda
+     *                        confirmada y no se le pide confirmar de nuevo.
+     */
+    public function rescheduleByStaff(Appointment $appointment, CarbonInterface $startsAt, User $by, ?Doctor $doctor = null, bool $agreed = false): Appointment
     {
         $doctor ??= $appointment->doctor;
         $this->assertCanManage($by, $appointment->doctor);
@@ -283,14 +287,24 @@ class AppointmentService
 
         $appointment = $this->move($appointment, $doctor, $startsAt, requireWorkingHours: false, actor: 'staff');
 
-        $appointment->update([
+        $appointment->update($agreed ? [
+            'status' => AppointmentStatus::Confirmed,
+            'confirmed_at' => now(),
+            'confirmed_via' => $by->isDoctor() ? ConfirmationChannel::Doctor : ConfirmationChannel::Reception,
+            'unconfirmed_flagged_at' => null,
+        ] : [
             'status' => AppointmentStatus::Pending,
             'confirmed_at' => null,
             'confirmed_via' => null,
             'unconfirmed_flagged_at' => null,
         ]);
 
-        $this->outbox->queueForAppointment($appointment, MessageTemplateKey::Rescheduled);
+        if ($agreed) {
+            // Ya lo sabe: no se le pide confirmar, y el aviso de un cambio anterior ya no sirve.
+            $this->outbox->discardPending($appointment, MessageTemplateKey::Rescheduled);
+        } else {
+            $this->outbox->queueForAppointment($appointment, MessageTemplateKey::Rescheduled);
+        }
 
         if ($by->isDoctor()) {
             $this->alerts->toReception(
