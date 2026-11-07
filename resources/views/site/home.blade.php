@@ -9,6 +9,11 @@
 @endphp
 {{-- El horario completo ya está en "Cómo llegar y contactarnos": el pie no lo repite. --}}
 <x-site-layout :wide="true" :json-ld="$jsonLd" :image="$heroImage" :footer-hours="false">
+    {{-- Quien vuelve desde su celular recordado ve primero lo suyo; quien no, la portada de siempre. --}}
+    @if ($welcome)
+        @include('site.partials.welcome', ['welcome' => $welcome])
+    @endif
+
     {{-- Lo primero: el consultorio de verdad, qué es, dónde y el próximo horario libre, sacado de la agenda. --}}
     <section @class(['hero', 'with-photo' => $heroImage]) aria-labelledby="titulo">
         @if ($heroImage)

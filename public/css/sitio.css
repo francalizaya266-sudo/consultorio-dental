@@ -298,6 +298,28 @@ details.more > summary::-webkit-details-marker { display: none; }
 .plan-card dd .small { display: block; font-weight: 400; }
 .plan-card .meter { height: 8px; border-radius: 999px; background: var(--surface-strong); overflow: hidden; }
 .plan-card .meter span { display: block; height: 100%; border-radius: 999px; background: var(--accent); }
+
+/* Inicio para quien vuelve: lo suyo arriba (su cita, sus sesiones, su control), cada cosa con su botón. */
+.welcome { margin: 8px 0 48px; padding: 16px; border-radius: 24px; background: var(--surface); display: grid; gap: 16px; }
+.welcome-head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; }
+.welcome-head h2 { margin: 0; font-size: clamp(1.625rem, 4vw, 2.125rem); font-weight: 750; letter-spacing: -.035em; line-height: 1.1; }
+.welcome-cards { display: grid; gap: 12px; }
+.welcome-card { background: var(--ground); border-radius: var(--radius); padding: 18px; display: grid; gap: 8px; align-content: start; box-shadow: 0 1px 2px rgb(12 26 46 / .06); }
+.welcome-card p { margin: 0; }
+.welcome-kicker { font-size: .8125rem; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--accent); }
+.welcome-when { font-size: 1.25rem; font-weight: 800; letter-spacing: -.01em; line-height: 1.2; }
+.welcome-card .meter { height: 8px; border-radius: 999px; background: var(--surface-strong); overflow: hidden; }
+.welcome-card .meter span { display: block; height: 100%; border-radius: 999px; background: var(--accent); }
+.welcome-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-top: 6px; }
+.welcome-actions form { margin: 0; }
+.welcome-card .welcome-done { color: var(--ok); font-weight: 600; font-size: .9375rem; }
+.welcome-empty, .welcome-more { margin: 0; }
+.welcome-empty { color: var(--muted); }
+.welcome-not-you { margin: 0; font-size: .9375rem; color: var(--muted); }
+@media (min-width: 720px) {
+    .welcome { padding: 28px; }
+    .welcome-cards { grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); }
+}
 .plan-items { list-style: none; margin: 10px 0 0; padding: 0; display: grid; gap: 8px; }
 .plan-items li { display: flex; justify-content: space-between; gap: 12px; }
 .plan-items li.done > span:first-child { text-decoration: line-through; color: var(--muted); }
