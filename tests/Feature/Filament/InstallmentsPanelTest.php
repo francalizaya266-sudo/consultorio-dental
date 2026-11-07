@@ -58,6 +58,33 @@ class InstallmentsPanelTest extends TestCase
             ->assertTableColumnHasDescription('due_on', 'En 3 días', $thisWeek);
     }
 
+    public function test_a_cuota_is_collected_from_the_list_with_the_total_on_top(): void
+    {
+        $this->freezeMonday();
+        $doctor = Doctor::factory()->create();
+        $rosa = Patient::factory()->create(['first_name' => 'Rosa', 'last_name' => 'Quispe']);
+        $plan = $this->planInCuotas($rosa, $doctor, 'Ortodoncia', ['2026-10-02', '2026-11-05']);
+        app(BillingService::class)->chargeDueInstallments();
+        [$late, $thisWeek] = $plan->installments;
+        $this->actingAs(User::factory()->reception()->create());
+
+        Livewire::test(ManageInstallments::class)
+            ->assertSee('Por cobrar: S/ 250.00 en 1 cuota')
+            ->mountAction(TestAction::make('collect')->table($late))
+            ->assertActionDataSet(['amount' => 250.0])
+            ->callMountedAction()
+            ->assertHasNoActionErrors()
+            ->assertNotified('Pago registrado')
+            ->set('activeTab', 'week')
+            ->assertSee('Por cobrar: S/ 250.00 en 1 cuota')
+            // La que todavía no vence se puede adelantar: queda a cuenta y la cubre al vencer.
+            ->mountAction(TestAction::make('collect')->table($thisWeek))
+            ->assertActionDataSet(['amount' => 250.0]);
+
+        $this->assertSame(0.0, $rosa->balance());
+        $this->assertSame($doctor->id, Payment::sole()->doctor_id);
+    }
+
     /** @param  list<string>  $dueDates */
     private function planInCuotas(Patient $patient, Doctor $doctor, string $title, array $dueDates): TreatmentPlan
     {

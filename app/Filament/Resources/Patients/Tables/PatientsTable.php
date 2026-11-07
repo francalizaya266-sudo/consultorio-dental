@@ -3,13 +3,17 @@
 namespace App\Filament\Resources\Patients\Tables;
 
 use App\Enums\AppointmentStatus;
+use App\Filament\Actions\RegisterPaymentAction;
+use App\Filament\Resources\Patients\Pages\ListPatients;
 use App\Models\Charge;
 use App\Models\Patient;
+use App\Models\Payment;
 use App\Support\Money;
 use App\Support\Phone;
 use Filament\Actions\EditAction;
 use Filament\Actions\ViewAction;
 use Filament\Tables\Columns\TextColumn;
+use Filament\Tables\Contracts\HasTable;
 use Filament\Tables\Filters\Filter;
 use Filament\Tables\Filters\TrashedFilter;
 use Filament\Tables\Table;
@@ -71,12 +75,26 @@ class PatientsTable
                 TrashedFilter::make()
                     ->visible(fn () => auth()->user()->isAdmin()),
             ])
+            ->description(fn (HasTable $livewire) => $livewire instanceof ListPatients && $livewire->activeTab === 'owing' ? self::owedTotal() : null)
             ->recordActions([
+                RegisterPaymentAction::make(fn (Patient $record) => $record)
+                    ->name('collect')
+                    ->label('Cobrar')
+                    ->color('success')
+                    ->visible(fn (Patient $record) => (float) ($record->balance_due ?? 0) > 0 && auth()->user()->can('create', Payment::class)),
                 ViewAction::make(),
                 EditAction::make(),
             ])
             ->emptyStateHeading('Aún no hay pacientes')
             ->emptyStateDescription('Se crean solos al reservar en la web, o desde "Nuevo paciente".');
+    }
+
+    /** "Por cobrar: S/ 2,350.00 entre 9 pacientes", arriba de la lista de saldos pendientes. */
+    private static function owedTotal(): string
+    {
+        $balances = Patient::query()->owing()->withBalance()->pluck('balance_due');
+
+        return 'Por cobrar: '.Money::format($balances->sum()).' entre '.$balances->count().($balances->count() === 1 ? ' paciente' : ' pacientes');
     }
 
     private static function seesBalances(): bool

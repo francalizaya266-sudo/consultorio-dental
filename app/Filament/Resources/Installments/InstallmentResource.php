@@ -3,6 +3,7 @@
 namespace App\Filament\Resources\Installments;
 
 use App\Enums\MessageTemplateKey;
+use App\Filament\Actions\RegisterPaymentAction;
 use App\Filament\Actions\SendWhatsAppAction;
 use App\Filament\Concerns\HasSpanishLabels;
 use App\Filament\Resources\Installments\Pages\ManageInstallments;
@@ -68,7 +69,15 @@ class InstallmentResource extends Resource
                     ->state(fn (TreatmentPlanInstallment $record, ManageInstallments $livewire) => Money::format($livewire->dueOf($record)))
                     ->weight('bold'),
             ])
+            ->description(fn (ManageInstallments $livewire) => $livewire->totalDescription())
             ->recordActions([
+                RegisterPaymentAction::make(
+                    fn (TreatmentPlanInstallment $record) => $record->plan->patient,
+                    amount: fn (TreatmentPlanInstallment $record, ManageInstallments $livewire) => $livewire->dueOf($record),
+                )
+                    ->name('collect')
+                    ->label('Cobrar')
+                    ->color('success'),
                 SendWhatsAppAction::compose('remind', fn (TreatmentPlanInstallment $record, ManageInstallments $livewire) => app(TreatmentPlanService::class)->installmentDraft(
                     $record,
                     $record->due_on->lt(today()) ? MessageTemplateKey::InstallmentOverdue : MessageTemplateKey::InstallmentReminder,

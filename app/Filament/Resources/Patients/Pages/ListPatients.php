@@ -41,7 +41,8 @@ class ListPatients extends ListRecords
                 ? Tab::make('Con saldo pendiente')
                     ->badge(fn () => PatientResource::getEloquentQuery()->owing()->count() ?: null)
                     ->badgeColor('danger')
-                    ->modifyQueryUsing(fn (Builder $query) => $query->owing())
+                    // Primero quien más debe.
+                    ->modifyQueryUsing(fn (Builder $query) => $query->owing()->orderByDesc('balance_due'))
                 : null,
         ]);
     }

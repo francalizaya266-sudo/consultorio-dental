@@ -187,10 +187,19 @@ class BillingPanelTest extends TestCase
         Payment::factory()->for($settled)->create(['amount' => 80]);
         $this->actingAs(User::factory()->reception()->create());
 
+        $owesMore = Patient::factory()->create();
+        Charge::factory()->for($owesMore)->create(['amount' => 400]);
+
+        // Primero quien más debe, con el total arriba; se cobra desde la misma lista.
         Livewire::test(ListPatients::class, ['activeTab' => 'owing'])
-            ->assertCanSeeTableRecords([$owes])
+            ->assertCanSeeTableRecords([$owesMore, $owes], inOrder: true)
             ->assertCanNotSeeTableRecords([$settled])
-            ->assertSee('Debe S/ 150.00');
+            ->assertSee(['Debe S/ 150.00', 'Por cobrar: S/ 550.00 entre 2 pacientes'])
+            ->callAction(TestAction::make('collect')->table($owes), ['method' => PaymentMethod::Cash->value])
+            ->assertHasNoActionErrors()
+            ->assertNotified('Pago registrado');
+
+        $this->assertSame(0.0, $owes->balance());
 
         $this->actingAs($this->doctorOffering(Treatment::factory()->create())->user);
 
