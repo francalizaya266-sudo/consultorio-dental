@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Site;
 
 use App\Http\Controllers\Controller;
 use App\Models\Campaign;
+use App\Services\Booking\WebAvailability;
 use App\Services\Web\StructuredData;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response;
@@ -20,7 +21,7 @@ class PromotionController extends Controller
         ]);
     }
 
-    public function show(Request $request, string $slug, StructuredData $structuredData): View|Response
+    public function show(Request $request, string $slug, StructuredData $structuredData, WebAvailability $availability): View|Response
     {
         $campaign = Campaign::query()->where('slug', $slug)->with('treatment', 'package.items.treatment')->first();
 
@@ -38,8 +39,17 @@ class PromotionController extends Controller
             $campaign->newQuery()->whereKey($campaign->getKey())->increment('views_count');
         }
 
+        // Si su tratamiento no se reserva solo en la web, se reserva la evaluación con la promoción.
+        $bookable = $availability->treatments();
+        $bookAs = match (true) {
+            $campaign->treatment === null => null,
+            $bookable->contains('id', $campaign->treatment_id) => $campaign->treatment,
+            default => $bookable->firstWhere('is_evaluation', true),
+        };
+
         return view('site.promotions.show', [
             'campaign' => $campaign,
+            'bookAs' => $bookAs,
             'jsonLd' => [$structuredData->breadcrumbs(['Promociones' => route('site.promotions'), $campaign->name => route('site.promotion', $campaign->slug)])],
         ]);
     }

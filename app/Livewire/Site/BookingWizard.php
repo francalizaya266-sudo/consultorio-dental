@@ -103,8 +103,9 @@ class BookingWizard extends Component
 
         $this->preferredDoctorId = filled(request('doctor')) ? Doctor::query()->where('slug', (string) request('doctor'))->value('id') : null;
         $campaign = $this->campaign;
+        // Con una promoción de un tratamiento que no se reserva solo, se empieza por la evaluación.
         $treatment = $this->treatments->firstWhere('slug', (string) request('tratamiento'))
-            ?? ($campaign ? $this->treatments->firstWhere('id', $campaign->treatment_id) : null);
+            ?? ($campaign?->treatment_id ? ($this->treatments->firstWhere('id', $campaign->treatment_id) ?? $this->treatments->firstWhere('is_evaluation', true)) : null);
 
         if ($treatment) {
             $this->chooseTreatment($treatment->getKey());
@@ -154,6 +155,18 @@ class BookingWizard extends Component
     public function family(): Collection
     {
         return $this->device?->account->patients()->orderByRaw('relationship = ? desc', [PatientRelationship::Self->value])->orderBy('first_name')->get() ?? collect();
+    }
+
+    /**
+     * De la familia del celular recordado, quién está en tratamiento: su doctor programa sus sesiones y
+     * la web no las reserva. Se dice desde el primer paso, no al final.
+     *
+     * @return Collection<int, Patient>
+     */
+    #[Computed]
+    public function inTreatment(): Collection
+    {
+        return $this->family->filter(fn (Patient $patient) => $patient->hasActiveTreatment())->values();
     }
 
     #[Computed]

@@ -35,6 +35,9 @@ final class ConsultationService
     /** Horas en que el doctor puede reabrir una atención cerrada para corregirla. */
     public const REOPEN_HOURS = 24;
 
+    /** @var list<string> Medicamentos de la plantilla que no se copiaron porque no le convienen al paciente. */
+    private array $heldMedications = [];
+
     public function __construct(
         private readonly OdontogramService $odontograms,
         private readonly AppointmentService $appointments,
@@ -84,8 +87,9 @@ final class ConsultationService
         DB::transaction(function () use ($consultation, $template) {
             $consultation->update($this->templateValues($consultation, $template));
 
-            // A un niño no se le copia la receta de la plantilla: va en jarabe y por su peso.
-            if (! $consultation->patient->isChild() && $medications = $this->prescriptions->fromTemplate($template)) {
+            ['items' => $medications, 'held' => $this->heldMedications] = $this->prescriptions->fromTemplateFor($template, $consultation->patient);
+
+            if ($medications !== []) {
                 $this->prescriptions->syncForConsultation($consultation, PrescriptionService::merge($this->prescriptions->itemsOf($consultation), $medications));
             }
         });
@@ -142,6 +146,16 @@ final class ConsultationService
             && $consultation->closed_at->gt(now()->subHours(self::REOPEN_HOURS));
     }
 
+    /**
+     * Lo que la última plantilla aplicada traía y no se copió a la receta, con el motivo: el doctor decide.
+     *
+     * @return list<string>
+     */
+    public function heldMedications(): array
+    {
+        return $this->heldMedications;
+    }
+
     /** Plantilla del tratamiento: primero la propia del doctor, luego la compartida. */
     public function templateFor(?Treatment $treatment, User $user): ?ClinicalTemplate
     {
@@ -170,6 +184,8 @@ final class ConsultationService
 
     private function open(Patient $patient, Doctor $doctor, User $by, ?Treatment $treatment, ?Appointment $appointment = null): Consultation
     {
+        $this->heldMedications = [];
+
         $consultation = Consultation::create([
             'patient_id' => $patient->getKey(),
             'doctor_id' => $doctor->getKey(),
@@ -181,9 +197,8 @@ final class ConsultationService
         if ($template = $this->templateFor($treatment, $by)) {
             $consultation->update($this->templateValues($consultation, $template));
 
-            if (! $patient->isChild()) {
-                $this->prescriptions->syncForConsultation($consultation, $this->prescriptions->fromTemplate($template));
-            }
+            ['items' => $medications, 'held' => $this->heldMedications] = $this->prescriptions->fromTemplateFor($template, $patient);
+            $this->prescriptions->syncForConsultation($consultation, $medications);
         }
 
         $this->markScheduledAsDone($consultation, $patient, $treatment, $appointment);

@@ -11,6 +11,7 @@ use App\Enums\TreatmentPlanStatus;
 use App\Filament\Pages\Dashboard;
 use App\Filament\Pages\Settings;
 use App\Filament\Resources\Appointments\Pages\ListAppointments;
+use App\Filament\Resources\Appointments\Pages\ViewAppointment;
 use App\Filament\Resources\Consultations\ConsultationResource;
 use App\Filament\Resources\Patients\Pages\ListPatients;
 use App\Filament\Widgets\FollowUpsToday;
@@ -323,6 +324,38 @@ class DashboardPanelTest extends TestCase
 
         $this->assertSame(AppointmentStatus::InProgress, $waiting->fresh()->status);
         $this->assertNotNull($unfinished->fresh());
+    }
+
+    public function test_late_in_the_day_home_does_not_offer_a_patient_whose_time_already_passed(): void
+    {
+        $treatment = Treatment::factory()->create(['name' => 'Curación con resina']);
+        $doctor = $this->doctorOffering($treatment);
+        $rosa = Appointment::factory()->for($doctor)->for($treatment)->for($this->patient('Rosa', 'Huamán'))->at('2026-11-02 11:00')->confirmed()->create();
+        Appointment::factory()->for($doctor)->for($treatment)->for($this->patient('Luis', 'Paz'))->at('2026-11-02 16:00')->create();
+        Appointment::factory()->for($doctor)->for($treatment)->for($this->patient('Ana', 'Ríos'))->at('2026-11-02 09:00')->create(['status' => AppointmentStatus::InProgress]);
+        $this->actingAs($doctor->user);
+
+        // 16:10: la de las 11:00 nunca llegó; la de las 16:00 va tarde.
+        $this->travelTo(CarbonImmutable::parse('2026-11-02 16:10', 'America/Lima'));
+
+        Livewire::test(NextPatient::class)
+            ->assertSee(['16:00', 'Luis Paz', 'Va 10'.self::NBSP.'min tarde'])
+            ->assertDontSee('Rosa Huamán');
+
+        // En la cita que ya pasó, el paso a la vista es "No asistió" y ya no "Confirmar".
+        Livewire::test(ViewAppointment::class, ['record' => $rosa->getRouteKey()])
+            ->assertActionVisible('missed')
+            ->assertActionHidden('confirm');
+
+        // A las 20:35 ya no queda nadie por venir.
+        $this->travelTo(CarbonImmutable::parse('2026-11-02 20:35', 'America/Lima'));
+        Livewire::test(NextPatient::class)->assertDontSee(['Luis Paz', 'Rosa Huamán']);
+
+        // Los números del día dicen lo que está pasando, no solo lo terminado.
+        $this->actingAs(User::factory()->admin()->create());
+        Livewire::test(TodayStats::class)
+            ->assertSee('1 en atención · 0 atendidas')
+            ->assertSee('Aún no se terminó ninguna atención');
     }
 
     public function test_past_appointments_left_open_show_up_and_the_no_shows_close_in_one_click(): void

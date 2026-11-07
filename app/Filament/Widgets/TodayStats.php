@@ -9,6 +9,7 @@ use App\Filament\Pages\CashClosing;
 use App\Filament\Resources\Appointments\AppointmentResource;
 use App\Filament\Resources\RescheduleRequests\RescheduleRequestResource;
 use App\Filament\Resources\WhatsappMessages\WhatsappMessageResource;
+use App\Models\Appointment;
 use App\Models\Patient;
 use App\Models\Payment;
 use App\Models\User;
@@ -56,14 +57,20 @@ class TodayStats extends Widget
             ->whereIn('status', AppointmentStatus::occupying())
             ->pluck('status');
 
-        $done = $today->filter(fn (AppointmentStatus $s) => $s === AppointmentStatus::Completed)->count();
-        $doneLabel = $done === 1 ? '1 atendida' : "{$done} atendidas";
-        $waiting = $today->filter(fn (AppointmentStatus $s) => $s === AppointmentStatus::CheckedIn)->count();
+        $count = fn (AppointmentStatus $status) => $today->filter(fn (AppointmentStatus $s) => $s === $status)->count();
+        $done = $count(AppointmentStatus::Completed);
+        $waiting = $count(AppointmentStatus::CheckedIn);
+        $inProgress = $count(AppointmentStatus::InProgress);
 
         return [
             'label' => 'Citas de hoy',
             'value' => $today->count(),
-            'hint' => $waiting > 0 ? "{$waiting} en sala · {$doneLabel}" : $doneLabel,
+            // Lo que está pasando primero; "atendidas" siempre, para que el cero se lea como cero y no como olvido.
+            'hint' => collect([
+                $waiting > 0 ? "{$waiting} en sala" : null,
+                $inProgress > 0 ? "{$inProgress} en atención" : null,
+                $done === 1 ? '1 atendida' : "{$done} atendidas",
+            ])->filter()->implode(' · '),
             'color' => 'gray',
             'icon' => 'heroicon-o-calendar-days',
             'url' => AppointmentResource::getUrl('index', ['tab' => 'today']),
@@ -104,13 +111,15 @@ class TodayStats extends Widget
             ->owing()
             ->whereHas('appointments', fn (Builder $query) => $query->whereDate('starts_at', today())->where('status', AppointmentStatus::Completed))
             ->count();
+        $finished = Appointment::query()->whereDate('starts_at', today())->where('status', AppointmentStatus::Completed)->exists();
 
         return [
             'label' => 'Cobrado hoy',
             'value' => Money::format($collected),
-            'hint' => match ($owing) {
-                0 => 'Nadie se fue debiendo',
-                1 => '1 paciente atendido hoy debe',
+            'hint' => match (true) {
+                $owing === 0 && ! $finished => 'Aún no se terminó ninguna atención',
+                $owing === 0 => 'Nadie se fue debiendo',
+                $owing === 1 => '1 paciente atendido hoy debe',
                 default => "{$owing} pacientes atendidos hoy deben",
             },
             'color' => $owing > 0 ? 'warning' : 'gray',

@@ -3,6 +3,8 @@
 namespace App\Http\Controllers\Clinical;
 
 use App\Enums\PlanItemStatus;
+use App\Enums\TreatmentPlanStatus;
+use App\Filament\Resources\Patients\RelationManagers\TreatmentPlansRelationManager;
 use App\Http\Controllers\Controller;
 use App\Livewire\OdontogramChart;
 use App\Models\Consent;
@@ -19,6 +21,8 @@ use App\Services\Clinical\TreatmentPlanService;
 use App\Support\Phone;
 use App\Support\Signatures;
 use App\Support\Teeth;
+use Filament\Facades\Filament;
+use Illuminate\Http\RedirectResponse;
 use Illuminate\View\View;
 
 /** Receta, presupuesto, consentimiento e historia listos para imprimir o guardar en PDF desde el navegador. */
@@ -96,11 +100,6 @@ class PrintController extends Controller
     {
         abort_unless(auth()->user()->can('viewClinical', $plan->patient), 403);
 
-        // Imprimirlo es entregárselo al paciente: el borrador pasa a "presentado".
-        if (auth()->user()->can('update', $plan)) {
-            $plans->markProposed($plan);
-        }
-
         $plan->load('patient', 'doctor', 'items.package', 'installments', 'signatures', 'includedIn.patient', 'companionPlans.patient');
         $package = $plan->accepted_at ? null : $plan->offeredPackage();
 
@@ -117,6 +116,21 @@ class PrintController extends Controller
             'companions' => $plan->companionNames(),
             'payer' => $plan->includedIn?->patient?->full_name,
             'signatures' => $plan->signatures->map(fn (TreatmentPlanSignature $signature) => ['signature' => $signature, 'image' => Signatures::dataUri($signature->signature_path)]),
+            // Abrir la hoja no es entregarla: el borrador pasa a "presentado" cuando se dice que se entregó.
+            'deliverUrl' => $plan->status === TreatmentPlanStatus::Draft && auth()->user()->can('update', $plan)
+                ? Filament::getPanel('admin')->route('print.plan.delivered', ['plan' => $plan])
+                : null,
+            'delivered' => (bool) session('planDelivered'),
         ]);
+    }
+
+    /** Se le entregó el presupuesto al paciente: el borrador pasa a "presentado al paciente". */
+    public function planDelivered(TreatmentPlan $plan, TreatmentPlanService $plans): RedirectResponse
+    {
+        abort_unless(auth()->user()->can('update', $plan), 403);
+
+        $plans->markProposed($plan);
+
+        return redirect()->to(TreatmentPlansRelationManager::printUrl($plan))->with('planDelivered', true);
     }
 }

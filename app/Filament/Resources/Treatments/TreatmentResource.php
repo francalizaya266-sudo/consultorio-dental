@@ -5,6 +5,7 @@ namespace App\Filament\Resources\Treatments;
 use App\Filament\Concerns\HasSpanishLabels;
 use App\Filament\Forms\WebPhotoUpload;
 use App\Filament\Resources\Treatments\Pages\ManageTreatments;
+use App\Models\Doctor;
 use App\Models\Setting;
 use App\Models\Supply;
 use App\Models\Treatment;
@@ -15,6 +16,7 @@ use Filament\Actions\ActionGroup;
 use Filament\Actions\DeleteAction;
 use Filament\Actions\EditAction;
 use Filament\Actions\RestoreAction;
+use Filament\Forms\Components\CheckboxList;
 use Filament\Forms\Components\MarkdownEditor;
 use Filament\Forms\Components\Textarea;
 use Filament\Forms\Components\TextInput;
@@ -33,6 +35,7 @@ use Filament\Tables\Filters\TrashedFilter;
 use Filament\Tables\Table;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\SoftDeletingScope;
+use Illuminate\Support\HtmlString;
 use Illuminate\Support\Str;
 
 class TreatmentResource extends Resource
@@ -129,7 +132,19 @@ class TreatmentResource extends Resource
                     ->schema([
                         Toggle::make('online_bookable')
                             ->label('Se reserva en la web como primera cita')
-                            ->helperText('Solo evaluaciones o tratamientos simples.'),
+                            ->helperText('Solo evaluaciones o tratamientos simples.')
+                            ->live(),
+                        // Sin un doctor que lo atienda y reserve por la web, no aparece en la reserva: se pregunta aquí mismo.
+                        CheckboxList::make('doctors')
+                            ->label('¿Quién lo atiende?')
+                            ->relationship('doctors', 'name', modifyQueryUsing: fn (Builder $query) => $query->active()->orderBy('sort_order'))
+                            ->getOptionLabelFromRecordUsing(fn (Doctor $doctor) => $doctor->name.($doctor->accepts_online_booking ? '' : ' (no recibe reservas por la web)'))
+                            ->helperText(fn (Get $get) => Doctor::query()->active()->where('accepts_online_booking', true)->whereKey($get('doctors') ?? [])->exists()
+                                ? 'Aparece en la reserva de la web con los doctores marcados que reciben reservas por la web.'
+                                : new HtmlString('<span class="help-warning">Así no aparece en la reserva: marca al menos un doctor que reciba reservas por la web.</span>'))
+                            ->live()
+                            ->visible(fn (Get $get) => (bool) $get('online_bookable'))
+                            ->columnSpanFull(),
                         Toggle::make('is_evaluation')
                             ->label('Es una evaluación'),
                         Toggle::make('show_price')
@@ -162,9 +177,22 @@ class TreatmentResource extends Resource
                     ->label('Desde')
                     ->money('PEN', locale: 'es_PE')
                     ->placeholder('—'),
+                // Marcado pero sin un doctor que lo atienda por la web: no aparece en la reserva, y se avisa.
                 IconColumn::make('online_bookable')
                     ->label('Reserva web')
-                    ->boolean(),
+                    ->icon(fn (Treatment $record) => match (true) {
+                        ! $record->online_bookable => Heroicon::OutlinedXCircle,
+                        ! $record->has_web_doctor => Heroicon::OutlinedExclamationTriangle,
+                        default => Heroicon::OutlinedCheckCircle,
+                    })
+                    ->color(fn (Treatment $record) => match (true) {
+                        ! $record->online_bookable => 'danger',
+                        ! $record->has_web_doctor => 'warning',
+                        default => 'success',
+                    })
+                    ->tooltip(fn (Treatment $record) => $record->online_bookable && ! $record->has_web_doctor
+                        ? 'No aparece en la reserva: ningún doctor que reciba reservas por la web lo atiende.'
+                        : null),
                 // Lo que usa cada atención: lo descuenta del inventario al terminarla.
                 TextColumn::make('supplies_count')
                     ->label('Materiales')
@@ -180,7 +208,8 @@ class TreatmentResource extends Resource
             ->filters([
                 TrashedFilter::make(),
             ])
-            ->modifyQueryUsing(fn (Builder $query) => $query->with('supplies'))
+            ->modifyQueryUsing(fn (Builder $query) => $query->with('supplies')
+                ->withExists(['doctors as has_web_doctor' => fn (Builder $doctors) => $doctors->active()->where('accepts_online_booking', true)]))
             ->recordActions([
                 TreatmentRecipeAction::make(),
                 EditAction::make(),

@@ -39,6 +39,12 @@ final class Dates
         return $withDate ? $relative.', '.mb_strtolower(self::day($date)) : $relative;
     }
 
+    /** "lunes 9 de noviembre a las 10:30", para el panel (hora de 24). */
+    public static function dayAndTime(CarbonInterface|string $date): string
+    {
+        return CarbonImmutable::parse($date)->translatedFormat('l j \d\e F \a \l\a\s H:i');
+    }
+
     /** "45 min", "1 h", "2 h 30 min". */
     public static function duration(int $minutes): string
     {

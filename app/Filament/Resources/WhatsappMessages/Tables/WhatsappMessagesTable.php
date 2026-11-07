@@ -62,13 +62,20 @@ class WhatsappMessagesTable
                     ->button()
                     ->visible(fn (WhatsappMessage $record) => $record->status !== MessageStatus::Cancelled)
                     ->authorize('update'),
+                SendWhatsAppAction::notSent()
+                    ->authorize('update'),
                 SendWhatsAppAction::discard()
                     ->iconButton()
                     ->tooltip('Descartar')
                     ->authorize('update'),
             ])
             ->poll('30s')
-            ->emptyStateHeading('No hay avisos por enviar')
+            ->emptyStateHeading(fn ($livewire) => match ($livewire->activeTab ?? null) {
+                'sent' => 'Todavía no se envió ningún aviso',
+                'scheduled' => 'No hay avisos programados',
+                'all' => 'Todavía no hay avisos',
+                default => 'No hay avisos por enviar',
+            })
             ->emptyStateDescription('Cuando se reserve, mueva o cancele una cita, el aviso aparecerá aquí.')
             ->emptyStateIcon('heroicon-o-chat-bubble-left-right');
     }

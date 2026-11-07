@@ -16,9 +16,11 @@ use App\Models\User;
 use App\Services\Booking\AppointmentService;
 use App\Services\Clinical\ConsultationService;
 use App\Services\WhatsApp\WhatsAppOutbox;
+use App\Support\Dates;
 use Filament\Actions\Action;
 use Filament\Actions\ActionGroup;
 use Filament\Actions\BulkAction;
+use Filament\Forms\Components\Checkbox;
 use Filament\Forms\Components\Textarea;
 use Filament\Forms\Components\Toggle;
 use Filament\Notifications\Notification;
@@ -34,6 +36,7 @@ final class AppointmentActions
     {
         return [
             self::confirm(),
+            self::missed(),
             self::arrived(),
             self::start(),
             self::continueConsultation(),
@@ -59,6 +62,7 @@ final class AppointmentActions
     {
         return [
             self::confirm(),
+            self::missed(),
             self::arrived(),
             self::start(),
             self::continueConsultation(),
@@ -82,7 +86,8 @@ final class AppointmentActions
             ->label('Confirmar')
             ->icon(Heroicon::OutlinedCheck)
             ->color('success')
-            ->visible(fn (Appointment $record) => $record->status === AppointmentStatus::Pending && ! $record->isFromAnEarlierDay())
+            // Confirmar sirve antes de la cita; cuando ya pasó su hora, el paso es "Llegó" o "No asistió".
+            ->visible(fn (Appointment $record) => $record->status === AppointmentStatus::Pending && ! $record->ends_at->isPast())
             ->authorize('update')
             ->action(fn (Appointment $record) => Notify::run(
                 fn () => app(AppointmentService::class)->confirmByStaff($record, auth()->user()),
@@ -126,12 +131,14 @@ final class AppointmentActions
                     return;
                 }
 
+                $consultations = app(ConsultationService::class);
                 $consultation = null;
-                Notify::run(function () use ($record, &$consultation) {
-                    $consultation = app(ConsultationService::class)->startFromAppointment($record, auth()->user());
+                Notify::run(function () use ($record, $consultations, &$consultation) {
+                    $consultation = $consultations->startFromAppointment($record, auth()->user());
                 }, 'Atención iniciada');
 
                 if ($consultation) {
+                    Notify::heldMedications($consultations->heldMedications());
                     $action->redirect(ConsultationResource::getUrl('edit', ['record' => $consultation]));
                 }
             });
@@ -193,15 +200,29 @@ final class AppointmentActions
             ));
     }
 
+    /** En "Más", mientras la cita está en curso: el paciente todavía puede llegar tarde. */
     public static function noShow(): Action
     {
-        return Action::make('noShow')
+        return self::noShowAction('noShow')
+            ->visible(fn (Appointment $record) => $record->status->isChangeable() && $record->starts_at->isPast() && ! $record->ends_at->isPast());
+    }
+
+    /** Ya terminó su hora y nunca llegó: marcar la inasistencia pasa a ser el paso del día. */
+    public static function missed(): Action
+    {
+        return self::noShowAction('missed')
+            ->outlined()
+            ->visible(fn (Appointment $record) => $record->status->isChangeable() && $record->ends_at->isPast());
+    }
+
+    private static function noShowAction(string $name): Action
+    {
+        return Action::make($name)
             ->label('No asistió')
             ->icon(Heroicon::OutlinedUserMinus)
             ->color('danger')
             ->requiresConfirmation()
             ->modalHeading('¿Marcar que el paciente no asistió?')
-            ->visible(fn (Appointment $record) => $record->status->isChangeable() && $record->starts_at->isPast())
             ->authorize('update')
             ->action(fn (Appointment $record) => Notify::run(
                 fn () => app(AppointmentService::class)->markNoShow($record, auth()->user()),
@@ -242,11 +263,11 @@ final class AppointmentActions
     public static function move(): Action
     {
         return Action::make('move')
-            ->label('Cambiar horario')
+            ->label('Mover cita')
             ->icon(Heroicon::OutlinedArrowsRightLeft)
-            ->color('warning')
-            ->modalHeading('Cambiar horario')
-            ->modalDescription('El paciente recibirá el aviso con el nuevo horario para confirmarlo.')
+            ->color('gray')
+            ->modalHeading('Mover cita')
+            ->modalDescription(fn (Appointment $record) => 'Ahora: '.Dates::dayAndTime($record->starts_at).'. Elige el nuevo horario.')
             ->modalSubmitActionLabel('Mover cita')
             ->visible(fn (Appointment $record) => $record->status->isChangeable())
             ->authorize('update')
@@ -254,15 +275,21 @@ final class AppointmentActions
                 'doctor_id' => $record->doctor_id,
                 'date' => $record->starts_at->toDateString(),
             ])
-            ->schema(fn (Appointment $record) => SlotPicker::fields($record))
+            ->schema(fn (Appointment $record) => [
+                ...SlotPicker::fields($record),
+                Checkbox::make('agreed')
+                    ->label('Ya lo acordé con el paciente')
+                    ->helperText('Queda confirmada y no se le pide confirmar. Si no, se prepara el aviso para que confirme.'),
+            ])
             ->action(fn (array $data, Appointment $record, Action $action) => Notify::run(
                 fn () => app(AppointmentService::class)->rescheduleByStaff(
                     $record,
                     SlotPicker::startsAt($data),
                     auth()->user(),
                     Doctor::findOrFail($data['doctor_id']),
+                    (bool) ($data['agreed'] ?? false),
                 ),
-                'Cita movida. El aviso al paciente está listo en "Avisos por enviar".',
+                ($data['agreed'] ?? false) ? 'Cita movida y confirmada.' : 'Cita movida. El aviso al paciente está listo en Avisos.',
                 $action,
             ));
     }
@@ -274,7 +301,8 @@ final class AppointmentActions
             ->icon(Heroicon::OutlinedXCircle)
             ->color('danger')
             ->modalHeading('Cancelar cita')
-            ->modalSubmitActionLabel('Sí, cancelar')
+            ->modalSubmitActionLabel('Cancelar la cita')
+            ->modalCancelActionLabel('Volver')
             ->visible(fn (Appointment $record) => $record->status->isChangeable())
             ->authorize('update')
             ->schema([

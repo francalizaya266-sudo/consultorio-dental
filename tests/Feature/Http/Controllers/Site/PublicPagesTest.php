@@ -3,6 +3,7 @@
 namespace Tests\Feature\Http\Controllers\Site;
 
 use App\Enums\DiscountType;
+use App\Livewire\Site\BookingWizard;
 use App\Models\Campaign;
 use App\Models\Faq;
 use App\Models\Review;
@@ -11,6 +12,7 @@ use App\Models\SmileCase;
 use App\Models\Treatment;
 use App\Models\TreatmentPackage;
 use Illuminate\Foundation\Testing\LazilyRefreshDatabase;
+use Livewire\Livewire;
 use Tests\Concerns\CreatesAgenda;
 use Tests\TestCase;
 
@@ -233,6 +235,28 @@ class PublicPagesTest extends TestCase
             ->assertOk()
             ->assertSeeInOrder(['Precio normal desde S/ 150', 'desde S/ 120', 'Pagas en el consultorio con Yape, Plin, tarjeta o efectivo.'])
             ->assertSee(route('site.booking', ['tratamiento' => 'limpieza-dental', 'promo' => 'limpieza-verano', 'origen' => 'campaign']));
+    }
+
+    public function test_a_promotion_for_a_treatment_that_is_not_booked_online_books_the_evaluation_with_it(): void
+    {
+        $this->freezeMonday();
+        $whitening = Treatment::factory()->clinicOnly()->create(['name' => 'Blanqueamiento', 'slug' => 'blanqueamiento', 'price_from' => 480]);
+        $evaluation = Treatment::factory()->evaluation()->create(['name' => 'Evaluación dental', 'slug' => 'evaluacion']);
+        $this->doctorOffering($whitening, $evaluation);
+        $this->campaign(['name' => 'Blanqueamiento de verano', 'slug' => 'blanqueamiento-verano', 'treatment_id' => $whitening->id, 'discount_type' => DiscountType::Percent, 'discount_value' => 20]);
+
+        $this->get(route('site.promotion', 'blanqueamiento-verano'))
+            ->assertOk()
+            ->assertSee('Blanqueamiento se programa después de una evaluación: reservas la evaluación y la promoción queda guardada para tu tratamiento.')
+            ->assertSee('Reservar evaluación con la promoción')
+            ->assertSee(route('site.booking', ['tratamiento' => 'evaluacion', 'promo' => 'blanqueamiento-verano', 'origen' => 'campaign']));
+
+        // En la reserva la promoción se ve desde el primer paso, con la evaluación ya elegida.
+        Livewire::withQueryParams(['promo' => 'blanqueamiento-verano'])
+            ->test(BookingWizard::class)
+            ->assertSet('treatmentId', $evaluation->id)
+            ->assertSee("Reservas con la promoción Blanqueamiento de verano · 20\u{00A0}% de descuento.")
+            ->assertSee('Se aplica a Blanqueamiento: el doctor lo revisa en esta cita y lo programa contigo.');
     }
 
     public function test_a_promotion_counts_one_visit_per_person_and_an_ended_one_offers_the_current_ones(): void

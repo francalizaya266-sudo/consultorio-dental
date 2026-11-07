@@ -2,7 +2,6 @@
 
 namespace App\Filament\Actions;
 
-use App\Enums\PaymentMethod;
 use App\Filament\Forms\PaymentFields;
 use App\Models\Patient;
 use App\Models\Payment;
@@ -33,7 +32,7 @@ final class RegisterPaymentAction
             ->modalWidth('lg')
             ->fillForm(fn () => [
                 'amount' => max(0, $patient()->balance()) ?: null,
-                'method' => PaymentMethod::Cash->value,
+                'method' => $patient()->usualPaymentMethod()->value,
                 'paid_at' => now()->format('Y-m-d H:i'),
             ])
             ->schema([

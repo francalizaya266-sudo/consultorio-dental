@@ -10,7 +10,6 @@ use App\Filament\Resources\Supplies\Pages\ViewSupply;
 use App\Filament\Resources\Supplies\RelationManagers\BatchesRelationManager;
 use App\Filament\Resources\Supplies\RelationManagers\MovementsRelationManager;
 use App\Filament\Resources\Supplies\Tables\SuppliesTable;
-use App\Models\PurchaseOrderItem;
 use App\Models\Supply;
 use App\Models\SupplyBatch;
 use App\Models\Treatment;
@@ -132,7 +131,10 @@ class SupplyResource extends Resource
                     ->schema([
                         TextEntry::make('stock')
                             ->label('Hay')
-                            ->formatStateUsing(fn (Supply $record) => $record->quantity($record->stock))
+                            ->formatStateUsing(fn (Supply $record) => $record->quantity($record->usableStock()))
+                            ->belowContent(fn (Supply $record) => $record->expiredStock() > 0
+                                ? 'Vencido aparte: '.$record->quantity($record->expiredStock()).'. Dalo de baja en Lotes.'
+                                : null)
                             ->color(fn (Supply $record) => $record->isLow() ? 'danger' : null)
                             ->size(TextSize::Large)
                             ->weight(FontWeight::Bold),
@@ -175,7 +177,7 @@ class SupplyResource extends Resource
         return SuppliesTable::configure($table);
     }
 
-    /** Con lo que vence primero entre lo que queda y lo que ya está pedido, para avisar sin una consulta por fila. */
+    /** Con lo que vence primero, lo vencido y lo que ya está pedido, para avisar sin una consulta por fila. */
     public static function getEloquentQuery(): Builder
     {
         return parent::getEloquentQuery()
@@ -185,16 +187,15 @@ class SupplyResource extends Resource
                     ->selectRaw('min(expires_on)')
                     ->whereColumn('supply_id', 'supplies.id')
                     ->where('remaining', '>', 0),
-                'on_order' => PurchaseOrderItem::query()
-                    ->selectRaw('sum(quantity - coalesce(received_quantity, 0))')
-                    ->whereColumn('supply_id', 'supplies.id')
-                    ->whereHas('purchaseOrder', fn (Builder $order) => $order->open()),
+                'expired_stock' => Supply::expiredStockQuery(),
+                'on_order' => Supply::onOrderQuery(),
             ]);
     }
 
+    /** Lo que hay que pedir: la misma cuenta que la pestaña "Por pedir" y que Hoy. */
     public static function getNavigationBadge(): ?string
     {
-        $count = Supply::query()->belowMinimum()->count();
+        $count = Supply::query()->toReorder()->count();
 
         return $count > 0 ? (string) $count : null;
     }
@@ -206,7 +207,7 @@ class SupplyResource extends Resource
 
     public static function getNavigationBadgeTooltip(): ?string
     {
-        return 'Materiales por reponer';
+        return 'Materiales por pedir';
     }
 
     public static function getRelations(): array

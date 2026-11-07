@@ -90,7 +90,7 @@ class RescheduleRequestsTable
                     $record->options->firstWhere('id', (int) $data['option_id']),
                     auth()->user(),
                 ),
-                'Cambio aprobado. El aviso al paciente está listo en "Avisos por enviar".',
+                'Cambio aprobado. El aviso al paciente está listo en Avisos.',
                 $action,
             ));
     }
@@ -114,7 +114,7 @@ class RescheduleRequestsTable
             ])
             ->action(fn (array $data, RescheduleRequest $record) => Notify::run(
                 fn () => app(RescheduleRequestService::class)->reject($record, auth()->user(), $data['note'] ?? null),
-                'Solicitud no aprobada. El aviso al paciente está listo en "Avisos por enviar".',
+                'Solicitud no aprobada. El aviso al paciente está listo en Avisos.',
             ));
     }
 

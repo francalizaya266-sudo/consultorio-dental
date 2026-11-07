@@ -11,6 +11,7 @@ use App\Filament\Resources\Appointments\AppointmentResource;
 use App\Filament\Resources\Consultations\ConsultationResource;
 use App\Filament\Resources\Consultations\Schemas\ConsultationForm;
 use App\Filament\Resources\Consultations\Schemas\SuppliesUsedField;
+use App\Filament\Support\Notify;
 use App\Models\ClinicalTemplate;
 use App\Models\Consultation;
 use App\Models\Supply;
@@ -346,8 +347,7 @@ class EditConsultation extends EditRecord
                 $template = ClinicalTemplate::find($data['template']);
 
                 if ($template) {
-                    // A un niño no se le copia la receta de la plantilla: va en jarabe y por su peso.
-                    $medications = $this->getConsultation()->patient->isChild() ? [] : app(PrescriptionService::class)->fromTemplate($template);
+                    ['items' => $medications, 'held' => $held] = app(PrescriptionService::class)->fromTemplateFor($template, $this->getConsultation()->patient);
 
                     $this->data = [
                         ...$this->data,
@@ -355,6 +355,7 @@ class EditConsultation extends EditRecord
                         'prescription_items' => PrescriptionService::merge($this->data['prescription_items'] ?? [], $medications),
                     ];
                     Notification::make()->success()->title('Plantilla aplicada. Revisa y guarda.')->send();
+                    Notify::heldMedications($held);
                 }
             });
     }

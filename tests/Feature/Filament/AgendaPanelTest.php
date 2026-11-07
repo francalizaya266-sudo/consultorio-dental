@@ -19,6 +19,7 @@ use App\Filament\Resources\WhatsappMessages\WhatsappMessageResource;
 use App\Filament\Widgets\TodayAppointments;
 use App\Filament\Widgets\TodayStats;
 use App\Models\Appointment;
+use App\Models\MagicLink;
 use App\Models\Patient;
 use App\Models\Treatment;
 use App\Models\User;
@@ -228,15 +229,41 @@ class AgendaPanelTest extends TestCase
 
         $this->actingAs($reception);
 
-        Livewire::test(ListWhatsappMessages::class)
+        $list = Livewire::test(ListWhatsappMessages::class)
             ->assertCanSeeTableRecords([$message])
             ->mountAction(TestAction::make('sendWhatsApp')->table($message))
-            ->assertSchemaStateSet(fn (array $state) => $this->assertStringContainsString('/c/', $state['body']) ?? [])
-            ->callMountedAction()
-            ->assertHasNoFormErrors();
+            // Al revisarlo todavía no hay enlace personal: se crea recién al abrir WhatsApp.
+            ->assertSchemaStateSet(fn (array $state) => $this->assertStringContainsString('{enlace}', $state['body']) ?? []);
+        $this->assertSame(0, MagicLink::count());
 
+        $list->callMountedAction()
+            ->assertHasNoFormErrors()
+            ->assertNotified('Aviso para '.$appointment->patient->full_name.' abierto en WhatsApp');
+
+        $this->assertSame(1, MagicLink::count());
         $this->assertSame(MessageStatus::Sent, $message->fresh()->status);
         $this->assertTrue($message->fresh()->sentBy->is($reception));
+
+        // Si al final no se envió, desde Enviados vuelve a "Por enviar".
+        $list->set('activeTab', 'sent')->callAction(TestAction::make('notSent')->table($message));
+        $this->assertSame(MessageStatus::Pending, $message->fresh()->status);
+        $this->assertNull($message->fresh()->sent_at);
+    }
+
+    public function test_cancelling_a_notice_leaves_no_personal_link_behind(): void
+    {
+        $treatment = Treatment::factory()->create();
+        $doctor = $this->doctorOffering($treatment);
+        $appointment = Appointment::factory()->for($doctor)->for($treatment)->at('2026-11-03 10:00')->create();
+        $message = app(WhatsAppOutbox::class)->queueForAppointment($appointment, MessageTemplateKey::BookingConfirmation);
+        $this->actingAs(User::factory()->reception()->create());
+
+        Livewire::test(ListWhatsappMessages::class)
+            ->mountAction(TestAction::make('sendWhatsApp')->table($message))
+            ->assertMountedActionModalSeeHtml('WhatsApp para '.e($appointment->patient->full_name));
+
+        $this->assertSame(0, MagicLink::count());
+        $this->assertSame(MessageStatus::Pending, $message->fresh()->status);
     }
 
     public function test_approving_a_request_from_the_panel_moves_the_appointment(): void

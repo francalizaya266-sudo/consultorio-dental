@@ -86,25 +86,55 @@ class Supply extends Model
     }
 
     /**
-     * Hay menos de lo mínimo. Un material que todavía no se cargó ni se contó no avisa:
-     * recién empieza a usarse el inventario.
+     * Hay menos de lo mínimo, contando solo lo que se puede usar (lo vencido no). Un material que
+     * todavía no se cargó ni se contó no avisa: recién empieza a usarse el inventario.
      */
     #[Scope]
     protected function belowMinimum(Builder $query): Builder
     {
+        $expired = self::expiredStockQuery();
+
         return $query->active()
             ->where('min_stock', '>', 0)
-            ->whereColumn('stock', '<', 'min_stock')
-            ->whereHas('movements');
+            ->whereHas('movements')
+            ->whereRaw('supplies.stock - ('.$expired->toSql().') < supplies.min_stock', $expired->getBindings());
     }
 
-    /** Bajo el mínimo y sin pedir todavía: lo que hay que pedir hoy. */
+    /**
+     * Lo que hay que pedir: aun con lo que ya viene en camino no llega al mínimo. Es la misma cuenta
+     * en el menú, en la pestaña "Por pedir", en Hoy y en el pedido que se arma.
+     */
     #[Scope]
     protected function toReorder(Builder $query): Builder
     {
-        return $query->belowMinimum()->whereDoesntHave('orderItems', fn (Builder $items) => $items
-            ->whereColumn('quantity', '>', DB::raw('coalesce(received_quantity, 0)'))
-            ->whereHas('purchaseOrder', fn (Builder $order) => $order->open()));
+        $expired = self::expiredStockQuery();
+        $onOrder = self::onOrderQuery();
+
+        return $query->active()
+            ->where('min_stock', '>', 0)
+            ->whereHas('movements')
+            ->whereRaw(
+                'supplies.stock - ('.$expired->toSql().') + ('.$onOrder->toSql().') < supplies.min_stock',
+                [...$expired->getBindings(), ...$onOrder->getBindings()],
+            );
+    }
+
+    /** Subconsulta: lo vencido de cada material que todavía no se dio de baja. */
+    public static function expiredStockQuery(): Builder
+    {
+        return SupplyBatch::query()
+            ->selectRaw('coalesce(sum(remaining), 0)')
+            ->whereColumn('supply_batches.supply_id', 'supplies.id')
+            ->expired();
+    }
+
+    /** Subconsulta: lo que ya se pidió de cada material y falta que llegue. */
+    public static function onOrderQuery(): Builder
+    {
+        return PurchaseOrderItem::query()
+            ->selectRaw('coalesce(sum(quantity - coalesce(received_quantity, 0)), 0)')
+            ->whereColumn('purchase_order_items.supply_id', 'supplies.id')
+            ->awaited();
     }
 
     /** Con algún lote que vence en los próximos 30 días (o ya venció) y del que queda algo. */
@@ -116,7 +146,33 @@ class Supply extends Model
 
     public function isLow(): bool
     {
-        return (float) $this->min_stock > 0 && (float) $this->stock < (float) $this->min_stock;
+        return (float) $this->min_stock > 0 && $this->usableStock() < (float) $this->min_stock;
+    }
+
+    /** Lo vencido que todavía no se dio de baja: está en el cajón pero no se usa. */
+    public function expiredStock(): float
+    {
+        $expired = array_key_exists('expired_stock', $this->attributes)
+            ? $this->attributes['expired_stock']
+            : $this->batches()->expired()->sum('remaining');
+
+        return round(min(max(0, (float) $this->stock), (float) $expired), 2);
+    }
+
+    /** Lo que hay y se puede usar: sin lo vencido. */
+    public function usableStock(): float
+    {
+        return round((float) $this->stock - $this->expiredStock(), 2);
+    }
+
+    /** Lo que ya se pidió y falta que llegue. */
+    public function onOrder(): float
+    {
+        $onOrder = array_key_exists('on_order', $this->attributes)
+            ? $this->attributes['on_order']
+            : $this->orderItems()->awaited()->sum(DB::raw('quantity - coalesce(received_quantity, 0)'));
+
+        return round((float) $onOrder, 2);
     }
 
     /** "12 carpules". */
@@ -125,7 +181,6 @@ class Supply extends Model
         return Quantity::format($quantity, $this->unit);
     }
 
-    /** Lo que se sugiere pedir: hasta el doble del mínimo, en unidades enteras. */
     /** La unidad para poner al lado de una cantidad que se está escribiendo: "carpule" o "carpules". */
     public static function unitFor(mixed $supplyId, mixed $quantity): ?string
     {
@@ -134,8 +189,9 @@ class Supply extends Model
         return $unit === null ? null : Quantity::unit($unit, is_numeric($quantity) ? (float) $quantity : 2.0);
     }
 
+    /** Lo que se sugiere pedir: hasta el doble del mínimo, sin contar lo vencido y restando lo que ya viene. */
     public function suggestedOrder(): float
     {
-        return max(1, ceil((float) $this->min_stock * 2 - max(0, (float) $this->stock)));
+        return max(1, ceil((float) $this->min_stock * 2 - max(0, $this->usableStock()) - $this->onOrder()));
     }
 }

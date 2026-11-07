@@ -55,15 +55,17 @@ class ListConsultations extends ListRecords
                     return;
                 }
 
+                $consultations = app(ConsultationService::class);
                 $consultation = null;
                 Notify::run(
-                    function () use ($patient, $data, &$consultation) {
-                        $consultation = app(ConsultationService::class)->startWithoutAppointment($patient, auth()->user(), Treatment::find($data['treatment_id'] ?? null));
+                    function () use ($patient, $data, $consultations, &$consultation) {
+                        $consultation = $consultations->startWithoutAppointment($patient, auth()->user(), Treatment::find($data['treatment_id'] ?? null));
                     },
                     'Atención iniciada',
                 );
 
                 if ($consultation) {
+                    Notify::heldMedications($consultations->heldMedications());
                     $action->redirect(ConsultationResource::getUrl('edit', ['record' => $consultation]));
                 }
             });

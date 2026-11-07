@@ -39,7 +39,7 @@ class CreateAppointment extends CreateRecord
 
     protected function getCreatedNotificationTitle(): ?string
     {
-        return 'Cita creada. El aviso al paciente está listo en "Avisos por enviar".';
+        return 'Cita creada. El aviso al paciente está listo en Avisos.';
     }
 
     protected function getRedirectUrl(): string

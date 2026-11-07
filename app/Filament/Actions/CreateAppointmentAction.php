@@ -39,7 +39,7 @@ final class CreateAppointmentAction
             ->fillForm(fn (array $arguments) => self::defaults($arguments))
             ->action(fn (array $data, Action $action) => Notify::run(
                 fn () => self::book($data),
-                'Cita creada. El aviso al paciente está listo en "Avisos por enviar".',
+                'Cita creada. El aviso al paciente está listo en Avisos.',
                 $action,
             ));
     }
@@ -75,9 +75,12 @@ final class CreateAppointmentAction
                 ],
             );
 
-            // Si agenda una sesión del plan, el paciente lo aceptó.
+            // Agendar una sesión no es aceptar el plan: solo si recepción marcó que el paciente lo aceptó.
+            // Si no, al menos ya se le presentó.
             if ($planItem) {
-                app(TreatmentPlanService::class)->accept($planItem->plan);
+                ($data['plan_accepted'] ?? false)
+                    ? app(TreatmentPlanService::class)->accept($planItem->plan)
+                    : app(TreatmentPlanService::class)->markProposed($planItem->plan);
             }
 
             return $appointment;

@@ -37,7 +37,7 @@ final class PatientSummary
     {
         $next = AppointmentResource::getEloquentQuery()
             ->whereBelongsTo($patient)
-            ->where('starts_at', '>=', today())
+            ->where('ends_at', '>', now())
             ->whereIn('status', AppointmentStatus::changeable())
             ->orderBy('starts_at')
             ->first();

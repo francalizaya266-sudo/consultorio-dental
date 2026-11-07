@@ -14,7 +14,7 @@ use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Filters\SelectFilter;
 use Filament\Tables\Table;
 
-/** Cada material con lo que hay (en rojo si falta), lo que vence primero y a quién se le pide. */
+/** Cada material con lo que se puede usar (en rojo si falta), lo vencido aparte, lo que vence primero y a quién se le pide. */
 class SuppliesTable
 {
     public static function configure(Table $table): Table
@@ -33,12 +33,15 @@ class SuppliesTable
                     ->wrap(),
                 TextColumn::make('stock')
                     ->label('Hay')
-                    ->formatStateUsing(fn (Supply $record) => $record->quantity($record->stock))
-                    ->description(fn (Supply $record) => match (true) {
-                        (float) $record->on_order > 0 => 'Pedido: llegan '.$record->quantity($record->on_order),
-                        (float) $record->min_stock > 0 => 'Avisa con menos de '.Quantity::number($record->min_stock),
-                        default => null,
-                    })
+                    ->formatStateUsing(fn (Supply $record) => $record->quantity($record->usableStock()))
+                    ->description(fn (Supply $record) => collect([
+                        $record->expiredStock() > 0 ? 'Vencido: '.$record->quantity($record->expiredStock()) : null,
+                        match (true) {
+                            $record->onOrder() > 0 => 'Pedido: llegan '.$record->quantity($record->onOrder()),
+                            (float) $record->min_stock > 0 => 'Avisa con menos de '.Quantity::number($record->min_stock),
+                            default => null,
+                        },
+                    ])->filter()->implode(' · ') ?: null)
                     ->color(fn (Supply $record) => $record->isLow() ? 'danger' : null)
                     ->weight(fn (Supply $record) => $record->isLow() ? 'bold' : null)
                     ->sortable(),

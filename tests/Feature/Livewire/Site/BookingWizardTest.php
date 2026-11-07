@@ -7,6 +7,7 @@ use App\Enums\BookingChannel;
 use App\Enums\DiscountType;
 use App\Enums\MessageTemplateKey;
 use App\Enums\PatientRelationship;
+use App\Enums\TreatmentPlanStatus;
 use App\Livewire\Site\BookingWizard;
 use App\Models\Account;
 use App\Models\Appointment;
@@ -14,6 +15,7 @@ use App\Models\Campaign;
 use App\Models\Patient;
 use App\Models\RememberedDevice;
 use App\Models\Treatment;
+use App\Models\TreatmentPlan;
 use App\Models\WhatsappMessage;
 use App\Services\Access\DeviceService;
 use App\Services\WhatsApp\WhatsAppOutbox;
@@ -187,6 +189,34 @@ class BookingWizardTest extends TestCase
 
         $confirmation = app(WhatsAppOutbox::class)->render(WhatsappMessage::where('template_key', MessageTemplateKey::BookingConfirmation)->sole());
         $this->assertStringContainsString("a las 10:00 am con {$cleaning->doctors->first()->name}.\nPrecio con la campaña Limpieza de verano: desde S/ 120 (normal desde S/ 150). Pagas en el consultorio con Yape, Plin, tarjeta o efectivo.\n\nConfirma tu asistencia", $confirmation);
+    }
+
+    public function test_someone_in_treatment_is_told_at_the_first_step_and_can_still_book_for_the_family(): void
+    {
+        $this->freezeMonday();
+        $evaluation = Treatment::factory()->evaluation()->create();
+        $doctor = $this->doctorOffering($evaluation);
+        $account = Account::factory()->verified()->create(['phone' => '+51987654321']);
+        $mother = Patient::factory()->for($account)->create(['first_name' => 'Rosa']);
+        $child = Patient::factory()->dependentOf($account)->create(['first_name' => 'Mateo']);
+        TreatmentPlan::create(['patient_id' => $mother->id, 'doctor_id' => $doctor->id, 'status' => TreatmentPlanStatus::InProgress]);
+        RememberedDevice::create(['account_id' => $account->id, 'token_hash' => hash('sha256', 'celular-de-rosa'), 'expires_at' => now()->addMonth()]);
+
+        Livewire::withCookie(DeviceService::COOKIE, 'celular-de-rosa')
+            ->test(BookingWizard::class)
+            ->assertSet('step', 1)
+            ->assertSee('Rosa, como estás en tratamiento, tu doctor programa tus próximas sesiones.')
+            ->assertSee('Si la cita es para otra persona, sigue: la eliges en el último paso.')
+            ->call('chooseTreatment', $evaluation->id)
+            ->call('chooseTime', '10:00')
+            ->assertSee('Rosa · en tratamiento')
+            ->assertSeeHtml('wire:target="book" disabled')
+            ->call('choosePatient', $child->id)
+            ->assertDontSee('como estás en tratamiento')
+            ->call('book')
+            ->assertSet('step', 4);
+
+        $this->assertTrue(Appointment::sole()->patient->is($child));
     }
 
     public function test_a_time_taken_meanwhile_sends_the_patient_back_to_choose_another(): void

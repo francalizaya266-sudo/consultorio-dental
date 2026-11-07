@@ -14,14 +14,19 @@ final class DoctorDay
 
     /**
      * El siguiente paciente de hoy: quien ya está en sala (el que llegó primero) o, si nadie llegó,
-     * la próxima cita por hora. No cuenta lo que ya se está atendiendo.
+     * la próxima cita por hora. No cuenta lo que ya se está atendiendo, ni a quien no llegó y ya pasó
+     * su hora: eso es una inasistencia por marcar, no un paciente que viene.
      */
     public function next(): ?Appointment
     {
         return Appointment::query()
             ->where('doctor_id', $this->doctorId)
             ->whereDate('starts_at', today())
-            ->whereIn('status', [AppointmentStatus::CheckedIn, AppointmentStatus::Confirmed, AppointmentStatus::Pending])
+            ->where(fn ($query) => $query
+                ->where('status', AppointmentStatus::CheckedIn)
+                ->orWhere(fn ($query) => $query
+                    ->whereIn('status', [AppointmentStatus::Confirmed, AppointmentStatus::Pending])
+                    ->where('ends_at', '>', now())))
             ->with(['patient.medicalBackground', 'treatment', 'planItem'])
             ->orderByRaw('case when status = ? then 0 else 1 end', [AppointmentStatus::CheckedIn->value])
             ->orderByRaw('case when status = ? then checked_in_at end', [AppointmentStatus::CheckedIn->value])

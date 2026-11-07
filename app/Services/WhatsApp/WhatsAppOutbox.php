@@ -92,19 +92,25 @@ class WhatsAppOutbox
         return $this->prepare($message, $by)['body'];
     }
 
+    /**
+     * El texto para revisar antes de abrir WhatsApp. Deja {enlace} como está: el enlace personal se crea
+     * recién al abrirlo, para no dejar enlaces sueltos si se cancela.
+     */
+    public function draft(WhatsappMessage $message): string
+    {
+        return $this->prepare($message, issueLink: false)['body'];
+    }
+
     /** @return array{body: string, params: array<string, string>} */
-    public function prepare(WhatsappMessage $message, ?User $by = null): array
+    public function prepare(WhatsappMessage $message, ?User $by = null, bool $issueLink = true): array
     {
         $template = MessageTemplate::query()->where('key', $message->template_key)->where('is_active', true)->first();
         $body = $template?->body ?? $message->template_key->defaultBody();
 
         $params = $message->params ?? [];
 
-        if (str_contains($body, '{enlace}') && $message->account) {
-            $appointment = $message->appointment;
-            $params['enlace'] = $appointment
-                ? $this->links->issue($message->account, MagicLinkPurpose::Appointment, $appointment, $by)
-                : $this->links->issue($message->account, MagicLinkPurpose::Access, null, $by);
+        if ($issueLink && str_contains($body, '{enlace}') && ($link = $this->linkFor($message, $by))) {
+            $params['enlace'] = $link;
         }
 
         $replacements = collect($params)->mapWithKeys(fn ($v, $k) => ['{'.$k.'}' => (string) $v])->all();
@@ -123,6 +129,11 @@ class WhatsAppOutbox
     {
         $body ??= $this->render($message, $by);
 
+        // El texto revisado trae {enlace} sin llenar: el enlace personal se crea ahora, al abrir WhatsApp.
+        if (str_contains($body, '{enlace}') && ($link = $this->linkFor($message, $by))) {
+            $body = str_replace('{enlace}', $link, $body);
+        }
+
         $message->forceFill([
             'status' => MessageStatus::Sent,
             'opened_at' => now(),
@@ -132,6 +143,32 @@ class WhatsAppOutbox
         ])->save();
 
         return 'https://wa.me/'.Phone::forWhatsApp($message->phone).'?text='.rawurlencode($body);
+    }
+
+    /** Se abrió WhatsApp pero el mensaje no llegó a enviarse: vuelve a "Por enviar". */
+    public function markNotSent(WhatsappMessage $message): void
+    {
+        $message->forceFill(['status' => MessageStatus::Pending, 'sent_at' => null, 'sent_by_user_id' => null])->save();
+    }
+
+    /** Lo abrió una persona con WhatsApp hace poco: todavía puede decir que no llegó a enviarse. */
+    public static function canUndoSend(WhatsappMessage $message): bool
+    {
+        return $message->status === MessageStatus::Sent
+            && $message->sent_by_user_id !== null
+            && $message->sent_at?->gt(now()->subDays(2));
+    }
+
+    /** Enlace personal nuevo para quien recibe el aviso: a su cita, o a "Mi cuenta". */
+    private function linkFor(WhatsappMessage $message, ?User $by): ?string
+    {
+        if (! $message->account) {
+            return null;
+        }
+
+        return $message->appointment
+            ? $this->links->issue($message->account, MagicLinkPurpose::Appointment, $message->appointment, $by)
+            : $this->links->issue($message->account, MagicLinkPurpose::Access, null, $by);
     }
 
     public function markSent(WhatsappMessage $message, ?User $by = null, ?string $providerId = null): void

@@ -30,6 +30,7 @@ use App\Services\Clinical\OdontogramSuggestions;
 use App\Support\Phone;
 use Database\Seeders\CatalogSeeder;
 use Filament\Actions\Testing\TestAction;
+use Filament\Facades\Filament;
 use Filament\Forms\Components\Repeater;
 use Illuminate\Foundation\Testing\LazilyRefreshDatabase;
 use Illuminate\Support\Facades\Storage;
@@ -65,11 +66,19 @@ class TreatmentPlanPanelTest extends TestCase
         $this->assertSame([TreatmentPlanStatus::Draft, $doctor->id], [$plan->status, $plan->doctor_id]);
         $this->assertSame([['Curación con resina', '36', 'O', '150.00']], $plan->items->map(fn ($item) => [$item->description, $item->tooth, $item->surfaces, $item->unit_price])->all());
 
-        // Imprimirlo es entregarlo: pasa a "presentado".
+        // Abrir la hoja no es entregarla: sigue en borrador hasta que se dice que se entregó.
         $this->get(TreatmentPlansRelationManager::printUrl($plan))
             ->assertOk()
-            ->assertSee(['Plan de tratamiento y presupuesto', 'Curación con resina', 'S/ 150.00']);
+            ->assertSee(['Plan de tratamiento y presupuesto', 'Curación con resina', 'S/ 150.00', 'Ya se lo entregué al paciente']);
+        $this->assertSame(TreatmentPlanStatus::Draft, $plan->fresh()->status);
+
+        $this->post(Filament::getPanel('admin')->route('print.plan.delivered', ['plan' => $plan]))
+            ->assertRedirect(TreatmentPlansRelationManager::printUrl($plan));
         $this->assertSame(TreatmentPlanStatus::Proposed, $plan->fresh()->status);
+        $this->withSession(['planDelivered' => true])->get(TreatmentPlansRelationManager::printUrl($plan))
+            ->assertSee('Listo: quedó como presentado al paciente.')
+            ->assertDontSee('Ya se lo entregué al paciente')
+            ->assertDontSee('window.print(), 300', false);
 
         // El paciente lo acepta en dos cuotas y firma en la tablet: falta la firma, y luego queda.
         $component
@@ -129,9 +138,10 @@ class TreatmentPlanPanelTest extends TestCase
             ->call('create')
             ->assertHasNoFormErrors();
 
+        // Agendar una sesión no es aceptar el plan: sigue esperando su firma.
         $appointment = Appointment::sole();
         $this->assertTrue($appointment->planItem->is($item));
-        $this->assertSame(TreatmentPlanStatus::Accepted, $plan->fresh()->status);
+        $this->assertSame([TreatmentPlanStatus::Proposed, null], [$plan->fresh()->status, $plan->fresh()->accepted_at]);
 
         $this->travelTo('2026-11-03 10:00');
         $consultation = app(ConsultationService::class)->startFromAppointment($appointment, $doctor->user);
@@ -144,6 +154,32 @@ class TreatmentPlanPanelTest extends TestCase
 
         $this->assertSame(1, $item->fresh()->sessions_done);
         $this->assertSame(TreatmentPlanStatus::Completed, $plan->fresh()->status);
+    }
+
+    public function test_booking_a_session_accepts_the_plan_only_when_reception_says_so(): void
+    {
+        $resin = Treatment::where('slug', 'curacion-con-resina')->firstOrFail();
+        $doctor = $this->doctorOffering($resin);
+        $patient = Patient::factory()->create();
+        $plan = TreatmentPlan::create(['patient_id' => $patient->id, 'doctor_id' => $doctor->id, 'status' => TreatmentPlanStatus::Draft]);
+        $item = $plan->items()->create(['treatment_id' => $resin->id, 'description' => 'Curación con resina', 'tooth' => '36', 'unit_price' => 150]);
+        $this->actingAs(User::factory()->reception()->create());
+
+        Livewire::withQueryParams(['patient' => $patient->id, 'doctor' => $doctor->id, 'treatment' => $resin->id, 'plan_item' => $item->id])
+            ->test(CreateAppointment::class)
+            ->assertSee('El paciente ya aceptó el plan')
+            ->fillForm(['date' => '2026-11-03', 'slot' => '10:00', 'plan_accepted' => true])
+            ->call('create')
+            ->assertHasNoFormErrors();
+
+        $plan->refresh();
+        $this->assertSame(TreatmentPlanStatus::Accepted, $plan->status);
+        $this->assertNotNull($item->fresh()->accepted_at);
+
+        // Con el plan ya aceptado, ya no se pregunta.
+        Livewire::withQueryParams(['patient' => $patient->id, 'plan_item' => $item->id])
+            ->test(CreateAppointment::class)
+            ->assertDontSee('El paciente ya aceptó el plan');
     }
 
     public function test_the_doctor_adds_the_odontogram_suggestions_to_the_diagnosis_and_the_plan(): void
