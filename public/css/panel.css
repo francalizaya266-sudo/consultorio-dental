@@ -1390,3 +1390,25 @@ a.ap-visit:hover { background: var(--gray-50); }
     .tray { grid-template-columns: 1fr 1fr; gap: .5rem; }
     .tray-visit { box-shadow: 0 0 0 1px #d1d5db; padding: .625rem .75rem; }
 }
+
+/* ---------- Dinero en espera ---------- */
+
+.report-link { color: var(--primary-600); font-weight: 500; }
+.report-link:hover { text-decoration: underline; }
+.dark .report-link { color: var(--primary-400); }
+.report-muted { color: var(--gray-500); font-size: .75rem; }
+.report-tag { display: inline-block; margin-left: .375rem; padding: 0 .375rem; border-radius: .375rem; font-size: .7rem; font-weight: 600; color: var(--warning-700); background: var(--warning-50); }
+.dark .report-tag { color: var(--warning-400); background: rgb(245 158 11 / .12); }
+.report-more { display: inline-block; margin-top: .75rem; }
+/* En el celular, cada fila es una tarjeta: el paciente arriba, el monto a la derecha y el resto debajo, sin barra horizontal. */
+@media (max-width: 40rem) {
+    .report-stack thead { display: none; }
+    .report-stack tr { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: .125rem .75rem; padding: .625rem 0; border-bottom: 1px solid var(--gray-200); }
+    .dark .report-stack tr { border-color: rgb(255 255 255 / .08); }
+    .report-stack td { padding: 0 !important; border: 0 !important; white-space: normal; }
+    .report-stack td:not(.num) { grid-column: 1; }
+    .report-stack td.num { grid-column: 2; grid-row: 1; font-weight: 600; }
+    .report-stack .is-lead { order: -1; }
+    .report-stack td.empty { grid-column: 1 / -1; }
+    .report-stack tfoot tr { border-bottom: 0; }
+}
