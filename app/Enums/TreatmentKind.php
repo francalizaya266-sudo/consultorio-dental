@@ -93,6 +93,12 @@ enum TreatmentKind: string
         };
     }
 
+    /** A cuántos días se agenda la sesión siguiente: ortodoncia al mes; lo demás (endodoncia, curaciones, controles post cirugía), a la semana. */
+    public function nextSessionDays(): int
+    {
+        return $this === self::Orthodontics ? 30 : 7;
+    }
+
     /** "control de ortodoncia", para el aviso y la ficha. */
     public function checkupLabel(): string
     {

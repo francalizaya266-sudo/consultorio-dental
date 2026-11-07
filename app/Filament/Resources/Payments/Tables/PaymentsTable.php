@@ -3,6 +3,7 @@
 namespace App\Filament\Resources\Payments\Tables;
 
 use App\Enums\PaymentMethod;
+use App\Filament\Actions\RegisterPaymentAction;
 use App\Models\Doctor;
 use App\Models\Payment;
 use Filament\Actions\Action;
@@ -37,7 +38,8 @@ class PaymentsTable
                     ->searchable(query: fn (Builder $query, string $search) => $query->whereHas('patient', fn (Builder $p) => $p->search($search))),
                 TextColumn::make('treatment.name')
                     ->label('Concepto')
-                    ->description(fn (Payment $record) => $record->doctor?->name)
+                    ->state(fn (Payment $record) => (float) $record->amount < 0 ? 'Devolución' : $record->treatment?->name)
+                    ->description(fn (Payment $record) => (float) $record->amount < 0 ? $record->notes : $record->doctor?->name)
                     ->placeholder('—'),
                 TextColumn::make('method')
                     ->label('Medio')
@@ -98,6 +100,7 @@ class PaymentsTable
             ])
             ->filtersFormColumns(3)
             ->recordActions([
+                self::receiptAction(),
                 self::voidAction(),
             ])
             ->emptyStateHeading('No hay pagos en estas fechas')
@@ -113,6 +116,16 @@ class PaymentsTable
             ]);
     }
 
+    /** La constancia del pago, para imprimirla o enviarla por WhatsApp. */
+    public static function receiptAction(): Action
+    {
+        return Action::make('receipt')
+            ->label('Constancia')
+            ->icon(Heroicon::OutlinedDocumentText)
+            ->color('gray')
+            ->url(fn (Payment $record) => RegisterPaymentAction::receiptUrl($record), shouldOpenInNewTab: true);
+    }
+
     /** Anular un pago: queda registrado (no se borra) y deja de sumar. */
     public static function voidAction(): Action
     {
@@ -122,6 +135,8 @@ class PaymentsTable
             ->color('danger')
             ->visible(fn (Payment $record) => $record->voided_at === null)
             ->authorize('update')
+            // En un día cerrado se ve, apagado, con el porqué.
+            ->authorizationTooltip()
             ->modalHeading('Anular pago')
             ->modalDescription('El pago queda registrado como anulado (no se borra).')
             ->modalSubmitActionLabel('Anular')

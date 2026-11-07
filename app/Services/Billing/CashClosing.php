@@ -2,7 +2,11 @@
 
 namespace App\Services\Billing;
 
+use App\Enums\AppointmentStatus;
 use App\Enums\PaymentMethod;
+use App\Models\Appointment;
+use App\Models\DailyClosing;
+use App\Models\Patient;
 use App\Models\Payment;
 use App\Models\User;
 use App\Services\Reports\EarningsTables;
@@ -21,6 +25,9 @@ final class CashClosing
 
     /** @var Collection<int, Payment>|null */
     private ?Collection $payments = null;
+
+    /** @var Collection<int, array{patient: Patient, due: float, concepts: string}>|null */
+    private ?Collection $pending = null;
 
     public function __construct(
         public readonly CarbonImmutable $date,
@@ -83,6 +90,91 @@ final class CashClosing
     public function totalFor(PaymentMethod $method): float
     {
         return round((float) $this->payments()->where('method', $method)->sum('amount'), 2);
+    }
+
+    /**
+     * Quienes tuvieron algo cargado ese día y todavía no lo pagan, con el más grande primero. Solo cuenta lo de
+     * ese día: los pagos cubren primero lo más antiguo, así que lo que falta de ese día es lo que debe ahora
+     * menos lo que se le cargó después, hasta lo que se le cargó ese día. Una deuda vieja no infla el cierre.
+     *
+     * @return Collection<int, array{patient: Patient, due: float, concepts: string}>
+     */
+    public function pending(): Collection
+    {
+        $day = [$this->date->startOfDay(), $this->date->endOfDay()];
+
+        return $this->pending ??= Patient::query()
+            ->owing()
+            ->withBalance()
+            ->whereHas('charges', fn (Builder $charges) => $charges->valid()->whereBetween('charged_at', $day))
+            ->with(['charges' => fn ($charges) => $charges->valid()->where('charged_at', '>=', $day[0])->orderBy('charged_at')])
+            ->get()
+            ->map(function (Patient $patient) use ($day) {
+                [$thatDay, $after] = $patient->charges->partition(fn ($charge) => $charge->charged_at->lte($day[1]));
+                $later = $after->sum(fn ($charge) => $charge->net());
+
+                return [
+                    'patient' => $patient,
+                    'due' => round(min($thatDay->sum(fn ($charge) => $charge->net()), max(0, (float) $patient->balance_due - $later)), 2),
+                    'concepts' => $thatDay->pluck('description')->implode(' · '),
+                ];
+            })
+            ->filter(fn (array $line) => $line['due'] > 0)
+            ->sortByDesc('due')
+            ->values();
+    }
+
+    public function pendingTotal(): float
+    {
+        return round((float) $this->pending()->sum('due'), 2);
+    }
+
+    /** Lo que había para cobrar ese día: lo cobrado más lo que faltó. */
+    public function expected(): float
+    {
+        return round($this->total() + $this->pendingTotal(), 2);
+    }
+
+    /**
+     * Las citas de ese día que ya pasaron y siguen sin cerrar: no se sabe si vino, y si vino, no se cobró.
+     *
+     * @return Collection<int, Appointment>
+     */
+    public function unclosedAppointments(): Collection
+    {
+        return Appointment::query()
+            ->with(['patient', 'treatment'])
+            ->whereBetween('starts_at', [$this->date->startOfDay(), min($this->date->endOfDay(), now())])
+            ->whereIn('status', AppointmentStatus::open())
+            ->orderBy('starts_at')
+            ->get();
+    }
+
+    /** El cierre ya hecho de ese día, si lo hay. */
+    public function record(): ?DailyClosing
+    {
+        return DailyClosing::query()->with('closedBy')->whereDate('date', $this->date)->first();
+    }
+
+    /** El fondo con que se abre la caja: el mismo del último cierre, o nada si es el primero. */
+    public function suggestedOpeningCash(): float
+    {
+        return (float) (DailyClosing::query()->whereDate('date', '<', $this->date)->latest('date')->value('opening_cash') ?? 0);
+    }
+
+    /** Cierra el día con el efectivo contado: queda lo cobrado, lo que faltó y la diferencia. */
+    public function close(float $openingCash, float $countedCash, ?string $notes, User $by): DailyClosing
+    {
+        return DailyClosing::create([
+            'date' => $this->date->toDateString(),
+            'opening_cash' => round($openingCash, 2),
+            'expected_cash' => round($openingCash + $this->cash(), 2),
+            'counted_cash' => round($countedCash, 2),
+            'collected' => $this->total(),
+            'pending' => $this->pendingTotal(),
+            'notes' => filled($notes) ? trim($notes) : null,
+            'closed_by_user_id' => $by->getKey(),
+        ]);
     }
 
     /** "Martes 3 de noviembre de 2026 · Rosa Pérez". */
@@ -163,7 +255,7 @@ final class CashClosing
             'rows' => $payments->map(fn (Payment $payment) => [
                 $payment->paid_at->format('H:i'),
                 $payment->patient?->full_name ?? '—',
-                $payment->treatment?->name ?? 'Pago a cuenta',
+                (float) $payment->amount < 0 ? 'Devolución: '.$payment->notes : ($payment->treatment?->name ?? 'Pago a cuenta'),
                 $payment->method->getLabel(),
                 $payment->reference ?? '',
                 $payment->receivedBy?->name ?? self::NOT_RECORDED,

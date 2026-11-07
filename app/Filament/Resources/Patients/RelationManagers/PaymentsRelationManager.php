@@ -2,6 +2,7 @@
 
 namespace App\Filament\Resources\Patients\RelationManagers;
 
+use App\Filament\Actions\RefundAction;
 use App\Filament\Actions\RegisterPaymentAction;
 use App\Filament\Resources\Payments\Tables\PaymentsTable;
 use App\Models\Payment;
@@ -47,7 +48,7 @@ class PaymentsRelationManager extends RelationManager
                     ->description(fn (Payment $record) => $record->reference),
                 TextColumn::make('notes')
                     ->label('Concepto')
-                    ->state(fn (Payment $record) => $record->notes ?? $record->treatment?->name)
+                    ->state(fn (Payment $record) => ((float) $record->amount < 0 ? 'Devolución: ' : '').($record->notes ?? $record->treatment?->name))
                     ->placeholder('—')
                     ->wrap(),
                 TextColumn::make('amount')
@@ -60,9 +61,11 @@ class PaymentsRelationManager extends RelationManager
             ])
             ->defaultSort('paid_at', 'desc')
             ->headerActions([
+                RefundAction::make(fn () => $this->getOwnerRecord()),
                 RegisterPaymentAction::make(fn () => $this->getOwnerRecord()),
             ])
             ->recordActions([
+                PaymentsTable::receiptAction(),
                 PaymentsTable::voidAction(),
             ])
             ->emptyStateHeading('Sin pagos todavía');

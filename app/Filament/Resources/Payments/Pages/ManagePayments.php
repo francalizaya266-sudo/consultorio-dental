@@ -2,22 +2,19 @@
 
 namespace App\Filament\Resources\Payments\Pages;
 
+use App\Filament\Actions\RegisterPaymentAction;
 use App\Filament\Resources\Payments\PaymentResource;
-use Filament\Actions\CreateAction;
 use Filament\Resources\Pages\ManageRecords;
 
 class ManagePayments extends ManageRecords
 {
     protected static string $resource = PaymentResource::class;
 
+    /** El mismo cobro de la ficha y de "Hoy": se elige al paciente y se ve lo que debe. */
     protected function getHeaderActions(): array
     {
         return [
-            CreateAction::make()
-                ->label('Registrar pago')
-                ->modalHeading('Registrar pago')
-                ->createAnother(false)
-                ->mutateDataUsing(fn (array $data) => $data + ['received_by_user_id' => auth()->id()]),
+            RegisterPaymentAction::make(),
         ];
     }
 }

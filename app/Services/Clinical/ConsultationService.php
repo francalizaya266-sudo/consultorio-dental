@@ -121,6 +121,35 @@ final class ConsultationService
         });
     }
 
+    /**
+     * Lo que suele olvidarse al terminar: el diagnóstico, el consentimiento firmado y los avisos de la receta.
+     * No impide terminar: el doctor decide.
+     *
+     * @param  array<string, mixed>  $data  Lo que hay en pantalla (diagnoses, prescription_items).
+     * @return list<string>
+     */
+    public function closingChecks(Consultation $consultation, array $data): array
+    {
+        $appointment = $consultation->appointment;
+        $checks = [];
+
+        if (collect($data['diagnoses'] ?? [])->filter(fn ($row) => filled($row['icd10_code_id'] ?? null))->isEmpty()) {
+            $checks[] = 'Falta el diagnóstico.';
+        }
+
+        if ($appointment && app(ConsentService::class)->signedForVisit($appointment) === false) {
+            $checks[] = 'Falta firmar el consentimiento de '.mb_strtolower($appointment->treatment->name).'.';
+        }
+
+        foreach ($data['prescription_items'] ?? [] as $item) {
+            foreach (PrescriptionService::warningsFor($consultation->patient, $item['medication'] ?? null) as $warning) {
+                $checks[] = 'Receta: '.$warning;
+            }
+        }
+
+        return $checks;
+    }
+
     /** Permite corregir una atención recién cerrada; todo cambio queda en la auditoría. */
     public function reopen(Consultation $consultation, User $by): void
     {

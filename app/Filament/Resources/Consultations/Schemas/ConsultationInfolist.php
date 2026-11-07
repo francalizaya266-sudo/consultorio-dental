@@ -4,6 +4,7 @@ namespace App\Filament\Resources\Consultations\Schemas;
 
 use App\Filament\Resources\Patients\PatientResource;
 use App\Filament\Support\ClinicalAlerts;
+use App\Filament\Support\VisitCloseOut;
 use App\Livewire\OdontogramChart;
 use App\Models\Consultation;
 use App\Models\ConsultationDiagnosis;
@@ -17,6 +18,7 @@ use Filament\Infolists\Components\TextEntry;
 use Filament\Schemas\Components\Group;
 use Filament\Schemas\Components\Livewire;
 use Filament\Schemas\Components\Section;
+use Filament\Schemas\Components\View;
 use Filament\Schemas\Schema;
 
 /** Atención en modo lectura (cerrada o de otro doctor). */
@@ -28,6 +30,11 @@ class ConsultationInfolist
             ->columns(3)
             ->components([
                 Group::make(fn (Consultation $record) => array_filter([ClinicalAlerts::callout($record->patient)]))
+                    ->columnSpanFull(),
+
+                View::make('filament.consultations.close-out')
+                    ->viewData(fn (Consultation $record) => ['closeOut' => VisitCloseOut::viewData($record, auth()->user())])
+                    ->visible(fn (Consultation $record) => $record->closed_at?->isToday() ?? false)
                     ->columnSpanFull(),
 
                 Section::make('Atención')

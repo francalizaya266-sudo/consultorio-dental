@@ -208,6 +208,7 @@ class Patient extends Model
     {
         $method = $this->payments()
             ->whereNull('voided_at')
+            ->where('amount', '>', 0)
             ->latest('paid_at')
             ->limit(10)
             ->pluck('method')

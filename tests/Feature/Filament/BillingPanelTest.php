@@ -148,7 +148,7 @@ class BillingPanelTest extends TestCase
         $this->assertSame(2, Charge::count());
     }
 
-    public function test_a_payment_from_caja_keeps_the_doctor_and_treatment_of_the_visit_and_the_usual_method(): void
+    public function test_a_payment_from_caja_counts_for_the_visit_it_covers_with_the_usual_method(): void
     {
         $this->freezeMonday();
         $visit = $this->completedCleaning();
@@ -160,18 +160,14 @@ class BillingPanelTest extends TestCase
         }
         $this->actingAs(User::factory()->reception()->create());
 
+        // Se elige al paciente y el pago cuenta para la visita que cubre: la limpieza que debía.
         Livewire::test(ManagePayments::class)
-            ->mountAction('create')
-            ->fillForm(['patient_id' => $patient->id])
-            ->assertSchemaStateSet([
-                'appointment_id' => $visit->id,
-                'doctor_id' => $visit->doctor_id,
-                'treatment_id' => $visit->treatment_id,
-                'amount' => 90.0,
-                'method' => PaymentMethod::Yape,
-            ])
+            ->mountAction('registerPayment')
+            ->setActionData(['patient_id' => $patient->id])
+            ->assertActionDataSet(['amount' => 90.0, 'method' => PaymentMethod::Yape])
             ->callMountedAction()
-            ->assertHasNoFormErrors();
+            ->assertHasNoFormErrors()
+            ->assertNotified('Pago registrado');
 
         $payment = Payment::latest('id')->first();
         $this->assertSame([$visit->id, $visit->doctor_id, $visit->treatment_id, PaymentMethod::Yape], [$payment->appointment_id, $payment->doctor_id, $payment->treatment_id, $payment->method]);
@@ -191,10 +187,26 @@ class BillingPanelTest extends TestCase
         Payment::factory()->for($settled)->create(['amount' => 80]);
         $this->actingAs(User::factory()->reception()->create());
 
+        $owesMore = Patient::factory()->create();
+        Charge::factory()->for($owesMore)->create(['amount' => 400]);
+
+        // Primero quien más debe, con el total arriba; se cobra desde la misma lista.
         Livewire::test(ListPatients::class, ['activeTab' => 'owing'])
-            ->assertCanSeeTableRecords([$owes])
+            ->assertCanSeeTableRecords([$owesMore, $owes], inOrder: true)
             ->assertCanNotSeeTableRecords([$settled])
-            ->assertSee('Debe S/ 150.00');
+            ->assertSee(['Debe S/ 150.00', 'Por cobrar: S/ 550.00 entre 2 pacientes'])
+            ->assertTableColumnHidden('next_appointment_at')
+            ->callAction(TestAction::make('collect')->table($owes), ['method' => PaymentMethod::Cash->value])
+            ->assertHasNoActionErrors()
+            ->assertNotified('Pago registrado');
+
+        $this->assertSame(0.0, $owes->balance());
+
+        // En la lista de todos solo se ve el saldo: cobrar es desde los saldos pendientes o la ficha.
+        Livewire::test(ListPatients::class)
+            ->assertSee('Debe S/ 400.00')
+            ->assertTableColumnVisible('next_appointment_at')
+            ->assertActionHidden(TestAction::make('collect')->table($owesMore));
 
         $this->actingAs($this->doctorOffering(Treatment::factory()->create())->user);
 

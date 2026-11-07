@@ -15,6 +15,7 @@ use App\Models\TreatmentPlanItem;
 use App\Services\Billing\BillingService;
 use App\Services\Clinical\ConsentService;
 use App\Services\Clinical\TreatmentPlanService;
+use Carbon\CarbonImmutable;
 use Carbon\CarbonInterface;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
@@ -275,6 +276,50 @@ class PatientInsights
         ])->filter()->implode(' ');
 
         return ['weekday' => $weekday, 'period' => $period, 'label' => $label];
+    }
+
+    /** Su próxima cita ya agendada, si tiene. */
+    public function upcomingVisit(Patient $patient): ?Appointment
+    {
+        return $patient->appointments()
+            ->with('treatment')
+            ->where('starts_at', '>=', now())
+            ->whereIn('status', AppointmentStatus::changeable())
+            ->orderBy('starts_at')
+            ->first();
+    }
+
+    /**
+     * La sesión que sigue de su plan y cuándo agendarla: ortodoncia al mes, lo demás a la semana, corrida al día
+     * en que suele venir. Null si su plan no tiene nada pendiente por agendar.
+     *
+     * @return array{item: TreatmentPlanItem, label: string, on: CarbonImmutable, why: string}|null
+     */
+    public function suggestedNextVisit(Patient $patient): ?array
+    {
+        $item = $this->plans->nextToSchedule($patient);
+
+        if (! $item) {
+            return null;
+        }
+
+        $item->loadMissing('treatment');
+        $days = TreatmentKind::for($item->treatment)->nextSessionDays();
+        $on = CarbonImmutable::today()->addDays($days);
+        $usual = $this->usualVisit($patient);
+
+        while ($usual && $usual['weekday'] !== null && $on->dayOfWeek !== $usual['weekday']) {
+            $on = $on->addDay();
+        }
+
+        $sessions = max(1, (int) $item->sessions_planned);
+
+        return [
+            'item' => $item,
+            'label' => $item->label().($sessions > 1 ? ' · sesión '.min($item->sessions_done + 1, $sessions).' de '.$sessions : ''),
+            'on' => $on,
+            'why' => ($days === 30 ? 'Al mes' : 'A la semana').($usual ? ' · '.mb_strtolower(mb_substr($usual['label'], 0, 1)).mb_substr($usual['label'], 1) : ''),
+        ];
     }
 
     /**

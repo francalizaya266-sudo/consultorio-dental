@@ -101,7 +101,7 @@ class PatientsAndSetupPanelTest extends TestCase
         $this->actingAs($reception);
 
         Livewire::test(ManagePayments::class)
-            ->callAction('create', [
+            ->callAction('registerPayment', [
                 'patient_id' => $patient->id,
                 'amount' => '150',
                 'method' => PaymentMethod::Yape->value,

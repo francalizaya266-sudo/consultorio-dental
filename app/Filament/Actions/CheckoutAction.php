@@ -45,7 +45,7 @@ final class CheckoutAction
             ->authorize(fn () => self::user()->can('create', Charge::class))
             ->modalHeading(fn (Appointment $record) => 'Cobrar a '.$record->patient->full_name)
             ->modalDescription(fn (Appointment $record) => $record->starts_at->translatedFormat('l j \d\e F').' · '.$record->treatment->name.' · '.$record->doctor->name)
-            ->modalSubmitAction(fn (Action $action) => $action->label('Guardar cobro')->color('primary'))
+            ->modalSubmitAction(fn (Action $action) => $action->label('Registrar pago')->color('primary'))
             ->modalWidth('3xl')
             ->fillForm(function (Appointment $record) {
                 $billing = app(BillingService::class);
@@ -71,6 +71,7 @@ final class CheckoutAction
                     'amount' => $balance > 0 ? $balance : null,
                     'method' => $record->patient->usualPaymentMethod()->value,
                     'upcoming' => self::upcomingInstallment($record),
+                    'paid_at' => now()->toDateTimeString(),
                 ];
             })
             ->schema([
@@ -124,22 +125,31 @@ final class CheckoutAction
                     ->color('warning')
                     ->visible(fn (Get $get) => filled($get('upcoming'))),
                 ...PaymentFields::make(amountRequired: false),
+                // Se paga hoy: si la caja de hoy ya se cerró, el pago espera a que la administradora la reabra.
+                Hidden::make('paid_at')
+                    ->dehydrated(false)
+                    ->rule(fn () => RegisterPaymentAction::openDay(), fn (Get $get) => (float) $get('amount') > 0),
             ])
             ->action(function (array $data, Appointment $record) {
                 $billing = app(BillingService::class);
                 $user = self::user();
 
-                DB::transaction(function () use ($billing, $data, $record, $user) {
+                $payment = DB::transaction(function () use ($billing, $data, $record, $user) {
                     $billing->reviseCharges($record, array_values($data['lines'] ?? []), $user);
 
-                    if ((float) ($data['amount'] ?? 0) > 0) {
-                        $billing->registerPayment($record->patient, $data, $user, $record);
-                    }
+                    return (float) ($data['amount'] ?? 0) > 0 ? $billing->registerPayment($record->patient, $data, $user, $record) : null;
                 });
 
+                if ($payment) {
+                    RegisterPaymentAction::notifyRegistered($payment);
+
+                    return;
+                }
+
+                // Sin pago: solo se corrigió lo de la cita.
                 Notification::make()
                     ->success()
-                    ->title((float) ($data['amount'] ?? 0) > 0 ? 'Pago registrado' : 'Cobro guardado')
+                    ->title('Cobro guardado')
                     ->body('Saldo del paciente: '.Money::balance($record->patient->balance()))
                     ->send();
             });

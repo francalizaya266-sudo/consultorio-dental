@@ -24,6 +24,7 @@ enum MessageTemplateKey: string implements HasLabel
     case PlanNextSession = 'plan_next_session';
     case CheckupRecall = 'checkup_recall';
     case Birthday = 'birthday';
+    case PaymentReceipt = 'payment_receipt';
 
     public function getLabel(): string
     {
@@ -45,6 +46,7 @@ enum MessageTemplateKey: string implements HasLabel
             self::PlanNextSession => 'Plan sin próxima cita',
             self::CheckupRecall => 'Llamado a control',
             self::Birthday => 'Saludo de cumpleaños',
+            self::PaymentReceipt => 'Constancia de pago',
         };
     }
 
@@ -69,6 +71,7 @@ enum MessageTemplateKey: string implements HasLabel
             self::PlanNextSession => "Hola {nombre}, te escribimos de {consultorio}.\nEn tu tratamiento queda pendiente: {pendiente}.\n\n¿Te reservamos tu próxima cita? Respóndenos con el día y la hora que te acomodan.",
             self::CheckupRecall => "Hola {nombre}, te escribimos de {consultorio}.\nYa es momento de tu {control}. ¿Te reservamos una cita? Respóndenos con el día y la hora que te acomodan.",
             self::Birthday => '¡Feliz cumpleaños, {nombre}! 🎂 Todo el equipo de {consultorio} te desea un gran día.',
+            self::PaymentReceipt => "Hola {nombre}, te escribimos de {consultorio}.\nRecibimos tu pago de {monto} ({medio}) el {fecha}. Constancia {numero}:\n{detalle}\n\nSaldo: {saldo}. ¡Gracias!",
         };
     }
 }

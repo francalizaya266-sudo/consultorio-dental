@@ -7,7 +7,6 @@ use App\Enums\VisitType;
 use App\Exceptions\ClinicalException;
 use App\Filament\Actions\EditMedicalBackgroundAction;
 use App\Filament\Actions\SignConsentAction;
-use App\Filament\Resources\Appointments\AppointmentResource;
 use App\Filament\Resources\Consultations\ConsultationResource;
 use App\Filament\Resources\Consultations\Schemas\ConsultationForm;
 use App\Filament\Resources\Consultations\Schemas\SuppliesUsedField;
@@ -29,6 +28,7 @@ use Filament\Support\Icons\Heroicon;
 use Illuminate\Contracts\Support\Htmlable;
 use Illuminate\Http\Exceptions\HttpResponseException;
 use Illuminate\Support\Arr;
+use Illuminate\Support\HtmlString;
 use Illuminate\Validation\ValidationException;
 use Livewire\Attributes\Locked;
 use Livewire\Attributes\On;
@@ -274,9 +274,7 @@ class EditConsultation extends EditRecord
             // Sin inventario es solo una confirmación; con inventario, además, lo que sale de él.
             ->requiresConfirmation(fn () => ! self::tracksInventory())
             ->modalHeading('¿Terminar la atención?')
-            ->modalDescription(fn () => ConsultationForm::chargePreview($this->getConsultation(), $this->data['treatments'] ?? [], $this->data['planItems'] ?? [], $this->data['prices'] ?? []).' '.(self::tracksInventory()
-                ? 'Se guarda lo escrito, la cita queda como atendida y estos materiales salen del inventario. Borra lo que no usaste y agrega lo que usaste de más. Si algo quedó mal, puedes reabrirla durante 24 horas.'
-                : 'Se guarda lo escrito y la cita queda como atendida. Si algo quedó mal, puedes reabrirla durante 24 horas.'))
+            ->modalDescription(fn () => $this->closeDescription())
             ->modalWidth(fn () => self::tracksInventory() ? Width::ThreeExtraLarge : null)
             ->modalSubmitActionLabel('Sí, terminar')
             ->fillForm(fn () => self::tracksInventory()
@@ -301,25 +299,25 @@ class EditConsultation extends EditRecord
                     return;
                 }
 
-                $next = app(TreatmentPlanService::class)->nextToSchedule($consultation->patient);
-
-                Notification::make()
-                    ->success()
-                    ->title('Atención terminada')
-                    ->body($next
-                        ? 'Sigue '.$next->label().' de su plan. Prográmala ahora para que se lleve la fecha.'
-                        : '¿El paciente necesita otra cita? Prográmala ahora para que se lleve la fecha.')
-                    ->actions([
-                        Action::make('book')
-                            ->label('Programar próxima cita')
-                            ->button()
-                            ->url(AppointmentResource::nextVisitUrl($consultation->patient, $consultation->doctor_id)),
-                    ])
-                    ->persistent()
-                    ->send();
+                // Arriba de la atención terminada queda lo que sigue: cobrar y agendar la próxima sesión.
+                Notification::make()->success()->title('Atención terminada')->send();
 
                 $this->redirect(ConsultationResource::getUrl('view', ['record' => $consultation]));
             });
+    }
+
+    /** Lo que se cargará, lo que pasa al terminar y, si algo falta, la lista para revisarlo antes. */
+    private function closeDescription(): HtmlString
+    {
+        $consultation = $this->getConsultation();
+        $preview = ConsultationForm::chargePreview($consultation, $this->data['treatments'] ?? [], $this->data['planItems'] ?? [], $this->data['prices'] ?? []).' '.(self::tracksInventory()
+            ? 'Se guarda lo escrito, la cita queda como atendida y estos materiales salen del inventario. Borra lo que no usaste y agrega lo que usaste de más. Si algo quedó mal, puedes reabrirla durante 24 horas.'
+            : 'Se guarda lo escrito y la cita queda como atendida. Si algo quedó mal, puedes reabrirla durante 24 horas.');
+        $checks = app(ConsultationService::class)->closingChecks($consultation, $this->data);
+
+        return new HtmlString('<p>'.e($preview).'</p>'.($checks === [] ? '' : '<div class="close-checks"><strong>Revisa antes de terminar</strong><ul>'
+            .collect($checks)->map(fn (string $check) => '<li>'.e($check).'</li>')->implode('')
+            .'</ul></div>'));
     }
 
     /** Suma al formulario el texto de una plantilla (sin borrar lo escrito). */

@@ -14,6 +14,7 @@ use App\Models\Patient;
 use App\Models\User;
 use App\Services\Clinical\TreatmentPlanService;
 use BackedEnum;
+use Carbon\CarbonInterface;
 use Filament\Resources\Resource;
 use Filament\Schemas\Schema;
 use Filament\Support\Icons\Heroicon;
@@ -68,7 +69,7 @@ class AppointmentResource extends Resource
      * La próxima cita del paciente, ya con la siguiente sesión pendiente de su plan y su tratamiento: así
      * nace como sesión del plan, y al atenderla se cobra al precio acordado y el plan avanza.
      */
-    public static function nextVisitUrl(Patient $patient, ?int $doctorId): string
+    public static function nextVisitUrl(Patient $patient, ?int $doctorId, ?CarbonInterface $date = null): string
     {
         $next = app(TreatmentPlanService::class)->nextToSchedule($patient);
 
@@ -77,6 +78,7 @@ class AppointmentResource extends Resource
             'doctor' => $next?->plan->doctor_id ?? $doctorId,
             'plan_item' => $next?->getKey(),
             'treatment' => $next?->treatment_id,
+            'date' => $date?->toDateString(),
         ]));
     }
 
