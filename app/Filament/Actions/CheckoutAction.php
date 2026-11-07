@@ -9,6 +9,7 @@ use App\Models\Charge;
 use App\Models\Payment;
 use App\Models\User;
 use App\Services\Billing\BillingService;
+use App\Services\Patients\PatientInsights;
 use App\Support\Money;
 use Closure;
 use Filament\Actions\Action;
@@ -69,11 +70,13 @@ final class CheckoutAction
                     'previous' => $previous,
                     'amount' => $balance > 0 ? $balance : null,
                     'method' => $record->patient->usualPaymentMethod()->value,
+                    'upcoming' => self::upcomingInstallment($record),
                 ];
             })
             ->schema([
                 Hidden::make('previous'),
                 Hidden::make('previous_items'),
+                Hidden::make('upcoming'),
                 Repeater::make('lines')
                     ->label('Lo de esta cita')
                     ->table([
@@ -117,6 +120,9 @@ final class CheckoutAction
                 Text::make(fn (Get $get) => self::summary($get))
                     ->size(TextSize::Large)
                     ->weight(FontWeight::Bold),
+                Text::make(fn (Get $get) => $get('upcoming'))
+                    ->color('warning')
+                    ->visible(fn (Get $get) => filled($get('upcoming'))),
                 ...PaymentFields::make(amountRequired: false),
             ])
             ->action(function (array $data, Appointment $record) {
@@ -165,6 +171,14 @@ final class CheckoutAction
             $previous < 0 => 'Tenía a favor '.Money::format(-$previous).' · Total a pagar '.Money::format(max(0, $total)),
             default => 'Total a pagar '.Money::format(max(0, $total)),
         };
+    }
+
+    /** Si una cuota de su plan vence en los próximos días: puede aprovechar y pagarla hoy. */
+    private static function upcomingInstallment(Appointment $record): ?string
+    {
+        $next = app(PatientInsights::class)->upcomingInstallment($record->patient, today()->addDays(7));
+
+        return $next ? 'El '.$next['on']->translatedFormat('l j \d\e F').' vence su cuota de '.Money::format($next['due']).': si quiere, la puede pagar hoy.' : null;
     }
 
     private static function user(): User

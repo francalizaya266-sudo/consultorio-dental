@@ -8,9 +8,11 @@ use App\Filament\Resources\Appointments\AppointmentResource;
 use App\Filament\Resources\Consultations\ConsultationResource;
 use App\Filament\Resources\Patients\PatientResource;
 use App\Filament\Support\ClinicalAlerts;
+use App\Filament\Support\VisitFlags;
 use App\Models\Appointment;
 use App\Models\Consultation;
 use App\Models\User;
+use App\Services\Clinical\ConsentService;
 use App\Services\Dashboard\DoctorDay;
 use App\Support\Dates;
 use Filament\Actions\Action;
@@ -100,7 +102,10 @@ class NextPatient extends Widget implements HasActions, HasSchemas
             'time' => $appointment->starts_at->format('H:i'),
             'name' => $patient->full_name,
             'age' => $patient->age !== null ? $patient->age.($patient->age === 1 ? ' año' : ' años') : null,
-            'reason' => $appointment->planItem?->label() ?? $appointment->treatment->name,
+            'reason' => collect([
+                $appointment->planItem?->label() ?? $appointment->treatment->name,
+                mb_strtolower(VisitFlags::session($appointment->planItem) ?? ''),
+            ])->filter()->implode(' · '),
             'state' => match (true) {
                 $waiting !== null => 'En sala hace '.Dates::duration($waiting),
                 $late !== null => 'Va '.Dates::duration($late).' tarde',
@@ -115,6 +120,8 @@ class NextPatient extends Widget implements HasActions, HasSchemas
             },
             'hasBackground' => $patient->medicalBackground !== null,
             'alerts' => ClinicalAlerts::for($patient),
+            // Si el tratamiento pide consentimiento y aún no lo firmó, se firma antes de empezar.
+            'consentMissing' => app(ConsentService::class)->signedForVisit($appointment) === false,
             'last' => $last ? $last->treatment->name.' · '.$last->starts_at->translatedFormat('j M Y') : null,
             'notes' => $appointment->patient_note,
             'historyUrl' => PatientResource::getUrl('clinical', ['record' => $patient]),

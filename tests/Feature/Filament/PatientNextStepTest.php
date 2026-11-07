@@ -6,18 +6,25 @@ use App\Enums\AppointmentStatus;
 use App\Enums\MessageTemplateKey;
 use App\Enums\PaymentMethod;
 use App\Enums\PlanPaymentMode;
+use App\Enums\RequestedBy;
+use App\Enums\RescheduleRequestStatus;
 use App\Enums\TreatmentPlanStatus;
+use App\Filament\Pages\Agenda;
 use App\Filament\Resources\Appointments\AppointmentResource;
 use App\Filament\Resources\Appointments\Pages\ViewAppointment;
 use App\Filament\Resources\Consultations\ConsultationResource;
+use App\Filament\Resources\Consultations\Pages\EditConsultation;
 use App\Filament\Resources\Patients\Pages\ViewPatient;
 use App\Filament\Resources\Patients\PatientResource;
 use App\Filament\Support\PatientSummary;
+use App\Filament\Widgets\NextPatient;
+use App\Filament\Widgets\TodayAppointments;
 use App\Models\Account;
 use App\Models\Appointment;
 use App\Models\ConsentTemplate;
 use App\Models\Consultation;
 use App\Models\Doctor;
+use App\Models\MedicalBackground;
 use App\Models\Patient;
 use App\Models\Payment;
 use App\Models\Treatment;
@@ -27,6 +34,7 @@ use App\Services\Billing\BillingService;
 use App\Services\Dashboard\FollowUps;
 use App\Services\Patients\PatientInsights;
 use App\Services\WhatsApp\WhatsAppOutbox;
+use Filament\Actions\Testing\TestAction;
 use Illuminate\Foundation\Testing\LazilyRefreshDatabase;
 use Livewire\Livewire;
 use Tests\Concerns\CreatesAgenda;
@@ -171,7 +179,9 @@ class PatientNextStepTest extends TestCase
 
         $insights = app(PatientInsights::class);
         $this->assertSame(250.0, $insights->lateInstallments($patient)['due']);
-        $this->assertSame(['due' => 250.0, 'on' => '2026-11-05'], ['due' => $insights->installmentDueBy($patient, today()->addWeek())['due'], 'on' => $insights->installmentDueBy($patient, today()->addWeek())['on']->toDateString()]);
+        $upcoming = $insights->upcomingInstallment($patient, today()->addWeek());
+        $this->assertSame([250.0, '2026-11-05'], [$upcoming['due'], $upcoming['on']->toDateString()]);
+        $this->assertNull($insights->upcomingInstallment($patient, today()->addDays(2)));
 
         Payment::factory()->for($patient)->create(['method' => PaymentMethod::Plin, 'amount' => 10]);
         $this->actingAs(User::factory()->reception()->create());
@@ -204,5 +214,76 @@ class PatientNextStepTest extends TestCase
             ->assertSee('Presupuesto sin respuesta')
             ->call('mountAction', 'followUp', ['template' => 'plan_follow_up'])
             ->assertSchemaStateSet(fn (array $state) => $this->assertStringContainsString('¿Pudiste revisar tu plan de tratamiento con '.$doctor->name.'?', $state['body']) ?? []);
+    }
+
+    public function test_the_day_lists_warn_about_alerts_reschedules_no_shows_and_the_plan_session(): void
+    {
+        $this->freezeMonday();
+        $endo = Treatment::factory()->create(['name' => 'Endodoncia']);
+        $doctor = $this->doctorOffering($endo);
+        $patient = Patient::factory()->create(['first_name' => 'Rosa']);
+        MedicalBackground::create(['patient_id' => $patient->id, 'allergies' => 'Penicilina']);
+        $plan = TreatmentPlan::create(['patient_id' => $patient->id, 'doctor_id' => $doctor->id, 'title' => 'Plan', 'status' => TreatmentPlanStatus::InProgress, 'accepted_at' => now()->subWeek()]);
+        $item = $plan->items()->create(['treatment_id' => $endo->id, 'description' => 'Endodoncia', 'tooth' => '46', 'unit_price' => 400, 'sessions_planned' => 3, 'sessions_done' => 1, 'accepted_at' => now()->subWeek()]);
+        foreach (['2026-10-12 10:00', '2026-10-19 10:00'] as $when) {
+            Appointment::factory()->for($doctor)->for($endo)->for($patient)->at($when)->create(['status' => AppointmentStatus::NoShow]);
+        }
+        $today = Appointment::factory()->for($doctor)->for($endo)->for($patient)->at('2026-11-02 10:00')->confirmed()->create(['treatment_plan_item_id' => $item->id]);
+        $today->rescheduleRequests()->create(['requested_by' => RequestedBy::Patient, 'status' => RescheduleRequestStatus::Pending]);
+
+        // Recepción: pidió cambio, suele faltar y qué sesión es; la alergia es del doctor.
+        $this->actingAs(User::factory()->reception()->create());
+        Livewire::test(TodayAppointments::class)
+            ->assertTableColumnStateSet('flags', ['Pidió cambio', 'Faltó 2 de 2', 'Sesión 2 de 3'], $today);
+        Livewire::test(Agenda::class)
+            ->assertSee(['Pidió cambio', 'Faltó 2 de 2', 'Endodoncia · sesión 2 de 3'])
+            ->assertDontSee('Alerta médica');
+
+        $this->actingAs($doctor->user);
+        Livewire::test(Agenda::class)
+            ->assertSee(['Alerta médica', 'title="Alergia: Penicilina"'], escape: false);
+        Livewire::test(NextPatient::class)
+            ->assertSee('Endodoncia · pieza 46 · sesión 2 de 3');
+    }
+
+    public function test_attending_shows_the_last_blood_pressure_and_what_follows_in_the_plan(): void
+    {
+        $this->freezeMonday();
+        $endo = Treatment::factory()->create(['name' => 'Endodoncia']);
+        $doctor = $this->doctorOffering($endo);
+        $patient = Patient::factory()->create();
+        Consultation::factory()->for($patient)->for($doctor)->create(['attended_at' => '2026-10-12 10:00', 'closed_at' => '2026-10-12 10:40', 'vital_signs' => ['blood_pressure' => '140/90']]);
+        $plan = TreatmentPlan::create(['patient_id' => $patient->id, 'doctor_id' => $doctor->id, 'title' => 'Plan', 'status' => TreatmentPlanStatus::InProgress, 'accepted_at' => now()->subWeek()]);
+        $endodontics = $plan->items()->create(['treatment_id' => $endo->id, 'description' => 'Endodoncia', 'tooth' => '46', 'unit_price' => 400, 'sessions_planned' => 2, 'accepted_at' => now()->subWeek(), 'sort_order' => 1]);
+        $plan->items()->create(['description' => 'Corona de porcelana', 'tooth' => '46', 'unit_price' => 900, 'accepted_at' => now()->subWeek(), 'sort_order' => 2]);
+        $visit = Appointment::factory()->for($doctor)->for($endo)->for($patient)->at('2026-11-02 10:00')->create(['status' => AppointmentStatus::InProgress, 'treatment_plan_item_id' => $endodontics->id]);
+        $consultation = Consultation::factory()->for($patient)->for($doctor)->create(['appointment_id' => $visit->id, 'vital_signs' => null]);
+        $consultation->planItems()->attach($endodontics);
+
+        $this->actingAs($doctor->user);
+
+        // Hoy va la primera de dos sesiones: lo que sigue es la segunda.
+        Livewire::test(EditConsultation::class, ['record' => $consultation->getRouteKey()])
+            ->assertSee(['La última: 140/90 el 12 oct. 2026', 'Sigue en su plan: Endodoncia · pieza 46 · sesión 2 de 2']);
+
+        $endodontics->update(['sessions_done' => 1]);
+        $this->assertSame('Corona de porcelana', app(PatientInsights::class)->planAfter($consultation)['item']->description);
+    }
+
+    public function test_checkout_mentions_the_installment_due_in_the_next_days(): void
+    {
+        $this->freezeMonday();
+        $cleaning = Treatment::factory()->create(['name' => 'Limpieza dental', 'price_from' => 120]);
+        $doctor = $this->doctorOffering($cleaning);
+        $patient = Patient::factory()->create();
+        $appointment = Appointment::factory()->for($doctor)->for($cleaning)->for($patient)->at('2026-11-02 07:00')->create(['status' => AppointmentStatus::Completed]);
+        $plan = TreatmentPlan::create(['patient_id' => $patient->id, 'doctor_id' => $doctor->id, 'title' => 'Ortodoncia', 'status' => TreatmentPlanStatus::InProgress, 'payment_mode' => PlanPaymentMode::Installments, 'accepted_at' => now()->subMonth()]);
+        $plan->installments()->create(['number' => 1, 'due_on' => '2026-11-05', 'amount' => 250]);
+        $this->actingAs($reception = User::factory()->reception()->create());
+        app(BillingService::class)->chargeAppointment($appointment, $reception);
+
+        Livewire::test(TodayAppointments::class)
+            ->mountAction(TestAction::make('checkout')->table($appointment))
+            ->assertSchemaStateSet(['upcoming' => 'El jueves 5 de noviembre vence su cuota de S/ 250.00: si quiere, la puede pagar hoy.']);
     }
 }

@@ -243,12 +243,16 @@
 :is(.agenda-appt, .agenda-item) .tag-owes { color: var(--warning-800); --t-ring: color-mix(in oklab, var(--warning-500) 40%, transparent); }
 :is(.agenda-appt, .agenda-item) .tag-note { color: var(--gray-700); --t-ring: color-mix(in oklab, var(--gray-500) 25%, transparent); }
 :is(.agenda-appt, .agenda-item) .tag-unclosed { background: var(--danger-600); color: #fff; box-shadow: none; }
+:is(.agenda-appt, .agenda-item) .tag-alert { color: var(--danger-700); --t-ring: color-mix(in oklab, var(--danger-500) 30%, transparent); cursor: help; }
+:is(.agenda-appt, .agenda-item) :is(.tag-change, .tag-missed) { color: var(--warning-800); --t-ring: color-mix(in oklab, var(--warning-500) 40%, transparent); }
 .dark :is(.agenda-appt, .agenda-item) .tag { background: rgb(0 0 0 / .3); }
 .dark :is(.agenda-appt, .agenda-item) .tag-call { color: var(--danger-300); }
 .dark :is(.agenda-appt, .agenda-item) .tag-new { color: var(--info-300); }
 .dark :is(.agenda-appt, .agenda-item) .tag-owes { color: var(--warning-300); }
 .dark :is(.agenda-appt, .agenda-item) .tag-note { color: var(--gray-300); }
 .dark :is(.agenda-appt, .agenda-item) .tag-unclosed { background: var(--danger-600); color: #fff; }
+.dark :is(.agenda-appt, .agenda-item) .tag-alert { color: var(--danger-300); }
+.dark :is(.agenda-appt, .agenda-item) :is(.tag-change, .tag-missed) { color: var(--warning-300); }
 /* En una columna angosta (la semana) las etiquetas no entran junto al nombre: el nombre queda entero
    y lo que pide algo (sin cerrar, llamar) se ve como un punto rojo en la esquina. */
 @container (max-width: 12rem) {

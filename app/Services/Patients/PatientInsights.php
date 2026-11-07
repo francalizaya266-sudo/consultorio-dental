@@ -79,6 +79,51 @@ class PatientInsights
         return $this->hasUpcomingVisit($patient) ? null : $this->plans->nextToSchedule($patient);
     }
 
+    /**
+     * Lo que sigue de su plan aceptado después de esta atención: otra sesión de lo que se está trabajando, si
+     * lleva varias, o el siguiente procedimiento pendiente.
+     *
+     * @return array{item: TreatmentPlanItem, session: int}|null
+     */
+    public function planAfter(Consultation $consultation): ?array
+    {
+        $working = $consultation->planItems()->pluck('treatment_plan_items.id')->all();
+
+        $item = TreatmentPlanItem::query()
+            ->with('plan')
+            ->whereHas('plan', fn ($plans) => $plans->whereIn('status', TreatmentPlan::ACCEPTED_STATUSES)->where('patient_id', $consultation->patient_id))
+            ->whereIn('status', TreatmentPlanItem::OPEN_STATUSES)
+            ->orderBy('treatment_plan_id')
+            ->orderBy('sort_order')
+            ->get()
+            ->first(fn (TreatmentPlanItem $item) => ! in_array($item->getKey(), $working, true) || $item->sessions_done + 1 < $item->sessions_planned);
+
+        if (! $item) {
+            return null;
+        }
+
+        // Si se trabaja hoy, lo que sigue es la sesión después de esta.
+        return ['item' => $item, 'session' => min($item->sessions_done + (in_array($item->getKey(), $working, true) ? 2 : 1), max(1, $item->sessions_planned))];
+    }
+
+    /**
+     * La última presión arterial que se le tomó en otra atención, para compararla.
+     *
+     * @return array{value: string, on: CarbonInterface}|null
+     */
+    public function lastBloodPressure(Consultation $consultation): ?array
+    {
+        $previous = $consultation->patient->consultations()
+            ->whereKeyNot($consultation->getKey())
+            ->whereNotNull('vital_signs')
+            ->latest('attended_at')
+            ->limit(20)
+            ->get(['id', 'attended_at', 'vital_signs'])
+            ->first(fn (Consultation $previous) => filled($previous->vital_signs['blood_pressure'] ?? null));
+
+        return $previous ? ['value' => $previous->vital_signs['blood_pressure'], 'on' => $previous->attended_at] : null;
+    }
+
     /** El presupuesto que se le presentó hace una semana o más y no respondió. */
     public function planAwaitingAnswer(Patient $patient): ?TreatmentPlan
     {
@@ -124,14 +169,14 @@ class PatientInsights
     }
 
     /**
-     * La próxima cuota por pagar que vence hasta esa fecha (hoy o en los próximos días).
+     * La próxima cuota que vence de aquí a esa fecha (todavía no entra al saldo), para avisar al cobrar.
      *
      * @return array{due: float, on: CarbonInterface}|null
      */
-    public function installmentDueBy(Patient $patient, CarbonInterface $until): ?array
+    public function upcomingInstallment(Patient $patient, CarbonInterface $until): ?array
     {
         $next = $this->installments($patient)
-            ->whereIn('state', ['due', 'upcoming'])
+            ->where('state', 'upcoming')
             ->filter(fn (array $row) => $row['installment']->due_on->lte($until))
             ->sortBy(fn (array $row) => $row['installment']->due_on)
             ->first();

@@ -4,12 +4,14 @@ namespace App\Filament\Resources\Appointments\Tables;
 
 use App\Enums\AppointmentStatus;
 use App\Filament\Actions\AppointmentActions;
+use App\Filament\Support\VisitFlags;
 use App\Models\Appointment;
 use App\Models\Doctor;
 use App\Models\User;
 use App\Support\Money;
 use App\Support\Phone;
 use Filament\Tables\Columns\TextColumn;
+use Filament\Tables\Contracts\HasTable;
 use Filament\Tables\Filters\Filter;
 use Filament\Tables\Filters\SelectFilter;
 use Filament\Tables\Table;
@@ -85,23 +87,28 @@ class AppointmentsTable
         ];
     }
 
-    /** Avisos de la cita: llamar, paciente nuevo, fecha fija y, si se pasa el saldo, cuánto debe. */
+    /**
+     * Avisos de la cita: llamar, paciente nuevo, fecha fija, alerta médica (para quien ve lo clínico), pidió
+     * cambio, si suele faltar, qué sesión de su plan es y, si se pasa el saldo, cuánto debe.
+     */
     public static function flagsColumn(bool $withBalance = false): TextColumn
     {
         return TextColumn::make('flags')
             ->label('')
-            ->state(fn (Appointment $record) => array_values(array_filter([
+            ->state(fn (Appointment $record, HasTable $livewire) => array_values(array_filter([
                 $record->needsCall() ? 'Llamar' : null,
+                ...VisitFlags::labels(VisitFlags::of($record, auth()->user(), $livewire->getTableRecords())),
                 $record->is_new_patient ? 'Nuevo' : null,
                 $record->fixed_date ? 'Fecha fija' : null,
                 $withBalance && (float) $record->patient->balance_due > 0 ? 'Debe '.Money::short($record->patient->balance_due) : null,
             ])))
             ->badge()
             ->color(fn (string $state) => match (true) {
-                $state === 'Llamar' => 'danger',
+                in_array($state, ['Llamar', 'Alerta médica'], true) => 'danger',
                 $state === 'Nuevo' => 'info',
-                str_starts_with($state, 'Debe') => 'warning',
+                $state === 'Pidió cambio', str_starts_with($state, 'Debe'), str_starts_with($state, 'Faltó') => 'warning',
                 default => 'gray',
-            });
+            })
+            ->tooltip(fn (Appointment $record, HasTable $livewire) => VisitFlags::of($record, auth()->user(), $livewire->getTableRecords())['alert']);
     }
 }
