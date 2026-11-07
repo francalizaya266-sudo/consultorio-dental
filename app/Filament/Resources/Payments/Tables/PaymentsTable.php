@@ -104,7 +104,7 @@ class PaymentsTable
                 self::voidAction(),
             ])
             ->emptyStateHeading('No hay pagos en estas fechas')
-            ->emptyStateDescription('Usa "Registrar pago" cuando el paciente pague en el consultorio, o mira los pagos de otros días.')
+            ->emptyStateDescription('Usa "Cobrar" cuando el paciente pague en el consultorio, o mira los pagos de otros días.')
             // Un día sin pagos no deja la pantalla en blanco: un clic quita el filtro de fecha.
             ->emptyStateActions([
                 Action::make('allDates')

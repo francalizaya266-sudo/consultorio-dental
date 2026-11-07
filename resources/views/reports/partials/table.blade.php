@@ -1,5 +1,5 @@
 @use('App\Services\Reports\EarningsTables')
-{{-- Una tabla con la forma de EarningsTables (Ganancias o el cierre de caja). La usan el panel y la hoja para imprimir, cada uno con sus estilos. $empty: el texto si no hay filas. --}}
+{{-- Una tabla con la forma de EarningsTables (Ingresos o el cierre de caja). La usan el panel y la hoja para imprimir, cada uno con sus estilos. $empty: el texto si no hay filas. --}}
 <table class="report-table">
     <thead>
         <tr>

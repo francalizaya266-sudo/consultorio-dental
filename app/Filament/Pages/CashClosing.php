@@ -29,7 +29,7 @@ class CashClosing extends BaseDashboard
 
     protected static string $routePath = 'cierre-de-caja';
 
-    protected static ?string $title = 'Cierre de caja';
+    protected static ?string $title = 'Cierre del día';
 
     protected static ?string $navigationLabel = 'Cierre del día';
 

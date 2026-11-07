@@ -45,7 +45,7 @@ final class CheckoutAction
             ->authorize(fn () => self::user()->can('create', Charge::class))
             ->modalHeading(fn (Appointment $record) => 'Cobrar a '.$record->patient->full_name)
             ->modalDescription(fn (Appointment $record) => $record->starts_at->translatedFormat('l j \d\e F').' · '.$record->treatment->name.' · '.$record->doctor->name)
-            ->modalSubmitAction(fn (Action $action) => $action->label('Registrar pago')->color('primary'))
+            ->modalSubmitAction(fn (Action $action) => $action->label('Cobrar')->color('primary'))
             ->modalWidth('3xl')
             ->fillForm(function (Appointment $record) {
                 $billing = app(BillingService::class);
@@ -163,7 +163,7 @@ final class CheckoutAction
         return round((float) $get($path.'previous') + $lines, 2);
     }
 
-    /** Al corregir un precio, "Paga ahora" se ajusta solo al nuevo total. */
+    /** Al corregir un precio, el monto se ajusta solo al nuevo total. */
     private static function refreshAmount(Get $get, Set $set, string $path = ''): void
     {
         $total = self::total($get, $path);

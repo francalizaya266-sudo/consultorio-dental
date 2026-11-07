@@ -14,6 +14,7 @@ class ManageSmileCases extends ManageRecords
     {
         return [
             CreateAction::make()
+                ->label('Nuevo caso')
                 // Queda constancia de quién confirmó la autorización y cuándo.
                 ->mutateDataUsing(fn (array $data) => $data + [
                     'consent_confirmed_at' => now(),

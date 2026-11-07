@@ -86,7 +86,7 @@ class TodayStats extends Widget
             ->count();
 
         return [
-            'label' => 'Sin confirmar',
+            'label' => 'Por confirmar',
             'value' => $count,
             'hint' => $count > 0 ? 'Hoy y mañana · reenvía el aviso o llama' : 'Hoy y mañana, todo confirmado',
             'color' => $count > 0 ? 'warning' : 'gray',

@@ -139,7 +139,7 @@ class Settings extends Page
                                 Section::make('Reportes')
                                     ->schema([
                                         Toggle::make('reports.doctors_see_own')
-                                            ->label('Cada doctor ve sus propias ganancias y gráficos')
+                                            ->label('Cada doctor ve sus propios ingresos y gráficos')
                                             ->helperText('Solo lo suyo: lo que atendió y lo que se cobró de sus citas. Recepción no ve reportes.'),
                                         TextInput::make('reports.monthly_goal')
                                             ->label('Meta de cobro del mes')

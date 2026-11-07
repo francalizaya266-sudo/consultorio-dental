@@ -5,7 +5,7 @@ namespace App\Services\Reports;
 use App\Support\Money;
 
 /**
- * Las tablas de ganancias, una sola vez: el panel, la hoja para imprimir y el Excel muestran lo mismo.
+ * Las tablas de ingresos, una sola vez: el panel, la hoja para imprimir y el Excel muestran lo mismo.
  * Cada celda guarda el valor sin formato; quien la muestra le da formato según el tipo de su columna.
  */
 final class EarningsTables

@@ -44,7 +44,7 @@ enum MessageTemplateKey: string implements HasLabel
             self::InstallmentOverdue => 'Cuota atrasada',
             self::PlanFollowUp => 'Presupuesto sin respuesta',
             self::PlanNextSession => 'Plan sin próxima cita',
-            self::CheckupRecall => 'Llamado a control',
+            self::CheckupRecall => 'Le toca control',
             self::Birthday => 'Saludo de cumpleaños',
             self::PaymentReceipt => 'Constancia de pago',
         };

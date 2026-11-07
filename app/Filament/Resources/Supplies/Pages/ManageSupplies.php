@@ -21,6 +21,9 @@ class ManageSupplies extends ManageRecords
 {
     protected static string $resource = SupplyResource::class;
 
+    /** El mismo nombre que en el menú. */
+    protected static ?string $title = 'Inventario';
+
     public function getSubheading(): ?string
     {
         return 'Cada atención descuenta lo que usa su tratamiento. Si algo baja del mínimo o está por vencer, te avisa.';

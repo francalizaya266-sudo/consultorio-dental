@@ -63,21 +63,21 @@ class DashboardPanelTest extends TestCase
 
         $this->actingAs(User::factory()->admin()->create());
         $this->assertSame([SystemHealth::class, TodayStats::class, TodayAppointments::class, MonthOverview::class, MonthTrend::class, WaitingRoom::class, FollowUpsToday::class, WeekGaps::class], $this->visibleWidgets());
-        $this->get(Dashboard::getUrl())->assertOk()->assertSee(['Lunes 2 de noviembre', 'Nueva cita', 'Registrar pago', 'Anotar en espera']);
+        $this->get(Dashboard::getUrl())->assertOk()->assertSee(['Lunes 2 de noviembre', 'Nueva cita', 'Cobrar', 'Anotar en espera']);
 
         $this->actingAs(User::factory()->reception()->create());
         $this->assertSame([TodayStats::class, TodayAppointments::class, WaitingRoom::class, FollowUpsToday::class, WeekGaps::class], $this->visibleWidgets());
         $this->get(Dashboard::getUrl())->assertOk();
         Livewire::test(TodayStats::class)
-            ->assertSeeInOrder(['Citas de hoy', 'Sin confirmar', 'Cobrado hoy', 'Horas libres'])
+            ->assertSeeInOrder(['Citas de hoy', 'Por confirmar', 'Cobrado hoy', 'Horas libres'])
             ->assertDontSee(['Solicitudes de cambio', 'Avisos por enviar']);
 
         // El doctor ve su paciente; cómo va el mes, solo si el consultorio se lo permite.
         $this->actingAs($doctor->user);
         $this->assertSame([TodayStats::class, NextPatient::class, TodayAppointments::class], $this->visibleWidgets());
-        $this->get(Dashboard::getUrl())->assertOk()->assertDontSee(['Registrar pago', 'Anotar en espera']);
+        $this->get(Dashboard::getUrl())->assertOk()->assertDontSee(['Cobrar', 'Anotar en espera']);
         Livewire::test(TodayStats::class)
-            ->assertSeeInOrder(['Citas de hoy', 'Sin confirmar', 'Solicitudes de cambio', 'Avisos por enviar'])
+            ->assertSeeInOrder(['Citas de hoy', 'Por confirmar', 'Solicitudes de cambio', 'Avisos por enviar'])
             ->assertDontSee(['Cobrado hoy', 'Horas libres']);
 
         Setting::set('reports.doctors_see_own', true);

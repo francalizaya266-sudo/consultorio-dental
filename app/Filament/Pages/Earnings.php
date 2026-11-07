@@ -12,20 +12,28 @@ use Filament\Facades\Filament;
 use Filament\Pages\Dashboard as BaseDashboard;
 use Filament\Support\Icons\Heroicon;
 
-/** Ganancias por día, doctor, tratamiento y medio de pago, para imprimir o bajar en Excel. */
+/**
+ * Ingresos por día, doctor, tratamiento y medio de pago, para imprimir o bajar en Excel. Se llaman
+ * ingresos y no ganancias porque no descuentan costos (materiales, laboratorio, sueldos).
+ */
 class Earnings extends BaseDashboard
 {
     use HasReportFilters;
 
-    protected static string $routePath = 'ganancias';
+    protected static string $routePath = 'ingresos';
 
-    protected static ?string $title = 'Ganancias';
+    protected static ?string $title = 'Ingresos';
 
     protected static ?string $navigationParentItem = 'Reportes';
 
     protected static ?int $navigationSort = 1;
 
     protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedPresentationChartLine;
+
+    public function getSubheading(): string
+    {
+        return 'Lo atendido y lo cobrado en el período, al detalle. No descuenta costos de materiales, laboratorio ni sueldos.';
+    }
 
     public function getWidgets(): array
     {

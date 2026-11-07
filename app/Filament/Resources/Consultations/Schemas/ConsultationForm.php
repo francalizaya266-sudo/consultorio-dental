@@ -276,7 +276,7 @@ class ConsultationForm
                                     ])->visible(fn (Get $get, $livewire) => blank($get('diagnosis_notes')) && ! ($livewire->showDiagnosisNotes ?? true)),
                                 ]),
 
-                            Section::make('Tratamientos y cobro')
+                            Section::make('Lo que se hizo')
                                 ->id('plan')
                                 ->key('plan')
                                 ->icon(Heroicon::OutlinedClipboardDocumentList)

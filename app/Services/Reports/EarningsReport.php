@@ -14,7 +14,7 @@ use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 
 /**
- * Ganancias de un período. Dos miradas que no siempre coinciden:
+ * Ingresos de un período. Dos miradas que no siempre coinciden:
  * - Cobrado: los pagos que entraron a caja (lo que importa para cuadrar la caja).
  * - Realizado: lo atendido, según los cargos (lo que dejó cada tratamiento y cada doctor, se haya pagado o no).
  * Nada anulado cuenta. Con $doctorId, solo lo de ese doctor.

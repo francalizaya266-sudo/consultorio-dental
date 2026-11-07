@@ -26,6 +26,7 @@ use App\Http\Controllers\Reports\CashClosingController;
 use App\Http\Controllers\Reports\EarningsExportController;
 use App\Models\Setting;
 use App\Services\Web\ClinicInfo;
+use Filament\Actions\CreateAction;
 use Filament\Http\Middleware\Authenticate;
 use Filament\Http\Middleware\AuthenticateSession;
 use Filament\Http\Middleware\DisableBladeIconComponents;
@@ -99,6 +100,14 @@ class AdminPanelProvider extends PanelProvider
             50 => $palette[50], 100 => $palette[100], 200 => $palette[200], 300 => $palette[300], 400 => $palette[500],
             500 => $palette[600], 600 => $palette[700], 700 => $palette[800], 800 => $palette[900], 900 => $palette[950], 950 => $palette[950],
         ];
+    }
+
+    /** Lo que vale para todas las pantallas: cada "Nuevo …" abre una ventana con ese mismo nombre y se guarda con "Guardar". */
+    public function boot(): void
+    {
+        CreateAction::configureUsing(fn (CreateAction $action) => $action
+            ->modalHeading(fn (CreateAction $action): string => (string) $action->getLabel())
+            ->modalSubmitActionLabel('Guardar'));
     }
 
     public function panel(Panel $panel): Panel
@@ -177,8 +186,8 @@ class AdminPanelProvider extends PanelProvider
                 Route::get('imprimir/consentimiento/{consent}', [PrintController::class, 'consent'])->name('print.consent');
                 Route::get('imprimir/historia/{patient}', [PrintController::class, 'history'])->name('print.history');
                 Route::get('archivos/{file}', [ClinicalFileController::class, 'show'])->name('clinical-files.show');
-                Route::get('reportes/ganancias/imprimir', [EarningsExportController::class, 'print'])->name('reports.earnings.print');
-                Route::get('reportes/ganancias/excel', [EarningsExportController::class, 'excel'])->name('reports.earnings.excel');
+                Route::get('reportes/ingresos/imprimir', [EarningsExportController::class, 'print'])->name('reports.earnings.print');
+                Route::get('reportes/ingresos/excel', [EarningsExportController::class, 'excel'])->name('reports.earnings.excel');
                 Route::get('caja/cierre/imprimir', [CashClosingController::class, 'print'])->name('cash-closing.print');
                 Route::get('imprimir/constancia/{payment}', [PaymentReceiptController::class, 'show'])->name('print.receipt');
                 Route::post('imprimir/constancia/{payment}/whatsapp', [PaymentReceiptController::class, 'whatsapp'])->name('print.receipt.whatsapp');

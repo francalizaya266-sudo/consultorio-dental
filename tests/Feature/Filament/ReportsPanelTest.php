@@ -171,7 +171,7 @@ class ReportsPanelTest extends TestCase
 
         $this->get($this->url('print', ['period' => 'custom', 'from' => '2026-10-01', 'to' => '2026-10-10']))
             ->assertOk()
-            ->assertSeeInOrder(['Ganancias', 'Del 1 al 10 de octubre de 2026', 'Cobrado', 'S/ 570.00', 'Por cobrar (a hoy)'])
+            ->assertSeeInOrder(['Ingresos', 'Del 1 al 10 de octubre de 2026', 'Cobrado', 'S/ 570.00', 'Por cobrar (a hoy)'])
             ->assertSeeInOrder(['Por día', 'Vie. 2 oct.', 'Lun. 5 oct.', 'Por doctor', 'Por tratamiento', 'Por medio de pago']);
     }
 
@@ -182,7 +182,7 @@ class ReportsPanelTest extends TestCase
         $response = $this->get($this->url('excel', ['period' => 'month']))
             ->assertOk()
             ->assertHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
-            ->assertHeader('Content-Disposition', 'attachment; filename="ganancias_2026-10-01_2026-10-23.xlsx"');
+            ->assertHeader('Content-Disposition', 'attachment; filename="ingresos_2026-10-01_2026-10-23.xlsx"');
 
         $path = tempnam(sys_get_temp_dir(), 'test');
         file_put_contents($path, $response->getContent());
@@ -209,7 +209,7 @@ class ReportsPanelTest extends TestCase
         $this->actingAs(User::factory()->admin()->create());
 
         Livewire::test(Settings::class)
-            ->assertSee('Cada doctor ve sus propias ganancias y gráficos')
+            ->assertSee('Cada doctor ve sus propios ingresos y gráficos')
             ->fillForm(['reports' => ['doctors_see_own' => true]])
             ->call('save')
             ->assertHasNoFormErrors();

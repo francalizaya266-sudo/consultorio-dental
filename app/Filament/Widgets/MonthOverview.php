@@ -15,7 +15,7 @@ use Filament\Widgets\StatsOverviewWidget;
 use Filament\Widgets\StatsOverviewWidget\Stat;
 
 /**
- * Cómo va el mes, sin entrar a Reportes: lo mismo que Resumen y Ganancias con el filtro "Este mes".
+ * Cómo va el mes, sin entrar a Reportes: lo mismo que Resumen e Ingresos con el filtro "Este mes".
  * Lo ve quien ve los reportes; un doctor, solo lo suyo. La meta y lo que se debe son del consultorio entero.
  */
 class MonthOverview extends StatsOverviewWidget
