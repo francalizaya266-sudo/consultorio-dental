@@ -9,6 +9,18 @@
 /* La caja de acciones de arriba de una lista, vacía hasta que se marcan filas, no deja un hueco. */
 .fi-ta-header-toolbar > .fi-ta-actions:not(:has(*)) { display: none; }
 
+/* Al tocar un botón se hunde apenas: se nota que respondió aunque la respuesta tarde. */
+@media (prefers-reduced-motion: no-preference) {
+    .fi-btn:not([disabled], .fi-disabled):active,
+    .fi-icon-btn:not([disabled], .fi-disabled):active,
+    .fi-ta-actions > .fi-link:active { transform: scale(.97); }
+}
+
+/* En el celular las pestañas bajan a otra fila en vez de quedar escondidas a la derecha. */
+@media (max-width: 40rem) {
+    .fi-tabs:not(.fi-vertical, .agenda-modes) { flex-wrap: wrap; row-gap: .25rem; }
+}
+
 /* En pantallas táctiles, los botones de cada fila se tocan con el dedo sin errar. */
 @media (pointer: coarse) {
     .fi-ta-actions { flex-wrap: wrap; gap: .5rem; }
@@ -46,7 +58,13 @@
 @media (max-width: 63.99rem) {
     .mobile-bar { position: fixed; inset: auto 0 0 0; z-index: 25; display: grid; grid-template-columns: repeat(var(--items), minmax(0, 1fr)); padding: .3rem .4rem calc(.3rem + env(safe-area-inset-bottom)); background: rgb(255 255 255 / .96); backdrop-filter: blur(8px); box-shadow: 0 -1px 0 rgb(3 7 18 / .08), 0 -4px 16px rgb(0 0 0 / .04); }
     .dark .mobile-bar { background: rgb(24 24 27 / .96); box-shadow: 0 -1px 0 rgb(255 255 255 / .08); }
-    .mobile-bar-item { display: grid; justify-items: center; gap: .15rem; min-height: 3.1rem; padding: .3rem .2rem; border-radius: .7rem; color: var(--gray-500); font-size: .68rem; font-weight: 600; text-decoration: none; -webkit-tap-highlight-color: transparent; }
+    .mobile-bar-item { display: grid; justify-items: center; align-content: start; gap: .2rem; min-height: 3.3rem; padding: .3rem .1rem; border-radius: .7rem; color: var(--gray-500); font-size: .75rem; line-height: 1rem; font-weight: 600; letter-spacing: -.01em; white-space: nowrap; text-decoration: none; -webkit-tap-highlight-color: transparent; transition: transform 160ms cubic-bezier(.23, 1, .32, 1), color 150ms ease; }
+    /* Al tocar, el botón se hunde un poco: se nota que respondió aunque la página tarde en cambiar. */
+    @media (prefers-reduced-motion: no-preference) { .mobile-bar-item:active { transform: scale(.94); } }
+    .mobile-bar-glyph { position: relative; display: grid; }
+    /* Cuántos avisos toca enviar, en ámbar como en el menú. */
+    .mobile-bar-badge { position: absolute; top: -.35rem; inset-inline-start: calc(100% - .55rem); min-width: 1.15rem; height: 1.15rem; padding: 0 .3rem; border-radius: 999px; background: var(--warning-500); color: var(--gray-950); font-size: .6875rem; line-height: 1.15rem; font-weight: 700; text-align: center; font-variant-numeric: tabular-nums; letter-spacing: 0; box-shadow: 0 0 0 2px #fff; }
+    .dark .mobile-bar-badge { background: var(--warning-400); box-shadow: 0 0 0 2px rgb(24 24 27); }
     .mobile-bar-item.is-active { color: var(--primary-600); }
     .dark .mobile-bar-item { color: var(--gray-400); }
     .dark .mobile-bar-item.is-active { color: var(--primary-400); }
@@ -633,7 +651,7 @@ button.agenda-slot:focus-visible { outline: 2px solid var(--primary-600); outlin
 
 /*
  * La hoja del odontograma es siempre blanca, como impresa, para que el rojo (por tratar) y el azul (tratado) de la
- * norma se lean igual con el modo oscuro. Lo de alrededor (filtros, buscador, ficha, lista) sigue el tema.
+ * norma se lean igual con el modo oscuro (ahí se apaga un poco). Lo de alrededor (filtros, buscador, ficha, lista) sigue el tema.
  */
 .odv {
     --odv-bad: #dc2626; --odv-good: #2563eb; --odv-today: #f59e0b;
@@ -746,6 +764,8 @@ button.agenda-slot:focus-visible { outline: 2px solid var(--primary-600); outlin
 .odv-stage { display: flex; flex-direction: column; gap: .75rem; min-width: 0; }
 .odv-sheet { position: relative; min-width: 0; padding: .375rem .5rem .75rem; border-radius: .875rem; background: #fff; box-shadow: inset 0 0 0 1px var(--gray-200); outline: 0; }
 .dark .odv-sheet { box-shadow: none; }
+/* En modo oscuro la hoja sigue siendo papel, pero un poco apagada para que no encandile; el rojo y el azul se leen igual. */
+@media screen { .dark .odv-sheet { filter: brightness(.86); } }
 .odv-sheet:focus-visible { box-shadow: inset 0 0 0 2px var(--primary-500); }
 .odv-sides { display: flex; justify-content: space-between; padding: .125rem .375rem .25rem; font-size: .6875rem; font-weight: 500; color: #94a3b8; }
 .odv-scroll { overflow-x: auto; overscroll-behavior-x: contain; scrollbar-width: thin; }

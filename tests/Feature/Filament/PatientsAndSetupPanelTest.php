@@ -4,6 +4,7 @@ namespace Tests\Feature\Filament;
 
 use App\Enums\AppointmentOrigin;
 use App\Enums\AppointmentStatus;
+use App\Enums\MessageTemplateKey;
 use App\Enums\PatientRelationship;
 use App\Enums\PaymentMethod;
 use App\Enums\SnippetStatus;
@@ -39,6 +40,7 @@ use App\Models\Setting;
 use App\Models\TextSnippet;
 use App\Models\Treatment;
 use App\Models\User;
+use App\Models\WhatsappMessage;
 use App\Services\Web\PublicImages;
 use Filament\Actions\Testing\TestAction;
 use Filament\Forms\Components\Select;
@@ -493,11 +495,21 @@ class PatientsAndSetupPanelTest extends TestCase
     {
         $doctor = $this->doctorOffering(Treatment::factory()->create());
 
-        $this->actingAs(User::factory()->reception()->create());
-        $this->get(Dashboard::getUrl())->assertOk()->assertSee('Accesos rápidos');
-        $this->assertSame(['Hoy', 'Agenda', 'Nueva cita', 'Pacientes', 'Caja'], array_column(MobileBar::items(), 'label'));
+        // Dos avisos listos para enviar; el recordatorio de mañana todavía no cuenta.
+        $patient = Patient::factory()->create();
+        foreach ([null, now()->subHour(), now()->addDay()] as $dueAt) {
+            WhatsappMessage::create(['account_id' => $patient->account_id, 'patient_id' => $patient->id, 'template_key' => MessageTemplateKey::Reminder, 'phone' => '+51987654321', 'due_at' => $dueAt]);
+        }
 
+        // Los avisos se mandan desde el celular: van en la barra con cuántos toca enviar. Caja queda en el menú.
+        $this->actingAs(User::factory()->reception()->create());
+        $this->get(Dashboard::getUrl())->assertOk()->assertSee(['Accesos rápidos', 'Avisos, 2 por enviar']);
+        $this->assertSame(['Hoy', 'Agenda', 'Nueva cita', 'Pacientes', 'Avisos'], array_column(MobileBar::items(), 'label'));
+        $this->assertSame([null, null, null, null, '2'], array_column(MobileBar::items(), 'badge'));
+
+        // El doctor ve solo los avisos de sus citas.
         $this->actingAs($doctor->user);
         $this->assertSame(['Hoy', 'Agenda', 'Nueva cita', 'Pacientes', 'Avisos'], array_column(MobileBar::items(), 'label'));
+        $this->assertNull(MobileBar::items()[4]['badge']);
     }
 }
