@@ -5,6 +5,7 @@ namespace App\Models;
 use App\Enums\PlanItemStatus;
 use App\Exceptions\ClinicalException;
 use App\Models\Concerns\Auditable;
+use App\Support\Teeth;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -85,6 +86,14 @@ class TreatmentPlanItem extends Model
     public function label(bool $withTooth = true): string
     {
         return $this->description.($withTooth && filled($this->tooth) ? ' · pieza '.$this->tooth.(filled($this->surfaces) ? " ({$this->surfaces})" : '') : '');
+    }
+
+    /** "Primer molar inferior izquierdo · caras oclusal y mesial", para el paciente. Null sin pieza reconocible. */
+    public function toothDescription(): ?string
+    {
+        $name = Teeth::nameOf($this->tooth);
+
+        return $name ? collect([$name, Teeth::surfacesText($this->surfaces)])->filter()->implode(' · ') : null;
     }
 
     public function isOpen(): bool

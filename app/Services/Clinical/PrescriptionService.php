@@ -108,7 +108,30 @@ final class PrescriptionService
             return ['items' => [], 'held' => []];
         }
 
-        [$held, $items] = collect($this->fromTemplate($template))
+        return $this->screen($this->fromTemplate($template), $patient);
+    }
+
+    /**
+     * Los medicamentos de una receta anterior, para repetirla. Igual que con la plantilla, lo que hoy ya no le
+     * conviene (una alergia o un embarazo registrados después) no se copia solo: queda en "held" con el motivo.
+     *
+     * @return array{items: list<array{medication: string, instructions: string|null}>, held: list<string>}
+     */
+    public function fromPrescriptionFor(Prescription $prescription, Patient $patient): array
+    {
+        return $this->screen(
+            $prescription->items->map(fn (PrescriptionItem $item) => ['medication' => $item->medication, 'instructions' => $this->instructionsOf($item)])->all(),
+            $patient,
+        );
+    }
+
+    /**
+     * @param  list<array{medication: string, instructions: string|null}>  $items
+     * @return array{items: list<array{medication: string, instructions: string|null}>, held: list<string>}
+     */
+    private function screen(array $items, Patient $patient): array
+    {
+        [$held, $items] = collect($items)
             ->partition(fn (array $item) => self::warningsFor($patient, $item['medication']) !== []);
 
         return [

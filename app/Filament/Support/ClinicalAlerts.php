@@ -96,7 +96,8 @@ final class ClinicalAlerts
     }
 
     /** "Ninguna", "no", "niega" no cuentan como alerta. */
-    private static function meaningful(?string $text): bool
+    /** Lo escrito dice algo: "Ninguna", "No refiere" o "-" no cuentan. */
+    public static function meaningful(?string $text): bool
     {
         $text = Str::of((string) $text)->trim()->lower()->ascii()->toString();
 

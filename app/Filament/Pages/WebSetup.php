@@ -5,12 +5,14 @@ namespace App\Filament\Pages;
 use App\Filament\Forms\WebPhotoUpload;
 use App\Filament\Pages\Concerns\EditsSettings;
 use App\Services\Web\PublicImages;
+use App\Services\Web\SetupChecklist;
 use BackedEnum;
 use Filament\Forms\Components\FileUpload;
 use Filament\Forms\Components\Textarea;
 use Filament\Forms\Components\TextInput;
 use Filament\Pages\Page;
 use Filament\Schemas\Components\Section;
+use Filament\Schemas\Components\View;
 use Filament\Schemas\Schema;
 use Filament\Support\Icons\Heroicon;
 
@@ -33,6 +35,24 @@ class WebSetup extends Page
     protected static ?int $navigationSort = 0;
 
     protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedAdjustmentsHorizontal;
+
+    /** Cuántas cosas faltan para que la web dé confianza: se ve en el menú sin tener que entrar. */
+    public static function getNavigationBadge(): ?string
+    {
+        $missing = count(app(SetupChecklist::class)->missing());
+
+        return $missing > 0 ? (string) $missing : null;
+    }
+
+    public static function getNavigationBadgeColor(): string
+    {
+        return 'warning';
+    }
+
+    public static function getNavigationBadgeTooltip(): ?string
+    {
+        return 'Lo que falta configurar para la web';
+    }
 
     public function getSubheading(): string
     {
@@ -67,7 +87,12 @@ class WebSetup extends Page
     {
         return $schema
             ->components([
+                // Lo que falta para que la web dé confianza, cada cosa con su enlace. Desaparece cuando está todo.
+                View::make('filament.pages.setup-checklist')
+                    ->viewData(fn () => ['items' => app(SetupChecklist::class)->items()])
+                    ->visible(fn () => app(SetupChecklist::class)->missing() !== []),
                 Section::make('Inicio')
+                    ->id('inicio')
                     ->columns(2)
                     ->schema([
                         TextInput::make('web.headline')
@@ -104,12 +129,14 @@ class WebSetup extends Page
                             ->columnSpanFull(),
                     ]),
                 Section::make('Opiniones en Google')
+                    ->id('opiniones')
                     ->description('Las estrellas salen en el inicio, con enlace a las opiniones.')
                     ->columns(2)
                     ->schema([
                         TextInput::make('clinic.reviews_url')
                             ->label('Enlace a sus opiniones en Google')
                             ->url()
+                            ->helperText('También va en el WhatsApp con que recepción pide su opinión a los pacientes que vienen seguido y están al día. Sin enlace, no se pide.')
                             ->columnSpanFull(),
                         TextInput::make('clinic.google_rating')
                             ->label('Puntaje en Google')
@@ -128,6 +155,7 @@ class WebSetup extends Page
                             ->suffix('opiniones'),
                     ]),
                 Section::make('Cómo llegar y redes')
+                    ->id('como-llegar')
                     ->columns(2)
                     ->schema([
                         TextInput::make('clinic.maps_url')

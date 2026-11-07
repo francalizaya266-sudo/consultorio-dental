@@ -121,6 +121,8 @@ class BookingWizard extends Component
 
         if ($device = $this->device) {
             $this->patientId = $device->account->holder?->getKey() ?? $this->family->first()?->getKey();
+            // Desde "Te toca tu control" en el inicio: ya a nombre de quien le toca (solo si es de su familia).
+            $this->choosePatient((int) request('para'));
         }
     }
 

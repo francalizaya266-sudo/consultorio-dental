@@ -25,10 +25,30 @@
         .signed figure { margin: 0; text-align: center; min-width: 220px; }
         .signed img { display: block; max-width: 240px; max-height: 110px; margin: 0 auto -6px; }
         .signed figcaption { border-top: 1px solid var(--ink); padding-top: 4px; font-size: .85rem; }
+        .mouth { display: flex; gap: 14px; align-items: center; margin: 4px 0 14px; break-inside: avoid; }
+        .mouth .odontogram { flex: 0 1 430px; border: 1px solid var(--line); border-radius: 6px; padding: 4px; }
+        .mouth svg { display: block; width: 100%; height: auto; }
+        .mouth p { margin: 0; font-size: .82rem; color: var(--muted); }
+        .tooth-name { font-size: .78rem; color: var(--muted); }
+        .why { font-size: .8rem; color: var(--muted); }
     </style>
 
     @if ($plan->title)
         <div class="plan-title">{{ $plan->title }}</div>
+    @endif
+
+    {{-- El odontograma en chico: lo rojo es lo que el plan va a tratar. --}}
+    @if ($odontogram)
+        <div class="mouth">
+            <div class="odontogram">
+                <x-odontogram-drawing :odontogram="$odontogram" :rows="$rows" :teeth="$teeth" :spans="$spans" />
+            </div>
+            <p>Su odontograma del {{ $odontogram->created_at->format('d/m/Y') }}.<br>En rojo, lo que hay que tratar; en azul, lo que ya está tratado o sano.</p>
+        </div>
+    @endif
+
+    @if ($items->count() > 1)
+        <p class="muted" style="margin: 0 0 6px">Los procedimientos van en el orden en que se harán.</p>
     @endif
 
     <table>
@@ -49,6 +69,9 @@
                     <td>{{ $loop->iteration }}</td>
                     <td>
                         {{ $item->description }}
+                        @if ($why = $diagnoses[(string) $item->tooth] ?? [])
+                            <div class="why">Por: {{ \Illuminate\Support\Arr::join($why, ', ', ' y ') }}</div>
+                        @endif
                         @if ($item->sessions_planned > 1 || $item->package)
                             <div class="muted">{{ collect([$item->sessions_planned > 1 ? $item->sessions_planned.' sesiones' : null, $item->package ? 'Paquete '.$item->package->name : null])->filter()->implode(' · ') }}</div>
                         @endif
@@ -56,7 +79,12 @@
                             <div class="tag">Agregado: falta la firma del paciente</div>
                         @endif
                     </td>
-                    <td>{{ collect([$item->tooth, $item->surfaces])->filter()->implode(' ') ?: '—' }}</td>
+                    <td>
+                        {{ collect([$item->tooth, $item->surfaces])->filter()->implode(' ') ?: '—' }}
+                        @if ($toothName = $item->toothDescription())
+                            <div class="tooth-name">{{ $toothName }}</div>
+                        @endif
+                    </td>
                     <td class="num">{{ $item->quantity }}</td>
                     <td class="num">{{ Money::format($item->unit_price) }}</td>
                     <td class="num">{{ (float) $item->discount > 0 ? '− '.Money::format($item->discount) : '—' }}</td>
@@ -133,7 +161,7 @@
         @if ($plan->accepted_at)
             Precio acordado el {{ $plan->accepted_at->format('d/m/Y') }}: no cambia aunque suba el precio de lista. Lo que se agregue después se firma aparte.
         @else
-            Presupuesto referencial. Si durante el tratamiento cambia el diagnóstico, se informará al paciente antes de continuar.
+            Presupuesto referencial{{ $validUntil ? ', válido hasta el '.$validUntil->translatedFormat('j \d\e F \d\e Y') : '' }}. Si durante el tratamiento cambia el diagnóstico, se informará al paciente antes de continuar.
         @endif
     </p>
 

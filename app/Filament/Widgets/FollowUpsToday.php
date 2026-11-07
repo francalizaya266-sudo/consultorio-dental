@@ -5,6 +5,7 @@ namespace App\Filament\Widgets;
 use App\Enums\MessageTemplateKey;
 use App\Enums\RescheduleRequestStatus;
 use App\Filament\Actions\SendWhatsAppAction;
+use App\Filament\Pages\TomorrowTray;
 use App\Filament\Resources\Appointments\AppointmentResource;
 use App\Filament\Resources\Installments\InstallmentResource;
 use App\Filament\Resources\Patients\PatientResource;
@@ -18,6 +19,8 @@ use App\Models\TreatmentPlan;
 use App\Models\TreatmentPlanItem;
 use App\Models\User;
 use App\Services\Dashboard\FollowUps;
+use App\Services\Inventory\SupplyForecast;
+use App\Services\Inventory\Tray;
 use App\Support\Money;
 use Carbon\CarbonImmutable;
 use Filament\Actions\Action;
@@ -84,9 +87,12 @@ class FollowUpsToday extends Widget implements HasActions, HasSchemas
             $this->unscheduled($followUps),
             $this->installments($followUps),
             $this->suppliesToReorder(),
+            $this->suppliesRunningLow(),
+            $this->tomorrowTray(),
             $this->batchesExpiring(),
             $this->checkups($followUps),
             $this->birthdays($followUps),
+            $this->reviews($followUps),
         ], fn (?array $section) => $section !== null && $section['count'] > 0))];
     }
 
@@ -246,6 +252,58 @@ class FollowUpsToday extends Widget implements HasActions, HasSchemas
     }
 
     /**
+     * Materiales que todavía alcanzan, pero que con las citas de las próximas dos semanas se acaban o bajan del
+     * mínimo: se piden antes de que falten.
+     *
+     * @return array<string, mixed>|null
+     */
+    private function suppliesRunningLow(): ?array
+    {
+        if (! auth()->user()->can('viewAny', Supply::class)) {
+            return null;
+        }
+
+        $lines = app(SupplyForecast::class)->runningLow();
+
+        return [
+            'key' => 'supplies-soon',
+            'title' => 'Materiales que se acaban pronto',
+            'hint' => 'Con las citas de las próximas '.intdiv(SupplyForecast::HORIZON_DAYS, 7).' semanas',
+            'count' => $lines->count(),
+            'url' => SupplyResource::getUrl('index', ['tab' => 'soon']),
+            'summary' => self::firstNames($lines->map(fn (array $line) => $line['supply']->name.' ('.($line['runs_out_on'] ? 'se acaba ~'.$line['runs_out_on']->format('d/m') : 'baja del mínimo el '.$line['below_min_on']->format('d/m')).')')).'. Pídelos antes de que falten.',
+            'template' => null,
+            'rows' => [],
+        ];
+    }
+
+    /**
+     * La bandeja de mañana: cuántas citas llevan materiales y si a alguna no le alcanza. Se prepara la víspera.
+     *
+     * @return array<string, mixed>|null
+     */
+    private function tomorrowTray(): ?array
+    {
+        if (! TomorrowTray::canAccess()) {
+            return null;
+        }
+
+        $visits = collect(app(Tray::class)->for(today()->addDay()))->filter(fn (array $visit) => $visit['items'] !== []);
+        $short = $visits->flatMap(fn (array $visit) => array_filter($visit['items'], fn (array $item) => $item['short'] !== null))->pluck('name')->unique();
+
+        return [
+            'key' => 'tray',
+            'title' => 'Bandeja de mañana',
+            'hint' => 'Lo que se usa en cada cita, del lote que vence primero',
+            'count' => $visits->count(),
+            'url' => TomorrowTray::getUrl(),
+            'summary' => $short->isNotEmpty() ? 'No alcanza: '.self::firstNames($short).'.' : null,
+            'template' => null,
+            'rows' => [],
+        ];
+    }
+
+    /**
      * Lotes que vencen en 30 días o ya vencieron: se usan primero o se dan de baja.
      *
      * @return array<string, mixed>|null
@@ -328,6 +386,34 @@ class FollowUpsToday extends Widget implements HasActions, HasSchemas
             'rows' => $patients->map(fn (Patient $patient) => $this->row(
                 $patient,
                 'Cumple '.$patient->age.($patient->age === 1 ? ' año' : ' años'),
+                $contacted,
+            ))->all(),
+        ];
+    }
+
+    /**
+     * Al terminar la atención, a quien vino contento: viene seguido, está al día y no faltó. Es el mejor día para
+     * pedirle su opinión en Google (y a nadie más de una vez cada seis meses).
+     *
+     * @return array<string, mixed>
+     */
+    private function reviews(FollowUps $followUps): array
+    {
+        $patients = $followUps->reviewCandidates();
+        $key = MessageTemplateKey::ReviewRequest;
+        $contacted = $followUps->recentlyContacted($patients->modelKeys(), $key);
+
+        return [
+            'key' => 'reviews',
+            'title' => 'Pedir su opinión en Google',
+            'hint' => 'Atendidos hoy que vienen seguido, están al día y no faltaron',
+            'count' => $patients->count(),
+            'url' => null,
+            'summary' => null,
+            'template' => $key->value,
+            'rows' => $patients->map(fn (Patient $patient) => $this->row(
+                $patient,
+                collect(['Hoy: '.$patient->appointments->first()?->treatment->name, $patient->visits_count.' atenciones'])->implode(' · '),
                 $contacted,
             ))->all(),
         ];

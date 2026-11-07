@@ -6,6 +6,7 @@ use App\Enums\DayPeriod;
 use App\Enums\MessageStatus;
 use App\Enums\MessageTemplateKey;
 use App\Enums\WaitlistStatus;
+use App\Filament\Pages\Agenda;
 use App\Filament\Resources\Appointments\AppointmentResource;
 use App\Filament\Resources\WaitlistEntries\Pages\ManageWaitlistEntries;
 use App\Filament\Resources\WaitlistEntries\WaitlistEntryResource;
@@ -17,6 +18,7 @@ use App\Models\Treatment;
 use App\Models\User;
 use App\Models\WaitlistEntry;
 use App\Models\WhatsappMessage;
+use App\Services\Booking\WaitlistService;
 use Illuminate\Foundation\Testing\LazilyRefreshDatabase;
 use Livewire\Livewire;
 use Tests\Concerns\CreatesAgenda;
@@ -103,8 +105,6 @@ class WaitlistPanelTest extends TestCase
 
         $this->actingAs(User::factory()->reception()->create());
 
-        $this->get(WaitlistEntryResource::urlForSlot($this->doctor, now()->parse('2026-11-04 10:00')))->assertOk();
-
         Livewire::withQueryParams(['filters' => ['fits' => ['date' => '2026-11-04', 'doctor_id' => $this->doctor->id]]])
             ->test(ManageWaitlistEntries::class)
             ->assertCanSeeTableRecords([$canCome])
@@ -127,16 +127,18 @@ class WaitlistPanelTest extends TestCase
                 'doctor_id' => $this->doctor->id,
                 'date' => '2026-11-03',
                 'slot' => '15:00',
-                'body' => 'Hola Rosa, se liberó un horario para limpieza dental el martes 3 de noviembre a las 3:00 pm con Dra. Ana Torres. ¿Lo quieres? Respóndenos y te lo reservamos.',
+                'body' => 'Hola Rosa, se liberó un horario para limpieza dental el martes 3 de noviembre a las 3:00 pm con Dra. Ana Torres. Te lo guardamos hasta las 10:00 am: ¿lo quieres? Respóndenos y te lo reservamos.',
             ])
             ->setTableActionData(['slot' => '16:30'])
-            ->assertSchemaStateSet(['body' => 'Hola Rosa, se liberó un horario para limpieza dental el martes 3 de noviembre a las 4:30 pm con Dra. Ana Torres. ¿Lo quieres? Respóndenos y te lo reservamos.'])
+            ->assertSchemaStateSet(['body' => 'Hola Rosa, se liberó un horario para limpieza dental el martes 3 de noviembre a las 4:30 pm con Dra. Ana Torres. Te lo guardamos hasta las 10:00 am: ¿lo quieres? Respóndenos y te lo reservamos.'])
             ->callMountedTableAction()
             ->assertHasNoTableActionErrors();
 
         $entry->refresh();
         $this->assertSame(WaitlistStatus::Offered, $entry->status);
         $this->assertSame('2026-11-03 16:30', $entry->offered_starts_at->format('Y-m-d H:i'));
+        // Apartado dos horas, con la atención y la esterilización.
+        $this->assertSame(['2026-11-02 10:00', '2026-11-03 17:10'], [$entry->held_until->format('Y-m-d H:i'), $entry->offered_until->format('Y-m-d H:i')]);
 
         $message = WhatsappMessage::sole();
         $this->assertSame(MessageTemplateKey::WaitlistOffer, $message->template_key);
@@ -195,6 +197,52 @@ class WaitlistPanelTest extends TestCase
 
         $this->assertSame(WaitlistStatus::Removed, $entry->fresh()->status);
         $this->assertSame("Prefiere sábados\nRetirado: Se atendió en otro lado", $entry->fresh()->notes);
+    }
+
+    public function test_the_held_slot_shows_in_the_agenda_and_can_be_released(): void
+    {
+        $entry = WaitlistEntry::factory()
+            ->for(Patient::factory()->state(['first_name' => 'Rosa', 'last_name' => 'Quispe']))
+            ->for($this->treatment)
+            ->create();
+        app(WaitlistService::class)->markOffered($entry, $this->doctor, $this->treatment, now()->parse('2026-11-04 10:00'));
+        $this->actingAs(User::factory()->reception()->create());
+
+        Livewire::withQueryParams(['date' => '2026-11-04', 'mode' => 'day', 'doctor' => $this->doctor->id])
+            ->test(Agenda::class)
+            ->assertSee('Apartado para Rosa Quispe · hasta las 10:00');
+
+        Livewire::test(ManageWaitlistEntries::class)
+            ->assertSee('apartado hasta las 10:00')
+            ->callTableAction('release', $entry)
+            ->assertNotified('Horario liberado');
+
+        $this->assertNull($entry->fresh()->held_until);
+        $this->assertSame(WaitlistStatus::Offered, $entry->fresh()->status, 'Sigue en la lista, ya avisado.');
+    }
+
+    public function test_the_freed_slot_alert_opens_the_agenda_with_the_offer_ready(): void
+    {
+        $entry = WaitlistEntry::factory()
+            ->for(Patient::factory()->state(['first_name' => 'Rosa', 'last_name' => 'Quispe']))
+            ->for($this->treatment)
+            ->create();
+        $this->actingAs(User::factory()->reception()->create());
+
+        $url = WaitlistEntryResource::urlForOffer($entry, $this->doctor, now()->parse('2026-11-04 10:00'));
+        parse_str((string) parse_url($url, PHP_URL_QUERY), $query);
+        $this->get($url)->assertOk();
+
+        // La página pide abrir la ventana apenas carga (wire:init).
+        Livewire::withQueryParams($query)
+            ->test(Agenda::class)
+            ->call('mountDefaultActions')
+            ->assertSet('mountedActions.0.name', 'offer')
+            ->assertSchemaStateSet(['doctor_id' => $this->doctor->id, 'date' => '2026-11-04', 'slot' => '10:00'])
+            ->callMountedAction()
+            ->assertHasNoActionErrors();
+
+        $this->assertSame('2026-11-04 10:00', $entry->fresh()->offered_starts_at->format('Y-m-d H:i'));
     }
 
     public function test_the_week_gaps_say_how_many_on_the_waitlist_can_come_each_day(): void

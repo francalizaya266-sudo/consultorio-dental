@@ -3,11 +3,14 @@
 namespace App\Http\Controllers\Site;
 
 use App\Enums\AppointmentStatus;
+use App\Enums\PatientRelationship;
 use App\Enums\TreatmentPlanStatus;
 use App\Exceptions\BookingException;
+use App\Filament\Resources\Patients\PatientResource;
 use App\Http\Controllers\Controller;
 use App\Models\Account;
 use App\Models\Appointment;
+use App\Models\Patient;
 use App\Models\RememberedDevice;
 use App\Models\TreatmentPlan;
 use App\Models\TreatmentPlanInstallment;
@@ -17,6 +20,8 @@ use App\Services\Billing\BillingService;
 use App\Services\Booking\AppointmentService;
 use App\Services\Booking\PatientChangePolicy;
 use App\Services\Clinical\TreatmentPlanService;
+use App\Services\StaffAlerts;
+use App\Services\Web\ReturningPatient;
 use App\Support\Phone;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -122,6 +127,35 @@ class AccountController extends Controller
         }
 
         return back()->with('status', 'La cita fue cancelada.');
+    }
+
+    /**
+     * "Pedir mi próxima sesión" desde la portada: quien está en tratamiento no reserva solo (su doctor programa las
+     * sesiones), así que recepción recibe el pedido con su nombre y le escribe con el horario. Uno cada 12 horas.
+     */
+    public function requestSession(Request $request, Patient $patient, ReturningPatient $returning, StaffAlerts $alerts): RedirectResponse
+    {
+        $device = $this->device($request);
+        abort_unless($device->account_id === $patient->account_id, 403);
+
+        $row = $returning->for($device->account)['sessions']->firstWhere('patient.id', $patient->getKey());
+
+        if ($row === null) {
+            return back();
+        }
+
+        $key = ReturningPatient::sessionRequestKey($patient);
+
+        if (! RateLimiter::tooManyAttempts($key, 1)) {
+            RateLimiter::hit($key, 12 * 3600);
+            $alerts->toReception(
+                'Pide su próxima sesión',
+                "{$patient->full_name} quiere agendar su próxima sesión (lleva {$row['done']} de {$row['total']}".($row['doctor'] ? ", con {$row['doctor']}" : '').'). Escríbele con el horario.',
+                link: ['label' => 'Ver paciente', 'url' => PatientResource::getUrl('view', ['record' => $patient])],
+            );
+        }
+
+        return back()->with('status', 'Listo: recepción ya sabe que '.($patient->relationship === PatientRelationship::Self ? 'quieres tu' : "{$patient->first_name} quiere su").' próxima sesión. Te escribiremos por WhatsApp con el horario.');
     }
 
     public function change(Request $request, Appointment $appointment): View

@@ -7,6 +7,7 @@ use App\Enums\PlanItemStatus;
 use App\Enums\PlanPaymentMode;
 use App\Enums\TreatmentPlanStatus;
 use App\Models\Concerns\Auditable;
+use Carbon\CarbonInterface;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Attributes\Scope;
 use Illuminate\Database\Eloquent\Builder;
@@ -139,6 +140,35 @@ class TreatmentPlan extends Model
     public function isOpen(): bool
     {
         return in_array($this->status, self::OPEN_STATUSES, true);
+    }
+
+    /**
+     * Hasta cuándo vale el precio de un presupuesto que todavía no se acepta: los días de Ajustes desde que se
+     * presentó (o desde hoy, si aún es borrador). Null una vez aceptado o cerrado: su precio ya quedó.
+     */
+    public function validUntil(): ?CarbonInterface
+    {
+        if (! in_array($this->status, [TreatmentPlanStatus::Draft, TreatmentPlanStatus::Proposed], true)) {
+            return null;
+        }
+
+        return ($this->proposed_at ?? now())->copy()->addDays((int) Setting::get('plans.valid_days', 30))->startOfDay();
+    }
+
+    /**
+     * Los diagnósticos de la atención donde se armó el plan, por pieza: lo que justifica cada procedimiento.
+     *
+     * @return array<string, list<string>> Pieza => diagnósticos
+     */
+    public function diagnosesByTooth(): array
+    {
+        $this->loadMissing('consultation.diagnoses.icd10Code');
+
+        return ($this->consultation?->diagnoses ?? collect())
+            ->filter(fn (ConsultationDiagnosis $diagnosis) => filled($diagnosis->tooth))
+            ->groupBy(fn (ConsultationDiagnosis $diagnosis) => (string) $diagnosis->tooth)
+            ->map(fn ($diagnoses) => $diagnoses->map(fn (ConsultationDiagnosis $diagnosis) => $diagnosis->icd10Code?->description ?? $diagnosis->description)->filter()->unique()->values()->all())
+            ->all();
     }
 
     /** Total del presupuesto sin los procedimientos cancelados. */

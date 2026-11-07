@@ -2,6 +2,7 @@
 
 namespace App\Exceptions;
 
+use App\Models\WaitlistEntry;
 use RuntimeException;
 
 /** Error de reserva con un mensaje en español simple, listo para mostrar al usuario. */
@@ -16,6 +17,12 @@ class BookingException extends RuntimeException
     public static function overlaps(): self
     {
         return new self('Ese horario se cruza con otra cita o con un bloqueo de la agenda. Elige otro.');
+    }
+
+    /** Para el personal: el horario está apartado para alguien de la lista de espera mientras responde. */
+    public static function held(WaitlistEntry $hold): self
+    {
+        return new self("Ese horario está apartado para {$hold->patient->full_name} (lista de espera) hasta las {$hold->held_until->format('H:i')}, mientras responde. Si ya no lo quiere, libéralo en la lista de espera.");
     }
 
     public static function outsideWorkingHours(): self

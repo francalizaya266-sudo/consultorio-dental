@@ -17,6 +17,7 @@ use App\Filament\Resources\Consultations\Pages\EditConsultation;
 use App\Filament\Resources\Patients\PatientResource;
 use App\Filament\Resources\Patients\Schemas\TreatmentPlanForm;
 use App\Filament\Support\ClinicalAlerts;
+use App\Filament\Support\Notify;
 use App\Livewire\OdontogramChart;
 use App\Models\Campaign;
 use App\Models\Consultation;
@@ -40,6 +41,7 @@ use App\Services\Clinical\TreatmentRisks;
 use App\Services\Patients\PatientInsights;
 use App\Support\CampaignText;
 use App\Support\Money;
+use Carbon\CarbonInterface;
 use Closure;
 use Filament\Actions\Action;
 use Filament\Forms\Components\CheckboxList;
@@ -449,6 +451,7 @@ class ConsultationForm
                                     $snippet->recordUse(auth()->user());
                                     self::notifyWarnings($livewire->getRecord()->patient, $item['medication']);
                                 }))
+                            ->prepend(self::repeatPrescriptionAction($record))
                             ->all())
                             ->visible(fn (?Consultation $record) => ! $record?->patient->isChild()),
                     ]),
@@ -569,6 +572,30 @@ class ConsultationForm
     }
 
     /**
+     * "Repetir la del 12/10": vuelve a poner los medicamentos de su última receta, menos los que hoy ya no le
+     * convienen. Se ve mientras falte en la receta de hoy alguno que sí se puede repetir.
+     */
+    private static function repeatPrescriptionAction(?Consultation $record): Action
+    {
+        $last = $record ? app(PatientInsights::class)->lastPrescription($record) : null;
+        $medications = $last?->items->pluck('medication') ?? collect();
+        $repeatable = $last ? app(PrescriptionService::class)->fromPrescriptionFor($last, $record->patient) : ['items' => [], 'held' => []];
+
+        return Action::make('repeatPrescription')
+            ->label($last ? Str::limit('Repetir la del '.$last->issued_at->format('d/m').': '.$medications->implode(', '), 70) : 'Repetir la receta anterior')
+            ->tooltip($medications->implode(' · '))
+            ->icon(Heroicon::OutlinedArrowPath)
+            ->size('sm')
+            ->color('gray')
+            ->outlined()
+            ->visible(fn (Get $get) => PrescriptionService::merge($get('prescription_items') ?? [], $repeatable['items']) !== ($get('prescription_items') ?? []))
+            ->action(function (Get $get, Set $set) use ($repeatable) {
+                $set('prescription_items', PrescriptionService::merge($get('prescription_items') ?? [], $repeatable['items']));
+                Notify::heldMedications($repeatable['held'], 'La receta anterior');
+            });
+    }
+
+    /**
      * Jarabes para niños, con la dosis calculada por su peso.
      *
      * @return list<Action>
@@ -610,7 +637,10 @@ class ConsultationForm
             return [];
         }
 
-        return collect($record->procedureKind()->detailFields())
+        $fields = $record->procedureKind()->detailFields();
+        $last = app(PatientInsights::class)->lastDetails($record, collect($fields)->pluck('remember')->filter()->unique()->values()->all());
+
+        return collect($fields)
             ->map(fn (array $field, string $key) => match ($field['type']) {
                 'toggle' => Toggle::make("procedure_details.{$key}")
                     ->label($field['label'])
@@ -623,13 +653,45 @@ class ConsultationForm
                     ->numeric()
                     ->minValue(0)
                     ->suffix($field['suffix'] ?? null),
-                default => TextInput::make("procedure_details.{$key}")
-                    ->label($field['label'])
-                    ->placeholder($field['placeholder'] ?? null)
-                    ->maxLength(120),
+                default => self::rememberLast(
+                    TextInput::make("procedure_details.{$key}")
+                        ->label($field['label'])
+                        ->placeholder($field['placeholder'] ?? null)
+                        ->maxLength(120),
+                    $key,
+                    isset($field['remember']) ? ($last[$field['remember']] ?? null) : null,
+                    renamed: ($field['remember'] ?? $key) !== $key,
+                ),
             })
             ->values()
             ->all();
+    }
+
+    /**
+     * Lo de la última vez debajo del campo, con "Usar" para copiarlo: "La última: A2 · pieza 36 · 12 oct. 2026".
+     *
+     * @param  array{value: string, tooth: string|null, on: CarbonInterface}|null  $last
+     * @param  bool  $renamed  Viene de otro dato (el color inicial de un blanqueamiento sale del color final del anterior).
+     */
+    private static function rememberLast(TextInput $input, string $key, ?array $last, bool $renamed = false): TextInput
+    {
+        if (! $last) {
+            return $input;
+        }
+
+        $hint = collect([
+            ($renamed ? 'La última vez terminó en ' : 'La última: ').$last['value'],
+            $key !== 'tooth' && $last['tooth'] ? 'pieza '.$last['tooth'] : null,
+            $last['on']->translatedFormat('j M Y'),
+        ])->filter()->implode(' · ');
+
+        return $input
+            ->helperText($hint)
+            ->hintAction(Action::make('useLast'.Str::studly($key))
+                ->label('Usar')
+                ->link()
+                ->visible(fn (Get $get) => blank($get("procedure_details.{$key}")))
+                ->action(fn (Set $set) => $set("procedure_details.{$key}", $last['value'])));
     }
 
     /** @param  list<string>  $items */

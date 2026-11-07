@@ -2,6 +2,7 @@
 
 namespace App\Providers;
 
+use App\Services\Inventory\SupplyForecast;
 use App\Services\Web\ClinicInfo;
 use Carbon\Carbon;
 use Carbon\CarbonImmutable;
@@ -19,6 +20,7 @@ class AppServiceProvider extends ServiceProvider
     {
         // Una vez por petición: el horario se arma con los horarios de los doctores.
         $this->app->scoped(ClinicInfo::class);
+        $this->app->scoped(SupplyForecast::class);
     }
 
     /**

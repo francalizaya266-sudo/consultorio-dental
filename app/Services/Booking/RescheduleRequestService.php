@@ -62,7 +62,7 @@ class RescheduleRequestService
         $buffer = $treatment->bufferMinutes();
 
         foreach ($proposedStarts as $start) {
-            if (! $this->availability->isFree($doctor, $start, $duration, $buffer, $appointment->getKey())) {
+            if (! $this->availability->forPatient($appointment->patient_id)->isFree($doctor, $start, $duration, $buffer, $appointment->getKey())) {
                 throw BookingException::slotTaken();
             }
         }

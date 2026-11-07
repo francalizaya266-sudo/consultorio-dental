@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use App\Models\Concerns\Auditable;
+use App\Services\Agenda\LearnedDurations;
 use Database\Factories\DoctorFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Attributes\Scope;
@@ -37,7 +38,7 @@ class Doctor extends Model
 
     public function treatments(): BelongsToMany
     {
-        return $this->belongsToMany(Treatment::class, 'doctor_treatment')->withPivot('duration_minutes')->withTimestamps();
+        return $this->belongsToMany(Treatment::class, 'doctor_treatment')->withPivot('duration_minutes', 'learned_minutes', 'learned_samples')->withTimestamps();
     }
 
     public function schedules(): HasMany
@@ -63,14 +64,21 @@ class Doctor extends Model
                 ->contains(fn (string $model) => $model::query()->where('doctor_id', $this->getKey())->exists());
     }
 
-    /** Duración del tratamiento para este doctor (o la general del tratamiento). */
+    /**
+     * Duración del tratamiento para este doctor: la propia puesta a mano; si no, lo que realmente suele tardar
+     * (cuando se nota la diferencia); si no, la general del tratamiento.
+     */
     public function durationFor(Treatment $treatment): int
     {
-        $custom = $this->treatments()
-            ->whereKey($treatment->getKey())
-            ->first()?->pivot?->duration_minutes;
+        $pivot = $this->treatments()->whereKey($treatment->getKey())->first()?->pivot;
 
-        return (int) ($custom ?? $treatment->duration_minutes);
+        if ($pivot?->duration_minutes) {
+            return (int) $pivot->duration_minutes;
+        }
+
+        $learned = $pivot?->learned_minutes !== null ? (int) $pivot->learned_minutes : null;
+
+        return LearnedDurations::applies($learned, (int) $treatment->duration_minutes) ? $learned : (int) $treatment->duration_minutes;
     }
 
     /** Con un solo doctor activo, la columna, el filtro y las tablas "por doctor" sobran. */

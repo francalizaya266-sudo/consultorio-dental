@@ -120,6 +120,40 @@ class ClinicalFilesAndConsentsTest extends TestCase
         $this->assertSame('Consentimiento informado general', $consents->templateFor(Treatment::factory()->create())->name);
     }
 
+    public function test_the_consent_adds_the_risks_of_this_patient_for_this_treatment(): void
+    {
+        $doctor = $this->doctorOffering(Treatment::factory()->create());
+        $patient = Patient::factory()->create(['first_name' => 'Rosa', 'last_name' => 'Huamán']);
+        $patient->medicalBackground()->create(['conditions' => ['osteoporosis_meds'], 'medications' => 'Warfarina 5 mg', 'allergies' => 'Látex', 'smoker' => false]);
+        $consents = app(ConsentService::class);
+        $extraction = Treatment::where('slug', 'extraccion-simple')->firstOrFail();
+        $signer = $consents->defaultSigner($patient);
+
+        $body = $consents->sign($patient, $consents->templateFor($extraction), $extraction, $signer, $this->signature(), $doctor->user)->body_snapshot;
+
+        // Van antes de la fecha, en palabras de quien firma.
+        $this->assertStringContainsString(implode("\n", [
+            'Por los antecedentes del paciente, se me explicó además que:',
+            '• Tiene alergia a: Látex. No se usará ningún material ni medicamento que la contenga.',
+            '• Por los anticoagulantes o el problema de coagulación, puede sangrar más durante y después del tratamiento. No debe dejar sus medicamentos sin indicación de su médico.',
+            '• Por los bifosfonatos u otros medicamentos para los huesos, existe el riesgo de que el hueso no sane después del tratamiento (osteonecrosis de los maxilares).',
+            '',
+            'Juliaca, 2 de noviembre de 2026.',
+        ]), $body);
+
+        // En una evaluación no cambia nada: el texto queda como la plantilla, sin huecos.
+        $evaluation = Treatment::factory()->create(['is_evaluation' => true]);
+        $plain = $consents->render($consents->templateFor(null)->body, $patient, $signer, null, $evaluation, now());
+        $this->assertStringNotContainsString('antecedentes del paciente', $plain);
+        $this->assertStringNotContainsString("\n\n\n", $plain);
+
+        // Si la plantilla dice dónde, van ahí. Una resina no sangra: de los anticoagulantes no se dice nada.
+        $this->assertSame(
+            "Resina de Rosa Huamán.\nPor los antecedentes del paciente, se me explicó además que:\n• Tiene alergia a: Látex. No se usará ningún material ni medicamento que la contenga.",
+            $consents->render("Resina de {paciente}.\n{riesgos}", $patient, $signer, null, Treatment::factory()->create(['name' => 'Curación con resina']), now()),
+        );
+    }
+
     public function test_a_bad_signature_is_rejected_and_a_revoked_consent_is_kept(): void
     {
         $doctor = $this->doctorOffering(Treatment::factory()->create());
