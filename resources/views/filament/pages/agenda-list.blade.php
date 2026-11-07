@@ -91,7 +91,7 @@
                         @break
 
                     @case('block')
-                        <li class="agenda-list-block">
+                        <li @class(['agenda-list-block', 'is-hold' => $item['hold']])>
                             <span class="agenda-list-block-time">{{ $item['time'] }}</span>
                             <span>{{ $item['label'] }}@if ($item['doctor']) · {{ $item['doctor']['name'] }}@endif</span>
                         </li>

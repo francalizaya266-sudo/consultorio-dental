@@ -64,7 +64,7 @@ enum MessageTemplateKey: string implements HasLabel
             self::AccessLink => "Hola, este es tu enlace para entrar a Mi cuenta en {consultorio}:\n{enlace}\n\nNo lo compartas con nadie.",
             self::Prescription => "Hola {nombre}, te enviamos tu receta e indicaciones de {doctor}:\n\n{receta}",
             self::TreatmentPlan => "Hola {nombre}, te enviamos tu plan de tratamiento con {doctor}:\n\n{plan}\n\nTotal: {total}\nEs un presupuesto referencial: si en el camino el tratamiento cambia, te lo explicamos antes. Cualquier duda, escríbenos.",
-            self::WaitlistOffer => 'Hola {nombre}, se liberó un horario para {tratamiento} el {fecha} a las {hora} con {doctor}. ¿Lo quieres? Respóndenos y te lo reservamos.',
+            self::WaitlistOffer => 'Hola {nombre}, se liberó un horario para {tratamiento} el {fecha} a las {hora} con {doctor}. Te lo guardamos hasta las {hasta}: ¿lo quieres? Respóndenos y te lo reservamos.',
             self::InstallmentReminder => "Hola {nombre}, te escribimos de {consultorio}.\nEl {fecha} vence tu {cuota} de {plan}: {monto}.\n\nPuedes pagarla en el consultorio con Yape, Plin, tarjeta o efectivo. Si ya la pagaste, no te preocupes.",
             self::InstallmentOverdue => "Hola {nombre}, te escribimos de {consultorio}.\nTu {cuota} de {plan} venció el {fecha} y queda {monto} por pagar.\n\nPuedes pagarla en el consultorio con Yape, Plin, tarjeta o efectivo. Si ya la pagaste, avísanos y lo revisamos.",
             self::PlanFollowUp => "Hola {nombre}, te escribimos de {consultorio}.\n¿Pudiste revisar tu plan de tratamiento con {doctor}? Si tienes dudas sobre el tratamiento o las formas de pago, escríbenos y te ayudamos.\n\nCuando quieras, te reservamos la primera cita.",

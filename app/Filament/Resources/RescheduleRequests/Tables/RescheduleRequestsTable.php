@@ -145,7 +145,7 @@ class RescheduleRequestsTable
         $appointment = $request->appointment;
         $treatment = $request->requestedTreatment ?? $appointment->treatment;
 
-        return app(AvailabilityService::class)->isFree(
+        return app(AvailabilityService::class)->forPatient($appointment->patient_id)->isFree(
             $option->doctor,
             $option->starts_at,
             (int) $option->starts_at->diffInMinutes($option->ends_at, true),

@@ -8,6 +8,7 @@ use App\Models\DoctorSchedule;
 use App\Models\ScheduleBlock;
 use App\Models\Setting;
 use App\Models\Treatment;
+use App\Models\WaitlistEntry;
 use Carbon\CarbonImmutable;
 use Carbon\CarbonInterface;
 use Illuminate\Support\Collection;
@@ -15,10 +16,23 @@ use Illuminate\Support\Collection;
 /**
  * Agenda inteligente: calcula los horarios donde cabe completa la duración
  * del tratamiento más el tiempo de esterilización, y marca primero los que
- * quedan pegados a citas existentes para no dejar huecos.
+ * quedan pegados a citas existentes para no dejar huecos. Un horario ofrecido
+ * a alguien de la lista de espera cuenta como ocupado mientras está apartado.
  */
 class AvailabilityService
 {
+    /** Paciente para quien se mira la agenda: lo que tiene apartado de la lista de espera le sirve. */
+    private ?int $holderPatientId = null;
+
+    /** La misma agenda vista para este paciente: su horario apartado no cuenta como ocupado. */
+    public function forPatient(?int $patientId): static
+    {
+        $clone = clone $this;
+        $clone->holderPatientId = $patientId;
+
+        return $clone;
+    }
+
     /**
      * @param  CarbonInterface|null  $earliest  No ofrecer horarios antes de este momento (anticipación mínima).
      * @param  int|null  $ignoreAppointmentId  Cita que se está moviendo (no cuenta como ocupada).
@@ -97,7 +111,7 @@ class AvailabilityService
         $clashesWithAppointment = $this->occupyingAppointments($doctor, $start->subDay(), $occupiedUntil, $ignoreAppointmentId)
             ->contains(fn (Appointment $a) => $a->starts_at->lt($occupiedUntil) && $a->occupied_until->gt($start));
 
-        if ($clashesWithAppointment) {
+        if ($clashesWithAppointment || $this->holdAt($doctor, $start, $durationMinutes, $bufferMinutes) !== null) {
             return false;
         }
 
@@ -111,6 +125,33 @@ class AvailabilityService
 
         return $this->workingRanges($doctor, $start)
             ->contains(fn (array $range) => $start->gte($range['start']) && $end->lte($range['end']));
+    }
+
+    /** Quién tiene apartado (por la lista de espera) un horario que se cruza con este. Null si nadie. */
+    public function holdAt(Doctor $doctor, CarbonInterface $startsAt, int $durationMinutes, int $bufferMinutes): ?WaitlistEntry
+    {
+        $start = CarbonImmutable::instance($startsAt);
+
+        return $this->holds($doctor, $start, $start->addMinutes($durationMinutes + $bufferMinutes))->first();
+    }
+
+    /**
+     * Horarios apartados para alguien de la lista de espera que caen en ese tramo (sin los del paciente
+     * para quien se mira la agenda).
+     *
+     * @return Collection<int, WaitlistEntry>
+     */
+    public function holds(Doctor $doctor, CarbonInterface $from, CarbonInterface $to): Collection
+    {
+        return WaitlistEntry::query()
+            ->holding()
+            ->where('offered_doctor_id', $doctor->getKey())
+            ->where('offered_starts_at', '<', $to)
+            ->where('offered_until', '>', $from)
+            ->when($this->holderPatientId, fn ($query, int $id) => $query->where('patient_id', '!=', $id))
+            ->with('patient')
+            ->orderBy('offered_starts_at')
+            ->get();
     }
 
     /**
@@ -143,7 +184,7 @@ class AvailabilityService
     }
 
     /**
-     * Ventanas libres del día: horario de atención menos citas y bloqueos.
+     * Ventanas libres del día: horario de atención menos citas, bloqueos y horarios apartados.
      *
      * @return list<array{start: CarbonImmutable, end: CarbonImmutable, start_is_appointment: bool, end_is_appointment: bool}>
      */
@@ -169,6 +210,11 @@ class AvailabilityService
                 'start' => CarbonImmutable::instance($b->starts_at),
                 'end' => CarbonImmutable::instance($b->ends_at),
                 'is_appointment' => false,
+            ]))
+            ->merge($this->holds($doctor, $dayStart, $dayEnd)->toBase()->map(fn (WaitlistEntry $hold) => [
+                'start' => CarbonImmutable::instance($hold->offered_starts_at),
+                'end' => CarbonImmutable::instance($hold->offered_until),
+                'is_appointment' => true,
             ]))
             ->filter(fn (array $b) => $b['end']->gt($dayStart) && $b['start']->lt($dayEnd))
             ->sortBy(fn (array $b) => $b['start']->getTimestamp())

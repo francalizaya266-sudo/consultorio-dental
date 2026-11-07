@@ -502,6 +502,7 @@ class Agenda extends Page
                     'doctor' => $doctor,
                     'time' => $wholeDay ? 'Todo el día' : self::clock($block['start']).' – '.self::clock(min($block['end'], 24 * 60 - 1)),
                     'label' => $block['label'],
+                    'hold' => $block['hold'],
                 ];
             }
 
@@ -665,15 +666,26 @@ class Agenda extends Page
                 'working' => app(AvailabilityService::class)->workingRanges($doctor, $day)
                     ->map(fn (array $r) => ['start' => $this->minuteOf($r['start']), 'end' => $this->minuteOf($r['end'])])
                     ->all(),
-                'blocks' => ScheduleBlock::query()
-                    ->affecting($doctor, $day->startOfDay(), $day->endOfDay())
-                    ->get()
-                    ->map(fn (ScheduleBlock $b) => [
-                        'start' => $b->starts_at->lt($day) ? 0 : $this->minuteOf($b->starts_at),
-                        'end' => $b->ends_at->gt($day->endOfDay()) ? 24 * 60 : $this->minuteOf($b->ends_at),
-                        'label' => $b->reason ?: $b->type->getLabel(),
-                    ])
-                    ->all(),
+                'blocks' => [
+                    ...ScheduleBlock::query()
+                        ->affecting($doctor, $day->startOfDay(), $day->endOfDay())
+                        ->get()
+                        ->map(fn (ScheduleBlock $b) => [
+                            'start' => $b->starts_at->lt($day) ? 0 : $this->minuteOf($b->starts_at),
+                            'end' => $b->ends_at->gt($day->endOfDay()) ? 24 * 60 : $this->minuteOf($b->ends_at),
+                            'label' => $b->reason ?: $b->type->getLabel(),
+                            'hold' => false,
+                        ]),
+                    // Lo ofrecido a alguien de la lista de espera queda apartado mientras responde.
+                    ...app(AvailabilityService::class)
+                        ->holds($doctor, $day->startOfDay(), $day->endOfDay())
+                        ->map(fn (WaitlistEntry $hold) => [
+                            'start' => $this->minuteOf($hold->offered_starts_at),
+                            'end' => $this->minuteOf($hold->offered_until),
+                            'label' => 'Apartado para '.$hold->patient->full_name.' · hasta las '.$hold->held_until->format('H:i'),
+                            'hold' => true,
+                        ]),
+                ],
                 'appointments' => $this->appointmentsFor($doctor, $day)->all(),
             ];
         })

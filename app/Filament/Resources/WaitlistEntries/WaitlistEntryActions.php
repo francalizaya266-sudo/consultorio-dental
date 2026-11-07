@@ -21,7 +21,7 @@ use Filament\Support\Enums\Width;
 use Filament\Support\Icons\Heroicon;
 use Livewire\Component;
 
-/** Ofrecerle un horario por WhatsApp, agendarlo cuando dice que sí, o retirarlo de la lista. */
+/** Ofrecerle un horario por WhatsApp (queda apartado mientras responde), agendarlo cuando dice que sí, liberarlo o retirarlo de la lista. */
 final class WaitlistEntryActions
 {
     /**
@@ -37,7 +37,7 @@ final class WaitlistEntryActions
             ->visible(fn (WaitlistEntry $record) => $record->isActive() && $record->patient->account !== null)
             ->authorize('update')
             ->modalHeading(fn (WaitlistEntry $record) => 'Ofrecer un horario a '.$record->patient->full_name)
-            ->modalDescription('Elige el horario. Se abrirá WhatsApp con el mensaje listo: solo presiona Enviar.')
+            ->modalDescription('Elige el horario. Se abrirá WhatsApp con el mensaje listo: solo presiona Enviar. El horario queda apartado mientras responde: no se le ofrece a nadie más ni se puede reservar en la web.')
             ->modalSubmitActionLabel('Abrir WhatsApp')
             ->modalWidth(Width::TwoExtraLarge)
             ->fillForm(function (WaitlistEntry $record, array $arguments) {
@@ -120,7 +120,7 @@ final class WaitlistEntryActions
 
                 $message->save();
                 $url = app(WhatsAppOutbox::class)->clickToChatUrl($message, auth()->user(), $data['body']);
-                $service->markOffered($record, $doctor, $startsAt);
+                $service->markOffered($record, $doctor, $treatment, $startsAt);
 
                 $livewire->js('window.open('.json_encode($url).', "_blank")');
             });
@@ -146,6 +146,26 @@ final class WaitlistEntryActions
                     'date' => ($record->offered_starts_at?->isFuture() ? $record->offered_starts_at : $record->firstDate())->toDateString(),
                     'time' => $record->offered_starts_at?->isFuture() ? $record->offered_starts_at->format('H:i') : null,
                 ])));
+    }
+
+    /** No quiere el horario ofrecido (o ya se sabe que no viene): queda libre para otro y él sigue en la lista. */
+    public static function release(): Action
+    {
+        return Action::make('release')
+            ->label('Liberar el horario')
+            ->icon(Heroicon::OutlinedLockOpen)
+            ->color('gray')
+            ->visible(fn (WaitlistEntry $record) => $record->isHolding())
+            ->authorize('update')
+            ->requiresConfirmation()
+            ->modalHeading(fn (WaitlistEntry $record) => '¿Liberar el horario apartado para '.$record->patient->first_name.'?')
+            ->modalDescription('Queda libre para ofrecérselo a otro o para la web. Sigue en la lista de espera.')
+            ->modalSubmitActionLabel('Liberar')
+            ->action(function (WaitlistEntry $record) {
+                app(WaitlistService::class)->release($record);
+
+                Notification::make()->success()->title('Horario liberado')->send();
+            });
     }
 
     public static function remove(): Action

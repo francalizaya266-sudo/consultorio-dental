@@ -5,6 +5,7 @@ namespace App\Filament\Resources\WaitlistEntries;
 use App\Enums\AppointmentStatus;
 use App\Enums\DayPeriod;
 use App\Filament\Concerns\HasSpanishLabels;
+use App\Filament\Pages\Agenda;
 use App\Filament\Resources\Appointments\Schemas\AppointmentForm;
 use App\Filament\Resources\WaitlistEntries\Pages\ManageWaitlistEntries;
 use App\Filament\Resources\WaitlistEntries\Tables\WaitlistEntriesTable;
@@ -152,11 +153,18 @@ class WaitlistEntryResource extends Resource
         ];
     }
 
-    /** La lista con quienes pueden venir ese día con ese doctor: a dónde lleva la alerta de un horario que se liberó. */
-    public static function urlForSlot(Doctor $doctor, CarbonInterface $startsAt): string
+    /**
+     * La agenda de ese día con la ventana para ofrecerle el horario ya abierta y el mensaje escrito: a dónde lleva
+     * la alerta de un horario que se liberó.
+     */
+    public static function urlForOffer(WaitlistEntry $entry, Doctor $doctor, CarbonInterface $startsAt): string
     {
-        return static::getUrl('index', [
-            'filters' => ['fits' => ['date' => $startsAt->toDateString(), 'doctor_id' => $doctor->getKey()]],
+        return Agenda::getUrl([
+            'date' => $startsAt->toDateString(),
+            'mode' => 'day',
+            'doctor' => $doctor->getKey(),
+            'action' => 'offer',
+            'actionArguments' => ['entry' => $entry->getKey(), 'doctor' => $doctor->getKey(), 'date' => $startsAt->toDateString(), 'time' => $startsAt->format('H:i')],
         ], panel: 'admin');
     }
 

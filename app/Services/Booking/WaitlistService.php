@@ -4,6 +4,7 @@ namespace App\Services\Booking;
 
 use App\Enums\MessageTemplateKey;
 use App\Enums\WaitlistStatus;
+use App\Filament\Resources\WaitlistEntries\WaitlistEntryResource;
 use App\Models\Appointment;
 use App\Models\Doctor;
 use App\Models\Treatment;
@@ -17,13 +18,17 @@ use Carbon\CarbonInterface;
 use Illuminate\Support\Collection;
 
 /**
- * Lista de espera: a quién ofrecerle un hueco, el aviso por WhatsApp con el horario y la salida de
- * la lista cuando se le agenda. Los horarios salen de la misma agenda inteligente que la web.
+ * Lista de espera: a quién ofrecerle un hueco, el aviso por WhatsApp con el horario (que queda apartado
+ * mientras responde) y la salida de la lista cuando se le agenda. Los horarios salen de la misma agenda
+ * inteligente que la web.
  */
 final class WaitlistService
 {
     /** Días hacia adelante en que se busca el primer horario que le sirva. */
     public const SEARCH_DAYS = 14;
+
+    /** Horas que el horario ofrecido queda apartado para quien lo recibió (o hasta la cita, si es antes). */
+    public const HOLD_HOURS = 2;
 
     public function __construct(
         private readonly AvailabilityService $availability,
@@ -42,7 +47,13 @@ final class WaitlistService
             ->availableOn($startsAt, $doctor->getKey())
             ->whereHas('patient')
             ->when($exceptPatientId, fn ($query, int $id) => $query->where('patient_id', '!=', $id))
-            ->with(['patient', 'treatment'])
+            // Quien ya tiene otro horario apartado está por responder; a quien se le ofreció este y no respondió, no se le insiste.
+            ->whereNotIn('id', WaitlistEntry::query()->holding()->select('id'))
+            ->where(fn ($query) => $query
+                ->whereNull('offered_starts_at')
+                ->orWhere('offered_starts_at', '!=', $startsAt)
+                ->orWhere('offered_doctor_id', '!=', $doctor->getKey()))
+            ->with(['patient.account', 'treatment'])
             ->oldest()
             ->get()
             ->filter(fn (WaitlistEntry $entry) => $entry->accepts($startsAt) && $this->fitsAt($entry, $doctor, $startsAt))
@@ -77,6 +88,7 @@ final class WaitlistService
         $day = CarbonImmutable::instance($date)->startOfDay();
 
         return $this->availability
+            ->forPatient($entry->patient_id)
             ->slotsFor($doctor, $treatment, $day, earliest: $day->isToday() ? now() : null)
             ->filter(fn (Slot $slot) => $entry->accepts($slot->startsAt))
             ->values();
@@ -132,18 +144,76 @@ final class WaitlistService
             'fecha' => $startsAt->translatedFormat('l j \d\e F'),
             'hora' => $startsAt->format('g:i a'),
             'doctor' => $doctor->name,
+            'hasta' => $this->holdEndsAt($startsAt)->format('g:i a'),
         ], $patient->getKey());
     }
 
-    /** Queda como avisado, con el horario que se le ofreció, para agendarlo si dice que sí. */
-    public function markOffered(WaitlistEntry $entry, Doctor $doctor, CarbonInterface $startsAt): void
+    /**
+     * Hasta cuándo queda apartado un horario que se ofrece ahora: unas horas, pero no tan encima de la cita que
+     * ya no dé tiempo a llegar (media hora antes). Si la cita es muy pronto, hasta que empiece.
+     */
+    public function holdEndsAt(CarbonInterface $startsAt): CarbonImmutable
     {
+        $startsAt = CarbonImmutable::instance($startsAt);
+        $end = now()->toImmutable()->addHours(self::HOLD_HOURS)->min($startsAt->subMinutes(30));
+
+        return $end->isAfter(now()) ? $end : $startsAt;
+    }
+
+    /**
+     * Queda como avisado, con el horario que se le ofreció, para agendarlo si dice que sí. El horario queda
+     * apartado un rato (ver holdEndsAt): mientras tanto no se le ofrece a otro ni lo toma la web.
+     */
+    public function markOffered(WaitlistEntry $entry, Doctor $doctor, Treatment $treatment, CarbonInterface $startsAt): void
+    {
+        $startsAt = CarbonImmutable::instance($startsAt);
+
         $entry->update([
             'status' => WaitlistStatus::Offered,
             'offered_at' => now(),
             'offered_starts_at' => $startsAt,
+            'offered_until' => $startsAt->addMinutes($doctor->durationFor($treatment) + $treatment->bufferMinutes()),
             'offered_doctor_id' => $doctor->getKey(),
+            'held_until' => $this->holdEndsAt($startsAt),
         ]);
+    }
+
+    /** Deja libre el horario apartado (no lo quiere, o no respondió a tiempo); sigue en la lista. */
+    public function release(WaitlistEntry $entry): void
+    {
+        $entry->update(['held_until' => null]);
+    }
+
+    /**
+     * Para la alerta de un horario que se liberó: quién de la lista de espera puede tomarlo (el que espera
+     * hace más tiempo) y el botón que abre la agenda con el mensaje para él ya escrito.
+     *
+     * @return array{text: string, link: array{label: string, url: string}}|null
+     */
+    public function freedSlotNotice(Doctor $doctor, CarbonInterface $startsAt, ?int $exceptPatientId = null): ?array
+    {
+        if (! $startsAt->isFuture()) {
+            return null;
+        }
+
+        $candidates = $this->candidatesFor($doctor, $startsAt, $exceptPatientId);
+        $first = $candidates->first(fn (WaitlistEntry $entry) => $entry->patient->account !== null);
+
+        if (! $first) {
+            return null;
+        }
+
+        $others = $candidates->count() - 1;
+
+        return [
+            'text' => "{$first->patient->full_name}, de la lista de espera, puede venir a esa hora"
+                .match (true) {
+                    $others === 1 => ' (y 1 persona más).',
+                    $others > 1 => " (y {$others} personas más).",
+                    default => '.',
+                },
+            'link' => ['label' => 'Ofrecérselo a '.$first->patient->first_name, 'url' => WaitlistEntryResource::urlForOffer($first, $doctor, $startsAt)],
+        ];
     }
 
     /** Ya no quiere esperar (consiguió otro horario, se atendió en otro lado...). */
@@ -180,6 +250,6 @@ final class WaitlistService
             return true;
         }
 
-        return $this->availability->isFree($doctor, $startsAt, $doctor->durationFor($entry->treatment), $entry->treatment->bufferMinutes());
+        return $this->availability->forPatient($entry->patient_id)->isFree($doctor, $startsAt, $doctor->durationFor($entry->treatment), $entry->treatment->bufferMinutes());
     }
 }

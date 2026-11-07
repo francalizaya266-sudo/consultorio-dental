@@ -226,7 +226,9 @@ final class SlotPicker
         $usualPeriod = $moving ? null : self::usualVisit($get)['period'] ?? null;
 
         // Los de la parte del día en que suele venir, primero.
+        // El horario apartado para este paciente (de la lista de espera) le sirve; el de otro, no.
         return app(AvailabilityService::class)
+            ->forPatient($moving?->patient_id ?? (filled($get('patient_id')) ? (int) $get('patient_id') : null))
             ->slotsFor($doctor, $treatment, $day, earliest: $day->isToday() ? now() : null, ignoreAppointmentId: $moving?->getKey())
             ->sortBy(fn (Slot $slot) => $usualPeriod && ! $usualPeriod->includes($slot->startsAt) ? 1 : 0)
             ->mapWithKeys(fn (Slot $slot) => [$slot->label() => $slot->label().($slot->recommended ? ' ★' : '')])
