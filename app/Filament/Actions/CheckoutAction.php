@@ -45,7 +45,7 @@ final class CheckoutAction
             ->authorize(fn () => self::user()->can('create', Charge::class))
             ->modalHeading(fn (Appointment $record) => 'Cobrar a '.$record->patient->full_name)
             ->modalDescription(fn (Appointment $record) => $record->starts_at->translatedFormat('l j \d\e F').' · '.$record->treatment->name.' · '.$record->doctor->name)
-            ->modalSubmitAction(fn (Action $action) => $action->label('Guardar cobro')->color('primary'))
+            ->modalSubmitAction(fn (Action $action) => $action->label('Registrar pago')->color('primary'))
             ->modalWidth('3xl')
             ->fillForm(function (Appointment $record) {
                 $billing = app(BillingService::class);
@@ -129,17 +129,22 @@ final class CheckoutAction
                 $billing = app(BillingService::class);
                 $user = self::user();
 
-                DB::transaction(function () use ($billing, $data, $record, $user) {
+                $payment = DB::transaction(function () use ($billing, $data, $record, $user) {
                     $billing->reviseCharges($record, array_values($data['lines'] ?? []), $user);
 
-                    if ((float) ($data['amount'] ?? 0) > 0) {
-                        $billing->registerPayment($record->patient, $data, $user, $record);
-                    }
+                    return (float) ($data['amount'] ?? 0) > 0 ? $billing->registerPayment($record->patient, $data, $user, $record) : null;
                 });
 
+                if ($payment) {
+                    RegisterPaymentAction::notifyRegistered($payment);
+
+                    return;
+                }
+
+                // Sin pago: solo se corrigió lo de la cita.
                 Notification::make()
                     ->success()
-                    ->title((float) ($data['amount'] ?? 0) > 0 ? 'Pago registrado' : 'Cobro guardado')
+                    ->title('Cobro guardado')
                     ->body('Saldo del paciente: '.Money::balance($record->patient->balance()))
                     ->send();
             });

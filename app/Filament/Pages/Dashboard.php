@@ -3,8 +3,8 @@
 namespace App\Filament\Pages;
 
 use App\Filament\Actions\CreateAppointmentAction;
+use App\Filament\Actions\RegisterPaymentAction;
 use App\Filament\Resources\Appointments\AppointmentResource;
-use App\Filament\Resources\Payments\PaymentResource;
 use App\Filament\Resources\WaitlistEntries\WaitlistEntryResource;
 use App\Filament\Widgets\FollowUpsToday;
 use App\Filament\Widgets\MonthOverview;
@@ -76,12 +76,7 @@ class Dashboard extends BaseDashboard
         return [
             CreateAppointmentAction::make('newAppointment')
                 ->visible(fn () => AppointmentResource::canCreate()),
-            Action::make('registerPayment')
-                ->label('Registrar pago')
-                ->icon(Heroicon::OutlinedBanknotes)
-                ->color('gray')
-                ->url(fn () => PaymentResource::getUrl('index', ['action' => 'create']))
-                ->visible(fn () => PaymentResource::canCreate()),
+            RegisterPaymentAction::make()->color('gray'),
             Action::make('waitlist')
                 ->label('Anotar en espera')
                 ->icon(Heroicon::OutlinedQueueList)

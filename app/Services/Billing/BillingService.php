@@ -578,17 +578,20 @@ final class BillingService
     }
 
     /**
-     * Pago recibido en el consultorio.
+     * Pago recibido en el consultorio. Si no viene de una cita, cuenta para el doctor y el tratamiento de lo
+     * más antiguo que se debía (lo primero que cubre), así los reportes lo reparten bien.
      *
      * @param  array{amount: float|string, method: PaymentMethod|string, reference?: ?string, notes?: ?string, paid_at?: mixed}  $data
      */
     public function registerPayment(Patient $patient, array $data, User $by, ?Appointment $appointment = null): Payment
     {
+        $covers = $appointment ? null : $this->unpaidCharges($patient)->first()['charge'] ?? null;
+
         return Payment::create([
             'patient_id' => $patient->getKey(),
-            'appointment_id' => $appointment?->getKey(),
-            'doctor_id' => $appointment?->doctor_id,
-            'treatment_id' => $appointment?->treatment_id,
+            'appointment_id' => $appointment?->getKey() ?? $covers?->appointment_id,
+            'doctor_id' => $appointment?->doctor_id ?? $covers?->doctor_id,
+            'treatment_id' => $appointment?->treatment_id ?? $covers?->treatment_id,
             'amount' => round((float) $data['amount'], 2),
             'method' => $data['method'],
             'reference' => filled($data['reference'] ?? null) ? trim($data['reference']) : null,

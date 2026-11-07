@@ -63,6 +63,7 @@ class PaymentsRelationManager extends RelationManager
                 RegisterPaymentAction::make(fn () => $this->getOwnerRecord()),
             ])
             ->recordActions([
+                PaymentsTable::receiptAction(),
                 PaymentsTable::voidAction(),
             ])
             ->emptyStateHeading('Sin pagos todavía');

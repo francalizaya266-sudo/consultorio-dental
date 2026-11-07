@@ -3,6 +3,7 @@
 namespace App\Filament\Resources\Payments\Tables;
 
 use App\Enums\PaymentMethod;
+use App\Filament\Actions\RegisterPaymentAction;
 use App\Models\Doctor;
 use App\Models\Payment;
 use Filament\Actions\Action;
@@ -98,6 +99,7 @@ class PaymentsTable
             ])
             ->filtersFormColumns(3)
             ->recordActions([
+                self::receiptAction(),
                 self::voidAction(),
             ])
             ->emptyStateHeading('No hay pagos en estas fechas')
@@ -111,6 +113,16 @@ class PaymentsTable
                     ->visible(fn (HasTable $livewire) => filled($livewire->getTableFilterState('paid_at')['from'] ?? null) || filled($livewire->getTableFilterState('paid_at')['until'] ?? null))
                     ->action(fn (HasTable $livewire) => $livewire->removeTableFilter('paid_at')),
             ]);
+    }
+
+    /** La constancia del pago, para imprimirla o enviarla por WhatsApp. */
+    public static function receiptAction(): Action
+    {
+        return Action::make('receipt')
+            ->label('Constancia')
+            ->icon(Heroicon::OutlinedDocumentText)
+            ->color('gray')
+            ->url(fn (Payment $record) => RegisterPaymentAction::receiptUrl($record), shouldOpenInNewTab: true);
     }
 
     /** Anular un pago: queda registrado (no se borra) y deja de sumar. */
