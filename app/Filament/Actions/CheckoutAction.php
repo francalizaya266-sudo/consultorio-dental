@@ -3,7 +3,6 @@
 namespace App\Filament\Actions;
 
 use App\Enums\AppointmentStatus;
-use App\Enums\PaymentMethod;
 use App\Filament\Forms\PaymentFields;
 use App\Models\Appointment;
 use App\Models\Charge;
@@ -69,7 +68,7 @@ final class CheckoutAction
                     ])->all(),
                     'previous' => $previous,
                     'amount' => $balance > 0 ? $balance : null,
-                    'method' => PaymentMethod::Cash->value,
+                    'method' => $record->patient->usualPaymentMethod()->value,
                 ];
             })
             ->schema([

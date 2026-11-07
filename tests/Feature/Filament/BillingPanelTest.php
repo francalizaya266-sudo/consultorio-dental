@@ -10,6 +10,7 @@ use App\Filament\Resources\Appointments\Pages\ViewAppointment;
 use App\Filament\Resources\Patients\Pages\ListPatients;
 use App\Filament\Resources\Patients\Pages\ViewPatient;
 use App\Filament\Resources\Patients\RelationManagers\ChargesRelationManager;
+use App\Filament\Resources\Payments\Pages\ManagePayments;
 use App\Filament\Widgets\TodayAppointments;
 use App\Filament\Widgets\TodayStats;
 use App\Models\Appointment;
@@ -145,6 +146,40 @@ class BillingPanelTest extends TestCase
 
         $this->assertSame(20.0, $patient->balance());
         $this->assertSame(2, Charge::count());
+    }
+
+    public function test_a_payment_from_caja_keeps_the_doctor_and_treatment_of_the_visit_and_the_usual_method(): void
+    {
+        $this->freezeMonday();
+        $visit = $this->completedCleaning();
+        $patient = $visit->patient;
+        // Una cita de más tarde que todavía no pasó no es a cuenta de qué se cobra.
+        Appointment::factory()->for($patient)->for($visit->doctor)->for(Treatment::factory())->at('2026-11-02 16:00')->confirmed()->create();
+        foreach ([PaymentMethod::Yape, PaymentMethod::Cash, PaymentMethod::Yape] as $days => $method) {
+            Payment::factory()->for($patient)->create(['amount' => 10, 'method' => $method, 'paid_at' => now()->subDays($days + 1)]);
+        }
+        $this->actingAs(User::factory()->reception()->create());
+
+        Livewire::test(ManagePayments::class)
+            ->mountAction('create')
+            ->fillForm(['patient_id' => $patient->id])
+            ->assertSchemaStateSet([
+                'appointment_id' => $visit->id,
+                'doctor_id' => $visit->doctor_id,
+                'treatment_id' => $visit->treatment_id,
+                'amount' => 90.0,
+                'method' => PaymentMethod::Yape,
+            ])
+            ->callMountedAction()
+            ->assertHasNoFormErrors();
+
+        $payment = Payment::latest('id')->first();
+        $this->assertSame([$visit->id, $visit->doctor_id, $visit->treatment_id, PaymentMethod::Yape], [$payment->appointment_id, $payment->doctor_id, $payment->treatment_id, $payment->method]);
+
+        // En la ficha del paciente también se propone su medio de siempre.
+        Livewire::test(ViewPatient::class, ['record' => $patient->getKey()])
+            ->mountAction('registerPayment')
+            ->assertSchemaStateSet(['method' => PaymentMethod::Yape]);
     }
 
     public function test_the_patient_list_shows_who_owes(): void

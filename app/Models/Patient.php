@@ -7,6 +7,7 @@ use App\Enums\AppointmentStatus;
 use App\Enums\Dentition;
 use App\Enums\DocumentType;
 use App\Enums\PatientRelationship;
+use App\Enums\PaymentMethod;
 use App\Enums\Sex;
 use App\Enums\TreatmentPlanStatus;
 use App\Models\Concerns\Auditable;
@@ -192,6 +193,22 @@ class Patient extends Model
         $paid = (float) $this->payments()->whereNull('voided_at')->sum('amount');
 
         return round($charged - $paid, 2);
+    }
+
+    /** El medio con que pagó más veces en sus últimos 10 pagos; efectivo si aún no pagó. */
+    public function usualPaymentMethod(): PaymentMethod
+    {
+        $method = $this->payments()
+            ->whereNull('voided_at')
+            ->latest('paid_at')
+            ->limit(10)
+            ->pluck('method')
+            ->countBy(fn (PaymentMethod $method) => $method->value)
+            ->sortDesc()
+            ->keys()
+            ->first();
+
+        return $method ? PaymentMethod::from($method) : PaymentMethod::Cash;
     }
 
     /** El saldo calculado en la misma consulta (columna balance_due), para listas y orden. */

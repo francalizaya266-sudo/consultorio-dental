@@ -2,6 +2,7 @@
 
 namespace App\Filament\Resources\Payments;
 
+use App\Enums\AppointmentStatus;
 use App\Enums\PaymentMethod;
 use App\Filament\Concerns\HasSpanishLabels;
 use App\Filament\Resources\Payments\Pages\ManagePayments;
@@ -64,12 +65,19 @@ class PaymentResource extends Resource
                     ->getOptionLabelUsing(fn ($value) => Patient::with('account')->find($value)?->selectLabel())
                     ->live()
                     ->afterStateUpdated(function (Set $set, Get $get) {
-                        $set('appointment_id', self::lastAppointmentId($get('patient_id')));
+                        $set('appointment_id', $appointmentId = self::lastAttendedId($get('patient_id')));
+                        // Un $set no dispara el afterStateUpdated de la cita: el doctor y el tratamiento se llenan aquí.
+                        self::fillFromAppointment($set, $appointmentId);
 
-                        // Lo que debe, listo para cobrar.
-                        if (blank($get('amount')) && ($balance = Patient::find($get('patient_id'))?->balance()) > 0) {
+                        if (! $patient = Patient::find($get('patient_id'))) {
+                            return;
+                        }
+
+                        // Lo que debe, listo para cobrar, con lo que suele pagar.
+                        if (blank($get('amount')) && ($balance = $patient->balance()) > 0) {
                             $set('amount', $balance);
                         }
+                        $set('method', $patient->usualPaymentMethod()->value);
                     })
                     ->helperText(fn (Get $get) => ($patient = Patient::find($get('patient_id'))) ? 'Saldo: '.Money::balance($patient->balance()) : null)
                     ->columnSpanFull(),
@@ -78,12 +86,7 @@ class PaymentResource extends Resource
                     ->placeholder('Sin cita')
                     ->options(fn (Get $get) => self::recentAppointments($get('patient_id')))
                     ->live()
-                    ->afterStateUpdated(function (Set $set, $state) {
-                        if ($appointment = Appointment::find($state)) {
-                            $set('doctor_id', $appointment->doctor_id);
-                            $set('treatment_id', $appointment->treatment_id);
-                        }
-                    })
+                    ->afterStateUpdated(fn (Set $set, $state) => self::fillFromAppointment($set, $state))
                     ->columnSpanFull(),
                 TextInput::make('amount')
                     ->label('Monto')
@@ -140,7 +143,12 @@ class PaymentResource extends Resource
         ];
     }
 
-    /** @return array<int, string> Citas del paciente de los últimos 30 días y de hoy. */
+    /**
+     * Citas del paciente de los últimos 30 días y de hoy, sin las canceladas ni las que faltó. Las que
+     * todavía no se atendieron lo dicen, para no cobrar a cuenta de una cita que no pasó.
+     *
+     * @return array<int, string>
+     */
     private static function recentAppointments(?string $patientId): array
     {
         if (! $patientId) {
@@ -150,15 +158,36 @@ class PaymentResource extends Resource
         return Appointment::query()
             ->with('treatment')
             ->where('patient_id', $patientId)
+            ->whereNotIn('status', [AppointmentStatus::Cancelled, AppointmentStatus::NoShow])
             ->whereBetween('starts_at', [now()->subDays(30), now()->endOfDay()])
             ->latest('starts_at')
             ->get()
-            ->mapWithKeys(fn (Appointment $a) => [$a->id => $a->starts_at->format('d/m H:i').' · '.$a->treatment->name])
+            ->mapWithKeys(fn (Appointment $a) => [$a->id => $a->starts_at->format('d/m H:i').' · '.$a->treatment->name
+                .($a->status->isChangeable() ? ' · '.mb_strtolower($a->status->getLabel()) : '')])
             ->all();
     }
 
-    private static function lastAppointmentId(?string $patientId): ?int
+    /** La última cita en que el paciente vino (atendida, en atención o en sala); ninguna si no vino. */
+    private static function lastAttendedId(?string $patientId): ?int
     {
-        return array_key_first(self::recentAppointments($patientId));
+        if (! $patientId) {
+            return null;
+        }
+
+        return Appointment::query()
+            ->where('patient_id', $patientId)
+            ->whereIn('status', [AppointmentStatus::Completed, AppointmentStatus::InProgress, AppointmentStatus::CheckedIn])
+            ->whereBetween('starts_at', [now()->subDays(30), now()->endOfDay()])
+            ->latest('starts_at')
+            ->value('id');
+    }
+
+    /** El doctor y el tratamiento de la cita, para que el pago cuente en sus reportes. */
+    private static function fillFromAppointment(Set $set, mixed $appointmentId): void
+    {
+        if ($appointment = Appointment::find($appointmentId)) {
+            $set('doctor_id', $appointment->doctor_id);
+            $set('treatment_id', $appointment->treatment_id);
+        }
     }
 }
