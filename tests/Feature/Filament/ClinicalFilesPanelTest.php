@@ -130,7 +130,7 @@ class ClinicalFilesPanelTest extends TestCase
         $this->actingAs($doctor->user)->get($url)
             ->assertOk()
             ->assertSee([$patient->full_name, 'Dolor al masticar en el lado izquierdo.', 'Aleta de mordida', 'Ley N.º 29733'])
-            ->assertSee('class="od-svg', false);
+            ->assertSee('class="odv-svg', false);
 
         $audit = AuditLog::where('event', 'printed')->sole();
         $this->assertSame([$patient->getMorphClass(), $patient->id, $doctor->user->id], [$audit->auditable_type, $audit->auditable_id, $audit->user_id]);

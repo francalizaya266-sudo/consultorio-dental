@@ -69,6 +69,17 @@ final class Teeth
         return ['V', self::isUpper($tooth) ? 'P' : 'L', 'M', 'D', self::isAnterior($tooth) ? 'I' : 'O'];
     }
 
+    /** "Primer molar inferior izquierdo", "Canino superior derecho (de leche)". */
+    public static function name(int $tooth): string
+    {
+        $primary = self::quadrant($tooth) >= 5;
+        $kind = $primary
+            ? [1 => 'Incisivo central', 2 => 'Incisivo lateral', 3 => 'Canino', 4 => 'Primer molar', 5 => 'Segundo molar'][$tooth % 10] ?? 'Pieza'
+            : [1 => 'Incisivo central', 2 => 'Incisivo lateral', 3 => 'Canino', 4 => 'Primer premolar', 5 => 'Segundo premolar', 6 => 'Primer molar', 7 => 'Segundo molar', 8 => 'Tercer molar'][$tooth % 10] ?? 'Pieza';
+
+        return $kind.' '.(self::isUpper($tooth) ? 'superior' : 'inferior').' '.(self::isPatientRight($tooth) ? 'derecho' : 'izquierdo').($primary ? ' (de leche)' : '');
+    }
+
     public static function surfaceName(string $surface): string
     {
         return match ($surface) {
