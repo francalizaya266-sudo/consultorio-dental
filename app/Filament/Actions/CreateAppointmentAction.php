@@ -39,7 +39,7 @@ final class CreateAppointmentAction
             ->fillForm(fn (array $arguments) => self::defaults($arguments))
             ->action(fn (array $data, Action $action) => Notify::run(
                 fn () => self::book($data),
-                'Cita creada. El aviso al paciente está listo en "Avisos por enviar".',
+                'Cita creada. El aviso al paciente está listo en Avisos.',
                 $action,
             ));
     }

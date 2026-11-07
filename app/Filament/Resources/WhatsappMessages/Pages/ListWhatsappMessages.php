@@ -12,7 +12,7 @@ class ListWhatsappMessages extends ListRecords
 {
     protected static string $resource = WhatsappMessageResource::class;
 
-    protected static ?string $title = 'Avisos por enviar';
+    protected static ?string $title = 'Avisos';
 
     public function getSubheading(): ?string
     {

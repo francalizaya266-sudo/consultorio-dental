@@ -281,7 +281,7 @@ final class AppointmentActions
                     auth()->user(),
                     Doctor::findOrFail($data['doctor_id']),
                 ),
-                'Cita movida. El aviso al paciente está listo en "Avisos por enviar".',
+                'Cita movida. El aviso al paciente está listo en Avisos.',
                 $action,
             ));
     }

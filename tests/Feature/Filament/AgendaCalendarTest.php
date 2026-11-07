@@ -75,7 +75,7 @@ class AgendaCalendarTest extends TestCase
 
         Livewire::test(Agenda::class, ['date' => '2026-11-04'])
             ->callAction('move', arguments: ['id' => $appointment->id, 'column' => "{$ramos->id}|2026-11-04", 'time' => '16:30'])
-            ->assertNotified('Cita movida. El aviso al paciente está listo en "Avisos por enviar".');
+            ->assertNotified('Cita movida. El aviso al paciente está listo en Avisos.');
 
         $appointment->refresh();
         $this->assertSame('2026-11-04 16:30', $appointment->starts_at->format('Y-m-d H:i'));
@@ -213,7 +213,7 @@ class AgendaCalendarTest extends TestCase
             ->assertActionDataSet(['slot' => '10:15'])
             ->callMountedAction()
             ->assertHasNoActionErrors()
-            ->assertNotified('Cita creada. El aviso al paciente está listo en "Avisos por enviar".');
+            ->assertNotified('Cita creada. El aviso al paciente está listo en Avisos.');
 
         $appointment = $patient->appointments()->sole();
         $this->assertSame('2026-11-03 10:15', $appointment->starts_at->format('Y-m-d H:i'));

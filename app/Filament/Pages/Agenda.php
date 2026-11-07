@@ -199,7 +199,7 @@ class Agenda extends Page
 
                 Notify::run(
                     fn () => app(AppointmentService::class)->rescheduleByStaff($appointment, $start, auth()->user(), $doctor),
-                    'Cita movida. El aviso al paciente está listo en "Avisos por enviar".',
+                    'Cita movida. El aviso al paciente está listo en Avisos.',
                 );
             });
     }

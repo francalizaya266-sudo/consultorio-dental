@@ -84,6 +84,6 @@ class PatientAccess
         $this->outbox->queueForAccount($account, MessageTemplateKey::AccessLink, patientId: $account->holder?->getKey());
 
         $name = $account->holder?->full_name ?? Phone::display($account->phone);
-        $this->alerts->toReception('Pidió su enlace de Mi cuenta', "{$name} quiere entrar a Mi cuenta. El enlace está listo en Avisos por enviar.");
+        $this->alerts->toReception('Pidió su enlace de Mi cuenta', "{$name} quiere entrar a Mi cuenta. El enlace está listo en Avisos.");
     }
 }
