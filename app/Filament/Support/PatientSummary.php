@@ -84,12 +84,7 @@ final class PatientSummary
             return self::step('schedule', 'Agendar: '.$item->label(withTooth: $user->canSeeClinical()), collect([
                 $sessions ? ucfirst($sessions) : null,
                 'de su plan'.($item->plan->doctor ? ' con '.$item->plan->doctor->name : ''),
-            ])->filter()->implode(' · '), 'Agendar', 'heroicon-m-calendar-days', url: AppointmentResource::getUrl('create', array_filter([
-                'patient' => $patient->getKey(),
-                'plan_item' => $item->getKey(),
-                'treatment' => $item->treatment_id,
-                'doctor' => $item->plan->doctor_id,
-            ])));
+            ])->filter()->implode(' · '), 'Agendar', 'heroicon-m-calendar-days', url: AppointmentResource::nextVisitUrl($patient, null));
         }
 
         $plan = $insights->planAwaitingAnswer($patient);

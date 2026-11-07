@@ -40,7 +40,11 @@ class AppointmentForm
                             ->hidden(fn (Get $get) => (bool) $get('new_patient'))
                             ->required(fn (Get $get) => ! $get('new_patient'))
                             ->live()
-                            ->afterStateUpdated(fn (Set $set) => $set('treatment_plan_item_id', null)),
+                            ->afterStateUpdated(function (Set $set, Get $get) {
+                                $set('treatment_plan_item_id', null);
+                                // Si suele venir un mismo día, se propone el próximo, con sus horarios de siempre primero.
+                                SlotPicker::followUsualDay($get, $set);
+                            }),
                         Grid::make(2)
                             ->statePath('patient')
                             ->visible(fn (Get $get) => (bool) $get('new_patient'))

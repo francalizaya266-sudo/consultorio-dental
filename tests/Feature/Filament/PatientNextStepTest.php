@@ -11,6 +11,7 @@ use App\Enums\RescheduleRequestStatus;
 use App\Enums\TreatmentPlanStatus;
 use App\Filament\Pages\Agenda;
 use App\Filament\Resources\Appointments\AppointmentResource;
+use App\Filament\Resources\Appointments\Pages\CreateAppointment;
 use App\Filament\Resources\Appointments\Pages\ViewAppointment;
 use App\Filament\Resources\Consultations\ConsultationResource;
 use App\Filament\Resources\Consultations\Pages\EditConsultation;
@@ -67,7 +68,7 @@ class PatientNextStepTest extends TestCase
         $this->get(PatientResource::getUrl('view', ['record' => $rosa]))
             ->assertOk()
             ->assertSeeInOrder(['Siguiente paso', 'Agendar: Endodoncia', 'Sesión 1 de 2 · de su plan con '.$doctor->name])
-            ->assertSee(AppointmentResource::getUrl('create', ['patient' => $rosa->id, 'plan_item' => $item->id, 'treatment' => $endo->id, 'doctor' => $doctor->id]))
+            ->assertSee(AppointmentResource::getUrl('create', ['patient' => $rosa->id, 'doctor' => $doctor->id, 'plan_item' => $item->id, 'treatment' => $endo->id]))
             ->assertDontSee(['Continuar la atención', 'pieza 46']);
 
         // Con la siguiente sesión ya agendada no hay nada que agendar.
@@ -285,5 +286,41 @@ class PatientNextStepTest extends TestCase
         Livewire::test(TodayAppointments::class)
             ->mountAction(TestAction::make('checkout')->table($appointment))
             ->assertSchemaStateSet(['upcoming' => 'El jueves 5 de noviembre vence su cuota de S/ 250.00: si quiere, la puede pagar hoy.']);
+    }
+
+    public function test_booking_proposes_the_day_and_times_the_patient_usually_comes(): void
+    {
+        $this->freezeMonday();
+        $cleaning = Treatment::factory()->create(['name' => 'Limpieza dental', 'duration_minutes' => 30]);
+        $doctor = $this->doctorOffering($cleaning);
+        $patient = Patient::factory()->create();
+
+        // Viene los miércoles en la tarde.
+        foreach (['2026-09-09 16:00', '2026-09-23 17:00', '2026-10-14 16:30'] as $when) {
+            Appointment::factory()->for($doctor)->for($cleaning)->for($patient)->at($when)->create(['status' => AppointmentStatus::Completed]);
+        }
+
+        $this->actingAs(User::factory()->reception()->create());
+
+        $form = Livewire::test(CreateAppointment::class)
+            ->fillForm(['treatment_id' => $cleaning->id, 'doctor_id' => $doctor->id])
+            ->fillForm(['patient_id' => $patient->id])
+            ->assertSchemaStateSet(['date' => '2026-11-04'])
+            ->assertSee('Suele venir los miércoles en la tarde: esos horarios van primero.');
+
+        $slots = array_keys($form->instance()->form->getComponent('slot')->getOptions());
+        $this->assertSame('15:00', $slots[0]);
+        $this->assertContains('09:00', $slots);
+
+        // Desde la ficha, con el paciente en el enlace, el día ya viene elegido.
+        Livewire::withQueryParams(['patient' => $patient->id])
+            ->test(CreateAppointment::class)
+            ->assertSchemaStateSet(['date' => '2026-11-04']);
+
+        // Si el día se eligió en la agenda, se respeta.
+        Livewire::withQueryParams(['date' => '2026-11-06', 'doctor' => $doctor->id])
+            ->test(CreateAppointment::class)
+            ->fillForm(['patient_id' => $patient->id])
+            ->assertSchemaStateSet(['date' => '2026-11-06']);
     }
 }
