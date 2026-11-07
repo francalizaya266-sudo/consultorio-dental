@@ -92,6 +92,7 @@ class FollowUpsToday extends Widget implements HasActions, HasSchemas
             $this->batchesExpiring(),
             $this->checkups($followUps),
             $this->birthdays($followUps),
+            $this->reviews($followUps),
         ], fn (?array $section) => $section !== null && $section['count'] > 0))];
     }
 
@@ -385,6 +386,34 @@ class FollowUpsToday extends Widget implements HasActions, HasSchemas
             'rows' => $patients->map(fn (Patient $patient) => $this->row(
                 $patient,
                 'Cumple '.$patient->age.($patient->age === 1 ? ' año' : ' años'),
+                $contacted,
+            ))->all(),
+        ];
+    }
+
+    /**
+     * Al terminar la atención, a quien vino contento: viene seguido, está al día y no faltó. Es el mejor día para
+     * pedirle su opinión en Google (y a nadie más de una vez cada seis meses).
+     *
+     * @return array<string, mixed>
+     */
+    private function reviews(FollowUps $followUps): array
+    {
+        $patients = $followUps->reviewCandidates();
+        $key = MessageTemplateKey::ReviewRequest;
+        $contacted = $followUps->recentlyContacted($patients->modelKeys(), $key);
+
+        return [
+            'key' => 'reviews',
+            'title' => 'Pedir su opinión en Google',
+            'hint' => 'Atendidos hoy que vienen seguido, están al día y no faltaron',
+            'count' => $patients->count(),
+            'url' => null,
+            'summary' => null,
+            'template' => $key->value,
+            'rows' => $patients->map(fn (Patient $patient) => $this->row(
+                $patient,
+                collect(['Hoy: '.$patient->appointments->first()?->treatment->name, $patient->visits_count.' atenciones'])->implode(' · '),
                 $contacted,
             ))->all(),
         ];

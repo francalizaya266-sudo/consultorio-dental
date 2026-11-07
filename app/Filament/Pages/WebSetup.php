@@ -110,6 +110,7 @@ class WebSetup extends Page
                         TextInput::make('clinic.reviews_url')
                             ->label('Enlace a sus opiniones en Google')
                             ->url()
+                            ->helperText('También va en el WhatsApp con que recepción pide su opinión a los pacientes que vienen seguido y están al día. Sin enlace, no se pide.')
                             ->columnSpanFull(),
                         TextInput::make('clinic.google_rating')
                             ->label('Puntaje en Google')

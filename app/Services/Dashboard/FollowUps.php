@@ -2,6 +2,7 @@
 
 namespace App\Services\Dashboard;
 
+use App\Enums\AppointmentStatus;
 use App\Enums\MessageStatus;
 use App\Enums\MessageTemplateKey;
 use App\Enums\TreatmentKind;
@@ -11,8 +12,10 @@ use App\Models\TreatmentPlanItem;
 use App\Models\WhatsappMessage;
 use App\Services\Billing\BillingService;
 use App\Services\Patients\PatientInsights;
+use App\Services\Web\ClinicInfo;
 use App\Services\WhatsApp\WhatsAppOutbox;
 use Carbon\CarbonImmutable;
+use Illuminate\Database\Eloquent\Collection as EloquentCollection;
 use Illuminate\Support\Arr;
 use Illuminate\Support\Collection;
 
@@ -32,6 +35,7 @@ final class FollowUps
         MessageTemplateKey::PlanNextSession->value => 7,
         MessageTemplateKey::CheckupRecall->value => 30,
         MessageTemplateKey::Birthday->value => 0,
+        MessageTemplateKey::ReviewRequest->value => 180,
     ];
 
     public function __construct(
@@ -113,6 +117,40 @@ final class FollowUps
     }
 
     /**
+     * A quién pedirle su opinión en Google al terminar el día: lo atendieron hoy, viene seguido (dos atenciones
+     * o más), está al día con sus pagos, no faltó a ninguna cita en seis meses y no se le pidió en ese tiempo.
+     * Quien ya la recibió hoy sigue en la lista, marcado. Sin el enlace a Google configurado, nadie.
+     *
+     * @return EloquentCollection<int, Patient> Cada uno con visits_count y la cita de hoy en appointments.
+     */
+    public function reviewCandidates(): EloquentCollection
+    {
+        if (blank(app(ClinicInfo::class)->reviewsUrl())) {
+            return new EloquentCollection;
+        }
+
+        $key = MessageTemplateKey::ReviewRequest;
+        $since = today()->subDays(self::CONTACT_DAYS[$key->value]);
+        $attendedToday = fn ($appointments) => $appointments->where('status', AppointmentStatus::Completed)->whereDate('starts_at', today());
+
+        return Patient::query()
+            ->whereHas('account')
+            ->whereHas('appointments', $attendedToday)
+            ->whereHas('appointments', fn ($appointments) => $appointments->where('status', AppointmentStatus::Completed), '>=', 2)
+            ->whereDoesntHave('appointments', fn ($appointments) => $appointments->where('status', AppointmentStatus::NoShow)->where('starts_at', '>=', $since))
+            ->whereDoesntHave('whatsappMessages', fn ($messages) => $messages
+                ->where('template_key', $key)
+                ->where('status', MessageStatus::Sent)
+                ->where('sent_at', '>=', $since)
+                ->where('sent_at', '<', today()))
+            ->upToDate()
+            ->withCount(['appointments as visits_count' => fn ($appointments) => $appointments->where('status', AppointmentStatus::Completed)])
+            ->with(['account', 'appointments' => fn ($appointments) => $attendedToday($appointments)->with('treatment')->latest('starts_at')])
+            ->orderBy('first_name')
+            ->get();
+    }
+
+    /**
      * Cuándo se le envió a cada paciente el aviso de este grupo, si fue hace poco.
      *
      * @param  iterable<int>  $patientIds
@@ -163,6 +201,14 @@ final class FollowUps
                 ->unique()
                 ->all();
             $params['pendiente'] = $pending === [] ? 'lo que falta' : Arr::join($pending, ', ', ' y ');
+        }
+
+        if ($key === MessageTemplateKey::ReviewRequest) {
+            $params['opinion'] = app(ClinicInfo::class)->reviewsUrl();
+
+            if (blank($params['opinion'])) {
+                return null;
+            }
         }
 
         // El control que le toca según lo último que se le hizo: "control de ortodoncia", "control y limpieza".

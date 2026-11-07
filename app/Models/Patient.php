@@ -238,6 +238,13 @@ class Patient extends Model
         return $query->whereRaw(self::balanceSql().' > 0');
     }
 
+    /** Pacientes que no deben nada (al día, o con saldo a favor). */
+    #[Scope]
+    protected function upToDate(Builder $query): Builder
+    {
+        return $query->whereRaw(self::balanceSql().' <= 0');
+    }
+
     /**
      * Para llamarlos a control: no tienen cita por delante y ya pasó el tiempo que pide lo último que se les
      * hizo (ortodoncia al mes, implante al año, lo demás a los 6 meses; ver TreatmentKind::checkupMonths).

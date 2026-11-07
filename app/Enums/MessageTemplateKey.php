@@ -25,6 +25,7 @@ enum MessageTemplateKey: string implements HasLabel
     case CheckupRecall = 'checkup_recall';
     case Birthday = 'birthday';
     case PaymentReceipt = 'payment_receipt';
+    case ReviewRequest = 'review_request';
 
     public function getLabel(): string
     {
@@ -47,6 +48,7 @@ enum MessageTemplateKey: string implements HasLabel
             self::CheckupRecall => 'Le toca control',
             self::Birthday => 'Saludo de cumpleaños',
             self::PaymentReceipt => 'Constancia de pago',
+            self::ReviewRequest => 'Pedido de opinión en Google',
         };
     }
 
@@ -72,6 +74,7 @@ enum MessageTemplateKey: string implements HasLabel
             self::CheckupRecall => "Hola {nombre}, te escribimos de {consultorio}.\nYa es momento de tu {control}. ¿Te reservamos una cita? Respóndenos con el día y la hora que te acomodan.",
             self::Birthday => '¡Feliz cumpleaños, {nombre}! 🎂 Todo el equipo de {consultorio} te desea un gran día.',
             self::PaymentReceipt => "Hola {nombre}, te escribimos de {consultorio}.\nRecibimos tu pago de {monto} ({medio}) el {fecha}. Constancia {numero}:\n{detalle}\n\nSaldo: {saldo}. ¡Gracias!",
+            self::ReviewRequest => "Hola {nombre}, gracias por confiar en {consultorio}. Si te sentiste bien atendido, ¿nos dejas tu opinión en Google? Toma un minuto y ayuda a otras personas a encontrarnos:\n{opinion}",
         };
     }
 }

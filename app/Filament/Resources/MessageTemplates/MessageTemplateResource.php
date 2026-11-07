@@ -39,7 +39,7 @@ class MessageTemplateResource extends Resource
 
     protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedChatBubbleBottomCenterText;
 
-    public const PLACEHOLDERS = '{nombre} quien recibe · {paciente} · {fecha} · {hora} · {doctor} · {tratamiento} · {precio} de la cita (con la campaña) · {consultorio} · {direccion} · {enlace} enlace personal · {receta} · {plan} y {total} del presupuesto · {cuota}, {plan} y {monto} en los avisos de cuota · {pendiente} del plan sin próxima cita · {control} en el llamado a control · {hasta} hasta cuándo se guarda el horario ofrecido a la lista de espera · {monto}, {medio}, {numero}, {detalle} y {saldo} en la constancia de pago';
+    public const PLACEHOLDERS = '{nombre} quien recibe · {paciente} · {fecha} · {hora} · {doctor} · {tratamiento} · {precio} de la cita (con la campaña) · {consultorio} · {direccion} · {enlace} enlace personal · {receta} · {plan} y {total} del presupuesto · {cuota}, {plan} y {monto} en los avisos de cuota · {pendiente} del plan sin próxima cita · {control} en el llamado a control · {hasta} hasta cuándo se guarda el horario ofrecido a la lista de espera · {monto}, {medio}, {numero}, {detalle} y {saldo} en la constancia de pago · {opinion} enlace para dejar la opinión en Google';
 
     public static function form(Schema $schema): Schema
     {
