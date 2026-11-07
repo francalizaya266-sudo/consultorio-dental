@@ -6,12 +6,14 @@ use App\Enums\AppointmentStatus;
 use App\Enums\DayPeriod;
 use App\Enums\MessageTemplateKey;
 use App\Enums\WaitlistStatus;
+use App\Exceptions\BookingException;
 use App\Models\Appointment;
 use App\Models\Doctor;
 use App\Models\Patient;
 use App\Models\Treatment;
 use App\Models\User;
 use App\Models\WaitlistEntry;
+use App\Services\Agenda\AvailabilityService;
 use App\Services\Booking\AppointmentService;
 use App\Services\Booking\WaitlistService;
 use App\Services\WhatsApp\WhatsAppOutbox;
@@ -130,11 +132,11 @@ class WaitlistServiceTest extends TestCase
         $startsAt = CarbonImmutable::parse('2026-11-04 10:30');
 
         $message = $this->service()->offerDraft($entry, $doctor, $treatment, $startsAt);
-        $this->service()->markOffered($entry, $doctor, $startsAt);
+        $this->service()->markOffered($entry, $doctor, $treatment, $startsAt);
 
         $this->assertSame(MessageTemplateKey::WaitlistOffer, $message->template_key);
         $this->assertFalse($message->exists, 'Se guarda recién al abrir WhatsApp.');
-        $this->assertStringContainsString('Hola Rosa, se liberó un horario para limpieza dental el miércoles 4 de noviembre a las 10:30 am con Dra. Ana Torres.', app(WhatsAppOutbox::class)->render($message));
+        $this->assertStringContainsString('Hola Rosa, se liberó un horario para limpieza dental el miércoles 4 de noviembre a las 10:30 am con Dra. Ana Torres. Te lo guardamos hasta las 10:00 am', app(WhatsAppOutbox::class)->render($message));
         $this->assertSame(WaitlistStatus::Offered, $entry->fresh()->status);
         $this->assertSame('2026-11-04 10:30', $entry->fresh()->offered_starts_at->format('Y-m-d H:i'));
         $this->assertTrue($entry->fresh()->offeredDoctor->is($doctor));
@@ -146,16 +148,22 @@ class WaitlistServiceTest extends TestCase
         $treatment = Treatment::factory()->create(['duration_minutes' => 30]);
         $doctor = $this->doctorOffering($treatment);
         $appointment = Appointment::factory()->for($doctor)->for($treatment)->confirmed()->at('2026-11-04 10:00')->create();
+        // Rosa espera desde antes: se le propone a ella.
+        $rosa = WaitlistEntry::factory()->for(Patient::factory()->state(['first_name' => 'Rosa', 'last_name' => 'Quispe']))->for($treatment)->create(['created_at' => now()->subDays(3)]);
         WaitlistEntry::factory()->for($treatment)->create();
 
         app(AppointmentService::class)->cancelByPatient($appointment);
 
         $notification = $reception->notifications()->sole();
         $this->assertSame(AppointmentStatus::Cancelled, $appointment->fresh()->status);
-        $this->assertStringContainsString('Hay 1 paciente en lista de espera que puede venir a esa hora.', $notification->data['body']);
-        $this->assertSame('Ofrecer el horario', $notification->data['actions'][0]['label']);
-        $this->assertStringContainsString('lista-de-espera', $notification->data['actions'][0]['url']);
-        $this->assertStringContainsString('2026-11-04', urldecode($notification->data['actions'][0]['url']));
+        $this->assertStringContainsString('Rosa Quispe, de la lista de espera, puede venir a esa hora (y 1 persona más).', $notification->data['body']);
+        // El botón abre la agenda de ese día con el mensaje para Rosa listo.
+        $this->assertSame('Ofrecérselo a Rosa', $notification->data['actions'][0]['label']);
+        $url = urldecode($notification->data['actions'][0]['url']);
+        $this->assertStringContainsString('agenda?', $url);
+        $this->assertStringContainsString('action=offer', $url);
+        $this->assertStringContainsString("actionArguments[entry]={$rosa->id}", $url);
+        $this->assertStringContainsString('actionArguments[time]=10:00', $url);
     }
 
     public function test_reception_hears_about_the_waitlist_when_it_cancels_an_appointment_itself(): void
@@ -173,5 +181,75 @@ class WaitlistServiceTest extends TestCase
 
         app(AppointmentService::class)->cancelByStaff($second, $reception, notifyPatient: false);
         $this->assertSame('Se liberó un horario', $reception->notifications()->sole()->data['title']);
+    }
+
+    public function test_an_offered_slot_is_held_for_that_patient_while_they_answer(): void
+    {
+        $reception = User::factory()->reception()->create();
+        $treatment = Treatment::factory()->create(['duration_minutes' => 30]);
+        $doctor = $this->doctorOffering($treatment);
+        $rosa = WaitlistEntry::factory()->for(Patient::factory()->state(['first_name' => 'Rosa', 'last_name' => 'Quispe']))->for($treatment)->create();
+        $luis = WaitlistEntry::factory()->for($treatment)->create();
+        $startsAt = CarbonImmutable::parse('2026-11-04 10:00');
+
+        $this->service()->markOffered($rosa, $doctor, $treatment, $startsAt);
+
+        // Nadie más lo ve libre: ni Luis, ni la web, ni otra alerta; para Rosa sigue disponible.
+        $times = fn (WaitlistEntry $entry) => $this->service()->slotsFor($entry, $doctor, $treatment, $startsAt)->map(fn ($slot) => $slot->label())->all();
+        $this->assertNotContains('10:00', $times($luis));
+        $this->assertContains('10:00', $times($rosa->fresh()));
+        $this->assertFalse(app(AvailabilityService::class)->isFree($doctor, $startsAt, 30, 10));
+        $this->assertCount(0, $this->service()->candidatesFor($doctor, $startsAt));
+
+        // Recepción no se lo da a otro sin liberarlo primero.
+        try {
+            app(AppointmentService::class)->bookFromStaff($reception, $luis->patient, $doctor, $treatment, $startsAt);
+            $this->fail('Se agendó encima de un horario apartado.');
+        } catch (BookingException $e) {
+            $this->assertSame('Ese horario está apartado para Rosa Quispe (lista de espera) hasta las 10:00, mientras responde. Si ya no lo quiere, libéralo en la lista de espera.', $e->getMessage());
+        }
+
+        // Rosa dice que sí: se le agenda en su horario y sale de la lista.
+        app(AppointmentService::class)->bookFromStaff($reception, $rosa->patient, $doctor, $treatment, $startsAt);
+        $this->assertSame(WaitlistStatus::Booked, $rosa->fresh()->status);
+    }
+
+    public function test_an_unanswered_offer_frees_the_slot_and_suggests_the_next_person(): void
+    {
+        $reception = User::factory()->reception()->create();
+        $treatment = Treatment::factory()->create(['duration_minutes' => 30]);
+        $doctor = $this->doctorOffering($treatment);
+        $rosa = WaitlistEntry::factory()->for(Patient::factory()->state(['first_name' => 'Rosa', 'last_name' => 'Quispe']))->for($treatment)->create(['created_at' => now()->subDays(3)]);
+        WaitlistEntry::factory()->for(Patient::factory()->state(['first_name' => 'Luis', 'last_name' => 'Soto']))->for($treatment)->create();
+        $startsAt = CarbonImmutable::parse('2026-11-04 10:00');
+        $this->service()->markOffered($rosa, $doctor, $treatment, $startsAt);
+
+        $this->artisan('lista-espera:liberar-apartados')->assertSuccessful();
+        $this->assertSame(0, $reception->notifications()->count(), 'Todavía está a tiempo de responder.');
+
+        $this->travel(2)->hours();
+        $this->artisan('lista-espera:liberar-apartados')->assertSuccessful();
+
+        $this->assertNull($rosa->fresh()->held_until);
+        $this->assertTrue(app(AvailabilityService::class)->isFree($doctor, $startsAt, 30, 10));
+        $notification = $reception->notifications()->sole();
+        $this->assertSame('Rosa Quispe no respondió al horario ofrecido', $notification->data['title']);
+        $this->assertStringContainsString('ya no está apartado. Luis Soto, de la lista de espera, puede venir a esa hora.', $notification->data['body']);
+        $this->assertSame('Ofrecérselo a Luis', $notification->data['actions'][0]['label']);
+    }
+
+    public function test_moving_an_appointment_frees_its_old_time_for_the_waitlist(): void
+    {
+        $reception = User::factory()->reception()->create();
+        $treatment = Treatment::factory()->create(['duration_minutes' => 30]);
+        $doctor = $this->doctorOffering($treatment);
+        $appointment = Appointment::factory()->for($doctor)->for($treatment)->confirmed()->at('2026-11-04 10:00')->create();
+        WaitlistEntry::factory()->for(Patient::factory()->state(['first_name' => 'Rosa', 'last_name' => 'Quispe']))->for($treatment)->create();
+
+        app(AppointmentService::class)->rescheduleByStaff($appointment, CarbonImmutable::parse('2026-11-05 10:00'), $reception);
+
+        $notification = $reception->notifications()->sole();
+        $this->assertSame('Se liberó un horario', $notification->data['title']);
+        $this->assertStringContainsString('Rosa Quispe, de la lista de espera, puede venir a esa hora.', $notification->data['body']);
     }
 }

@@ -80,6 +80,11 @@ return [
             'elevated_minutes' => 15,
         ],
 
+        'plans' => [
+            // Días que vale el precio de un presupuesto sin aceptar (sale en la hoja y en el WhatsApp).
+            'valid_days' => 30,
+        ],
+
         'reports' => [
             // Si los doctores ven sus propias ganancias y gráficos (la administración siempre ve todo).
             'doctors_see_own' => false,

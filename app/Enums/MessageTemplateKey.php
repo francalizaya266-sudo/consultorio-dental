@@ -25,6 +25,7 @@ enum MessageTemplateKey: string implements HasLabel
     case CheckupRecall = 'checkup_recall';
     case Birthday = 'birthday';
     case PaymentReceipt = 'payment_receipt';
+    case ReviewRequest = 'review_request';
 
     public function getLabel(): string
     {
@@ -47,6 +48,7 @@ enum MessageTemplateKey: string implements HasLabel
             self::CheckupRecall => 'Le toca control',
             self::Birthday => 'Saludo de cumpleaños',
             self::PaymentReceipt => 'Constancia de pago',
+            self::ReviewRequest => 'Pedido de opinión en Google',
         };
     }
 
@@ -63,8 +65,8 @@ enum MessageTemplateKey: string implements HasLabel
             self::RescheduleRejected => 'Hola {nombre}, no pudimos mover tu cita a los horarios que propusiste. Tu cita sigue el {fecha} a las {hora}. Escríbenos y buscamos otra opción.',
             self::AccessLink => "Hola, este es tu enlace para entrar a Mi cuenta en {consultorio}:\n{enlace}\n\nNo lo compartas con nadie.",
             self::Prescription => "Hola {nombre}, te enviamos tu receta e indicaciones de {doctor}:\n\n{receta}",
-            self::TreatmentPlan => "Hola {nombre}, te enviamos tu plan de tratamiento con {doctor}:\n\n{plan}\n\nTotal: {total}\nEs un presupuesto referencial: si en el camino el tratamiento cambia, te lo explicamos antes. Cualquier duda, escríbenos.",
-            self::WaitlistOffer => 'Hola {nombre}, se liberó un horario para {tratamiento} el {fecha} a las {hora} con {doctor}. ¿Lo quieres? Respóndenos y te lo reservamos.',
+            self::TreatmentPlan => "Hola {nombre}, te enviamos tu plan de tratamiento con {doctor}:\n\n{plan}\n\nTotal: {total}{vigencia}\nEs un presupuesto referencial: si en el camino el tratamiento cambia, te lo explicamos antes. Cualquier duda, escríbenos.",
+            self::WaitlistOffer => 'Hola {nombre}, se liberó un horario para {tratamiento} el {fecha} a las {hora} con {doctor}. Te lo guardamos hasta las {hasta}: ¿lo quieres? Respóndenos y te lo reservamos.',
             self::InstallmentReminder => "Hola {nombre}, te escribimos de {consultorio}.\nEl {fecha} vence tu {cuota} de {plan}: {monto}.\n\nPuedes pagarla en el consultorio con Yape, Plin, tarjeta o efectivo. Si ya la pagaste, no te preocupes.",
             self::InstallmentOverdue => "Hola {nombre}, te escribimos de {consultorio}.\nTu {cuota} de {plan} venció el {fecha} y queda {monto} por pagar.\n\nPuedes pagarla en el consultorio con Yape, Plin, tarjeta o efectivo. Si ya la pagaste, avísanos y lo revisamos.",
             self::PlanFollowUp => "Hola {nombre}, te escribimos de {consultorio}.\n¿Pudiste revisar tu plan de tratamiento con {doctor}? Si tienes dudas sobre el tratamiento o las formas de pago, escríbenos y te ayudamos.\n\nCuando quieras, te reservamos la primera cita.",
@@ -72,6 +74,7 @@ enum MessageTemplateKey: string implements HasLabel
             self::CheckupRecall => "Hola {nombre}, te escribimos de {consultorio}.\nYa es momento de tu {control}. ¿Te reservamos una cita? Respóndenos con el día y la hora que te acomodan.",
             self::Birthday => '¡Feliz cumpleaños, {nombre}! 🎂 Todo el equipo de {consultorio} te desea un gran día.',
             self::PaymentReceipt => "Hola {nombre}, te escribimos de {consultorio}.\nRecibimos tu pago de {monto} ({medio}) el {fecha}. Constancia {numero}:\n{detalle}\n\nSaldo: {saldo}. ¡Gracias!",
+            self::ReviewRequest => "Hola {nombre}, gracias por confiar en {consultorio}. Si te sentiste bien atendido, ¿nos dejas tu opinión en Google? Toma un minuto y ayuda a otras personas a encontrarnos:\n{opinion}",
         };
     }
 }

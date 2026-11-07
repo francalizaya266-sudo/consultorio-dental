@@ -138,9 +138,10 @@ enum TreatmentKind: string
     }
 
     /**
-     * Los datos que no pueden faltar en la evolución de este tratamiento.
+     * Los datos que no pueden faltar en la evolución de este tratamiento. "remember" es el dato de la última vez
+     * que conviene tener a la vista (el color de la última resina, el último arco): la clave donde se anotó.
      *
-     * @return array<string, array{label: string, type: 'text'|'number'|'toggle'|'select', placeholder?: string, suffix?: string, options?: array<string, string>}>
+     * @return array<string, array{label: string, type: 'text'|'number'|'toggle'|'select', placeholder?: string, suffix?: string, options?: array<string, string>, remember?: string}>
      */
     public function detailFields(): array
     {
@@ -148,7 +149,7 @@ enum TreatmentKind: string
             self::Filling => [
                 'tooth' => ['label' => 'Pieza', 'type' => 'text', 'placeholder' => '36'],
                 'surfaces' => ['label' => 'Caras', 'type' => 'text', 'placeholder' => 'MO'],
-                'shade' => ['label' => 'Color', 'type' => 'text', 'placeholder' => 'A2'],
+                'shade' => ['label' => 'Color', 'type' => 'text', 'placeholder' => 'A2', 'remember' => 'shade'],
                 'anesthesia' => ['label' => 'Con anestesia', 'type' => 'toggle'],
                 'pulp_protection' => ['label' => 'Protección del nervio', 'type' => 'toggle'],
             ],
@@ -161,27 +162,27 @@ enum TreatmentKind: string
             ],
             self::RootCanal => [
                 'tooth' => ['label' => 'Pieza', 'type' => 'text', 'placeholder' => '46'],
-                'canals' => ['label' => 'Conductos y longitudes', 'type' => 'text', 'placeholder' => 'MV 21 mm · ML 21 mm · D 22 mm'],
-                'medication' => ['label' => 'Medicación entre sesiones', 'type' => 'text', 'placeholder' => 'Hidróxido de calcio'],
+                'canals' => ['label' => 'Conductos y longitudes', 'type' => 'text', 'placeholder' => 'MV 21 mm · ML 21 mm · D 22 mm', 'remember' => 'canals'],
+                'medication' => ['label' => 'Medicación entre sesiones', 'type' => 'text', 'placeholder' => 'Hidróxido de calcio', 'remember' => 'medication'],
                 'temporary' => ['label' => 'Sellado provisional', 'type' => 'toggle'],
             ],
             self::Implant => [
                 'tooth' => ['label' => 'Zona o pieza', 'type' => 'text', 'placeholder' => '46'],
-                'brand' => ['label' => 'Marca', 'type' => 'text'],
+                'brand' => ['label' => 'Marca', 'type' => 'text', 'remember' => 'brand'],
                 'lot' => ['label' => 'Lote', 'type' => 'text'],
                 'diameter' => ['label' => 'Diámetro', 'type' => 'number', 'suffix' => 'mm'],
                 'length' => ['label' => 'Largo', 'type' => 'number', 'suffix' => 'mm'],
                 'torque' => ['label' => 'Torque', 'type' => 'number', 'suffix' => 'Ncm'],
             ],
             self::Whitening => [
-                'shade_before' => ['label' => 'Color inicial', 'type' => 'text', 'placeholder' => 'A3'],
+                'shade_before' => ['label' => 'Color inicial', 'type' => 'text', 'placeholder' => 'A3', 'remember' => 'shade_after'],
                 'shade_after' => ['label' => 'Color final', 'type' => 'text', 'placeholder' => 'A1'],
                 'product' => ['label' => 'Producto y concentración', 'type' => 'text', 'placeholder' => 'Peróxido de hidrógeno 35 %'],
                 'sensitivity' => ['label' => 'Tuvo sensibilidad', 'type' => 'toggle'],
             ],
             self::Orthodontics => [
-                'archwire' => ['label' => 'Arco', 'type' => 'text', 'placeholder' => 'NiTi 0.016 superior e inferior'],
-                'elastics' => ['label' => 'Ligas o cadenetas', 'type' => 'text'],
+                'archwire' => ['label' => 'Arco', 'type' => 'text', 'placeholder' => 'NiTi 0.016 superior e inferior', 'remember' => 'archwire'],
+                'elastics' => ['label' => 'Ligas o cadenetas', 'type' => 'text', 'remember' => 'elastics'],
                 'rebonded' => ['label' => 'Piezas recementadas', 'type' => 'text', 'placeholder' => 'Ninguna'],
                 'hygiene' => ['label' => 'Higiene', 'type' => 'select', 'options' => ['good' => 'Buena', 'fair' => 'Regular', 'poor' => 'Mala']],
             ],

@@ -87,6 +87,7 @@ class WebAvailability
 
         return $doctors
             ->flatMap(fn (Doctor $doctor) => $this->availability
+                ->forPatient($moving?->patient_id)
                 ->slotsFor($doctor, $treatment, $date, earliest: $this->earliest(), ignoreAppointmentId: $moving?->getKey())
                 ->map(fn (Slot $slot) => [
                     'time' => $slot->label(),

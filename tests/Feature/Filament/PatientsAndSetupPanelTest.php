@@ -37,6 +37,7 @@ use App\Models\Patient;
 use App\Models\Payment;
 use App\Models\ScheduleBlock;
 use App\Models\Setting;
+use App\Models\SmileCase;
 use App\Models\TextSnippet;
 use App\Models\Treatment;
 use App\Models\User;
@@ -337,6 +338,45 @@ class PatientsAndSetupPanelTest extends TestCase
             ->assertHasNoFormErrors();
 
         $this->assertSame([null, null], [Setting::get('clinic.google_rating'), Setting::get('clinic.google_reviews_count')]);
+    }
+
+    public function test_the_web_setup_lists_what_is_missing_with_its_link_and_goes_away_when_all_is_done(): void
+    {
+        $this->actingAs(User::factory()->admin()->create());
+        $ana = Doctor::factory()->create(['name' => 'Dra. Ana Torres']);
+        Doctor::factory()->create(['name' => 'Dr. Luis Ramos', 'photo_path' => 'doctores/luis.jpg']);
+        // Quien no sale en la web no necesita foto.
+        Doctor::factory()->create(['name' => 'Dr. Pablo Ccori', 'is_public' => false]);
+        Setting::set('clinic.maps_url', 'https://maps.app.goo.gl/consultorio');
+        // Se reserva por la web, pero quien lo atiende no recibe reservas por la web: no aparece en la reserva.
+        $whitening = Treatment::factory()->create(['name' => 'Blanqueamiento', 'online_bookable' => true]);
+        $whitening->doctors()->attach(Doctor::factory()->create(['accepts_online_booking' => false, 'is_public' => false]));
+
+        $this->assertSame('5', WebSetup::getNavigationBadge());
+
+        Livewire::test(WebSetup::class)
+            ->assertSeeInOrder([
+                'Lo que falta para que la web dé confianza', '1 de 6 listos',
+                'La foto de cada doctor', 'Falta la de Dra. Ana Torres.', 'Subir su foto',
+                'Una foto del consultorio en el inicio', 'Subir la foto',
+                'Quién atiende cada tratamiento de la reserva', 'Blanqueamiento no aparece en la reserva', 'Ver tratamientos',
+                'El enlace a sus opiniones en Google', 'Pegar el enlace',
+                'Un caso de antes y después', 'Agregar un caso',
+                // Lo listo va al final, sin enlace.
+                'La ubicación en Google Maps',
+            ])
+            ->assertSee(DoctorResource::getUrl('edit', ['record' => $ana]), false)
+            ->assertSee(WebSetup::getUrl().'#opiniones', false)
+            ->assertDontSee('Dr. Pablo Ccori');
+
+        $ana->update(['photo_path' => 'doctores/ana.jpg']);
+        $whitening->doctors()->attach($ana);
+        Setting::set('web.hero_image', 'inicio/consultorio.jpg');
+        Setting::set('clinic.reviews_url', 'https://g.page/r/consultorio/review');
+        SmileCase::factory()->create();
+
+        $this->assertNull(WebSetup::getNavigationBadge());
+        Livewire::test(WebSetup::class)->assertDontSee('Lo que falta para que la web dé confianza');
     }
 
     public function test_the_doctor_schedule_is_edited_on_the_doctor_page(): void

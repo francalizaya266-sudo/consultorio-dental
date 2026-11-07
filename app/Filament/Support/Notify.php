@@ -31,7 +31,7 @@ final class Notify
      *
      * @param  list<string>  $held
      */
-    public static function heldMedications(array $held): void
+    public static function heldMedications(array $held, string $from = 'La plantilla'): void
     {
         if ($held === []) {
             return;
@@ -39,7 +39,7 @@ final class Notify
 
         Notification::make()
             ->warning()
-            ->title('La plantilla traía un medicamento que no le conviene')
+            ->title($from.' traía un medicamento que no le conviene')
             ->body(implode("\n\n", $held)."\n\nSi aun así lo necesita, agrégalo a mano.")
             ->persistent()
             ->send();

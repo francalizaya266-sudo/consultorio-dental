@@ -3,6 +3,7 @@
 namespace App\Filament\Resources\Doctors\RelationManagers;
 
 use App\Models\Treatment;
+use App\Services\Agenda\LearnedDurations;
 use Filament\Actions\AttachAction;
 use Filament\Actions\DetachAction;
 use Filament\Actions\EditAction;
@@ -12,7 +13,7 @@ use Filament\Schemas\Schema;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Table;
 
-/** Qué tratamientos hace el doctor y, si es distinto, cuánto demora en cada uno. */
+/** Qué tratamientos hace el doctor y cuánto se le reserva en cada uno: lo puesto a mano, lo que suele tardar o la duración general. */
 class TreatmentsRelationManager extends RelationManager
 {
     protected static string $relationship = 'treatments';
@@ -38,9 +39,10 @@ class TreatmentsRelationManager extends RelationManager
                 TextColumn::make('name')
                     ->label('Tratamiento'),
                 TextColumn::make('pivot.duration_minutes')
-                    ->label('Duración con este doctor')
-                    ->state(fn (Treatment $record) => ($record->pivot->duration_minutes ?? $record->duration_minutes).' min')
-                    ->description(fn (Treatment $record) => $record->pivot->duration_minutes ? 'Propia (general: '.$record->duration_minutes.' min)' : 'La general'),
+                    ->label('Se reserva')
+                    ->state(fn (Treatment $record) => $this->getOwnerRecord()->durationFor($record).' min')
+                    ->description(fn (Treatment $record) => self::durationSource($record))
+                    ->wrap(),
             ])
             ->defaultSort('sort_order')
             ->headerActions([
@@ -59,6 +61,19 @@ class TreatmentsRelationManager extends RelationManager
             ]);
     }
 
+    /** De dónde sale lo que se reserva: la propia, lo que suele tardar (con cuántas atenciones) o la general. */
+    private static function durationSource(Treatment $record): string
+    {
+        $learned = $record->pivot->learned_minutes !== null ? (int) $record->pivot->learned_minutes : null;
+        $measured = $learned !== null ? "En la práctica suele tardar {$learned} min ({$record->pivot->learned_samples} atenciones)" : null;
+
+        return match (true) {
+            (bool) $record->pivot->duration_minutes => collect(['Puesta a mano (general: '.$record->duration_minutes.' min)', $measured])->filter()->implode('. '),
+            LearnedDurations::applies($learned, (int) $record->duration_minutes) => "Lo que suele tardar: {$record->pivot->learned_samples} atenciones medidas (general: {$record->duration_minutes} min)",
+            default => collect(['La general', $measured])->filter()->implode('. '),
+        };
+    }
+
     private static function durationInput(): TextInput
     {
         return TextInput::make('duration_minutes')
@@ -68,6 +83,6 @@ class TreatmentsRelationManager extends RelationManager
             ->minValue(5)
             ->maxValue(480)
             ->step(5)
-            ->helperText('Vacío = la duración general del tratamiento.');
+            ->helperText('Vacío = lo que suele tardar en la práctica (si ya hay atenciones medidas) o la duración general.');
     }
 }

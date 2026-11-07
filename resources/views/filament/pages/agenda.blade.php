@@ -432,7 +432,7 @@
                         @endforeach
 
                         @foreach ($column['blocks'] as $block)
-                            <div class="agenda-block" style="top: {{ (max($block['start'], $from) - $from) * $scale }}px; height: {{ (min($block['end'], $to) - max($block['start'], $from)) * $scale }}px">{{ $block['label'] }}</div>
+                            <div @class(['agenda-block', 'is-hold' => $block['hold']]) style="top: {{ (max($block['start'], $from) - $from) * $scale }}px; height: {{ (min($block['end'], $to) - max($block['start'], $from)) * $scale }}px">{{ $block['label'] }}</div>
                         @endforeach
 
                         @if ($column['date'] === today()->toDateString() && $nowMinute > $from && $nowMinute < $to)

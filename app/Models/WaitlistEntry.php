@@ -16,9 +16,10 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 /**
  * Paciente que quiere un horario antes (o un día que hoy está lleno). Cuando se libera un hueco
- * se le ofrece por WhatsApp; al agendarle la cita sale solo de la lista.
+ * se le ofrece por WhatsApp y el horario queda apartado un rato para él; al agendarle la cita sale
+ * solo de la lista.
  */
-#[Fillable(['patient_id', 'treatment_id', 'doctor_id', 'earliest_date', 'latest_date', 'preferred_period', 'notes', 'status', 'offered_at', 'offered_starts_at', 'offered_doctor_id', 'appointment_id', 'created_by_user_id'])]
+#[Fillable(['patient_id', 'treatment_id', 'doctor_id', 'earliest_date', 'latest_date', 'preferred_period', 'notes', 'status', 'offered_at', 'offered_starts_at', 'offered_until', 'offered_doctor_id', 'held_until', 'appointment_id', 'created_by_user_id'])]
 class WaitlistEntry extends Model
 {
     /** @use HasFactory<WaitlistEntryFactory> */
@@ -41,6 +42,8 @@ class WaitlistEntry extends Model
             'status' => WaitlistStatus::class,
             'offered_at' => 'datetime',
             'offered_starts_at' => 'datetime',
+            'offered_until' => 'datetime',
+            'held_until' => 'datetime',
         ];
     }
 
@@ -111,6 +114,23 @@ class WaitlistEntry extends Model
                 ->where(fn (Builder $treatment) => $treatment
                     ->whereNull('treatment_id')
                     ->orWhereHas('treatment.doctors', fn (Builder $doctors) => $doctors->whereKey($doctorId))));
+    }
+
+    /** Tienen apartado el horario que se les ofreció: nadie más lo toma mientras responden. */
+    #[Scope]
+    protected function holding(Builder $query): Builder
+    {
+        return $query
+            ->where('status', WaitlistStatus::Offered)
+            ->where('held_until', '>', now())
+            ->whereNotNull('offered_starts_at')
+            ->whereNotNull('offered_until')
+            ->whereNotNull('offered_doctor_id');
+    }
+
+    public function isHolding(): bool
+    {
+        return $this->status === WaitlistStatus::Offered && $this->held_until?->isFuture() === true && $this->offered_starts_at !== null;
     }
 
     public function isActive(): bool

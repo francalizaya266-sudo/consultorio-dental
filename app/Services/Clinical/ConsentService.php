@@ -3,6 +3,7 @@
 namespace App\Services\Clinical;
 
 use App\Enums\PatientRelationship;
+use App\Enums\TreatmentKind;
 use App\Models\Appointment;
 use App\Models\Consent;
 use App\Models\ConsentTemplate;
@@ -33,6 +34,7 @@ final class ConsentService
         '{tratamiento}' => 'Tratamiento',
         '{fecha}' => 'Fecha de la firma',
         '{ciudad}' => 'Distrito o ciudad del consultorio (Ajustes)',
+        '{riesgos}' => 'Riesgos propios del paciente según sus antecedentes (anticoagulantes, bifosfonatos, alergias…). Si no lo pones, van solos antes de la fecha',
     ];
 
     /**
@@ -95,14 +97,26 @@ final class ConsentService
         ];
     }
 
-    /** Texto final con los datos de esta firma. */
+    /**
+     * Texto final con los datos de esta firma. Si el paciente tiene riesgos propios para este tratamiento, el texto
+     * los suma: donde diga {riesgos} o, si la plantilla no lo usa, antes del párrafo de la fecha.
+     */
     public function render(string $body, Patient $patient, array $signer, ?Doctor $doctor, ?Treatment $treatment, CarbonInterface $date): string
     {
+        $risks = TreatmentRisks::forConsent($patient, TreatmentKind::for($treatment));
+
+        if ($risks !== [] && ! str_contains($body, '{riesgos}')) {
+            $paragraphs = preg_split("/\R\s*\R/", trim($body));
+            $dated = collect($paragraphs)->search(fn (string $paragraph) => str_contains($paragraph, '{fecha}'));
+            array_splice($paragraphs, $dated === false ? count($paragraphs) : $dated, 0, ['{riesgos}']);
+            $body = implode("\n\n", $paragraphs);
+        }
+
         $relationship = $signer['signer_relationship'] instanceof PatientRelationship
             ? $signer['signer_relationship']
             : (PatientRelationship::tryFrom((string) ($signer['signer_relationship'] ?? '')) ?? PatientRelationship::Self);
 
-        return strtr($body, [
+        $text = strtr($body, [
             '{paciente}' => $patient->full_name,
             '{firmante}' => filled($signer['signer_name'] ?? null) ? $signer['signer_name'] : '________________',
             '{documento}' => filled($signer['signer_document'] ?? null) ? 'documento N.º '.$signer['signer_document'] : 'documento N.º ________',
@@ -113,7 +127,11 @@ final class ConsentService
             '{tratamiento}' => $treatment ? mb_strtolower($treatment->name) : 'el tratamiento indicado',
             '{fecha}' => $date->translatedFormat('j \d\e F \d\e Y'),
             '{ciudad}' => (string) (Setting::get('clinic.district') ?: '________'),
+            '{riesgos}' => $risks === [] ? '' : "Por los antecedentes del paciente, se me explicó además que:\n".collect($risks)->map(fn (string $risk) => '• '.$risk)->implode("\n"),
         ]);
+
+        // Sin riesgos, {riesgos} no deja un hueco entre párrafos.
+        return preg_replace("/\n{3,}/", "\n\n", $text);
     }
 
     /**

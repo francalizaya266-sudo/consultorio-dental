@@ -190,6 +190,9 @@
 .agenda-work { position: absolute; left: 0; right: 0; background: var(--ag-surface); pointer-events: none; }
 .agenda-block { position: absolute; left: 0; right: 0; overflow: hidden; padding: .375rem .5rem; pointer-events: none; font-size: .75rem; font-weight: 500; color: var(--gray-500); background: repeating-linear-gradient(135deg, color-mix(in oklab, var(--gray-300) 45%, transparent) 0 1px, transparent 1px 7px), var(--ag-off); }
 .dark .agenda-block { color: var(--gray-400); background: repeating-linear-gradient(135deg, rgb(255 255 255 / .06) 0 1px, transparent 1px 7px), var(--ag-off); }
+/* Un horario ofrecido a la lista de espera: apartado mientras responde, en ámbar y con borde punteado (todavía no es una cita). */
+.agenda-block.is-hold { margin: 1px 2px; border-radius: .5rem; color: #92400e; background: rgb(254 243 199 / .7); outline: 1px dashed #f59e0b; outline-offset: -1px; }
+.dark .agenda-block.is-hold { color: #fcd34d; background: rgb(245 158 11 / .12); outline-color: rgb(245 158 11 / .6); }
 /* El tiempo de esterilización que sigue a una cita: una cola rayada, más angosta que la tarjeta. */
 .agenda-buffer { position: absolute; left: 10px; right: 11px; pointer-events: none; border-radius: 0 0 .375rem .375rem; background: repeating-linear-gradient(135deg, color-mix(in oklab, var(--gray-400) 35%, transparent) 0 1px, transparent 1px 5px); }
 .dark .agenda-buffer { background: repeating-linear-gradient(135deg, rgb(255 255 255 / .1) 0 1px, transparent 1px 5px); }
@@ -512,6 +515,8 @@ button.agenda-slot:focus-visible { outline: 2px solid var(--primary-600); outlin
 .agenda-list-block-time { flex: none; min-width: 3.25rem; font-weight: 600; color: var(--gray-600); font-variant-numeric: tabular-nums; }
 .dark .agenda-list-block { color: var(--gray-400); background: repeating-linear-gradient(135deg, rgb(255 255 255 / .06) 0 1px, transparent 1px 7px), var(--ag-off); }
 .dark .agenda-list-block-time { color: var(--gray-300); }
+.agenda-list-block.is-hold { color: #92400e; background: rgb(254 243 199 / .7); outline: 1px dashed #f59e0b; outline-offset: -1px; }
+.dark .agenda-list-block.is-hold { color: #fcd34d; background: rgb(245 158 11 / .12); outline-color: rgb(245 158 11 / .6); }
 .agenda-list-empty { padding: 2.5rem 1rem; border-radius: .875rem; text-align: center; color: var(--gray-500); background: var(--ag-surface); box-shadow: 0 0 0 1px var(--ag-line); }
 
 @media (pointer: coarse) {
@@ -1347,3 +1352,103 @@ a.ap-visit:hover { background: var(--gray-50); }
 /* Opciones rápidas: junto al nombre, solo lo que no es lo de siempre ("Solo tuya", "Propuesta de Ana"). */
 .snip-note { display: inline-block; margin-left: .35rem; padding: 0 .45rem; border-radius: 9999px; font-size: .72rem; font-weight: 500; line-height: 1.25rem; vertical-align: 1px; color: var(--gray-600); background: var(--gray-100); }
 .dark .snip-note { color: var(--gray-300); background: rgb(255 255 255 / .08); }
+
+/* ---------- Bandeja del día (Inventario) ---------- */
+
+/* Una tarjeta por cita, con casillas para ir marcando lo que ya está en la bandeja (también en papel). */
+.tray { display: grid; gap: 1rem; grid-template-columns: repeat(auto-fill, minmax(min(100%, 22rem), 1fr)); align-items: start; }
+.tray-visit { display: grid; gap: .75rem; padding: 1rem 1.125rem; border-radius: .875rem; background: #fff; box-shadow: 0 0 0 1px rgb(3 7 18 / .07), 0 1px 2px rgb(0 0 0 / .04); break-inside: avoid; }
+.dark .tray-visit { background: var(--gray-900); box-shadow: 0 0 0 1px rgb(255 255 255 / .08); }
+.tray-visit-head { display: flex; align-items: baseline; gap: .75rem; }
+.tray-time { font-size: 1.125rem; font-weight: 700; font-variant-numeric: tabular-nums; color: var(--gray-950); }
+.dark .tray-time { color: #fff; }
+.tray-who { display: grid; min-width: 0; }
+.tray-who b { font-weight: 600; color: var(--gray-950); }
+.dark .tray-who b { color: #fff; }
+.tray-who small { font-size: .8125rem; color: var(--gray-500); }
+.tray-alerts { display: flex; flex-wrap: wrap; gap: .375rem; }
+.tray-alert { padding: .1875rem .5rem; border-radius: .375rem; font-size: .8125rem; font-weight: 500; color: #92400e; background: #fef3c7; }
+.tray-alert.is-severe { color: #991b1b; background: #fee2e2; font-weight: 600; }
+.dark .tray-alert { color: #fcd34d; background: rgb(245 158 11 / .15); }
+.dark .tray-alert.is-severe { color: #fca5a5; background: rgb(239 68 68 / .18); }
+.tray-items { display: grid; gap: .125rem; }
+.tray-item { display: grid; grid-template-columns: auto 1fr auto; column-gap: .625rem; align-items: baseline; padding: .375rem 0; border-top: 1px solid var(--gray-100); font-size: .875rem; }
+.dark .tray-item { border-color: rgb(255 255 255 / .06); }
+.tray-item:first-child { border-top: 0; }
+.tray-check { width: .875rem; height: .875rem; border-radius: .25rem; box-shadow: inset 0 0 0 1.5px var(--gray-300); align-self: center; }
+.tray-item-name { color: var(--gray-900); }
+.dark .tray-item-name { color: var(--gray-100); }
+.tray-item-qty { font-weight: 600; font-variant-numeric: tabular-nums; color: var(--gray-700); }
+.dark .tray-item-qty { color: var(--gray-200); }
+.tray-item-from { grid-column: 2 / -1; font-size: .75rem; color: var(--gray-500); }
+.tray-item.is-short .tray-item-from { color: var(--danger-600); font-weight: 600; }
+.dark .tray-item.is-short .tray-item-from { color: var(--danger-400); }
+.tray-empty, .tray-none { font-size: .875rem; color: var(--gray-500); }
+@media print {
+    body:has(.tray) :is(.fi-sidebar, .fi-topbar, .fi-header-actions-ctn, .fi-header .fi-ac) { display: none !important; }
+    body:has(.tray) .fi-main-ctn { margin: 0 !important; }
+    .tray { grid-template-columns: 1fr 1fr; gap: .5rem; }
+    .tray-visit { box-shadow: 0 0 0 1px #d1d5db; padding: .625rem .75rem; }
+}
+
+/* ---------- Dinero en espera ---------- */
+
+.report-link { color: var(--primary-600); font-weight: 500; }
+.report-link:hover { text-decoration: underline; }
+.dark .report-link { color: var(--primary-400); }
+.report-muted { color: var(--gray-500); font-size: .75rem; }
+.report-tag { display: inline-block; margin-left: .375rem; padding: 0 .375rem; border-radius: .375rem; font-size: .7rem; font-weight: 600; color: var(--warning-700); background: var(--warning-50); }
+.dark .report-tag { color: var(--warning-400); background: rgb(245 158 11 / .12); }
+.report-more { display: inline-block; margin-top: .75rem; }
+/* En el celular, cada fila es una tarjeta: el paciente arriba, el monto a la derecha y el resto debajo, sin barra horizontal. */
+@media (max-width: 40rem) {
+    .report-stack thead { display: none; }
+    .report-stack tr { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: .125rem .75rem; padding: .625rem 0; border-bottom: 1px solid var(--gray-200); }
+    .dark .report-stack tr { border-color: rgb(255 255 255 / .08); }
+    .report-stack td { padding: 0 !important; border: 0 !important; white-space: normal; }
+    .report-stack td:not(.num) { grid-column: 1; }
+    .report-stack td.num { grid-column: 2; grid-row: 1; font-weight: 600; }
+    .report-stack .is-lead { order: -1; }
+    .report-stack td.empty { grid-column: 1 / -1; }
+    .report-stack tfoot tr { border-bottom: 0; }
+}
+
+/* ---------- Puesta a punto: lo que falta configurar ---------- */
+/* Arriba de la página web: lo pendiente con su enlace, lo listo al final con su check. Se va cuando está todo. */
+.setup { display: grid; gap: .875rem; padding: 1.125rem 1.25rem; border-radius: .875rem; background: #fff; box-shadow: 0 0 0 1px rgb(3 7 18 / .07), 0 1px 2px rgb(0 0 0 / .04); }
+.dark .setup { background: var(--gray-900); box-shadow: 0 0 0 1px rgb(255 255 255 / .08); }
+.setup-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 1rem; }
+.setup-title { font-size: 1rem; font-weight: 600; color: var(--gray-950); }
+.dark .setup-title { color: #fff; }
+.setup-sub { margin-top: .125rem; font-size: .8125rem; color: var(--gray-500); }
+.setup-count { flex: none; font-size: .8125rem; font-weight: 600; font-variant-numeric: tabular-nums; color: var(--gray-700); }
+.dark .setup-count { color: var(--gray-200); }
+.setup-bar { height: .375rem; border-radius: 99px; background: var(--gray-100); overflow: hidden; }
+.dark .setup-bar { background: rgb(255 255 255 / .08); }
+.setup-bar span { display: block; height: 100%; border-radius: inherit; background: var(--success-500); }
+.setup-list { display: grid; }
+.setup-item { display: flex; align-items: center; gap: .75rem; padding: .75rem 0; border-top: 1px solid var(--gray-100); }
+.dark .setup-item { border-color: rgb(255 255 255 / .06); }
+.setup-item:first-child { border-top: 0; padding-top: .25rem; }
+.setup-icon { width: 1.25rem; height: 1.25rem; flex: none; color: var(--primary-600); }
+.dark .setup-icon { color: var(--primary-400); }
+.setup-text { flex: 1; min-width: 0; display: grid; gap: .125rem; }
+.setup-text strong { font-size: .9375rem; font-weight: 600; color: var(--gray-950); }
+.dark .setup-text strong { color: #fff; }
+.setup-text span { font-size: .8125rem; color: var(--gray-600); }
+.dark .setup-text span { color: var(--gray-400); }
+.setup-link { flex: none; }
+/* Los enlaces llevan a una sección de esta misma página: que el título no quede bajo la barra de arriba. */
+.fi-section[id] { scroll-margin-top: 5.5rem; }
+.setup-link:active { transform: scale(.97); }
+.setup-item.is-done { padding: .5rem 0; }
+.setup-item.is-done .setup-icon { color: var(--success-600); }
+.dark .setup-item.is-done .setup-icon { color: var(--success-400); }
+.setup-item.is-done .setup-text strong { font-weight: 500; color: var(--gray-500); }
+@media (max-width: 40rem) {
+    .setup { padding: 1rem; }
+    .setup-head { flex-direction: column; gap: .25rem; }
+    .setup-item { flex-wrap: wrap; align-items: flex-start; row-gap: .5rem; }
+    .setup-text { flex-basis: calc(100% - 2rem); }
+    .setup-link { margin-left: 2rem; }
+}

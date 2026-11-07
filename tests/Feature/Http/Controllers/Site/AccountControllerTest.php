@@ -10,12 +10,14 @@ use App\Enums\PlanItemStatus;
 use App\Enums\PlanPaymentMode;
 use App\Enums\TreatmentPlanStatus;
 use App\Filament\Resources\Accounts\Pages\ViewAccount;
+use App\Livewire\Site\BookingWizard;
 use App\Models\Account;
 use App\Models\Appointment;
 use App\Models\Doctor;
 use App\Models\Patient;
 use App\Models\Payment;
 use App\Models\RememberedDevice;
+use App\Models\Treatment;
 use App\Models\TreatmentPlan;
 use App\Models\User;
 use App\Models\WhatsappMessage;
@@ -142,6 +144,79 @@ class AccountControllerTest extends TestCase
             ->assertSeeInOrder(['Sonrisa en familia (2x1)', 'Incluido en el 2x1', 'Va incluido en el 2x1 de Rosa: no tiene costo.'])
             ->assertSeeInOrder(['Saldo de '.$this->mother->full_name, 'S/ 600.00 por pagar'])
             ->assertDontSee('Carillas por aceptar');
+    }
+
+    public function test_the_home_page_greets_a_returning_patient_with_their_appointment_their_sessions_and_their_checkup(): void
+    {
+        $evaluation = Treatment::factory()->evaluation()->create();
+        $doctor = $this->doctorOffering($evaluation);
+        $doctor->update(['name' => 'Dra. Vega']);
+        Appointment::factory()->for($this->mother)->for($doctor)->for(Treatment::factory()->create(['name' => 'Limpieza dental']))->at('2026-11-04 10:00')->create();
+        // A Mateo le falta una sesión de su plan y no tiene cita.
+        $this->mateoHalfwayThroughHisPlan($doctor);
+        // Lucía vino hace 7 meses y no volvió: le toca su control.
+        $lucia = Patient::factory()->dependentOf($this->account)->create(['first_name' => 'Lucía', 'last_visit_at' => now()->subMonths(7)]);
+
+        $this->get(route('site.home'))->assertOk()->assertDontSee(['Hola, Rosa', 'Tu próxima cita']);
+
+        $this->rememberDevice()
+            ->get(route('site.home'))
+            ->assertOk()
+            ->assertSeeInOrder([
+                'Hola, Rosa',
+                'Tu próxima cita', 'Miércoles 4 de noviembre, 10:00', 'Limpieza dental · Dra. Vega', 'Confirmar', 'Cambiar horario',
+                'Tratamiento de Mateo', 'A Mateo le falta 1 de 3 sesiones', 'Con Dra. Vega.', 'Pedir su próxima sesión',
+                'Control de Lucía', '7 meses desde su última visita', 'Reservar su control',
+                '¿No eres Rosa?',
+            ])
+            ->assertSee(route('site.booking', ['tratamiento' => $evaluation->slug, 'para' => $lucia->id]))
+            // Lo de la portada no muestra montos: los pagos siguen pidiendo verificar.
+            ->assertDontSee('Saldo de');
+
+        // Desde "Reservar su control", la reserva ya va a nombre de Lucía (y de nadie fuera de la familia).
+        Livewire::withQueryParams(['tratamiento' => $evaluation->slug, 'para' => $lucia->id])
+            ->withCookie(DeviceService::COOKIE, 'este-celular')
+            ->test(BookingWizard::class)
+            ->assertSet('patientId', $lucia->id);
+        Livewire::withQueryParams(['para' => Patient::factory()->create()->id])
+            ->withCookie(DeviceService::COOKIE, 'este-celular')
+            ->test(BookingWizard::class)
+            ->assertSet('patientId', $this->mother->id);
+    }
+
+    public function test_asking_for_the_next_session_tells_reception_once_and_only_from_the_family_phone(): void
+    {
+        $reception = User::factory()->reception()->create();
+        $this->mateoHalfwayThroughHisPlan(Doctor::factory()->create(['name' => 'Dra. Vega']));
+
+        $this->rememberDevice()
+            ->from(route('site.home'))
+            ->post(route('site.account.session', $this->child))
+            ->assertRedirect(route('site.home'))
+            ->assertSessionHas('status', 'Listo: recepción ya sabe que Mateo quiere su próxima sesión. Te escribiremos por WhatsApp con el horario.');
+        $this->post(route('site.account.session', $this->child))->assertRedirect();
+
+        $alert = $reception->notifications()->sole()->data;
+        $this->assertSame('Pide su próxima sesión', $alert['title']);
+        $this->assertSame($this->child->full_name.' quiere agendar su próxima sesión (lleva 2 de 3, con Dra. Vega). Escríbele con el horario.', $alert['body']);
+
+        $this->get(route('site.home'))->assertSee('Ya la pediste.')->assertDontSee('Pedir su próxima sesión');
+
+        // Otro celular no puede pedirla por Mateo.
+        $other = Account::factory()->verified()->create(['phone' => '+51912345678']);
+        RememberedDevice::create(['account_id' => $other->id, 'token_hash' => hash('sha256', 'otro-celular'), 'expires_at' => now()->addMonth()]);
+        $this->withCookie(DeviceService::COOKIE, 'otro-celular')->post(route('site.account.session', $this->child))->assertForbidden();
+    }
+
+    private function mateoHalfwayThroughHisPlan(Doctor $doctor): TreatmentPlan
+    {
+        $plan = TreatmentPlan::create(['patient_id' => $this->child->id, 'doctor_id' => $doctor->id, 'status' => TreatmentPlanStatus::InProgress, 'accepted_at' => now()->subMonth()]);
+        $plan->items()->createMany([
+            ['description' => 'Curación con resina', 'unit_price' => 120, 'status' => PlanItemStatus::Done, 'accepted_at' => now()->subMonth()],
+            ['description' => 'Pulpotomía', 'unit_price' => 250, 'sessions_planned' => 2, 'sessions_done' => 1, 'status' => PlanItemStatus::InProgress, 'accepted_at' => now()->subMonth()],
+        ]);
+
+        return $plan;
     }
 
     public function test_asking_for_access_leaves_one_link_ready_for_reception_without_revealing_numbers(): void

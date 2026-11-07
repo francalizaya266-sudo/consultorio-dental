@@ -99,6 +99,7 @@ class WaitlistEntriesTable
                 ActionGroup::make([
                     EditAction::make()
                         ->modalHeading('Editar lo que espera'),
+                    WaitlistEntryActions::release(),
                     WaitlistEntryActions::remove(),
                 ]),
             ])
@@ -127,6 +128,7 @@ class WaitlistEntriesTable
 
         return match (true) {
             $entry->status === WaitlistStatus::Booked && $entry->appointment !== null => 'Cita: '.self::when($entry->appointment->starts_at),
+            $entry->isHolding() => 'Le ofreciste '.self::when($entry->offered_starts_at).' · apartado hasta las '.$entry->held_until->format('H:i'),
             $entry->status === WaitlistStatus::Offered && $entry->offered_starts_at !== null => 'Le ofreciste '.self::when($entry->offered_starts_at).' · '.$entry->offered_at->diffForHumans(),
             $entry->isActive() && $upcoming !== null => 'Ya tiene cita el '.self::when($upcoming).': adelántasela',
             default => null,

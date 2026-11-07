@@ -23,6 +23,7 @@ use App\Filament\Widgets\TodayStats;
 use App\Filament\Widgets\WaitingRoom;
 use App\Filament\Widgets\WeekGaps;
 use App\Models\Appointment;
+use App\Models\Charge;
 use App\Models\Consultation;
 use App\Models\Doctor;
 use App\Models\Patient;
@@ -248,6 +249,56 @@ class DashboardPanelTest extends TestCase
         $this->assertSame([MessageTemplateKey::Birthday, MessageStatus::Sent, $carmen->id], [$message->template_key, $message->status, $message->patient_id]);
 
         Livewire::test(FollowUpsToday::class)->assertSee('Le escribiste hoy');
+    }
+
+    public function test_regulars_who_leave_happy_are_asked_for_their_google_review_once_in_six_months(): void
+    {
+        Setting::set('clinic.reviews_url', 'https://g.page/r/vega/review');
+        $cleaning = Treatment::factory()->create(['name' => 'Limpieza dental']);
+        $visit = fn (Patient $patient, string $at, AppointmentStatus $status = AppointmentStatus::Completed) => Appointment::factory()->for($patient)->for($cleaning)->at($at)->create(['status' => $status]);
+        $regular = function (string $firstName, string $lastName) use ($visit): Patient {
+            $patient = $this->patient($firstName, $lastName);
+            $visit($patient, '2026-05-04 10:00');
+            $visit($patient, '2026-11-02 09:00');
+
+            return $patient;
+        };
+
+        // Viene seguido, está al día y no falta: hoy es el día para pedírsela.
+        $rosa = $regular('Rosa', 'Quispe');
+        // Primera vez: todavía no.
+        $visit($this->patient('Luis', 'Mamani'), '2026-11-02 09:30');
+        // Se fue debiendo.
+        Charge::factory()->for($regular('Ana', 'Flores'))->create(['amount' => 120]);
+        // Faltó a una cita hace dos meses.
+        $visit($regular('Pedro', 'Huamán'), '2026-09-07 10:00', AppointmentStatus::NoShow);
+        // Ya se le pidió hace tres meses.
+        $carmen = $regular('Carmen', 'Rojas');
+        WhatsappMessage::create(['account_id' => $carmen->account_id, 'patient_id' => $carmen->id, 'template_key' => MessageTemplateKey::ReviewRequest, 'phone' => '+51987654321', 'status' => MessageStatus::Sent, 'sent_at' => '2026-08-03 10:00']);
+
+        $this->actingAs(User::factory()->reception()->create());
+
+        Livewire::test(FollowUpsToday::class)
+            ->assertSee(['Pedir su opinión en Google', 'Rosa Quispe', 'Hoy: Limpieza dental · 2 atenciones'])
+            ->assertDontSee(['Luis Mamani', 'Ana Flores', 'Pedro Huamán', 'Carmen Rojas'])
+            ->mountAction('whatsapp', ['template' => MessageTemplateKey::ReviewRequest->value, 'patient' => $rosa->id])
+            ->assertSchemaStateSet(['body' => "Hola Rosa, gracias por confiar en Clínica Vega Implant. Si te sentiste bien atendido, ¿nos dejas tu opinión en Google? Toma un minuto y ayuda a otras personas a encontrarnos:\nhttps://g.page/r/vega/review"])
+            ->callMountedAction()
+            ->assertHasNoErrors();
+
+        Livewire::test(FollowUpsToday::class)->assertSee(['Rosa Quispe', 'Le escribiste hoy']);
+
+        // La semana siguiente vuelve, contenta otra vez: ya se le pidió, no se le insiste.
+        $this->travelTo(now()->addWeek());
+        $visit($rosa, '2026-11-09 09:00');
+
+        Livewire::test(FollowUpsToday::class)->assertDontSee('Rosa Quispe');
+
+        // Sin el enlace a Google configurado, no se ofrece a nadie.
+        $visit($regular('Elena', 'Vargas'), '2026-11-09 10:00');
+        Setting::set('clinic.reviews_url', null);
+
+        Livewire::test(FollowUpsToday::class)->assertDontSee(['Pedir su opinión', 'Elena Vargas']);
     }
 
     public function test_the_plan_message_names_what_is_pending_without_the_tooth(): void

@@ -195,8 +195,8 @@ class TreatmentPlanAndPrescriptionTest extends TestCase
 
         $body = app(WhatsAppOutbox::class)->render($this->plans()->whatsappDraft($plan));
 
-        $this->assertStringContainsString('• Curación con resina · pieza 36 (MO) × 2: S/ 250.00', $body);
-        $this->assertStringContainsString('Total: S/ 250.00', $body);
+        $this->assertStringContainsString('1. Curación con resina × 2 en el primer molar inferior izquierdo (pieza 36), caras mesial y oclusal: S/ 250.00', $body);
+        $this->assertStringContainsString('Total: S/ 250.00 (vale hasta el 2 de diciembre)', $body);
         $this->assertStringNotContainsString('Blanqueamiento', $body);
 
         // Sin celular no hay a dónde enviarlo.

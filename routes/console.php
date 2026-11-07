@@ -25,6 +25,11 @@ Schedule::command('cuotas:preparar-avisos')
     ->dailyAt(config('consultorio.defaults.reminders.day_before_at', '09:00'))
     ->withoutOverlapping();
 
+// Lo ofrecido a la lista de espera que nadie confirmó a tiempo vuelve a quedar libre (y se sugiere al siguiente).
+Schedule::command('lista-espera:liberar-apartados')
+    ->everyFiveMinutes()
+    ->withoutOverlapping();
+
 Schedule::command('whatsapp:enviar')
     ->everyFiveMinutes()
     ->withoutOverlapping();
@@ -35,6 +40,11 @@ Schedule::command('queue:work --stop-when-empty --max-time=50')
     ->withoutOverlapping();
 
 Schedule::command('model:prune')->daily();
+
+// Lo que cada doctor realmente tarda en cada tratamiento, con las atenciones hasta ayer.
+Schedule::command('agenda:aprender-duraciones')
+    ->dailyAt('02:30')
+    ->withoutOverlapping();
 
 // Copia de la base de datos de madrugada, cuando nadie está usando el sistema.
 Schedule::command('respaldo:crear')

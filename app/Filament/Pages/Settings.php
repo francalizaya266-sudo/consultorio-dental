@@ -53,6 +53,7 @@ class Settings extends Page
             'booking.self_reschedule_min_hours' => 'int',
             'booking.self_cancel_min_hours' => 'int',
             'booking.max_reschedule_options' => 'int',
+            'plans.valid_days' => 'int',
             'reports.doctors_see_own' => 'bool',
             'reports.monthly_goal' => 'optional_int',
         ];
@@ -107,6 +108,12 @@ class Settings extends Page
                                             ->label('Lema')
                                             ->maxLength(80)
                                             ->helperText('Sale al pie de las recetas.'),
+                                    ]),
+                                Section::make('Presupuestos')
+                                    ->columns(2)
+                                    ->schema([
+                                        self::number('plans.valid_days', 'Un presupuesto vale por', 7, 365, 'días')
+                                            ->helperText('Desde que se presenta. Sale en la hoja y en el WhatsApp: "vale hasta el …". Lo aceptado mantiene su precio.'),
                                     ]),
                             ]),
                         Tab::make('Agenda y reservas')

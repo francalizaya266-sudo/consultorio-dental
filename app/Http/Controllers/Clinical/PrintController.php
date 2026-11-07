@@ -8,6 +8,7 @@ use App\Filament\Resources\Patients\RelationManagers\TreatmentPlansRelationManag
 use App\Http\Controllers\Controller;
 use App\Livewire\OdontogramChart;
 use App\Models\Consent;
+use App\Models\Odontogram;
 use App\Models\OdontogramEntry;
 use App\Models\Patient;
 use App\Models\Prescription;
@@ -23,6 +24,7 @@ use App\Support\Signatures;
 use App\Support\Teeth;
 use Filament\Facades\Filament;
 use Illuminate\Http\RedirectResponse;
+use Illuminate\Support\Collection;
 use Illuminate\View\View;
 
 /** Receta, presupuesto, consentimiento e historia listos para imprimir o guardar en PDF desde el navegador. */
@@ -82,16 +84,12 @@ class PrintController extends Controller
         $patient->auditEvent('printed');
 
         $odontogram = $patient->latestOdontogram;
-        $entries = $odontogram?->entries ?? collect();
 
         return view('print.history', [
+            ...self::drawing($odontogram),
             'patient' => $patient,
             'doctor' => auth()->user()->doctor,
-            'odontogram' => $odontogram,
-            'rows' => $odontogram ? Teeth::rows($odontogram->dentition) : [],
-            'teeth' => OdontogramChart::teethData($entries),
-            'spans' => $entries->filter(fn (OdontogramEntry $entry) => $entry->to_tooth !== null)->values(),
-            'findings' => $entries->sortBy([['tooth', 'asc'], ['id', 'asc']])->values(),
+            'findings' => ($odontogram?->entries ?? collect())->sortBy([['tooth', 'asc'], ['id', 'asc']])->values(),
             'prescriptions' => $prescriptions,
         ]);
     }
@@ -102,8 +100,18 @@ class PrintController extends Controller
 
         $plan->load('patient', 'doctor', 'items.package', 'installments', 'signatures', 'includedIn.patient', 'companionPlans.patient');
         $package = $plan->accepted_at ? null : $plan->offeredPackage();
+        // El odontograma de la atención donde se armó el plan o, si no hay, el último: lo rojo es lo que se va a tratar.
+        $odontogram = Odontogram::query()
+            ->where('patient_id', $plan->patient_id)
+            ->when($plan->consultation_id, fn ($odontograms) => $odontograms->orderByRaw('consultation_id = ? desc', [$plan->consultation_id]))
+            ->latest('id')
+            ->with('entries.condition')
+            ->first();
 
         return view('print.plan', [
+            ...self::drawing($odontogram),
+            'diagnoses' => $plan->diagnosesByTooth(),
+            'validUntil' => $plan->validUntil(),
             'plan' => $plan,
             'patient' => $plan->patient,
             'doctor' => $plan->doctor,
@@ -122,6 +130,23 @@ class PrintController extends Controller
                 : null,
             'delivered' => (bool) session('planDelivered'),
         ]);
+    }
+
+    /**
+     * Lo que necesita el dibujo del odontograma (x-odontogram-drawing), con sus hallazgos ya cargados.
+     *
+     * @return array{odontogram: Odontogram|null, rows: array<int, list<int>>, teeth: array<int, array<string, mixed>>, spans: Collection<int, OdontogramEntry>}
+     */
+    private static function drawing(?Odontogram $odontogram): array
+    {
+        $entries = $odontogram?->entries ?? collect();
+
+        return [
+            'odontogram' => $odontogram,
+            'rows' => $odontogram ? Teeth::rows($odontogram->dentition) : [],
+            'teeth' => OdontogramChart::teethData($entries),
+            'spans' => $entries->filter(fn (OdontogramEntry $entry) => $entry->to_tooth !== null)->values(),
+        ];
     }
 
     /** Se le entregó el presupuesto al paciente: el borrador pasa a "presentado al paciente". */

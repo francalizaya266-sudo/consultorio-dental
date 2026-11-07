@@ -10,7 +10,6 @@ use App\Enums\ConfirmationChannel;
 use App\Enums\MessageTemplateKey;
 use App\Enums\PatientRelationship;
 use App\Exceptions\BookingException;
-use App\Filament\Resources\WaitlistEntries\WaitlistEntryResource;
 use App\Models\Account;
 use App\Models\Appointment;
 use App\Models\Campaign;
@@ -91,7 +90,7 @@ class AppointmentService
 
             $this->lockAgenda($doctor);
 
-            if (! $this->availability->isFree($doctor, $data->startsAt, $duration, $buffer)) {
+            if (! $this->availability->forPatient($patient->exists ? $patient->getKey() : null)->isFree($doctor, $data->startsAt, $duration, $buffer)) {
                 throw BookingException::slotTaken();
             }
 
@@ -159,7 +158,13 @@ class AppointmentService
         return DB::transaction(function () use ($by, $patient, $doctor, $treatment, $startsAt, $options, $duration, $buffer) {
             $this->lockAgenda($doctor);
 
-            if (! $this->availability->isFree($doctor, $startsAt, $duration, $buffer, requireWorkingHours: false)) {
+            $availability = $this->availability->forPatient($patient->getKey());
+
+            if ($hold = $availability->holdAt($doctor, $startsAt, $duration, $buffer)) {
+                throw BookingException::held($hold);
+            }
+
+            if (! $availability->isFree($doctor, $startsAt, $duration, $buffer, requireWorkingHours: false)) {
                 throw BookingException::overlaps();
             }
 
@@ -246,6 +251,7 @@ class AppointmentService
 
         $this->assertWebTimeWindow($startsAt);
 
+        [$freedDoctor, $freedAt] = [$appointment->doctor, $appointment->starts_at];
         $appointment = $this->move($appointment, $appointment->doctor, $startsAt, requireWorkingHours: true, actor: 'patient');
 
         $appointment->update([
@@ -255,9 +261,12 @@ class AppointmentService
             'unconfirmed_flagged_at' => null,
         ]);
 
+        $waitlist = $this->waitlist->freedSlotNotice($freedDoctor, $freedAt, $appointment->patient_id);
         $this->alerts->toReception(
             'Un paciente cambió su horario',
-            "{$appointment->patient->full_name} movió su cita a {$this->when($appointment)} con {$appointment->doctor->name}.",
+            "{$appointment->patient->full_name} movió su cita a {$this->when($appointment)} con {$appointment->doctor->name}."
+                .($waitlist ? ' En el horario que dejó, '.lcfirst($waitlist['text']) : ''),
+            link: $waitlist['link'] ?? null,
         );
 
         return $appointment;
@@ -285,6 +294,7 @@ class AppointmentService
             $this->assertDoctorOffers($doctor, $appointment->treatment);
         }
 
+        [$freedDoctor, $freedAt] = [$appointment->doctor, $appointment->starts_at];
         $appointment = $this->move($appointment, $doctor, $startsAt, requireWorkingHours: false, actor: 'staff');
 
         $appointment->update($agreed ? [
@@ -306,10 +316,20 @@ class AppointmentService
             $this->outbox->queueForAppointment($appointment, MessageTemplateKey::Rescheduled);
         }
 
+        $waitlist = $this->waitlist->freedSlotNotice($freedDoctor, $freedAt, $appointment->patient_id);
+
         if ($by->isDoctor()) {
             $this->alerts->toReception(
                 "{$doctor->name} movió una cita",
-                "{$appointment->patient->full_name} ahora va el {$this->when($appointment)}. El aviso al paciente está listo para enviar.",
+                "{$appointment->patient->full_name} ahora va el {$this->when($appointment)}. El aviso al paciente está listo para enviar."
+                    .($waitlist ? ' En el horario que dejó, '.lcfirst($waitlist['text']) : ''),
+                link: $waitlist['link'] ?? null,
+            );
+        } elseif ($waitlist) {
+            $this->alerts->toReception(
+                'Se liberó un horario',
+                ucfirst($freedAt->translatedFormat('D j M, g:i a'))." con {$freedDoctor->name}. {$waitlist['text']}",
+                link: $waitlist['link'],
             );
         }
 
@@ -433,7 +453,13 @@ class AppointmentService
         return DB::transaction(function () use ($appointment, $doctor, $startsAt, $requireWorkingHours, $actor, $duration, $buffer) {
             $this->lockAgenda($doctor);
 
-            if (! $this->availability->isFree($doctor, $startsAt, $duration, $buffer, $appointment->getKey(), $requireWorkingHours)) {
+            $availability = $this->availability->forPatient($appointment->patient_id);
+
+            if ($actor !== 'patient' && ($hold = $availability->holdAt($doctor, $startsAt, $duration, $buffer))) {
+                throw BookingException::held($hold);
+            }
+
+            if (! $availability->isFree($doctor, $startsAt, $duration, $buffer, $appointment->getKey(), $requireWorkingHours)) {
                 throw $actor === 'patient' ? BookingException::slotTaken() : BookingException::overlaps();
             }
 
@@ -580,24 +606,13 @@ class AppointmentService
 
     /**
      * Si alguien de la lista de espera puede tomar el horario que se liberó: el texto para la alerta
-     * y el botón que abre la lista con quienes pueden venir ese día.
+     * y el botón que abre la agenda con el horario ofrecido al primero que lo espera.
      *
      * @return array{text: string, link: array{label: string, url: string}}|null
      */
     private function waitlistNotice(Appointment $appointment): ?array
     {
-        $count = $this->waitlist->candidatesFor($appointment->doctor, $appointment->starts_at, $appointment->patient_id)->count();
-
-        if ($count === 0) {
-            return null;
-        }
-
-        return [
-            'text' => $count === 1
-                ? 'Hay 1 paciente en lista de espera que puede venir a esa hora.'
-                : "Hay {$count} pacientes en lista de espera que pueden venir a esa hora.",
-            'link' => ['label' => 'Ofrecer el horario', 'url' => WaitlistEntryResource::urlForSlot($appointment->doctor, $appointment->starts_at)],
-        ];
+        return $this->waitlist->freedSlotNotice($appointment->doctor, $appointment->starts_at, $appointment->patient_id);
     }
 
     private function when(Appointment $appointment): string
