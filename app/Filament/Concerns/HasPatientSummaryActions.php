@@ -3,6 +3,7 @@
 namespace App\Filament\Concerns;
 
 use App\Enums\MessageTemplateKey;
+use App\Filament\Actions\RefundAction;
 use App\Filament\Actions\RegisterPaymentAction;
 use App\Filament\Actions\SendWhatsAppAction;
 use App\Filament\Actions\SignConsentAction;
@@ -12,8 +13,8 @@ use App\Services\Dashboard\FollowUps;
 use Filament\Actions\Action;
 
 /**
- * Los botones del resumen del paciente (ficha y cita) que se hacen ahí mismo: cobrar lo que debe, firmar el
- * consentimiento de la cita de hoy y escribirle por WhatsApp con el mensaje ya armado.
+ * Los botones del resumen del paciente (ficha y cita) que se hacen ahí mismo: cobrar lo que debe, devolverle
+ * lo que tiene a favor, firmar el consentimiento de la cita de hoy y escribirle por WhatsApp con el mensaje ya armado.
  */
 trait HasPatientSummaryActions
 {
@@ -22,6 +23,12 @@ trait HasPatientSummaryActions
     public function collectPaymentAction(): Action
     {
         return RegisterPaymentAction::make(fn () => $this->summaryPatient())->name('collectPayment');
+    }
+
+    /** Lo que tiene a favor se le devuelve desde la misma etiqueta "A favor". */
+    public function refundAction(): Action
+    {
+        return RefundAction::make(fn () => $this->summaryPatient());
     }
 
     public function consentForVisitAction(): Action

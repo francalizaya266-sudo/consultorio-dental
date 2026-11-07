@@ -3,6 +3,7 @@
 namespace App\Filament\Support;
 
 use App\Enums\AppointmentStatus;
+use App\Filament\Actions\RegisterPaymentAction;
 use App\Filament\Resources\Appointments\AppointmentResource;
 use App\Filament\Resources\Consultations\ConsultationResource;
 use App\Models\Appointment;
@@ -16,24 +17,34 @@ use Carbon\CarbonInterface;
 use Illuminate\Support\Collection;
 
 /**
- * Una sola línea de tiempo del paciente: citas, atenciones, pagos y mensajes, de lo más nuevo a lo más viejo.
+ * Una sola línea de tiempo del paciente: citas, atenciones, pagos y mensajes, de lo más nuevo a lo más viejo,
+ * con un filtro por tipo. Reemplaza las pestañas Citas y Pagos que repetían lo mismo: cada pago lleva aquí su
+ * constancia y, para quien puede, su "Anular".
  * Cada persona ve lo que le toca: lo clínico solo quien atiende, la plata solo caja y administración.
+ *
+ * @phpstan-type Event array{at: CarbonInterface, kind: string, icon: string, color: string, title: string, detail: string|null, url: string|null, receipt: string|null, payment: int|null}
  */
 final class PatientTimeline
 {
-    /** Cuántos sucesos de cada tipo se juntan (la lista completa está en cada pestaña). */
-    private const PER_KIND = 25;
+    /** Cuántos sucesos de cada tipo se juntan: años de historia, sin cargar todo de un paciente antiguo. */
+    private const PER_KIND = 100;
 
-    /** @return Collection<int, array{at: CarbonInterface, kind: string, icon: string, color: string, title: string, detail: string|null, url: string|null}> */
+    /** Cómo se llama cada tipo en el filtro. */
+    public const KINDS = ['Cita' => 'Citas', 'Atención' => 'Atenciones', 'Pago' => 'Pagos', 'WhatsApp' => 'Mensajes'];
+
+    /** @return Collection<int, Event> */
     public static function for(Patient $patient, User $user): Collection
     {
         $events = collect()
             ->merge(self::appointments($patient, $user))
             ->merge($user->can('viewClinical', $patient) ? self::consultations($patient) : [])
-            ->merge($user->can('viewAny', Payment::class) ? self::payments($patient) : [])
+            ->merge($user->can('viewAny', Payment::class) ? self::payments($patient, $user) : [])
             ->merge(self::messages($patient));
 
-        return $events->sortByDesc(fn (array $event) => $event['at']->getTimestamp())->values();
+        return $events
+            ->map(fn (array $event) => [...$event, 'receipt' => $event['receipt'] ?? null, 'payment' => $event['payment'] ?? null])
+            ->sortByDesc(fn (array $event) => $event['at']->getTimestamp())
+            ->values();
     }
 
     /** @return list<array<string, mixed>> */
@@ -84,7 +95,7 @@ final class PatientTimeline
     }
 
     /** @return list<array<string, mixed>> */
-    private static function payments(Patient $patient): array
+    private static function payments(Patient $patient, User $user): array
     {
         return $patient->payments()
             ->latest('paid_at')
@@ -95,9 +106,13 @@ final class PatientTimeline
                 'kind' => 'Pago',
                 'icon' => 'heroicon-o-banknotes',
                 'color' => $payment->voided_at ? 'gray' : 'success',
-                'title' => 'Pagó '.Money::format($payment->amount).' · '.$payment->method->getLabel().($payment->voided_at ? ' (anulado)' : ''),
-                'detail' => $payment->notes,
+                'title' => ((float) $payment->amount < 0 ? 'Se le devolvió '.Money::format(-$payment->amount) : 'Pagó '.Money::format($payment->amount))
+                    .' · '.$payment->method->getLabel().($payment->voided_at ? ' (anulado)' : ''),
+                'detail' => $payment->voided_at ? 'Anulado: '.$payment->void_reason : $payment->notes,
                 'url' => null,
+                'receipt' => RegisterPaymentAction::receiptUrl($payment),
+                // Se anula desde aquí si todavía cuenta y el día no está cerrado para quien mira.
+                'payment' => $payment->voided_at === null && $user->can('update', $payment) ? $payment->getKey() : null,
             ])
             ->all();
     }

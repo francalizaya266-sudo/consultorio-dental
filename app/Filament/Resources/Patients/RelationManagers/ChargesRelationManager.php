@@ -4,7 +4,6 @@ namespace App\Filament\Resources\Patients\RelationManagers;
 
 use App\Models\Charge;
 use App\Models\Doctor;
-use App\Models\Patient;
 use App\Models\User;
 use App\Services\Billing\BillingService;
 use App\Support\Money;
@@ -33,21 +32,6 @@ class ChargesRelationManager extends RelationManager
     public static function canViewForRecord(Model $ownerRecord, string $pageClass): bool
     {
         return auth()->user()->can('viewAny', Charge::class);
-    }
-
-    /** El saldo en la pestaña, para verlo sin entrar. */
-    public static function getBadge(Model $ownerRecord, string $pageClass): ?string
-    {
-        /** @var Patient $ownerRecord */
-        $balance = $ownerRecord->balance();
-
-        return $balance == 0 ? null : Money::balance($balance);
-    }
-
-    public static function getBadgeColor(Model $ownerRecord, string $pageClass): ?string
-    {
-        /** @var Patient $ownerRecord */
-        return $ownerRecord->balance() > 0 ? 'danger' : 'success';
     }
 
     public function isReadOnly(): bool

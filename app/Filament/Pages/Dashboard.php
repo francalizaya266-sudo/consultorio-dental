@@ -8,7 +8,6 @@ use App\Filament\Resources\Appointments\AppointmentResource;
 use App\Filament\Resources\WaitlistEntries\WaitlistEntryResource;
 use App\Filament\Widgets\FollowUpsToday;
 use App\Filament\Widgets\MonthOverview;
-use App\Filament\Widgets\MonthTrend;
 use App\Filament\Widgets\NextPatient;
 use App\Filament\Widgets\SystemHealth;
 use App\Filament\Widgets\TodayAppointments;
@@ -24,21 +23,25 @@ use Filament\Support\Icons\Heroicon;
 
 /**
  * El inicio como dashboard: todo lo del día en la primera pantalla. Arriba, los números del día;
- * al centro, la agenda de hoy (y, para el doctor, su próximo paciente; para la administración, el
- * mes con su gráfico); al costado, la sala de espera, lo que hay que hacer y los huecos de la semana.
- * Cada tarjeta decide si se muestra con el mismo permiso de la pantalla a la que lleva. Si a alguien
- * no le toca nada del costado, el centro ocupa todo el ancho.
+ * al centro, la agenda de hoy (y, para el doctor, su próximo paciente); al costado, la sala de espera,
+ * lo que hay que hacer y los huecos de la semana; y al final, cómo va el mes. En el celular va en ese
+ * mismo orden: primero lo del día, lo del mes al último. Cada tarjeta decide si se muestra con el
+ * mismo permiso de la pantalla a la que lleva. Si a alguien no le toca nada del costado, el centro
+ * ocupa todo el ancho.
  */
 class Dashboard extends BaseDashboard
 {
     /** @var list<class-string> Arriba, a todo el ancho. */
     private const TOP = [SystemHealth::class, TodayStats::class];
 
-    /** @var list<class-string> La columna ancha. */
-    private const MAIN = [NextPatient::class, TodayAppointments::class, MonthOverview::class, MonthTrend::class];
+    /** @var list<class-string> La columna ancha: lo de hoy. */
+    private const MAIN = [NextPatient::class, TodayAppointments::class];
 
     /** @var list<class-string> La columna angosta. */
     private const SIDE = [WaitingRoom::class, FollowUpsToday::class, WeekGaps::class];
+
+    /** @var list<class-string> Debajo de la columna ancha (en el celular, al final de todo). */
+    private const MONTH = [MonthOverview::class];
 
     protected static ?string $title = 'Hoy';
 
@@ -52,20 +55,29 @@ class Dashboard extends BaseDashboard
     /** @return list<class-string> */
     public function getWidgets(): array
     {
-        return [...self::TOP, ...self::MAIN, ...self::SIDE];
+        return [...self::TOP, ...self::MAIN, ...self::SIDE, ...self::MONTH];
     }
 
+    /**
+     * Tres bloques en el orden en que se leen en el celular: hoy, el costado y el mes. En pantalla
+     * ancha el costado ocupa las dos filas (panel.css, .dash-side) y el mes queda bajo la agenda.
+     */
     public function content(Schema $schema): Schema
     {
         $side = $this->getWidgetsSchemaComponents(self::SIDE);
+        $month = $this->getWidgetsSchemaComponents(self::MONTH);
+        $wide = ['default' => 1, 'lg' => $side === [] ? 3 : 2];
 
         return $schema->components([
             Group::make($this->getWidgetsSchemaComponents(self::TOP)),
             Grid::make(['default' => 1, 'lg' => 3])
+                ->extraAttributes(['class' => 'dash-layout'])
                 ->schema(array_values(array_filter([
-                    Group::make($this->getWidgetsSchemaComponents(self::MAIN))
-                        ->columnSpan(['default' => 1, 'lg' => $side === [] ? 3 : 2]),
-                    $side === [] ? null : Group::make($side)->columnSpan(['default' => 1, 'lg' => 1]),
+                    Group::make($this->getWidgetsSchemaComponents(self::MAIN))->columnSpan($wide),
+                    $side === [] ? null : Group::make($side)
+                        ->columnSpan(['default' => 1, 'lg' => 1])
+                        ->extraAttributes(['class' => 'dash-side']),
+                    $month === [] ? null : Group::make($month)->columnSpan($wide),
                 ]))),
         ]);
     }

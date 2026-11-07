@@ -25,6 +25,7 @@ use Filament\Tables\Filters\SelectFilter;
 use Filament\Tables\Table;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Arr;
+use Illuminate\Support\HtmlString;
 
 /**
  * Frases para escribir rápido en la historia clínica. Las del equipo las maneja
@@ -89,9 +90,14 @@ class TextSnippetResource extends Resource
         return $table
             ->stackedOnMobile()
             ->columns([
+                // De quién es y en qué estado está se dice solo cuando no es lo de siempre (del equipo y activa):
+                // dos columnas que repetían "Equipo" y "Activa" en cada fila empujaban "Editar" fuera de la pantalla.
                 TextColumn::make('label')
                     ->label('Opción')
                     ->searchable(['label', 'body', 'shortcut'])
+                    ->formatStateUsing(fn (TextSnippet $record) => ($note = self::ownershipNote($record))
+                        ? new HtmlString(e($record->label).' <span class="snip-note">'.e($note).'</span>')
+                        : $record->label)
                     ->description(fn (TextSnippet $record) => str($record->body)->limit(90)),
                 TextColumn::make('shortcut')
                     ->label('Atajo')
@@ -101,12 +107,6 @@ class TextSnippetResource extends Resource
                     ->label('Dónde')
                     ->badge()
                     ->color('gray'),
-                TextColumn::make('user.name')
-                    ->label('De')
-                    ->placeholder('Equipo'),
-                TextColumn::make('status')
-                    ->label('Estado')
-                    ->badge(),
             ])
             ->defaultSort('label')
             ->filters([
@@ -142,6 +142,20 @@ class TextSnippetResource extends Resource
                     ->mutateDataUsing(fn (array $data, TextSnippet $record) => self::withOwnership($data, $record)),
                 DeleteAction::make(),
             ]);
+    }
+
+    /** "Solo tuya", "Propuesta" o "Propuesta de Ana"; nada si es del equipo y está activa. */
+    private static function ownershipNote(TextSnippet $record): ?string
+    {
+        $mine = $record->user_id === auth()->id();
+
+        return match (true) {
+            $record->status === SnippetStatus::Proposed => $mine ? 'Propuesta' : 'Propuesta de '.$record->user?->name,
+            $record->status === SnippetStatus::Archived => 'Archivada',
+            $mine => 'Solo tuya',
+            $record->user_id !== null => 'De '.$record->user?->name,
+            default => null,
+        };
     }
 
     /** Opciones del equipo y propias; el administrador ve además las propuestas. */

@@ -19,7 +19,9 @@ use App\Filament\Resources\Doctors\Pages\EditDoctor;
 use App\Filament\Resources\Patients\Pages\CreatePatient;
 use App\Filament\Resources\Patients\Pages\EditPatient;
 use App\Filament\Resources\Patients\Pages\ListPatients;
+use App\Filament\Resources\Patients\Pages\ViewPatient;
 use App\Filament\Resources\Patients\PatientResource;
+use App\Filament\Resources\Patients\RelationManagers\ChargesRelationManager;
 use App\Filament\Resources\Payments\Pages\ManagePayments;
 use App\Filament\Resources\ScheduleBlocks\Pages\ManageScheduleBlocks;
 use App\Filament\Resources\TextSnippets\Pages\ManageTextSnippets;
@@ -241,13 +243,17 @@ class PatientsAndSetupPanelTest extends TestCase
         $this->assertTrue($mine->user->is($doctor));
         $this->assertTrue($shared->isShared());
 
+        // Solo se marca lo que no es lo de siempre: la del equipo va sin etiqueta, la propia dice "Solo tuya".
         $this->actingAs($doctor);
         Livewire::test(ManageTextSnippets::class)
+            ->assertSee(['Mi limpieza', 'Solo tuya', 'Postoperatorio'])
+            ->assertDontSee(['Equipo', 'Activa'])
             ->assertActionHidden(TestAction::make('edit')->table($shared))
             ->callAction(TestAction::make('propose')->table($mine));
 
         $this->actingAs($admin);
         Livewire::test(ManageTextSnippets::class)
+            ->assertSee('Propuesta de '.$doctor->name)
             ->callAction(TestAction::make('approve')->table($mine->fresh()));
 
         $this->assertTrue($mine->fresh()->isShared());
@@ -416,12 +422,30 @@ class PatientsAndSetupPanelTest extends TestCase
         Appointment::factory()->for($doctor)->for($treatment)->for($patient)->at('2026-10-20 10:00')->create();
         Payment::factory()->for($patient)->create(['amount' => 80, 'method' => PaymentMethod::Yape, 'paid_at' => '2026-10-20 11:00']);
 
-        $this->actingAs(User::factory()->reception()->create());
+        $reception = User::factory()->reception()->create();
+        $this->actingAs($reception);
 
+        // Una sola línea de tiempo, con su filtro: ya no hay pestañas de Citas y Pagos que la repitan,
+        // y el saldo va una sola vez (la etiqueta bajo el nombre), sin tarjeta "Cuenta".
         $this->get(PatientResource::getUrl('view', ['record' => $patient]))
             ->assertOk()
-            ->assertSee(['María Quispe', 'Línea de tiempo', 'Limpieza dental · Pendiente', 'Pagó S/ 80.00 · Yape'])
-            ->assertDontSee(['Ver María Quispe', 'Penicilina', 'Correo', 'Notas internas']);
+            ->assertSee(['María Quispe', 'Línea de tiempo', 'Limpieza dental · Pendiente', 'Pagó S/ 80.00 · Yape', 'Constancia'])
+            ->assertSeeInOrder(['Todo', 'Citas', 'Pagos'])
+            ->assertSee('A favor S/ 80.00')
+            ->assertDontSee(['Ver María Quispe', 'Penicilina', 'Correo', 'Notas internas', 'Último pago', 'Sin citas todavía', 'Sin pagos todavía']);
+        $this->assertSame([ChargesRelationManager::class], PatientResource::getRelations());
+
+        // Un pago se anula desde su línea, con su motivo.
+        $payment = $patient->payments()->sole();
+        Livewire::test(ViewPatient::class, ['record' => $patient->getRouteKey()])
+            ->mountAction('voidPayment', ['payment' => $payment->id])
+            ->setActionData(['reason' => 'Se cobró dos veces'])
+            ->callMountedAction()
+            ->assertHasNoActionErrors()
+            ->assertNotified('Pago anulado')
+            ->assertSee(['Pagó S/ 80.00 · Yape (anulado)', 'Anulado: Se cobró dos veces', 'Al día'])
+            ->assertDontSee('A favor');
+        $this->assertSame([$reception->id, 'Se cobró dos veces'], [$payment->fresh()->voided_by_user_id, $payment->fresh()->void_reason]);
 
         $this->actingAs($doctor->user);
 

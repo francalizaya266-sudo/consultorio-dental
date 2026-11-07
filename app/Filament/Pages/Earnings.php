@@ -3,7 +3,6 @@
 namespace App\Filament\Pages;
 
 use App\Filament\Pages\Concerns\HasReportFilters;
-use App\Filament\Widgets\Reports\EarningsChart;
 use App\Filament\Widgets\Reports\EarningsStats;
 use App\Filament\Widgets\Reports\EarningsTables;
 use BackedEnum;
@@ -13,8 +12,9 @@ use Filament\Pages\Dashboard as BaseDashboard;
 use Filament\Support\Icons\Heroicon;
 
 /**
- * Ingresos por día, doctor, tratamiento y medio de pago, para imprimir o bajar en Excel. Se llaman
- * ingresos y no ganancias porque no descuentan costos (materiales, laboratorio, sueldos).
+ * Ingresos por día, doctor, tratamiento y medio de pago, para imprimir o bajar en Excel: el detalle detrás
+ * del Resumen, que es el tablero con los gráficos. Aquí no se repiten los gráficos, solo los totales y las
+ * tablas. Se llaman ingresos y no ganancias porque no descuentan costos (materiales, laboratorio, sueldos).
  */
 class Earnings extends BaseDashboard
 {
@@ -37,7 +37,7 @@ class Earnings extends BaseDashboard
 
     public function getWidgets(): array
     {
-        return [EarningsStats::class, EarningsChart::class, EarningsTables::class];
+        return [EarningsStats::class, EarningsTables::class];
     }
 
     public function getColumns(): int|array

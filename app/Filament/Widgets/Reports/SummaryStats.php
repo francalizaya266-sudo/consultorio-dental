@@ -2,6 +2,7 @@
 
 namespace App\Filament\Widgets\Reports;
 
+use App\Filament\Pages\Earnings;
 use App\Filament\Support\StatComparison;
 use App\Filament\Widgets\Concerns\ReadsReportFilters;
 use App\Support\Money;
@@ -32,8 +33,10 @@ class SummaryStats extends StatsOverviewWidget
                 ->icon('heroicon-o-check-badge'),
             StatComparison::make('Pacientes nuevos', $activity->newPatients(), $before->newPatients(), $previousPeriod, $count)
                 ->icon('heroicon-o-user-plus'),
-            StatComparison::make('Ingresos (cobrado)', $this->earnings()->collected(), $this->earnings($previousPeriod)->collected(), $previousPeriod, Money::format(...))
-                ->icon('heroicon-o-banknotes'),
+            // El detalle (por día, doctor, tratamiento y medio de pago) está en Ingresos, con el mismo período.
+            StatComparison::make('Cobrado', $this->earnings()->collected(), $this->earnings($previousPeriod)->collected(), $previousPeriod, Money::format(...))
+                ->icon('heroicon-o-banknotes')
+                ->url(Earnings::getUrl(['filters' => $this->pageFilters])),
             StatComparison::points('Inasistencias', $activity->noShowRate(), $before->noShowRate(), $previousPeriod, higherIsBetter: false)
                 ->icon('heroicon-o-user-minus'),
         ];

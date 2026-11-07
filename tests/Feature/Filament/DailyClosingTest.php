@@ -4,7 +4,6 @@ namespace Tests\Feature\Filament;
 
 use App\Enums\PaymentMethod;
 use App\Filament\Resources\Patients\Pages\ViewPatient;
-use App\Filament\Resources\Patients\RelationManagers\PaymentsRelationManager;
 use App\Filament\Resources\Payments\Pages\ManagePayments;
 use App\Filament\Widgets\CashClosingCheck;
 use App\Models\Appointment;
@@ -161,9 +160,10 @@ class DailyClosingTest extends TestCase
         $payment = $this->pay($patient, 500, PaymentMethod::Card);
         $this->actingAs($this->reception);
 
-        Livewire::test(PaymentsRelationManager::class, ['ownerRecord' => $patient, 'pageClass' => ViewPatient::class])
-            ->assertCanSeeTableRecords([$payment])
-            ->mountAction(TestAction::make('refund')->table())
+        // Desde la ficha, la etiqueta "A favor" abre la devolución.
+        Livewire::test(ViewPatient::class, ['record' => $patient->getRouteKey()])
+            ->assertSee('A favor S/ 200.00')
+            ->mountAction('refund')
             ->assertActionDataSet(['amount' => 200.0, 'method' => PaymentMethod::Cash])
             ->setActionData(['amount' => 250])
             ->callMountedAction()
@@ -172,8 +172,9 @@ class DailyClosingTest extends TestCase
             ->callMountedAction()
             ->assertHasNoActionErrors()
             ->assertNotified('Devolución registrada')
-            ->assertSee('Devolución: Pagó de más con tarjeta')
-            ->assertActionHidden(TestAction::make('refund')->table());
+            // En la línea de tiempo queda como devolución, con su motivo.
+            ->assertSee(['Se le devolvió S/ 200.00', 'Pagó de más con tarjeta', 'Al día'])
+            ->assertActionHidden('refund');
 
         $refund = Payment::query()->latest('id')->first();
         $this->assertSame([-200.0, PaymentMethod::Cash, $this->reception->id], [(float) $refund->amount, $refund->method, $refund->received_by_user_id]);

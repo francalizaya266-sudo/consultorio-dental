@@ -11,7 +11,6 @@ use App\Filament\Pages\Summary;
 use App\Filament\Support\StatComparison;
 use App\Filament\Widgets\MonthOverview;
 use App\Filament\Widgets\Reports\BusiestHoursChart;
-use App\Filament\Widgets\Reports\EarningsChart;
 use App\Filament\Widgets\Reports\EarningsStats;
 use App\Filament\Widgets\Reports\EarningsTables;
 use App\Filament\Widgets\Reports\IncomeByMonthChart;
@@ -77,9 +76,14 @@ class ReportsPanelTest extends TestCase
         $this->get(Earnings::getUrl())->assertOk()->assertSee('Descargar Excel')->assertSee('Imprimir o PDF');
 
         Livewire::test(EarningsStats::class, $filters)->assertSee(['Cobrado', 'S/ 570.00', 'S/ 0.00 en 1–23 sep.', 'Pagos', 'Promedio S/ 285.00', 'Por cobrar (a hoy)']);
-        Livewire::test(EarningsChart::class, $filters)->assertSee('El mejor día: Lun. 5 oct. (S/ 450.00)');
-        Livewire::test(EarningsTables::class, $filters)->assertSee(['Por día', 'Por doctor', 'Por tratamiento', 'Por medio de pago', 'Dr. Luis Ramos', 'Yape', '78.9 %']);
-        Livewire::test(SummaryStats::class, $filters)->assertSee(['Citas atendidas', 'Pacientes nuevos', 'Ingresos (cobrado)', 'Inasistencias', 'Sin citas en 1–23 sep.']);
+        // Ingresos es el detalle: totales y tablas, sin el gráfico que repetía la tabla de los días.
+        $this->assertSame([EarningsStats::class, EarningsTables::class], (new Earnings)->getWidgets());
+        Livewire::test(EarningsTables::class, $filters)
+            ->assertSee(['Por día', 'El mejor día: Lun. 5 oct. (S/ 450.00)', 'Por doctor', 'Por tratamiento', 'Por medio de pago', 'Dr. Luis Ramos', 'Yape', '78.9 %']);
+        // El Resumen es el tablero: su "Cobrado" lleva al detalle con el mismo período.
+        Livewire::test(SummaryStats::class, $filters)
+            ->assertSee(['Citas atendidas', 'Pacientes nuevos', 'Cobrado', 'Inasistencias', 'Sin citas en 1–23 sep.'])
+            ->assertSeeHtml(e(Earnings::getUrl(['filters' => ['period' => 'month']])));
         Livewire::test(IncomeByMonthChart::class, $filters)->assertSee('Este mes: S/ 570.00');
         Livewire::test(IncomeByTreatmentChart::class, $filters)->assertSee('Lo que más dejó: Limpieza dental (S/ 570.00)');
         Livewire::test(BusiestHoursChart::class, $filters)->assertSee('La hora más pedida');
@@ -95,8 +99,9 @@ class ReportsPanelTest extends TestCase
     {
         $this->actingAs(User::factory()->admin()->create());
 
-        Livewire::test(EarningsChart::class, ['pageFilters' => ['period' => 'today']])
-            ->assertSee('Aún no hay datos para este período')
+        Livewire::test(IncomeByTreatmentChart::class, ['pageFilters' => ['period' => 'today']])
+            ->assertSee('Aún no hay datos para este período');
+        Livewire::test(EarningsTables::class, ['pageFilters' => ['period' => 'today']])
             ->assertDontSee('El mejor día');
     }
 
