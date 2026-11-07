@@ -195,11 +195,18 @@ class BillingPanelTest extends TestCase
             ->assertCanSeeTableRecords([$owesMore, $owes], inOrder: true)
             ->assertCanNotSeeTableRecords([$settled])
             ->assertSee(['Debe S/ 150.00', 'Por cobrar: S/ 550.00 entre 2 pacientes'])
+            ->assertTableColumnHidden('next_appointment_at')
             ->callAction(TestAction::make('collect')->table($owes), ['method' => PaymentMethod::Cash->value])
             ->assertHasNoActionErrors()
             ->assertNotified('Pago registrado');
 
         $this->assertSame(0.0, $owes->balance());
+
+        // En la lista de todos solo se ve el saldo: cobrar es desde los saldos pendientes o la ficha.
+        Livewire::test(ListPatients::class)
+            ->assertSee('Debe S/ 400.00')
+            ->assertTableColumnVisible('next_appointment_at')
+            ->assertActionHidden(TestAction::make('collect')->table($owesMore));
 
         $this->actingAs($this->doctorOffering(Treatment::factory()->create())->user);
 

@@ -2,6 +2,7 @@
 
 namespace App\Filament\Widgets;
 
+use App\Enums\AppointmentStatus;
 use App\Filament\Actions\RegisterPaymentAction;
 use App\Filament\Resources\Appointments\AppointmentResource;
 use App\Models\Patient;
@@ -64,7 +65,7 @@ class CashClosingCheck extends Widget implements HasActions, HasSchemas
             'unclosed' => $wholeDay ? $closing->unclosedAppointments()->map(fn ($appointment) => [
                 'time' => $appointment->starts_at->format('H:i'),
                 'name' => $appointment->patient->full_name,
-                'detail' => $appointment->treatment->name.' · '.mb_strtolower($appointment->status->getLabel()),
+                'detail' => $appointment->treatment->name.' · '.mb_strtolower($appointment->status->getLabel()).': '.self::unclosedHint($appointment->status),
                 'url' => AppointmentResource::getUrl('view', ['record' => $appointment]),
             ]) : collect(),
             'record' => $closing->record(),
@@ -163,6 +164,14 @@ class CashClosingCheck extends Widget implements HasActions, HasSchemas
             $difference < 0 => 'Faltan '.Money::format(-$difference).' en la caja.',
             default => 'Sobran '.Money::format($difference).' en la caja.',
         };
+    }
+
+    /** Qué falta para cerrar la cita: si no se marcó la llegada, saber si vino; si vino, terminar la atención. */
+    private static function unclosedHint(AppointmentStatus $status): string
+    {
+        return in_array($status, [AppointmentStatus::Pending, AppointmentStatus::Confirmed], true)
+            ? 'marca si vino o si no asistió'
+            : 'falta terminar la atención y cobrar';
     }
 
     private function difference(Get $get): ?float

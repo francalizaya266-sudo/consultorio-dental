@@ -35,7 +35,7 @@
                         <li>
                             <span class="cc-row-text">
                                 <strong>{{ $row['time'] }} · {{ $row['name'] }}</strong>
-                                <small>{{ $row['detail'] }}: marca si vino o si no asistió</small>
+                                <small>{{ $row['detail'] }}</small>
                             </span>
                             <x-filament::link :href="$row['url']" size="sm">Ver cita</x-filament::link>
                         </li>

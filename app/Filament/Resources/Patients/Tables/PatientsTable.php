@@ -43,15 +43,18 @@ class PatientsTable
                     ->formatStateUsing(fn (string $state) => Phone::display($state))
                     ->description(fn (Patient $record) => $record->relationship?->getLabel())
                     ->placeholder('Sin celular'),
+                // En los saldos pendientes la lista es para cobrar: deja sitio al saldo y a "Cobrar".
                 TextColumn::make('birth_date')
                     ->label('Edad')
                     ->formatStateUsing(fn (Patient $record) => $record->age !== null ? $record->age.' años' : null)
-                    ->placeholder('—'),
+                    ->placeholder('—')
+                    ->hidden(fn (HasTable $livewire) => self::isOwingTab($livewire)),
                 TextColumn::make('next_appointment_at')
                     ->label('Próxima cita')
                     ->dateTime('D d/m H:i')
                     ->placeholder('—')
-                    ->sortable(),
+                    ->sortable()
+                    ->hidden(fn (HasTable $livewire) => self::isOwingTab($livewire)),
                 TextColumn::make('last_visit_at')
                     ->label('Última visita')
                     ->date('d/m/Y')
@@ -75,13 +78,13 @@ class PatientsTable
                 TrashedFilter::make()
                     ->visible(fn () => auth()->user()->isAdmin()),
             ])
-            ->description(fn (HasTable $livewire) => $livewire instanceof ListPatients && $livewire->activeTab === 'owing' ? self::owedTotal() : null)
+            ->description(fn (HasTable $livewire) => self::isOwingTab($livewire) ? self::owedTotal() : null)
             ->recordActions([
                 RegisterPaymentAction::make(fn (Patient $record) => $record)
                     ->name('collect')
                     ->label('Cobrar')
                     ->color('success')
-                    ->visible(fn (Patient $record) => (float) ($record->balance_due ?? 0) > 0 && auth()->user()->can('create', Payment::class)),
+                    ->visible(fn (Patient $record, HasTable $livewire) => self::isOwingTab($livewire) && (float) ($record->balance_due ?? 0) > 0 && auth()->user()->can('create', Payment::class)),
                 ViewAction::make(),
                 EditAction::make(),
             ])
@@ -95,6 +98,11 @@ class PatientsTable
         $balances = Patient::query()->owing()->withBalance()->pluck('balance_due');
 
         return 'Por cobrar: '.Money::format($balances->sum()).' entre '.$balances->count().($balances->count() === 1 ? ' paciente' : ' pacientes');
+    }
+
+    private static function isOwingTab(HasTable $livewire): bool
+    {
+        return $livewire instanceof ListPatients && $livewire->activeTab === 'owing';
     }
 
     private static function seesBalances(): bool
