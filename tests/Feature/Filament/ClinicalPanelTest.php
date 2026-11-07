@@ -134,7 +134,7 @@ class ClinicalPanelTest extends TestCase
 
         // El navegador manda cada toque con el hallazgo, el color y la sigla elegidos.
         Livewire::test(OdontogramChart::class, ['record' => $consultation, 'editable' => true])
-            ->assertSee(['Caries', 'Prótesis fija', 'Buscar otro hallazgo…'])
+            ->assertSee(['Caries', 'Prótesis fija', 'Busca o escribe «36 MO caries»'])
             ->call('mark', 36, 'O', 'caries', 'bad', 'CD')
             ->assertSee('Caries (CD · dentina)')
             ->call('mark', 14, null, 'protesis_fija', 'good', null, 16)
@@ -144,13 +144,13 @@ class ClinicalPanelTest extends TestCase
 
         $this->assertSame(2, $consultation->odontogram->entries()->count());
 
-        // Un admin odontólogo lo ve, pero no lo puede cambiar: el toque solo muestra lo que tiene la pieza.
+        // Un admin odontólogo lo ve, pero no lo puede cambiar: el toque solo abre la ficha de la pieza.
         $this->actingAs(User::factory()->admin(isDentist: true)->create());
 
         Livewire::test(OdontogramChart::class, ['record' => $consultation, 'editable' => true])
-            ->assertDontSee('Buscar otro hallazgo…')
-            ->call('mark', 11, 'V', 'caries')
-            ->assertSet('selectedTooth', 11);
+            ->assertDontSee('Busca o escribe «36 MO caries»')
+            ->call('mark', 11, 'V', 'caries', 'bad')
+            ->call('remove', $consultation->odontogram->entries()->pluck('id')->all());
 
         $this->assertSame(2, $consultation->odontogram->entries()->count());
     }
@@ -164,13 +164,13 @@ class ClinicalPanelTest extends TestCase
 
         $chart = Livewire::test(OdontogramChart::class, ['record' => $consultation, 'editable' => true])
             ->call('mark', 36, 'O', 'caries', 'bad', 'CD')
-            ->assertSee('✓ Tratado');
+            ->assertSeeHtml('data-treat');
 
         $caries = $consultation->odontogram->entries()->sole();
 
         $chart->call('markTreated', $caries->id, 'R')
             ->assertSee('Restauración definitiva (R · resina)')
-            ->assertDontSee('✓ Tratado');
+            ->assertDontSeeHtml('data-treat');
 
         $this->assertSame(
             [['restauracion', 36, 'O', ToothState::Good, 'R']],

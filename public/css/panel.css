@@ -611,8 +611,285 @@ button.agenda-slot:focus-visible { outline: 2px solid var(--primary-600); outlin
 @media (min-width: 64rem) {
     .consultation-split > .fi-grid { align-items: start; }
     .consultation-split:not(.is-single) > .fi-grid > .fi-grid-col:first-child { position: sticky; top: var(--split-top, 10rem); }
-    .consultation-split .od-scroll .od-svg { min-width: 26rem; }
+    .consultation-split .odv-scroll .odv-svg { min-width: 26rem; }
 }
+
+/* ---------- Odontograma (resources/views/livewire/odontogram-chart.blade.php, public/js/odontogram.js) ---------- */
+
+/*
+ * La hoja del odontograma es siempre blanca, como impresa, para que el rojo (por tratar) y el azul (tratado) de la
+ * norma se lean igual con el modo oscuro. Lo de alrededor (filtros, buscador, ficha, lista) sigue el tema.
+ */
+.odv {
+    --odv-bad: #dc2626; --odv-good: #2563eb; --odv-today: #f59e0b;
+    --odv-ink: var(--gray-800); --odv-soft: var(--gray-500); --odv-line: var(--gray-200); --odv-fill: var(--gray-100);
+    --odv-surface: #fff; --odv-hover: var(--gray-50); --odv-accent: var(--primary-600); --odv-accent-soft: var(--primary-50);
+    --odv-ease: cubic-bezier(.23, 1, .32, 1);
+    display: flex; flex-direction: column; gap: 1rem; min-width: 0;
+}
+.dark .odv {
+    --odv-ink: var(--gray-100); --odv-soft: var(--gray-400); --odv-line: rgb(255 255 255 / .1); --odv-fill: rgb(255 255 255 / .07);
+    --odv-surface: var(--gray-900); --odv-hover: rgb(255 255 255 / .05); --odv-accent: var(--primary-400); --odv-accent-soft: rgb(255 255 255 / .06);
+}
+.odv [x-cloak] { display: none !important; }
+.odv button { -webkit-tap-highlight-color: transparent; }
+.odv-muted { font-size: .8125rem; color: var(--odv-soft); }
+.odv-frame { display: flex; flex-direction: column; gap: .75rem; min-width: 0; }
+
+/* Arriba: los filtros (que son también la leyenda) y, a la derecha, versión o dentición, atajos y ampliar. */
+.odv-head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: .5rem .75rem; }
+.odv-filters { display: flex; flex-wrap: wrap; gap: .25rem; }
+.odv-filter { display: inline-flex; align-items: center; gap: .375rem; min-height: 2rem; padding: .25rem .625rem; border-radius: .5rem; font-size: .8125rem; font-weight: 500; color: var(--odv-ink); box-shadow: inset 0 0 0 1px var(--odv-line); transition: background-color 150ms ease, color 150ms ease; }
+.odv-filter b { font-weight: 600; font-variant-numeric: tabular-nums; color: var(--odv-soft); }
+.odv-filter[aria-pressed="true"] { background: var(--gray-900); color: #fff; box-shadow: none; }
+.odv-filter[aria-pressed="true"] b { color: rgb(255 255 255 / .7); }
+.dark .odv-filter[aria-pressed="true"] { background: #fff; color: var(--gray-900); }
+.dark .odv-filter[aria-pressed="true"] b { color: var(--gray-500); }
+.odv-filter:disabled { opacity: .4; cursor: default; }
+.odv-swatch { display: inline-block; width: .625rem; height: .625rem; border-radius: .125rem; flex: none; }
+.odv-swatch.is-bad { background: var(--odv-bad); }
+.odv-swatch.is-good { background: var(--odv-good); }
+.odv-swatch.is-missing { box-shadow: inset 0 0 0 1.5px var(--odv-soft); }
+.odv-swatch.is-today { border-radius: 999px; background: var(--odv-today); }
+.odv-head-side { display: flex; flex-wrap: wrap; align-items: center; gap: .5rem; min-width: 0; }
+.odv-select { min-width: 0; max-width: 100%; }
+.odv-btn { display: inline-flex; align-items: center; gap: .375rem; min-height: 2.25rem; padding: .375rem .75rem; border-radius: .5rem; font-size: .8125rem; font-weight: 600; color: var(--odv-ink); background: var(--odv-surface); box-shadow: inset 0 0 0 1px var(--odv-line); transition: transform 160ms var(--odv-ease); }
+.odv-btn > span:not([x-text]) { display: inline-flex; }
+.odv-btn:active, .odv-chip:active, .odv-filter:active { transform: scale(.97); }
+.odv-keys { position: relative; }
+.odv-keys summary { list-style: none; cursor: pointer; padding: .375rem .5rem; border-radius: .5rem; font-size: .8125rem; font-weight: 500; color: var(--odv-soft); }
+.odv-keys summary::-webkit-details-marker { display: none; }
+.odv-keys[open] summary { background: var(--odv-hover); color: var(--odv-ink); }
+.odv-keys dl { position: absolute; right: 0; top: calc(100% + .375rem); z-index: 30; display: grid; grid-template-columns: auto auto; gap: .5rem .875rem; align-items: center; width: max-content; padding: .875rem 1rem; border-radius: .75rem; background: var(--odv-surface); box-shadow: 0 0 0 1px var(--odv-line), 0 12px 32px -8px rgb(15 23 42 / .22); font-size: .8125rem; color: var(--odv-ink); }
+.odv-keys dt { display: flex; gap: .25rem; justify-content: flex-end; }
+.odv kbd { display: inline-grid; place-items: center; min-width: 1.375rem; height: 1.375rem; padding: 0 .3125rem; border-radius: .3125rem; font: 600 .6875rem/1 ui-monospace, SFMono-Regular, Menlo, monospace; color: var(--odv-soft); background: var(--odv-hover); box-shadow: inset 0 0 0 1px var(--odv-line), inset 0 -1px 0 var(--odv-line); }
+@media (hover: none) { .odv-keys, .odv-omni-key { display: none !important; } }
+
+/* El buscador: un hallazgo por nombre, o varios escritos o dictados («36 MO caries, 18 ausente»). */
+.odv-tools { display: flex; flex-direction: column; gap: .625rem; }
+.odv-omni { position: relative; display: flex; align-items: center; gap: .5rem; min-height: 2.75rem; padding: 0 .5rem 0 .75rem; border-radius: .75rem; background: var(--odv-surface); box-shadow: inset 0 0 0 1px var(--odv-line); color: var(--odv-soft); transition: box-shadow 150ms ease; }
+.odv-omni:focus-within { box-shadow: inset 0 0 0 2px var(--primary-500); }
+.odv-omni > svg { flex: none; }
+.odv-omni input { flex: 1; min-width: 0; padding: .5rem 0; border: 0; outline: 0; background: transparent; box-shadow: none; font-size: .9375rem; color: var(--odv-ink); }
+.odv-omni input:focus { outline: 0; box-shadow: none; }
+.odv-omni input::placeholder { color: var(--gray-400); }
+.odv-omni-clear { display: grid; place-items: center; width: 2rem; height: 2rem; border-radius: 999px; font-size: 1.25rem; line-height: 1; color: var(--odv-soft); }
+.odv-omni-clear:hover { background: var(--odv-hover); }
+.odv-matches { position: absolute; left: 0; right: 0; top: calc(100% + .375rem); z-index: 30; max-height: min(20rem, 60vh); overflow-y: auto; overscroll-behavior: contain; padding: .25rem; border-radius: .75rem; background: var(--odv-surface); box-shadow: 0 0 0 1px var(--odv-line), 0 16px 40px -12px rgb(15 23 42 / .28); }
+.odv-matches button { display: flex; align-items: baseline; gap: .5rem; width: 100%; padding: .5rem .625rem; border-radius: .5rem; text-align: left; font-size: .875rem; color: var(--odv-ink); }
+.odv-matches button[aria-selected="true"] { background: var(--odv-accent-soft); }
+.odv-matches small { font-size: .75rem; color: var(--odv-soft); }
+.odv-matches-tip, .odv-matches-empty { padding: .5rem .625rem; font-size: .8125rem; color: var(--odv-soft); }
+.odv-matches-tip { margin-bottom: .25rem; border-bottom: 1px solid var(--odv-line); }
+.odv-matches-tip b { font-weight: 600; color: var(--odv-ink); }
+
+/* Los hallazgos de todos los días a un toque. En el celular, una sola fila que se desliza. */
+.odv-chips { display: flex; flex-wrap: wrap; gap: .375rem; }
+.odv-chip { flex: none; display: inline-flex; align-items: center; min-height: 2rem; padding: .25rem .75rem; border: 1px solid var(--odv-line); border-radius: 999px; font-size: .8125rem; font-weight: 500; white-space: nowrap; color: var(--odv-ink); background: var(--odv-surface); transition: background-color 150ms ease, border-color 150ms ease, transform 160ms var(--odv-ease); }
+.odv-chip.is-favorite { border-style: dashed; border-color: var(--gray-300); }
+.odv-chip.is-ghost { border-color: transparent; background: transparent; color: var(--odv-accent); font-weight: 600; }
+.odv-chip[aria-pressed="true"] { background: var(--primary-600); border-color: var(--primary-600); color: #fff; }
+@media (hover: hover) and (pointer: fine) {
+    .odv-chip:not([aria-pressed="true"]):hover { border-color: var(--primary-400); }
+    .odv-filter:not([aria-pressed="true"]):not(:disabled):hover { background: var(--odv-hover); }
+}
+@media (max-width: 47.99rem) {
+    .odv-chips { flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; padding-bottom: .125rem; }
+    .odv-chips::-webkit-scrollbar { display: none; }
+}
+
+/* El pincel elegido: color, sigla y qué tocar. Sin pincel, una línea de ayuda en el mismo lugar. */
+.odv-brush { display: flex; align-items: center; min-height: 2.25rem; }
+.odv-brush-in { display: flex; flex-wrap: wrap; align-items: center; gap: .5rem .75rem; width: 100%; padding: .375rem .5rem .375rem .375rem; border-radius: .75rem; background: var(--odv-accent-soft); }
+.odv-seg { display: inline-flex; padding: .125rem; border-radius: .5rem; background: var(--odv-surface); box-shadow: inset 0 0 0 1px var(--odv-line); }
+.odv-seg button { padding: .25rem .625rem; border-radius: .375rem; font-size: .8125rem; font-weight: 600; color: var(--odv-soft); transition: background-color 150ms ease, color 150ms ease; }
+.odv-seg button.is-bad[aria-pressed="true"] { background: var(--odv-bad); color: #fff; }
+.odv-seg button.is-good[aria-pressed="true"] { background: var(--odv-good); color: #fff; }
+.odv-seg button:disabled { opacity: .35; cursor: not-allowed; }
+.odv-siglas { display: inline-flex; flex-wrap: wrap; gap: .25rem; }
+.odv-sigla { flex: none; display: inline-flex; align-items: baseline; gap: .25rem; white-space: nowrap; padding: .1875rem .5rem; border-radius: .375rem; font-size: .75rem; color: var(--odv-ink); background: var(--odv-surface); box-shadow: inset 0 0 0 1px var(--odv-line); }
+.odv-sigla span { color: var(--odv-soft); }
+.odv-sigla[aria-pressed="true"] { background: var(--gray-900); color: #fff; box-shadow: none; }
+.odv-sigla[aria-pressed="true"] span { color: rgb(255 255 255 / .7); }
+.dark .odv-sigla[aria-pressed="true"] { background: #fff; color: var(--gray-900); }
+.dark .odv-sigla[aria-pressed="true"] span { color: var(--gray-500); }
+.odv-hint { flex: 1 1 14rem; font-size: .8125rem; font-weight: 500; color: var(--primary-700); }
+.dark .odv-hint { color: var(--primary-300); }
+.odv-link { padding: .25rem .5rem; border-radius: .375rem; font-size: .8125rem; font-weight: 600; color: var(--odv-accent); }
+
+/* Lo escrito o dictado, tal como se entendió, antes de agregarlo (en ámbar, como las piezas que resalta). */
+.odv-parse { display: flex; flex-direction: column; gap: .5rem; padding: .625rem .75rem; border-radius: .75rem; background: #fffbeb; box-shadow: inset 0 0 0 1px #fde68a; }
+.dark .odv-parse { background: rgb(245 158 11 / .08); box-shadow: inset 0 0 0 1px rgb(245 158 11 / .25); }
+.odv-parse ul { display: flex; flex-direction: column; gap: .25rem; font-size: .875rem; }
+.odv-parse .is-ok { color: var(--odv-ink); }
+.odv-parse .is-error { color: #b45309; }
+.dark .odv-parse .is-error { color: #fbbf24; }
+.odv-parse-foot { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: .5rem 1rem; }
+.odv-parse-foot .odv-muted { flex: 1 1 16rem; }
+
+/* La hoja con el dibujo. En el celular es más ancha que la pantalla: se desliza y abre centrada. */
+.odv-stage { display: flex; flex-direction: column; gap: .75rem; min-width: 0; }
+.odv-sheet { position: relative; min-width: 0; padding: .375rem .5rem .75rem; border-radius: .875rem; background: #fff; box-shadow: inset 0 0 0 1px var(--gray-200); outline: 0; }
+.dark .odv-sheet { box-shadow: none; }
+.odv-sheet:focus-visible { box-shadow: inset 0 0 0 2px var(--primary-500); }
+.odv-sides { display: flex; justify-content: space-between; padding: .125rem .375rem .25rem; font-size: .6875rem; font-weight: 500; color: #94a3b8; }
+.odv-scroll { overflow-x: auto; overscroll-behavior-x: contain; scrollbar-width: thin; }
+.odv-scroll .odv-svg { width: 100%; height: auto; max-width: 69rem; min-width: 38rem; }
+.odv-svg [data-tooth-group] { cursor: pointer; }
+.odv-svg .odv-col { stroke: transparent; transition: fill 120ms ease; }
+.odv-svg [data-focus] .odv-col { fill: rgb(37 99 235 / .07); stroke: #3b82f6; stroke-width: 1.5; }
+.odv-svg [data-preview] .odv-col { fill: rgb(245 158 11 / .1); stroke: #f59e0b; stroke-width: 1.5; stroke-dasharray: 4 3; }
+.odv-svg [data-span-start] .odv-col { fill: #fef3c7; stroke: #f59e0b; stroke-width: 1.5; }
+.odv-svg [data-busy] .odv-col { fill: rgb(37 99 235 / .1); }
+@media (hover: hover) and (pointer: fine) {
+    .odv-svg [data-tooth-group]:not([data-focus]):hover .odv-col { fill: rgb(15 23 42 / .035); }
+    .odv.has-face-tool .odv-svg .odv-surface.is-none:hover { fill: #dbeafe; }
+}
+@media (prefers-reduced-motion: no-preference) {
+    .odv-svg [data-busy] { animation: odv-busy 900ms ease-in-out infinite; }
+    @keyframes odv-busy { 50% { opacity: .55; } }
+}
+
+/* Filtros: lo que no corresponde queda tenue en el dibujo y sale de la lista. La pieza abierta se ve siempre. */
+.odv-svg .odv-tooth, .odv-svg .odv-span, .odv-svg .odv-span-label { transition: opacity 150ms ease; }
+.odv[data-filter="bad"] .odv-tooth:not([data-bad]),
+.odv[data-filter="good"] .odv-tooth:not([data-good]),
+.odv[data-filter="missing"] .odv-tooth:not([data-missing]),
+.odv[data-filter="today"] .odv-tooth:not([data-today]),
+.odv[data-filter="bad"] :is(.odv-span, .odv-span-label):not([data-span="bad"]),
+.odv[data-filter="good"] :is(.odv-span, .odv-span-label):not([data-span="good"]),
+.odv[data-filter="missing"] :is(.odv-span, .odv-span-label),
+.odv[data-filter="today"] :is(.odv-span, .odv-span-label):not([data-today]) { opacity: .16; }
+.odv[data-filter] .odv-tooth[data-focus] { opacity: 1; }
+.odv[data-filter="bad"] .odv-item:not([data-bad]),
+.odv[data-filter="good"] .odv-item:not([data-good]),
+.odv[data-filter="missing"] .odv-item:not([data-missing]),
+.odv[data-filter="today"] .odv-item:not([data-today]) { display: none; }
+.odv[data-filter="bad"] .odv-list-part:not(:has([data-bad])),
+.odv[data-filter="good"] .odv-list-part:not(:has([data-good])),
+.odv[data-filter="missing"] .odv-list-part:not(:has([data-missing])),
+.odv[data-filter="today"] .odv-list-part:not(:has([data-today])) { display: none; }
+
+/* La ficha de la pieza: sus caras en grande, lo que tiene y lo que se le marca. */
+.odv-card { container: odv-card / inline-size; border-radius: .875rem; background: var(--odv-surface); box-shadow: inset 0 0 0 1px var(--odv-line); transition: opacity 160ms ease-out, translate 220ms var(--odv-ease); }
+@starting-style { .odv-card { opacity: 0; } }
+.odv-card-head { display: flex; align-items: center; gap: .125rem; padding: .375rem; border-bottom: 1px solid var(--odv-line); }
+.odv-card-title { flex: 1; min-width: 0; display: flex; flex-wrap: wrap; align-items: baseline; gap: 0 .5rem; padding: 0 .375rem; }
+.odv-card-title strong { font-size: 1.25rem; font-weight: 700; font-variant-numeric: tabular-nums; color: var(--odv-ink); }
+.odv-card-title span { min-width: 0; font-size: .875rem; line-height: 1.3; color: var(--odv-soft); }
+.odv-icon-btn { display: grid; place-items: center; flex: none; width: 2.25rem; height: 2.25rem; border-radius: .5rem; font-size: 1.25rem; line-height: 1; color: var(--odv-soft); transition: background-color 150ms ease; }
+.odv-icon-btn.is-small { width: 1.75rem; height: 1.75rem; font-size: 1.05rem; }
+.odv-icon-btn:hover { background: var(--odv-hover); color: var(--odv-ink); }
+.odv-card-body { display: grid; grid-template-columns: 9.5rem minmax(0, 1fr); grid-template-rows: auto auto 1fr; grid-template-areas: "faces list" "faces quick" "hint quick"; gap: .625rem 1rem; align-items: start; padding: .75rem; }
+.odv-faces { grid-area: faces; display: block; width: 100%; height: auto; overflow: visible; }
+.odv-card-list { grid-area: list; }
+.odv-card-tool { grid-area: hint; display: flex; flex-direction: column; gap: .5rem; min-width: 0; }
+.odv-card-brush { display: none; }
+.odv-faces-hint { font-size: .75rem; line-height: 1.35; text-align: center; color: var(--odv-soft); }
+.odv-quick { grid-area: quick; display: flex; flex-direction: column; gap: .375rem; }
+/* Ficha angosta (celular, columna partida): las caras chicas al lado de lo que tiene; los hallazgos en una fila que se desliza. */
+@container odv-card (max-width: 28rem) {
+    .odv-card-body { grid-template-columns: 5.75rem minmax(0, 1fr); grid-template-rows: auto; grid-template-areas: "faces list" "hint hint" "quick quick"; gap: .5rem .75rem; padding: .625rem; }
+    .odv-faces-hint { text-align: left; }
+    .odv-card .odv-quick-list { flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; }
+    .odv-quick-list::-webkit-scrollbar { display: none; }
+}
+.odv-face polygon { fill: #fff; stroke: #94a3b8; stroke-width: .8; transition: fill 120ms ease; }
+.odv-face.is-bad polygon { fill: var(--odv-bad); }
+.odv-face.is-good polygon { fill: var(--odv-good); }
+.odv-face text { text-anchor: middle; dominant-baseline: middle; pointer-events: none; fill: #64748b; }
+.odv-face:is(.is-bad, .is-good) text { fill: #fff; }
+.odv-face-letter { font-size: 12px; font-weight: 700; }
+.odv-face-name { font-size: 5.5px; }
+.odv.has-face-tool .odv-face { cursor: pointer; }
+.odv.has-face-tool .odv-face.is-none:hover polygon { fill: #dbeafe; }
+.odv-card-list li { display: flex; align-items: center; gap: .5rem; padding: .375rem 0; border-bottom: 1px solid var(--odv-line); font-size: .875rem; color: var(--odv-ink); }
+.odv-card-list li:last-child { border-bottom: 0; }
+.odv-dot { display: inline-block; width: .5rem; height: .5rem; border-radius: 999px; flex: none; }
+.odv-dot.is-bad { background: var(--odv-bad); }
+.odv-dot.is-good { background: var(--odv-good); }
+.odv-card-text { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.odv-card-text small { font-size: .75rem; color: var(--odv-soft); }
+.odv-card-actions { display: flex; align-items: center; gap: .125rem; flex: none; }
+.odv-new { flex: none; padding: .0625rem .4375rem; border-radius: 999px; font-size: .6875rem; font-weight: 600; color: #92400e; background: #fef3c7; }
+.dark .odv-new { color: #fcd34d; background: rgb(245 158 11 / .15); }
+.odv-treat { padding: .25rem .5rem; border-radius: .375rem; white-space: nowrap; font-size: .8125rem; font-weight: 600; color: var(--odv-accent); }
+.odv-treat:hover { background: var(--odv-accent-soft); }
+.odv-quick-label { font-size: .75rem; font-weight: 600; color: var(--odv-soft); }
+.odv-quick-list { display: flex; flex-wrap: wrap; gap: .375rem; }
+
+/* Tableta y celular: la ficha sale desde abajo, encima de la barra, y el dibujo queda a la vista. */
+@media (max-width: 63.99rem) {
+    .odv-card { position: fixed; z-index: 46; left: .5rem; right: .5rem; bottom: calc(.5rem + env(safe-area-inset-bottom)); max-width: 36rem; max-height: min(60vh, 30rem); margin-inline: auto; overflow-y: auto; overscroll-behavior: contain; border-radius: 1rem; box-shadow: 0 0 0 1px var(--odv-line), 0 -8px 40px -12px rgb(15 23 42 / .35); }
+    @starting-style { .odv-card { opacity: 0; translate: 0 1rem; } }
+    .odv-card-head { position: sticky; top: 0; z-index: 1; background: var(--odv-surface); }
+    /* Con la ficha abierta, el pincel se maneja desde ella: el de arriba se esconde y el dibujo no se mueve. */
+    .odv:has(.odv-stage.has-card) .odv-brush { display: none; }
+    .odv-card-brush { display: flex; flex-wrap: wrap; align-items: center; gap: .375rem .5rem; }
+    .odv-card-brush .odv-siglas { flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; max-width: 100%; }
+}
+
+/* Pantalla completa: solo el odontograma, lo más grande que entre; en pantallas anchas, la ficha al costado. */
+html.odv-locked { overflow: hidden; }
+/* Lo que contiene el odontograma (la columna fija, la sección…) sube por encima de la barra y el menú. */
+html.odv-locked :has(.odv.is-expanded) { z-index: 45 !important; }
+.odv.is-expanded .odv-frame { position: fixed; inset: 0; z-index: 45; overflow-y: auto; overscroll-behavior: contain; padding: 1rem clamp(1rem, 3vw, 2rem) calc(1rem + env(safe-area-inset-bottom)); background: var(--gray-50); }
+.dark .odv.is-expanded .odv-frame { background: var(--gray-950); }
+.odv.is-expanded .odv-scroll .odv-svg { max-width: max(38rem, calc((100dvh - 15rem) * var(--odv-ratio, 2.3))); }
+@media (min-width: 64rem) {
+    .odv.is-expanded .odv-stage.has-card { display: grid; grid-template-columns: minmax(0, 1fr) 23rem; align-items: start; }
+    .odv.is-expanded .odv-card { position: sticky; top: 0; }
+    .odv.is-expanded .odv-card-body { grid-template-columns: minmax(0, 1fr); grid-template-areas: "faces" "hint" "list" "quick"; }
+    .odv.is-expanded .odv-faces { max-width: 11rem; margin-inline: auto; }
+}
+
+/* La lista: por tratar primero; la pieza lleva a su ficha. */
+.odv-list { display: flex; flex-direction: column; gap: 1rem; }
+.odv-list-part h3 { display: flex; align-items: center; gap: .5rem; margin-bottom: .25rem; font-size: .8125rem; font-weight: 600; color: var(--odv-ink); }
+.odv-list-part h3 span { font-weight: 500; font-variant-numeric: tabular-nums; color: var(--odv-soft); }
+.odv-item { display: flex; align-items: center; gap: .625rem; padding: .375rem 0; border-top: 1px solid var(--odv-line); font-size: .875rem; color: var(--odv-ink); }
+.odv-item-tooth { flex: none; min-width: 2.75rem; padding: .25rem .5rem; border-radius: .375rem; text-align: center; font-size: .8125rem; font-weight: 700; font-variant-numeric: tabular-nums; color: var(--odv-ink); background: var(--odv-fill); transition: background-color 150ms ease; }
+.odv-item-tooth:hover { background: var(--odv-accent-soft); color: var(--odv-accent); }
+.odv-item-text { flex: 1; min-width: 0; display: flex; flex-wrap: wrap; align-items: baseline; column-gap: .5rem; }
+.odv-item-text small { font-size: .8125rem; color: var(--odv-soft); }
+.odv-item-actions { display: flex; align-items: center; gap: .125rem; flex: none; }
+
+/* Sugerencias para el diagnóstico y el plan. */
+.odv-plan { display: flex; flex-direction: column; gap: .625rem; padding: .75rem; border-radius: .875rem; box-shadow: inset 0 0 0 1px var(--odv-line); }
+.odv-plan-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: .25rem .75rem; font-size: .875rem; color: var(--odv-ink); }
+.odv-plan-row { display: flex; align-items: flex-start; gap: .625rem; padding: .5rem .375rem; border-radius: .5rem; cursor: pointer; }
+.odv-plan-row:hover { background: var(--odv-hover); }
+.odv-plan-row input { flex: none; width: 1rem; height: 1rem; margin-top: .1875rem; accent-color: var(--primary-600); }
+.odv-plan-row.is-done { opacity: .55; cursor: default; }
+.odv-plan-text { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: .125rem; }
+.odv-plan-main { font-size: .875rem; color: var(--odv-ink); }
+.odv-plan-sub { font-size: .75rem; color: var(--odv-soft); }
+.odv-plan-side { display: flex; flex-direction: column; align-items: flex-end; gap: .125rem; white-space: nowrap; font-size: .8125rem; }
+.odv-plan-price { font-weight: 600; font-variant-numeric: tabular-nums; color: var(--odv-ink); }
+.odv-tag { padding: .0625rem .4375rem; border-radius: 999px; font-size: .6875rem; color: var(--odv-soft); background: var(--odv-fill); }
+.odv-plan-foot { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: .5rem 1rem; padding-top: .625rem; border-top: 1px solid var(--odv-line); font-size: .875rem; color: var(--odv-ink); }
+
+/* Especificaciones y observaciones. */
+.odv-notes { display: grid; gap: .75rem; grid-template-columns: repeat(auto-fit, minmax(16rem, 1fr)); }
+.odv-notes label { display: block; margin-bottom: .25rem; font-size: .8125rem; font-weight: 600; color: var(--odv-ink); }
+.odv-notes textarea { width: 100%; min-height: 4rem; padding: .5rem .625rem; border: 1px solid var(--gray-300); border-radius: .5rem; font-size: .875rem; color: var(--odv-ink); background: var(--odv-surface); }
+.dark .odv-notes textarea { border-color: rgb(255 255 255 / .15); }
+.odv-notes p { font-size: .875rem; white-space: pre-line; color: var(--odv-ink); }
+
+/* En pantallas táctiles, todo lo que se toca mide al menos 44 px. */
+@media (pointer: coarse) {
+    .odv-filter, .odv-chip, .odv-btn, .odv-seg button, .odv-sigla, .odv-treat, .odv-link, .odv-item-tooth, .odv-keys summary { min-height: 2.75rem; }
+    .odv-chip, .odv-filter { padding-inline: .875rem; }
+    .odv-icon-btn, .odv-icon-btn.is-small, .odv-omni-clear { width: 2.75rem; height: 2.75rem; }
+    .odv-omni { min-height: 3rem; }
+    .odv-omni input { font-size: 1rem; }
+    .odv-plan-row input { width: 1.375rem; height: 1.375rem; }
+}
+@media (prefers-reduced-motion: reduce) {
+    .odv *, .odv-card { transition: none !important; }
+    .odv-btn:active, .odv-chip:active, .odv-filter:active { transform: none; }
+}
+@media print { .odv-head, .odv-tools, .odv-card, .odv-parse { display: none !important; } }
 
 /* ---------- Paciente: línea de tiempo ---------- */
 
