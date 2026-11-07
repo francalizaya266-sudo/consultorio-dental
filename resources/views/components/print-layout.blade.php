@@ -1,5 +1,6 @@
 {{-- details: más datos del paciente para la hoja, como ['Teléfono' => '987 654 321']. --}}
-@props(['title', 'size' => 'A4', 'doctor' => null, 'patient' => null, 'date' => null, 'details' => []])
+{{-- actions: botones extra en la barra (no salen impresos); autoPrint: abrir el diálogo de imprimir al cargar. --}}
+@props(['title', 'size' => 'A4', 'doctor' => null, 'patient' => null, 'date' => null, 'details' => [], 'autoPrint' => true])
 @php
     $info = app(\App\Services\Web\ClinicInfo::class);
     $clinic = $info->name();
@@ -44,6 +45,8 @@
         .toolbar { position: sticky; top: 0; display: flex; justify-content: center; gap: 12px; padding: 12px; background: #0f172a; }
         .toolbar button { font: inherit; font-weight: 700; padding: 10px 18px; border-radius: 8px; border: 0; cursor: pointer; background: #1e4f91; color: #fff; }
         .toolbar button.secondary { background: #334155; color: #fff; }
+        .toolbar form { margin: 0; }
+        .toolbar .note { align-self: center; color: #cbd5e1; font-size: .9rem; }
         @media print {
             body { background: #fff; }
             .sheet { margin: 0; padding: 0; box-shadow: none; max-width: none; min-height: auto; }
@@ -54,6 +57,7 @@
 <body>
 <div class="toolbar">
     <button type="button" onclick="window.print()">Imprimir o guardar PDF</button>
+    {{ $actions ?? '' }}
     <button type="button" class="secondary" onclick="window.close()">Cerrar</button>
 </div>
 <div class="sheet">
@@ -104,9 +108,11 @@
 
     <footer>{{ $footer ?? '' }}</footer>
 </div>
+@if ($autoPrint)
 <script>
     // Abrir la hoja ya es pedir imprimirla: se muestra el diálogo de una vez.
     window.addEventListener('load', () => setTimeout(() => window.print(), 300));
 </script>
+@endif
 </body>
 </html>

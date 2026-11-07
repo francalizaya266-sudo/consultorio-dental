@@ -180,6 +180,7 @@ class AdminPanelProvider extends PanelProvider
             ->authenticatedRoutes(function () {
                 Route::get('imprimir/receta/{prescription}', [PrintController::class, 'prescription'])->name('print.prescription');
                 Route::get('imprimir/plan/{plan}', [PrintController::class, 'plan'])->name('print.plan');
+                Route::post('imprimir/plan/{plan}/entregado', [PrintController::class, 'planDelivered'])->name('print.plan.delivered');
                 Route::get('imprimir/consentimiento/{consent}', [PrintController::class, 'consent'])->name('print.consent');
                 Route::get('imprimir/historia/{patient}', [PrintController::class, 'history'])->name('print.history');
                 Route::get('archivos/{file}', [ClinicalFileController::class, 'show'])->name('clinical-files.show');

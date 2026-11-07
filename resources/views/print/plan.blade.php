@@ -1,5 +1,17 @@
 @use('App\Support\Money')
-<x-print-layout title="Plan de tratamiento y presupuesto" :doctor="$doctor" :patient="$patient" :date="$plan->created_at">
+<x-print-layout title="Plan de tratamiento y presupuesto" :doctor="$doctor" :patient="$patient" :date="$plan->created_at" :auto-print="! $delivered">
+    @if ($deliverUrl)
+        <x-slot:actions>
+            <form method="POST" action="{{ $deliverUrl }}">
+                @csrf
+                <button type="submit" class="secondary">Ya se lo entregué al paciente</button>
+            </form>
+        </x-slot:actions>
+    @elseif ($delivered)
+        <x-slot:actions>
+            <span class="note">Listo: quedó como presentado al paciente.</span>
+        </x-slot:actions>
+    @endif
     <style>
         .plan-title { font-weight: 700; margin-bottom: 8px; }
         tfoot td { font-weight: 800; font-size: 1rem; border-bottom: 0; }

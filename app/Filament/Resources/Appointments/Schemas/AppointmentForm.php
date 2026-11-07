@@ -10,6 +10,7 @@ use App\Models\TreatmentPlanItem;
 use App\Models\User;
 use App\Services\Clinical\TreatmentPlanService;
 use App\Support\Phone;
+use Filament\Forms\Components\Checkbox;
 use Filament\Forms\Components\DatePicker;
 use Filament\Forms\Components\Field;
 use Filament\Forms\Components\Select;
@@ -45,6 +46,7 @@ class AppointmentForm
                             ->visible(fn (Get $get) => (bool) $get('new_patient'))
                             ->schema(self::newPatientFields()),
                         self::planItemSelect(),
+                        self::planAcceptedCheckbox(),
                         // Junto al paciente, donde recepción lo pregunta (antes quedaba al final, en Detalles).
                         Select::make('origin')
                             ->label('¿Cómo nos encontró?')
@@ -91,6 +93,19 @@ class AppointmentForm
                     $set('treatment_id', $item->treatment_id);
                 }
             });
+    }
+
+    /**
+     * Agendar una sesión no es aceptar el plan: si todavía no lo firmó, se pregunta. Sin marcarlo, el plan
+     * sigue esperando su firma (o queda aceptado solo cuando se haga la primera sesión).
+     */
+    public static function planAcceptedCheckbox(): Checkbox
+    {
+        return Checkbox::make('plan_accepted')
+            ->label('El paciente ya aceptó el plan')
+            ->helperText('Sin firmar, paga por sesión y el precio queda fijo. Si no lo marcas, el plan sigue esperando su firma.')
+            ->visible(fn (Get $get) => filled($get('treatment_plan_item_id'))
+                && TreatmentPlanItem::with('plan')->find($get('treatment_plan_item_id'))?->plan->accepted_at === null);
     }
 
     /**
