@@ -48,7 +48,9 @@ class ViewConsultation extends ViewRecord
                 ->icon(Heroicon::OutlinedLockOpen)
                 ->color('gray')
                 ->requiresConfirmation()
+                ->modalHeading('¿Reabrir la atención para corregirla?')
                 ->modalDescription('Podrás corregir la atención. Cada cambio queda registrado con fecha y usuario.')
+                ->modalSubmitActionLabel('Reabrir')
                 ->authorize('reopen')
                 ->action(function () {
                     try {

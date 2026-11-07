@@ -25,7 +25,7 @@ final class VisitFlags
      * Los avisos de cada cita de la lista.
      *
      * @param  iterable<Appointment>|Paginator  $appointments
-     * @return array<int, array{alert: string|null, session: string|null, reschedule: bool, noShows: string|null}> Por id de la cita.
+     * @return array<int, array{alert: string|null, alertSevere: bool, session: string|null, reschedule: bool, noShows: string|null}> Por id de la cita.
      */
     public static function for(iterable|Paginator $appointments, User $user): array
     {
@@ -38,7 +38,7 @@ final class VisitFlags
      * Los avisos de una fila de tabla. La primera fila los calcula para toda la página y los deja en cada cita.
      *
      * @param  iterable<Appointment>|Paginator  $page
-     * @return array{alert: string|null, session: string|null, reschedule: bool, noShows: string|null}
+     * @return array{alert: string|null, alertSevere: bool, session: string|null, reschedule: bool, noShows: string|null}
      */
     public static function of(Appointment $appointment, User $user, iterable|Paginator $page = []): array
     {
@@ -70,7 +70,7 @@ final class VisitFlags
     /**
      * Los avisos como etiquetas cortas, en orden de importancia.
      *
-     * @param  array{alert: string|null, session: string|null, reschedule: bool, noShows: string|null}|null  $flags
+     * @param  array{alert: string|null, alertSevere: bool, session: string|null, reschedule: bool, noShows: string|null}|null  $flags
      * @return list<string>
      */
     public static function labels(?array $flags): array
@@ -85,7 +85,7 @@ final class VisitFlags
 
     /**
      * @param  Collection<int, Appointment>  $appointments
-     * @return array<int, array{alert: string|null, session: string|null, reschedule: bool, noShows: string|null}>
+     * @return array<int, array{alert: string|null, alertSevere: bool, session: string|null, reschedule: bool, noShows: string|null}>
      */
     private static function compute(Collection $appointments, User $user): array
     {
@@ -101,11 +101,13 @@ final class VisitFlags
 
         return $appointments->mapWithKeys(function (Appointment $appointment) use ($clinical, $asked, $noShows) {
             $item = $appointment->planItem;
-            $alerts = $clinical ? ClinicalAlerts::for($appointment->patient) : [];
+            $alerts = $clinical ? ClinicalAlerts::withSeverity($appointment->patient) : [];
             $missed = $noShows[$appointment->patient_id] ?? null;
 
             return [$appointment->getKey() => [
-                'alert' => $alerts === [] ? null : implode(' · ', $alerts),
+                'alert' => $alerts === [] ? null : implode(' · ', array_column($alerts, 'text')),
+                // Rojo solo si algo puede hacer daño en el sillón (alergia, anticoagulantes…); si no, ámbar.
+                'alertSevere' => in_array(true, array_column($alerts, 'severe'), true),
                 'session' => self::session($item),
                 'reschedule' => $asked->has($appointment->getKey()),
                 'noShows' => $missed && $missed['missed'] >= PatientInsights::NO_SHOWS_TO_CALL ? 'Faltó '.$missed['missed'].' de '.$missed['of'] : null,

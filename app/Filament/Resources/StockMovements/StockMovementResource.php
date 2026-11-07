@@ -10,6 +10,7 @@ use App\Filament\Resources\Supplies\SupplyResource;
 use App\Models\StockMovement;
 use App\Support\Quantity;
 use BackedEnum;
+use Carbon\CarbonImmutable;
 use Filament\Forms\Components\DatePicker;
 use Filament\Resources\RelationManagers\RelationManager;
 use Filament\Resources\Resource;
@@ -113,8 +114,9 @@ class StockMovementResource extends Resource
                         DatePicker::make('until')->label('Hasta')->native(false)->displayFormat('d/m/Y'),
                     ])
                     ->query(fn (Builder $query, array $data) => $query
-                        ->when($data['from'] ?? null, fn (Builder $q, $from) => $q->whereDate('created_at', '>=', $from))
-                        ->when($data['until'] ?? null, fn (Builder $q, $until) => $q->whereDate('created_at', '<=', $until))),
+                        // El calendario del panel guarda la fecha con hora (00:00:00): se compara solo el día.
+                        ->when($data['from'] ?? null, fn (Builder $q, $from) => $q->whereDate('created_at', '>=', CarbonImmutable::parse($from)->toDateString()))
+                        ->when($data['until'] ?? null, fn (Builder $q, $until) => $q->whereDate('created_at', '<=', CarbonImmutable::parse($until)->toDateString()))),
             ])
             ->emptyStateHeading('Todavía no hay movimientos')
             ->emptyStateDescription('Aparecen solos con cada entrada, cada atención y cada conteo.');

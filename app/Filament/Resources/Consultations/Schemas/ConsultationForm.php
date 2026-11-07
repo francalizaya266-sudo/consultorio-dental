@@ -703,7 +703,7 @@ class ConsultationForm
                 $record->appointment?->treatment?->name,
                 $record->attended_at->translatedFormat('D d/m · H:i'),
             ])->filter()->implode(' · ') : null,
-            'alerts' => $patient ? ClinicalAlerts::for($patient) : [],
+            'alerts' => $patient ? ClinicalAlerts::withSeverity($patient) : [],
             'hasBackground' => $patient?->medicalBackground !== null,
             'consent' => $record ? self::consentStatus($record) : null,
             'autosavedAt' => $livewire->autosavedAt ?? null,

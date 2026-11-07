@@ -5,16 +5,30 @@ namespace App\Filament\Support;
 use App\Filament\Resources\Patients\PatientResource;
 use App\Models\MedicalBackground;
 use App\Models\Patient;
+use App\Services\Clinical\MedicationCheck;
 use Filament\Actions\Action;
 use Filament\Schemas\Components\Callout;
 use Filament\Support\Icons\Heroicon;
 use Illuminate\Support\Str;
 
-/** Lo que el doctor debe ver antes de atender: alergias, enfermedades, embarazo. */
+/**
+ * Lo que el doctor debe ver antes de atender: alergias, enfermedades, embarazo, medicamentos. Por gravedad:
+ * en rojo lo que puede hacer daño en el sillón (alergias, reacción a la anestesia, anticoagulantes o problemas
+ * de coagulación); en ámbar lo demás, para tenerlo presente. Lo rojo va primero.
+ */
 final class ClinicalAlerts
 {
+    /** Las enfermedades que van en rojo: sangrado y reacción a la anestesia. */
+    private const SEVERE_CONDITIONS = ['bleeding_disorder', 'anesthesia_reaction'];
+
     /** @return list<string> */
     public static function for(Patient $patient): array
+    {
+        return array_column(self::withSeverity($patient), 'text');
+    }
+
+    /** @return list<array{text: string, severe: bool}> */
+    public static function withSeverity(Patient $patient): array
     {
         $background = $patient->medicalBackground;
 
@@ -22,13 +36,28 @@ final class ClinicalAlerts
             return [];
         }
 
-        return array_values(array_filter([
-            self::meaningful($background->allergies) ? 'Alergia: '.Str::limit($background->allergies, 80) : null,
-            ...collect($background->conditions ?? [])->map(fn (string $key) => MedicalBackground::CONDITIONS[$key] ?? null)->all(),
-            $background->is_pregnant ? 'Embarazada'.($background->pregnancy_weeks ? " ({$background->pregnancy_weeks} semanas)" : '') : null,
-            $background->is_breastfeeding ? 'Dando de lactar' : null,
-            self::meaningful($background->medications) ? 'Toma: '.Str::limit($background->medications, 80) : null,
+        $alerts = array_values(array_filter([
+            self::meaningful($background->allergies) ? ['text' => 'Alergia: '.Str::limit($background->allergies, 80), 'severe' => true] : null,
+            ...collect($background->conditions ?? [])
+                ->map(fn (string $key) => isset(MedicalBackground::CONDITIONS[$key])
+                    ? ['text' => MedicalBackground::CONDITIONS[$key], 'severe' => in_array($key, self::SEVERE_CONDITIONS, true)]
+                    : null)
+                ->all(),
+            $background->is_pregnant ? ['text' => 'Embarazada'.($background->pregnancy_weeks ? " ({$background->pregnancy_weeks} semanas)" : ''), 'severe' => false] : null,
+            $background->is_breastfeeding ? ['text' => 'Dando de lactar', 'severe' => false] : null,
+            self::meaningful($background->medications)
+                ? ['text' => 'Toma: '.Str::limit($background->medications, 80), 'severe' => MedicationCheck::mentionsAnticoagulants($background->medications)]
+                : null,
         ]));
+
+        // Lo rojo primero, sin cambiar el orden dentro de cada grupo.
+        return [...array_filter($alerts, fn (array $alert) => $alert['severe']), ...array_filter($alerts, fn (array $alert) => ! $alert['severe'])];
+    }
+
+    /** Si algo de lo que tiene va en rojo. */
+    public static function isSevere(Patient $patient): bool
+    {
+        return in_array(true, array_column(self::withSeverity($patient), 'severe'), true);
     }
 
     public static function callout(?Patient $patient, bool $withLink = true): ?Callout
@@ -59,10 +88,11 @@ final class ClinicalAlerts
                 ->actions($link);
         }
 
-        return Callout::make('Atención: '.implode(' · ', $alerts))
+        $callout = Callout::make('Atención: '.implode(' · ', $alerts))
             ->icon(Heroicon::OutlinedExclamationTriangle)
-            ->danger()
             ->actions($link);
+
+        return self::isSevere($patient) ? $callout->danger() : $callout->warning();
     }
 
     /** "Ninguna", "no", "niega" no cuentan como alerta. */

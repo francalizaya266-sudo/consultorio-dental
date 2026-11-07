@@ -24,7 +24,7 @@
                         <li class="is-success"><x-filament::icon icon="heroicon-m-shield-check" /> Sin alergias ni enfermedades registradas.</li>
                     @else
                         @foreach ($next['alerts'] as $alert)
-                            <li class="is-danger"><x-filament::icon icon="heroicon-m-exclamation-triangle" /> {{ $alert }}</li>
+                            <li @class(['is-danger' => $alert['severe'], 'is-warning' => ! $alert['severe']])><x-filament::icon :icon="$alert['severe'] ? 'heroicon-m-exclamation-triangle' : 'heroicon-m-information-circle'" /> {{ $alert['text'] }}</li>
                         @endforeach
                     @endif
                 </ul>

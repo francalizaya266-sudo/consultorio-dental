@@ -223,6 +223,7 @@ final class AppointmentActions
             ->color('danger')
             ->requiresConfirmation()
             ->modalHeading('¿Marcar que el paciente no asistió?')
+            ->modalSubmitActionLabel('Marcar inasistencia')
             ->authorize('update')
             ->action(fn (Appointment $record) => Notify::run(
                 fn () => app(AppointmentService::class)->markNoShow($record, auth()->user()),
@@ -239,6 +240,7 @@ final class AppointmentActions
             ->color('danger')
             ->requiresConfirmation()
             ->modalHeading('¿Marcar que estos pacientes no asistieron?')
+            ->modalSubmitActionLabel('Marcar inasistencias')
             ->modalDescription('Solo cambia las citas pendientes o confirmadas que ya pasaron. Las que estaban en sala o en atención se quedan como están.')
             ->visible(fn (mixed $livewire) => property_exists($livewire, 'activeTab') && $livewire->activeTab === 'unclosed')
             ->authorizeIndividualRecords('update')

@@ -9,6 +9,7 @@ use App\Models\Doctor;
 use App\Models\ScheduleBlock;
 use App\Models\User;
 use BackedEnum;
+use Filament\Actions\ActionGroup;
 use Filament\Actions\DeleteAction;
 use Filament\Actions\EditAction;
 use Filament\Forms\Components\DateTimePicker;
@@ -118,7 +119,10 @@ class ScheduleBlockResource extends Resource
                 EditAction::make()
                     ->mutateDataUsing(fn (array $data) => ManageScheduleBlocks::forOwnAgenda($data))
                     ->after(fn (ScheduleBlock $record) => ManageScheduleBlocks::warnAboutAppointments($record)),
-                DeleteAction::make(),
+                // Borrar va en el menú ⋮: el rojo queda para lo urgente.
+                ActionGroup::make([
+                    DeleteAction::make(),
+                ]),
             ])
             ->emptyStateHeading('No hay bloqueos próximos')
             ->emptyStateDescription('Agrega vacaciones, cursos o feriados para que la agenda no ofrezca esas horas.');

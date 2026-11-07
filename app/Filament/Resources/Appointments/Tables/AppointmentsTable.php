@@ -103,8 +103,9 @@ class AppointmentsTable
                 $withBalance && (float) $record->patient->balance_due > 0 ? 'Debe '.Money::short($record->patient->balance_due) : null,
             ])))
             ->badge()
-            ->color(fn (string $state) => match (true) {
-                in_array($state, ['Llamar', 'Alerta médica'], true) => 'danger',
+            ->color(fn (string $state, Appointment $record, HasTable $livewire) => match (true) {
+                $state === 'Alerta médica' => VisitFlags::of($record, auth()->user(), $livewire->getTableRecords())['alertSevere'] ? 'danger' : 'warning',
+                $state === 'Llamar' => 'danger',
                 $state === 'Nuevo' => 'info',
                 $state === 'Pidió cambio', str_starts_with($state, 'Debe'), str_starts_with($state, 'Faltó') => 'warning',
                 default => 'gray',

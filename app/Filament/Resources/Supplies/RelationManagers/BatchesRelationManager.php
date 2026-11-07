@@ -7,6 +7,7 @@ use App\Filament\Resources\Supplies\SupplyResource;
 use App\Models\Supply;
 use App\Models\SupplyBatch;
 use App\Support\Money;
+use Filament\Actions\ActionGroup;
 use Filament\Resources\RelationManagers\RelationManager;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Filters\TernaryFilter;
@@ -68,8 +69,9 @@ class BatchesRelationManager extends RelationManager
                         false: fn (Builder $query) => $query->where('remaining', '<=', 0),
                     ),
             ])
+            // "Dar de baja" va en el menú ⋮ de cada lote: rojo en cada fila parecía una alarma.
             ->recordActions([
-                SupplyActions::writeOff(),
+                ActionGroup::make([SupplyActions::writeOff()]),
             ])
             ->emptyStateHeading('No queda ningún lote')
             ->emptyStateDescription('Cuando llegue una compra, regístrala con "Entrada" o desde Compras.');

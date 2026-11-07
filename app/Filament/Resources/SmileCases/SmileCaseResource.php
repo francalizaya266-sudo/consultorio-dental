@@ -9,6 +9,7 @@ use App\Models\Patient;
 use App\Models\SmileCase;
 use App\Services\Web\PublicImages;
 use BackedEnum;
+use Filament\Actions\ActionGroup;
 use Filament\Actions\DeleteAction;
 use Filament\Actions\EditAction;
 use Filament\Actions\RestoreAction;
@@ -128,8 +129,11 @@ class SmileCaseResource extends Resource
             ])
             ->recordActions([
                 EditAction::make(),
-                DeleteAction::make(),
-                RestoreAction::make(),
+                // Borrar va en el menú ⋮: el rojo queda para lo urgente.
+                ActionGroup::make([
+                    DeleteAction::make(),
+                    RestoreAction::make(),
+                ]),
             ])
             ->emptyStateHeading('Todavía no hay casos')
             ->emptyStateDescription('Sube las fotos de antes y después de pacientes que autorizaron publicarlas.');

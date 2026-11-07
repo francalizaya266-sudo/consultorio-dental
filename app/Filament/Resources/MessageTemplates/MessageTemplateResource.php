@@ -91,6 +91,7 @@ class MessageTemplateResource extends Resource
                     ->color('gray')
                     ->requiresConfirmation()
                     ->modalHeading('¿Volver al texto original?')
+                    ->modalSubmitActionLabel('Volver al original')
                     ->modalDescription(fn (MessageTemplate $record) => $record->key->defaultBody())
                     ->authorize('update')
                     ->visible(fn (MessageTemplate $record) => $record->body !== $record->key->defaultBody())

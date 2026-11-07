@@ -27,6 +27,8 @@ use App\Http\Controllers\Reports\EarningsExportController;
 use App\Models\Setting;
 use App\Services\Web\ClinicInfo;
 use Filament\Actions\CreateAction;
+use Filament\Forms\Components\DatePicker;
+use Filament\Forms\Components\DateTimePicker;
 use Filament\Http\Middleware\Authenticate;
 use Filament\Http\Middleware\AuthenticateSession;
 use Filament\Http\Middleware\DisableBladeIconComponents;
@@ -102,12 +104,22 @@ class AdminPanelProvider extends PanelProvider
         ];
     }
 
-    /** Lo que vale para todas las pantallas: cada "Nuevo …" abre una ventana con ese mismo nombre y se guarda con "Guardar". */
+    /**
+     * Lo que vale para todas las pantallas: cada "Nuevo …" abre una ventana con ese mismo nombre y se guarda con
+     * "Guardar"; y una fecha con hora se elige con el calendario del panel y se lee dd/mm/aaaa hh:mm, sea cual sea
+     * el idioma de la computadora (el del navegador la mostraba mm/dd/aaaa en una en inglés). Las fechas solas
+     * (nacimiento, por ejemplo) siguen con el del navegador, que deja escribirlas de corrido.
+     */
     public function boot(): void
     {
         CreateAction::configureUsing(fn (CreateAction $action) => $action
             ->modalHeading(fn (CreateAction $action): string => (string) $action->getLabel())
             ->modalSubmitActionLabel('Guardar'));
+
+        DateTimePicker::configureUsing(fn (DateTimePicker $picker) => $picker instanceof DatePicker ? $picker : $picker
+            ->native(false)
+            ->displayFormat('d/m/Y H:i')
+            ->firstDayOfWeek(1));
     }
 
     public function panel(Panel $panel): Panel

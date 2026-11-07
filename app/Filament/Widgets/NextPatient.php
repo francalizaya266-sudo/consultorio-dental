@@ -119,7 +119,7 @@ class NextPatient extends Widget implements HasActions, HasSchemas
                 default => 'gray',
             },
             'hasBackground' => $patient->medicalBackground !== null,
-            'alerts' => ClinicalAlerts::for($patient),
+            'alerts' => ClinicalAlerts::withSeverity($patient),
             // Si el tratamiento pide consentimiento y aún no lo firmó, se firma antes de empezar.
             'consentMissing' => app(ConsentService::class)->signedForVisit($appointment) === false,
             'last' => $last ? $last->treatment->name.' · '.$last->starts_at->translatedFormat('j M Y') : null,

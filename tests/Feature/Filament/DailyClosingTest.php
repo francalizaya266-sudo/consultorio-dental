@@ -11,6 +11,7 @@ use App\Models\Charge;
 use App\Models\DailyClosing;
 use App\Models\Patient;
 use App\Models\Payment;
+use App\Models\Treatment;
 use App\Models\User;
 use App\Services\Billing\CashClosing;
 use Filament\Actions\Testing\TestAction;
@@ -51,8 +52,10 @@ class DailyClosingTest extends TestCase
 
     public function test_the_day_says_what_was_due_who_left_owing_and_which_visits_were_left_open(): void
     {
-        Appointment::factory()->for($this->rosa)->at('2026-11-02 17:00')->confirmed()->create();
-        Appointment::factory()->for($this->rosa)->at('2026-11-02 21:00')->confirmed()->create(); // Todavía no llega.
+        // Un nombre fijo: uno al azar podría llamarse "Curación con resina" y confundirse con lo que debe.
+        $control = Treatment::factory()->create(['name' => 'Control']);
+        Appointment::factory()->for($this->rosa)->for($control)->at('2026-11-02 17:00')->confirmed()->create();
+        Appointment::factory()->for($this->rosa)->for($control)->at('2026-11-02 21:00')->confirmed()->create(); // Todavía no llega.
         $closing = new CashClosing(today()->toImmutable());
 
         $this->assertSame([['Rosa Huamán', 120.0, 'Curación con resina'], ['Luis Soto', 80.0, 'Radiografía']], $closing->pending()->map(fn (array $line) => [$line['patient']->full_name, $line['due'], $line['concepts']])->all());

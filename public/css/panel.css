@@ -244,6 +244,7 @@
 :is(.agenda-appt, .agenda-item) .tag-note { color: var(--gray-700); --t-ring: color-mix(in oklab, var(--gray-500) 25%, transparent); }
 :is(.agenda-appt, .agenda-item) .tag-unclosed { background: var(--danger-600); color: #fff; box-shadow: none; }
 :is(.agenda-appt, .agenda-item) .tag-alert { color: var(--danger-700); --t-ring: color-mix(in oklab, var(--danger-500) 30%, transparent); cursor: help; }
+:is(.agenda-appt, .agenda-item) .tag-alert.is-caution { color: var(--warning-800); --t-ring: color-mix(in oklab, var(--warning-500) 40%, transparent); }
 :is(.agenda-appt, .agenda-item) :is(.tag-change, .tag-missed) { color: var(--warning-800); --t-ring: color-mix(in oklab, var(--warning-500) 40%, transparent); }
 .dark :is(.agenda-appt, .agenda-item) .tag { background: rgb(0 0 0 / .3); }
 .dark :is(.agenda-appt, .agenda-item) .tag-call { color: var(--danger-300); }
@@ -252,6 +253,7 @@
 .dark :is(.agenda-appt, .agenda-item) .tag-note { color: var(--gray-300); }
 .dark :is(.agenda-appt, .agenda-item) .tag-unclosed { background: var(--danger-600); color: #fff; }
 .dark :is(.agenda-appt, .agenda-item) .tag-alert { color: var(--danger-300); }
+.dark :is(.agenda-appt, .agenda-item) .tag-alert.is-caution { color: var(--warning-300); }
 .dark :is(.agenda-appt, .agenda-item) :is(.tag-change, .tag-missed) { color: var(--warning-300); }
 /* En una columna angosta (la semana) las etiquetas no entran junto al nombre: el nombre queda entero
    y lo que pide algo (sin cerrar, llamar) se ve como un punto rojo en la esquina. */
@@ -511,6 +513,9 @@ button.agenda-slot:focus-visible { outline: 2px solid var(--primary-600); outlin
 .appt-panel-chips { display: flex; flex-wrap: wrap; gap: .35rem; align-items: center; }
 .appt-panel-alert { border-radius: .6rem; padding: .6rem .75rem; background: var(--danger-50); color: var(--danger-700); font-weight: 600; }
 .dark .appt-panel-alert { background: rgb(239 68 68 / .12); color: var(--danger-300); }
+/* Antecedentes para tener presentes (presión, diabetes, embarazo, un medicamento común): ámbar, no rojo. */
+.appt-panel-alert.is-caution { background: var(--warning-50); color: var(--warning-800); font-weight: 500; }
+.dark .appt-panel-alert.is-caution { background: rgb(245 158 11 / .12); color: var(--warning-300); }
 .appt-panel dl { display: grid; grid-template-columns: max-content 1fr; gap: .45rem 1rem; margin: 0; }
 .appt-panel dt { color: var(--gray-500); }
 .appt-panel dd { margin: 0; color: var(--gray-950); font-weight: 500; overflow-wrap: anywhere; }
@@ -555,6 +560,8 @@ button.agenda-slot:focus-visible { outline: 2px solid var(--primary-600); outlin
 .cb-flag.is-ok { color: var(--success-700); background: var(--success-50); border-color: var(--success-200); }
 .dark .cb-flag.is-danger { color: var(--danger-300); background: rgb(239 68 68 / .12); border-color: rgb(239 68 68 / .35); }
 .dark .cb-flag.is-warning { color: var(--warning-300); background: rgb(245 158 11 / .12); border-color: rgb(245 158 11 / .35); }
+.cb-flag.is-caution { color: var(--warning-800); background: var(--warning-50); border-color: var(--warning-300); }
+.dark .cb-flag.is-caution { color: var(--warning-300); background: rgb(245 158 11 / .12); border-color: rgb(245 158 11 / .35); }
 .dark .cb-flag.is-ok { color: var(--success-300); background: rgb(34 197 94 / .1); border-color: rgb(34 197 94 / .3); }
 .cb-sections { display: flex; gap: .35rem; overflow-x: auto; scrollbar-width: none; }
 .cb-sections::-webkit-scrollbar { display: none; }

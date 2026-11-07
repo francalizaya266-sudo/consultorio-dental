@@ -10,6 +10,7 @@ use App\Models\TextSnippet;
 use App\Models\User;
 use BackedEnum;
 use Filament\Actions\Action;
+use Filament\Actions\ActionGroup;
 use Filament\Actions\DeleteAction;
 use Filament\Actions\EditAction;
 use Filament\Forms\Components\Select;
@@ -120,7 +121,9 @@ class TextSnippetResource extends Resource
                     ->icon(Heroicon::OutlinedUserGroup)
                     ->color('gray')
                     ->requiresConfirmation()
+                    ->modalHeading('¿Proponer esta opción para todo el equipo?')
                     ->modalDescription('El administrador podrá sumarla a las opciones del equipo.')
+                    ->modalSubmitActionLabel('Proponer')
                     ->visible(fn (TextSnippet $record) => $record->user_id === auth()->id() && $record->status === SnippetStatus::Active && ! auth()->user()->isAdmin())
                     ->authorize('update')
                     ->action(function (TextSnippet $record) {
@@ -132,6 +135,9 @@ class TextSnippetResource extends Resource
                     ->icon(Heroicon::OutlinedCheck)
                     ->color('success')
                     ->requiresConfirmation()
+                    ->modalHeading('¿Sumar esta opción a las del equipo?')
+                    ->modalDescription('Desde ahora la ve y la usa todo el equipo.')
+                    ->modalSubmitActionLabel('Sumar al equipo')
                     ->visible(fn (TextSnippet $record) => $record->status === SnippetStatus::Proposed && auth()->user()->isAdmin())
                     ->authorize('approve')
                     ->action(function (TextSnippet $record) {
@@ -140,7 +146,10 @@ class TextSnippetResource extends Resource
                     }),
                 EditAction::make()
                     ->mutateDataUsing(fn (array $data, TextSnippet $record) => self::withOwnership($data, $record)),
-                DeleteAction::make(),
+                // Borrar va en el menú ⋮: el rojo queda para lo urgente.
+                ActionGroup::make([
+                    DeleteAction::make(),
+                ]),
             ]);
     }
 

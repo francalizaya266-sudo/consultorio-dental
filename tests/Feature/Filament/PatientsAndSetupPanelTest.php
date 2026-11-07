@@ -170,15 +170,17 @@ class PatientsAndSetupPanelTest extends TestCase
     public function test_payments_open_on_the_last_week_and_older_ones_are_one_click_away(): void
     {
         $thisWeek = Payment::factory()->for(Patient::factory())->create(['paid_at' => now()->subDays(3)]);
+        // El primer día de la semana también entra, aunque el calendario guarde la fecha con hora.
+        $firstDay = Payment::factory()->for(Patient::factory())->create(['paid_at' => today()->subDays(6)->setTime(9, 30)]);
         $payment = Payment::factory()->for(Patient::factory())->create(['paid_at' => now()->subDays(20)]);
         $this->actingAs(User::factory()->reception()->create());
 
         Livewire::test(ManagePayments::class)
-            ->assertCanSeeTableRecords([$thisWeek])
+            ->assertCanSeeTableRecords([$thisWeek, $firstDay])
             ->assertCanNotSeeTableRecords([$payment])
             ->assertSee('Últimos 7 días');
 
-        Payment::query()->whereKey($thisWeek->getKey())->delete();
+        Payment::query()->whereKey([$thisWeek->getKey(), $firstDay->getKey()])->delete();
 
         Livewire::test(ManagePayments::class)
             ->assertCanNotSeeTableRecords([$payment])

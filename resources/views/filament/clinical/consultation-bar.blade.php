@@ -118,7 +118,7 @@
         @if ($patient)
             <div class="cb-flags">
                 @foreach ($alerts as $alert)
-                    <span class="cb-flag is-danger">⚠ {{ $alert }}</span>
+                    <span @class(['cb-flag', 'is-danger' => $alert['severe'], 'is-caution' => ! $alert['severe']])>{{ $alert['severe'] ? '⚠ ' : '' }}{{ $alert['text'] }}</span>
                 @endforeach
                 @if ($patient && ! $hasBackground)
                     <button type="button" class="cb-flag is-warning" wire:click="mountAction('editBackground')">Sin antecedentes · registrar</button>

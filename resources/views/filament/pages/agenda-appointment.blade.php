@@ -19,7 +19,7 @@
     </div>
 
     @if ($alerts)
-        <div class="appt-panel-alert" role="alert">⚠ {{ implode(' · ', $alerts) }}</div>
+        <div @class(['appt-panel-alert', 'is-caution' => ! $alertsSevere]) role="alert">{{ $alertsSevere ? '⚠ ' : '' }}{{ implode(' · ', $alerts) }}</div>
     @endif
 
     <dl>

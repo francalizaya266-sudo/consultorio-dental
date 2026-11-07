@@ -138,7 +138,13 @@ final class MedicationCheck
         $background = $patient->medicalBackground;
 
         return in_array('bleeding_disorder', $background?->conditions ?? [], true)
-            || AllergyCheck::mentionsAny($background?->medications, self::ANTICOAGULANTS);
+            || self::mentionsAnticoagulants($background?->medications);
+    }
+
+    /** Lo que escribieron en "medicamentos que toma" incluye un anticoagulante o antiagregante. */
+    public static function mentionsAnticoagulants(?string $medications): bool
+    {
+        return AllergyCheck::mentionsAny($medications, self::ANTICOAGULANTS);
     }
 
     /** Toma bifosfonatos (o algo parecido para los huesos). */

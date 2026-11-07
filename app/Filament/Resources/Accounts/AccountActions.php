@@ -83,6 +83,7 @@ final class AccountActions
             ->authorize('block')
             ->requiresConfirmation()
             ->modalHeading('¿Permitir otra vez las reservas web?')
+            ->modalSubmitActionLabel('Desbloquear')
             ->action(function (Account $record) {
                 $record->update(['blocked_at' => null, 'blocked_reason' => null, 'blocked_by_user_id' => null]);
 

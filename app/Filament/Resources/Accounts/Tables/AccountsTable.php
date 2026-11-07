@@ -5,6 +5,7 @@ namespace App\Filament\Resources\Accounts\Tables;
 use App\Filament\Resources\Accounts\AccountActions;
 use App\Models\Account;
 use App\Support\Phone;
+use Filament\Actions\ActionGroup;
 use Filament\Actions\ViewAction;
 use Filament\Tables\Columns\IconColumn;
 use Filament\Tables\Columns\TextColumn;
@@ -57,8 +58,8 @@ class AccountsTable
             ])
             ->recordActions([
                 ViewAction::make(),
-                AccountActions::block(),
                 AccountActions::unblock(),
+                ActionGroup::make([AccountActions::block()]),
             ]);
     }
 }
