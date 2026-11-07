@@ -5,22 +5,19 @@ namespace App\Filament\Resources\Patients\Schemas;
 use App\Enums\PatientRelationship;
 use App\Filament\Resources\Accounts\AccountActions;
 use App\Filament\Resources\Accounts\AccountResource;
+use App\Filament\Resources\Patients\Pages\ViewPatient;
 use App\Filament\Resources\Patients\PatientResource;
 use App\Filament\Support\ClinicalAlerts;
 use App\Filament\Support\PatientSummary;
 use App\Filament\Support\PatientTimeline;
-use App\Models\Charge;
 use App\Models\Patient;
 use App\Services\Clinical\ConsentService;
-use App\Support\Money;
 use App\Support\Phone;
 use Filament\Infolists\Components\TextEntry;
 use Filament\Schemas\Components\Group;
 use Filament\Schemas\Components\Section;
 use Filament\Schemas\Components\View;
 use Filament\Schemas\Schema;
-use Filament\Support\Enums\FontWeight;
-use Filament\Support\Enums\TextSize;
 use Filament\Support\Icons\Heroicon;
 use Illuminate\Support\HtmlString;
 
@@ -38,7 +35,8 @@ class PatientInfolist
                 // La alerta médica arriba de todo, para quien atiende al paciente.
                 Group::make(fn (Patient $record) => auth()->user()->can('viewClinical', $record) ? array_filter([ClinicalAlerts::callout($record)]) : [])
                     ->columnSpanFull(),
-                // A la izquierda, los datos y la línea de tiempo; a la derecha, el celular y la cuenta.
+                // A la izquierda, los datos y la línea de tiempo; a la derecha, el celular y la familia. El saldo va
+                // una sola vez, en las etiquetas de arriba; lo que pagó, en la línea de tiempo.
                 Group::make([
                     // Etiqueta y dato en la misma línea: la ficha entra en media pantalla.
                     Section::make('Datos del paciente')
@@ -46,13 +44,11 @@ class PatientInfolist
                         ->compact()
                         ->inlineLabel()
                         ->schema([
-                            TextEntry::make('document_number')
-                                ->label('Documento')
-                                ->formatStateUsing(fn (Patient $record) => $record->document_type?->getLabel().' '.$record->document_number)
-                                ->hidden(fn ($state) => blank($state)),
+                            // Documento, edad y desde cuándo viene ya están bajo el nombre (PatientSummary::subheading);
+                            // cómo nos encontró y la última visita, en las etiquetas y en la línea de tiempo.
                             TextEntry::make('birth_date')
                                 ->label('Nacimiento')
-                                ->formatStateUsing(fn (Patient $record) => $record->birth_date->format('d/m/Y').($record->age !== null ? ' · '.$record->age.' años' : ''))
+                                ->date('d/m/Y')
                                 ->hidden(fn ($state) => blank($state)),
                             TextEntry::make('sex')
                                 ->label('Sexo')
@@ -68,17 +64,6 @@ class PatientInfolist
                                 ->label('Contacto de emergencia')
                                 ->state(fn (Patient $record) => collect([$record->emergency_contact_name, $record->emergency_contact_phone])->filter()->implode(' · '))
                                 ->hidden(fn ($state) => blank($state)),
-                            TextEntry::make('origin')
-                                ->label('¿Cómo nos encontró?')
-                                ->hidden(fn ($state) => blank($state)),
-                            TextEntry::make('first_visit_at')
-                                ->label('Primera visita')
-                                ->date('d/m/Y')
-                                ->hidden(fn ($state) => blank($state)),
-                            TextEntry::make('last_visit_at')
-                                ->label('Última visita')
-                                ->date('d/m/Y')
-                                ->hidden(fn ($state) => blank($state)),
                             TextEntry::make('admin_notes')
                                 ->label('Notas internas')
                                 ->hidden(fn ($state) => blank($state))
@@ -90,11 +75,15 @@ class PatientInfolist
                         ->collapsible()
                         ->schema([
                             View::make('filament.patients.timeline')
-                                ->viewData(fn (Patient $record) => ['events' => PatientTimeline::for($record, auth()->user())]),
+                                ->viewData(fn (Patient $record, $livewire) => [
+                                    'events' => PatientTimeline::for($record, auth()->user()),
+                                    // "Anular" abre su ventana en la ficha, que es la que la tiene.
+                                    'canVoid' => $livewire instanceof ViewPatient,
+                                ]),
                         ]),
                 ])
                     ->columnSpan(['default' => 'full', 'lg' => 2]),
-                Group::make([self::phoneAndFamily(), self::account()])
+                Group::make([self::phoneAndFamily()])
                     ->columnSpan(['default' => 'full', 'lg' => 1]),
             ]);
     }
@@ -153,30 +142,6 @@ class PatientInfolist
                     })
                     ->placeholder('Falta: quién firma por él')
                     ->visible(fn (Patient $record) => $record->isMinor()),
-            ]);
-    }
-
-    /** Saldo y último pago, para recepción y administración. */
-    private static function account(): Section
-    {
-        return Section::make('Cuenta')
-            ->compact()
-            ->visible(fn () => auth()->user()->can('viewAny', Charge::class))
-            ->schema([
-                TextEntry::make('balance')
-                    ->label('Saldo')
-                    ->state(fn (Patient $record) => Money::balance($record->balance()))
-                    ->color(fn (Patient $record) => $record->balance() > 0 ? 'danger' : 'success')
-                    ->size(TextSize::Large)
-                    ->weight(FontWeight::Bold),
-                TextEntry::make('last_payment')
-                    ->label('Último pago')
-                    ->state(function (Patient $record) {
-                        $payment = $record->payments()->whereNull('voided_at')->latest('paid_at')->first();
-
-                        return $payment ? $payment->paid_at->format('d/m/Y').' · '.Money::format($payment->amount).' · '.$payment->method->getLabel() : null;
-                    })
-                    ->placeholder('Aún no hay pagos'),
             ]);
     }
 }

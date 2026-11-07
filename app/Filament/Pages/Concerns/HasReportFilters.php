@@ -14,7 +14,7 @@ use Filament\Schemas\Components\Utilities\Get;
 use Filament\Schemas\Components\Utilities\Set;
 use Filament\Schemas\Schema;
 
-/** Filtros comunes de Resumen y Ganancias: período y, para la administración, doctor. */
+/** Filtros comunes de Resumen e Ingresos: período y, para la administración, doctor. */
 trait HasReportFilters
 {
     use HasFiltersForm;

@@ -4,9 +4,12 @@ namespace App\Filament\Resources\PurchaseOrders\Pages;
 
 use App\Filament\Resources\PurchaseOrders\PlaceOrderAction;
 use App\Filament\Resources\PurchaseOrders\PurchaseOrderResource;
+use App\Filament\Resources\Suppliers\SupplierResource;
 use App\Models\PurchaseOrder;
+use Filament\Actions\Action;
 use Filament\Resources\Pages\ManageRecords;
 use Filament\Schemas\Components\Tabs\Tab;
+use Filament\Support\Icons\Heroicon;
 use Illuminate\Database\Eloquent\Builder;
 
 class ManagePurchaseOrders extends ManageRecords
@@ -16,6 +19,12 @@ class ManagePurchaseOrders extends ManageRecords
     protected function getHeaderActions(): array
     {
         return [
+            Action::make('suppliers')
+                ->label('Proveedores')
+                ->icon(Heroicon::OutlinedTruck)
+                ->color('gray')
+                ->visible(fn () => SupplierResource::canViewAny())
+                ->url(fn () => SupplierResource::getUrl('index')),
             PlaceOrderAction::make(),
         ];
     }

@@ -7,6 +7,7 @@ use App\Filament\Resources\Patients\Schemas\PatientForm;
 use App\Models\Patient;
 use App\Services\Patients\PatientRegistrar;
 use Filament\Actions\Action;
+use Filament\Actions\ActionGroup;
 use Filament\Actions\DeleteAction;
 use Filament\Actions\RestoreAction;
 use Filament\Actions\ViewAction;
@@ -37,11 +38,14 @@ class EditPatient extends EditRecord
                     Notification::make()->success()->title('Celular actualizado')->send();
                     $this->refreshFormData(['relationship']);
                 }),
-            // Solo un paciente registrado por error: con citas, pagos o historia, el botón explica por qué no.
-            DeleteAction::make()
-                ->authorizationNotification()
-                ->modalDescription('El paciente deja de aparecer en las listas. Se puede recuperar.'),
-            RestoreAction::make(),
+            // En el menú ⋮, no como botón rojo: solo un paciente registrado por error. Con citas, pagos o
+            // historia, explica por qué no.
+            ActionGroup::make([
+                DeleteAction::make()
+                    ->authorizationNotification()
+                    ->modalDescription('El paciente deja de aparecer en las listas. Se puede recuperar.'),
+                RestoreAction::make(),
+            ]),
         ];
     }
 

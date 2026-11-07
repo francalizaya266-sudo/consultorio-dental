@@ -4,22 +4,30 @@ namespace Tests\Feature\Filament;
 
 use App\Enums\AppointmentOrigin;
 use App\Enums\AppointmentStatus;
+use App\Enums\MessageTemplateKey;
 use App\Enums\PatientRelationship;
 use App\Enums\PaymentMethod;
 use App\Enums\SnippetStatus;
+use App\Enums\UserRole;
 use App\Filament\Pages\Agenda;
 use App\Filament\Pages\Dashboard;
 use App\Filament\Pages\Settings;
+use App\Filament\Pages\WebSetup;
 use App\Filament\Resources\Accounts\Pages\ViewAccount;
+use App\Filament\Resources\Doctors\DoctorResource;
+use App\Filament\Resources\Doctors\Pages\CreateDoctor;
 use App\Filament\Resources\Doctors\Pages\EditDoctor;
 use App\Filament\Resources\Patients\Pages\CreatePatient;
 use App\Filament\Resources\Patients\Pages\EditPatient;
 use App\Filament\Resources\Patients\Pages\ListPatients;
+use App\Filament\Resources\Patients\Pages\ViewPatient;
 use App\Filament\Resources\Patients\PatientResource;
+use App\Filament\Resources\Patients\RelationManagers\ChargesRelationManager;
 use App\Filament\Resources\Payments\Pages\ManagePayments;
 use App\Filament\Resources\ScheduleBlocks\Pages\ManageScheduleBlocks;
 use App\Filament\Resources\TextSnippets\Pages\ManageTextSnippets;
 use App\Filament\Resources\Treatments\Pages\ManageTreatments;
+use App\Filament\Resources\Users\Pages\ManageUsers;
 use App\Filament\Support\MobileBar;
 use App\Models\Account;
 use App\Models\Appointment;
@@ -32,10 +40,13 @@ use App\Models\Setting;
 use App\Models\TextSnippet;
 use App\Models\Treatment;
 use App\Models\User;
+use App\Models\WhatsappMessage;
 use App\Services\Web\PublicImages;
 use Filament\Actions\Testing\TestAction;
+use Filament\Forms\Components\Select;
 use Illuminate\Foundation\Testing\LazilyRefreshDatabase;
 use Illuminate\Http\UploadedFile;
+use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Storage;
 use Livewire\Livewire;
 use Tests\Concerns\CreatesAgenda;
@@ -161,15 +172,17 @@ class PatientsAndSetupPanelTest extends TestCase
     public function test_payments_open_on_the_last_week_and_older_ones_are_one_click_away(): void
     {
         $thisWeek = Payment::factory()->for(Patient::factory())->create(['paid_at' => now()->subDays(3)]);
+        // El primer día de la semana también entra, aunque el calendario guarde la fecha con hora.
+        $firstDay = Payment::factory()->for(Patient::factory())->create(['paid_at' => today()->subDays(6)->setTime(9, 30)]);
         $payment = Payment::factory()->for(Patient::factory())->create(['paid_at' => now()->subDays(20)]);
         $this->actingAs(User::factory()->reception()->create());
 
         Livewire::test(ManagePayments::class)
-            ->assertCanSeeTableRecords([$thisWeek])
+            ->assertCanSeeTableRecords([$thisWeek, $firstDay])
             ->assertCanNotSeeTableRecords([$payment])
             ->assertSee('Últimos 7 días');
 
-        Payment::query()->whereKey($thisWeek->getKey())->delete();
+        Payment::query()->whereKey([$thisWeek->getKey(), $firstDay->getKey()])->delete();
 
         Livewire::test(ManagePayments::class)
             ->assertCanNotSeeTableRecords([$payment])
@@ -234,13 +247,17 @@ class PatientsAndSetupPanelTest extends TestCase
         $this->assertTrue($mine->user->is($doctor));
         $this->assertTrue($shared->isShared());
 
+        // Solo se marca lo que no es lo de siempre: la del equipo va sin etiqueta, la propia dice "Solo tuya".
         $this->actingAs($doctor);
         Livewire::test(ManageTextSnippets::class)
+            ->assertSee(['Mi limpieza', 'Solo tuya', 'Postoperatorio'])
+            ->assertDontSee(['Equipo', 'Activa'])
             ->assertActionHidden(TestAction::make('edit')->table($shared))
             ->callAction(TestAction::make('propose')->table($mine));
 
         $this->actingAs($admin);
         Livewire::test(ManageTextSnippets::class)
+            ->assertSee('Propuesta de '.$doctor->name)
             ->callAction(TestAction::make('approve')->table($mine->fresh()));
 
         $this->assertTrue($mine->fresh()->isShared());
@@ -265,12 +282,12 @@ class PatientsAndSetupPanelTest extends TestCase
         $this->assertSame(['+51912345678', 'Sonríe sin miedo'], [Setting::get('clinic.whatsapp'), Setting::get('clinic.slogan')]);
     }
 
-    public function test_the_admin_uploads_and_removes_the_logo_in_settings(): void
+    public function test_the_admin_uploads_and_removes_the_logo_in_the_web_setup(): void
     {
         Storage::fake(PublicImages::DISK);
         $this->actingAs(User::factory()->admin()->create());
 
-        Livewire::test(Settings::class)
+        Livewire::test(WebSetup::class)
             ->fillForm(['web' => ['logo' => UploadedFile::fake()->image('logo.png', 600, 200)]])
             ->call('save')
             ->assertHasNoFormErrors();
@@ -282,7 +299,7 @@ class PatientsAndSetupPanelTest extends TestCase
 
         $this->get(route('site.home'))->assertSee('class="logo"', false);
 
-        Livewire::test(Settings::class)
+        Livewire::test(WebSetup::class)
             ->fillForm(['web' => ['logo' => null]])
             ->call('save')
             ->assertHasNoFormErrors();
@@ -291,17 +308,17 @@ class PatientsAndSetupPanelTest extends TestCase
         $this->get(route('site.home'))->assertDontSee('class="logo"', false)->assertSee('class="mark"', false);
     }
 
-    public function test_the_admin_sets_the_home_photo_and_the_google_stars_in_settings(): void
+    public function test_the_admin_sets_the_home_photo_and_the_google_stars_in_the_web_setup(): void
     {
         Storage::fake(PublicImages::DISK);
         $this->actingAs(User::factory()->admin()->create());
 
-        Livewire::test(Settings::class)
+        Livewire::test(WebSetup::class)
             ->fillForm(['clinic' => ['google_rating' => '6']])
             ->call('save')
             ->assertHasFormErrors(['clinic.google_rating']);
 
-        Livewire::test(Settings::class)
+        Livewire::test(WebSetup::class)
             ->fillForm([
                 'web' => ['hero_image' => UploadedFile::fake()->image('consultorio.jpg', 2400, 1200)],
                 'clinic' => ['google_rating' => '4,9', 'google_reviews_count' => '87'],
@@ -314,7 +331,7 @@ class PatientsAndSetupPanelTest extends TestCase
         Storage::disk(PublicImages::DISK)->assertExists(Setting::get('web.hero_image'));
 
         // Sin puntaje, no quedan estrellas a medias en la web.
-        Livewire::test(Settings::class)
+        Livewire::test(WebSetup::class)
             ->fillForm(['clinic' => ['google_rating' => '', 'google_reviews_count' => '']])
             ->call('save')
             ->assertHasNoFormErrors();
@@ -336,6 +353,50 @@ class PatientsAndSetupPanelTest extends TestCase
             ->assertHasNoFormErrors();
 
         $this->assertSame(2, $doctor->schedules()->where('weekday', 1)->count());
+    }
+
+    public function test_a_doctor_is_registered_with_their_access_in_one_step(): void
+    {
+        $this->actingAs(User::factory()->admin()->create());
+
+        Livewire::test(CreateDoctor::class)
+            ->assertSchemaStateSet(['access' => 'new'])
+            ->fillForm(['name' => 'Dra. Ana Torres', 'slug' => 'ana-torres', 'access_email' => 'ana@consultorio.test', 'access_password' => 'corto'])
+            ->call('create')
+            ->assertHasFormErrors(['access_password' => 'min'])
+            ->fillForm(['access_password' => 'clave-segura-1'])
+            ->call('create')
+            ->assertHasNoFormErrors();
+
+        $doctor = Doctor::query()->where('slug', 'ana-torres')->sole();
+        $this->assertSame(['Dra. Ana Torres', 'ana@consultorio.test', UserRole::Doctor], [$doctor->user->name, $doctor->user->email, $doctor->user->role]);
+        $this->assertTrue(Hash::check('clave-segura-1', $doctor->user->password));
+
+        // Sin acceso por ahora: el doctor queda sin usuario, y se le puede dar después desde su ficha.
+        Livewire::test(CreateDoctor::class)
+            ->fillForm(['name' => 'Dr. Luis Paz', 'slug' => 'luis-paz', 'access' => 'none'])
+            ->call('create')
+            ->assertHasNoFormErrors();
+
+        $luis = Doctor::query()->where('slug', 'luis-paz')->sole();
+        $this->assertNull($luis->user_id);
+
+        Livewire::test(EditDoctor::class, ['record' => $luis->getKey()])
+            ->assertSchemaStateSet(['access' => 'none'])
+            ->fillForm(['access' => 'new', 'access_email' => 'ana@consultorio.test', 'access_password' => 'clave-segura-2'])
+            ->call('save')
+            ->assertHasFormErrors(['access_email' => 'unique'])
+            ->fillForm(['access_email' => 'luis@consultorio.test'])
+            ->call('save')
+            ->assertHasNoFormErrors();
+
+        $this->assertSame('luis@consultorio.test', $luis->fresh()->user->email);
+
+        // En Usuarios ya no se da de alta a un doctor: lleva a Doctores.
+        Livewire::test(ManageUsers::class)
+            ->assertActionHasUrl('newDoctor', DoctorResource::getUrl('create'))
+            ->mountAction('create')
+            ->assertFormFieldExists('role', 'mountedActionSchema0', fn (Select $field) => ! array_key_exists(UserRole::Doctor->value, $field->getOptions()));
     }
 
     public function test_patients_away_for_six_months_can_be_listed_to_call_them_back(): void
@@ -365,12 +426,30 @@ class PatientsAndSetupPanelTest extends TestCase
         Appointment::factory()->for($doctor)->for($treatment)->for($patient)->at('2026-10-20 10:00')->create();
         Payment::factory()->for($patient)->create(['amount' => 80, 'method' => PaymentMethod::Yape, 'paid_at' => '2026-10-20 11:00']);
 
-        $this->actingAs(User::factory()->reception()->create());
+        $reception = User::factory()->reception()->create();
+        $this->actingAs($reception);
 
+        // Una sola línea de tiempo, con su filtro: ya no hay pestañas de Citas y Pagos que la repitan,
+        // y el saldo va una sola vez (la etiqueta bajo el nombre), sin tarjeta "Cuenta".
         $this->get(PatientResource::getUrl('view', ['record' => $patient]))
             ->assertOk()
-            ->assertSee(['María Quispe', 'Línea de tiempo', 'Limpieza dental · Pendiente', 'Pagó S/ 80.00 · Yape'])
-            ->assertDontSee(['Ver María Quispe', 'Penicilina', 'Correo', 'Notas internas']);
+            ->assertSee(['María Quispe', 'Línea de tiempo', 'Limpieza dental · Pendiente', 'Pagó S/ 80.00 · Yape', 'Constancia'])
+            ->assertSeeInOrder(['Todo', 'Citas', 'Pagos'])
+            ->assertSee('A favor S/ 80.00')
+            ->assertDontSee(['Ver María Quispe', 'Penicilina', 'Correo', 'Notas internas', 'Último pago', 'Sin citas todavía', 'Sin pagos todavía']);
+        $this->assertSame([ChargesRelationManager::class], PatientResource::getRelations());
+
+        // Un pago se anula desde su línea, con su motivo.
+        $payment = $patient->payments()->sole();
+        Livewire::test(ViewPatient::class, ['record' => $patient->getRouteKey()])
+            ->mountAction('voidPayment', ['payment' => $payment->id])
+            ->setActionData(['reason' => 'Se cobró dos veces'])
+            ->callMountedAction()
+            ->assertHasNoActionErrors()
+            ->assertNotified('Pago anulado')
+            ->assertSee(['Pagó S/ 80.00 · Yape (anulado)', 'Anulado: Se cobró dos veces', 'Al día'])
+            ->assertDontSee('A favor');
+        $this->assertSame([$reception->id, 'Se cobró dos veces'], [$payment->fresh()->voided_by_user_id, $payment->fresh()->void_reason]);
 
         $this->actingAs($doctor->user);
 
@@ -416,11 +495,21 @@ class PatientsAndSetupPanelTest extends TestCase
     {
         $doctor = $this->doctorOffering(Treatment::factory()->create());
 
-        $this->actingAs(User::factory()->reception()->create());
-        $this->get(Dashboard::getUrl())->assertOk()->assertSee('Accesos rápidos');
-        $this->assertSame(['Hoy', 'Agenda', 'Nueva cita', 'Pacientes', 'Caja'], array_column(MobileBar::items(), 'label'));
+        // Dos avisos listos para enviar; el recordatorio de mañana todavía no cuenta.
+        $patient = Patient::factory()->create();
+        foreach ([null, now()->subHour(), now()->addDay()] as $dueAt) {
+            WhatsappMessage::create(['account_id' => $patient->account_id, 'patient_id' => $patient->id, 'template_key' => MessageTemplateKey::Reminder, 'phone' => '+51987654321', 'due_at' => $dueAt]);
+        }
 
+        // Los avisos se mandan desde el celular: van en la barra con cuántos toca enviar. Caja queda en el menú.
+        $this->actingAs(User::factory()->reception()->create());
+        $this->get(Dashboard::getUrl())->assertOk()->assertSee(['Accesos rápidos', 'Avisos, 2 por enviar']);
+        $this->assertSame(['Hoy', 'Agenda', 'Nueva cita', 'Pacientes', 'Avisos'], array_column(MobileBar::items(), 'label'));
+        $this->assertSame([null, null, null, null, '2'], array_column(MobileBar::items(), 'badge'));
+
+        // El doctor ve solo los avisos de sus citas.
         $this->actingAs($doctor->user);
         $this->assertSame(['Hoy', 'Agenda', 'Nueva cita', 'Pacientes', 'Avisos'], array_column(MobileBar::items(), 'label'));
+        $this->assertNull(MobileBar::items()[4]['badge']);
     }
 }

@@ -276,7 +276,7 @@ class ConsultationForm
                                     ])->visible(fn (Get $get, $livewire) => blank($get('diagnosis_notes')) && ! ($livewire->showDiagnosisNotes ?? true)),
                                 ]),
 
-                            Section::make('Tratamientos y cobro')
+                            Section::make('Lo que se hizo')
                                 ->id('plan')
                                 ->key('plan')
                                 ->icon(Heroicon::OutlinedClipboardDocumentList)
@@ -703,7 +703,7 @@ class ConsultationForm
                 $record->appointment?->treatment?->name,
                 $record->attended_at->translatedFormat('D d/m · H:i'),
             ])->filter()->implode(' · ') : null,
-            'alerts' => $patient ? ClinicalAlerts::for($patient) : [],
+            'alerts' => $patient ? ClinicalAlerts::withSeverity($patient) : [],
             'hasBackground' => $patient?->medicalBackground !== null,
             'consent' => $record ? self::consentStatus($record) : null,
             'autosavedAt' => $livewire->autosavedAt ?? null,

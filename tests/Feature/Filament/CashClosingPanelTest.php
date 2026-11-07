@@ -82,7 +82,7 @@ class CashClosingPanelTest extends TestCase
     {
         $this->actingAs($this->rosa);
 
-        $this->get(CashClosing::getUrl())->assertOk()->assertSee('Cierre de caja');
+        $this->get(CashClosing::getUrl())->assertOk()->assertSee('Cierre del día');
 
         Livewire::test(CashClosingStats::class, ['pageFilters' => ['date' => '2026-11-02']])
             ->assertSee(['Cobrado', 'S/ 580.00', '4 pagos · 1 anulado aparte', 'Efectivo en caja', 'S/ 200.00', 'Yape y Plin', 'S/ 80.00']);
@@ -92,7 +92,7 @@ class CashClosingPanelTest extends TestCase
 
         $this->get(Filament::getPanel('admin')->route('cash-closing.print', ['date' => '2026-11-02']))
             ->assertOk()
-            ->assertSee(['Cierre de caja', 'Lunes 2 de noviembre de 2026', 'Arqueo del efectivo', 'Según el sistema', 'Entregó', 'Recibió'])
+            ->assertSee(['Cierre del día', 'Lunes 2 de noviembre de 2026', 'Arqueo del efectivo', 'Según el sistema', 'Entregó', 'Recibió'])
             ->assertDontSee('S/ 500.00');
     }
 

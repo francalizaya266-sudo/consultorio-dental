@@ -3,8 +3,8 @@
 namespace App\Filament\Widgets;
 
 use App\Filament\Pages\Earnings;
+use App\Filament\Pages\OwingBalances;
 use App\Filament\Pages\Summary;
-use App\Filament\Resources\Patients\PatientResource;
 use App\Filament\Support\StatComparison;
 use App\Models\User;
 use App\Services\Dashboard\MonthFigures;
@@ -15,7 +15,8 @@ use Filament\Widgets\StatsOverviewWidget;
 use Filament\Widgets\StatsOverviewWidget\Stat;
 
 /**
- * Cómo va el mes, sin entrar a Reportes: lo mismo que Resumen y Ganancias con el filtro "Este mes".
+ * Cómo va el mes, sin entrar a Reportes: lo mismo que Resumen e Ingresos con el filtro "Este mes",
+ * y a cuánto cerraría el mes si sigue al mismo ritmo. Va al final de "Hoy": primero lo del día.
  * Lo ve quien ve los reportes; un doctor, solo lo suyo. La meta y lo que se debe son del consultorio entero.
  */
 class MonthOverview extends StatsOverviewWidget
@@ -48,9 +49,35 @@ class MonthOverview extends StatsOverviewWidget
 
     protected function getDescription(): ?string
     {
-        return ($this->doctorId() !== null ? 'Solo tus citas y lo que se cobró de ellas. ' : '')
-            .'Comparado con los mismos días del mes pasado.'
-            .($this->isEarly() ? ' Con tan pocos días, las diferencias todavía no dicen mucho.' : '');
+        return collect([
+            $this->doctorId() !== null ? 'Solo tus citas y lo que se cobró de ellas.' : null,
+            $this->projection(),
+            'Comparado con los mismos días del mes pasado.',
+            $this->isEarly() ? 'Con tan pocos días, las diferencias todavía no dicen mucho.' : null,
+        ])->filter()->implode(' ');
+    }
+
+    /**
+     * A cuánto cerraría el mes si sigue así, contra la meta o, si no hay, contra el mes pasado.
+     * Nada los primeros días: un solo pago lo cambia todo.
+     */
+    private function projection(): ?string
+    {
+        $figures = (new MonthFigures($this->doctorId()))->figures();
+        $projection = MonthFigures::projection($figures['collected']);
+
+        if ($projection === null) {
+            return null;
+        }
+
+        $goal = $this->doctorId() === null ? MonthFigures::goalProgress($figures['collected'])['goal'] ?? null : null;
+        $against = match (true) {
+            $goal !== null => ($projection >= $goal ? ', por encima' : ', por debajo').' de la meta de '.Money::short($goal),
+            $figures['collected_last_month'] > 0 => '; '.today()->subMonthNoOverflow()->translatedFormat('F').' cerró en '.Money::format($figures['collected_last_month']),
+            default => '',
+        };
+
+        return 'A este ritmo, '.today()->translatedFormat('F').' cerraría en '.Money::format($projection).$against.'.';
     }
 
     protected function getStats(): array
@@ -99,7 +126,7 @@ class MonthOverview extends StatsOverviewWidget
         return Stat::make('Por cobrar (a hoy)', Money::format(MonthFigures::outstanding()))
             ->description('Saldos pendientes de todos los pacientes')
             ->icon('heroicon-o-scale')
-            ->url(PatientResource::getUrl('index', ['tab' => 'owing']));
+            ->url(OwingBalances::getUrl());
     }
 
     /** La meta de cobro del mes, si se puso en Ajustes. */

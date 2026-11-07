@@ -15,7 +15,7 @@ final class PaymentFields
     {
         return [
             TextInput::make('amount')
-                ->label('Paga ahora')
+                ->label('Monto')
                 ->prefix('S/')
                 ->numeric()
                 ->minValue($amountRequired ? 0.01 : 0)

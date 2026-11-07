@@ -256,7 +256,7 @@ class EditConsultation extends EditRecord
             Notification::make()
                 ->success()
                 ->title('Marcado como trabajado hoy: '.$worked->map->label()->implode(', ').'.')
-                ->body('Se cobra al terminar la atención. Si no se hizo hoy, desmárcalo en "Lo que se hizo hoy".')
+                ->body('Se cobra al terminar la atención. Si no se hizo hoy, desmárcalo en "Lo que se hizo".')
                 ->send();
         }
 

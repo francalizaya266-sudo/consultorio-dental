@@ -9,7 +9,7 @@ use App\Services\Reports\ReportAccess;
 use App\Services\Reports\ReportPeriod;
 use Filament\Widgets\Concerns\InteractsWithPageFilters;
 
-/** Los widgets de Resumen y Ganancias leen el período y el doctor de los filtros de la página. */
+/** Los widgets de Resumen e Ingresos leen el período y el doctor de los filtros de la página. */
 trait ReadsReportFilters
 {
     use InteractsWithPageFilters;

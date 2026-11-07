@@ -5,7 +5,7 @@ namespace App\Enums;
 use Filament\Support\Contracts\HasColor;
 use Filament\Support\Contracts\HasLabel;
 
-/** Estado del plan. */
+/** Estado del plan. Mientras el paciente no lo acepta es un presupuesto; después, su plan. */
 enum TreatmentPlanStatus: string implements HasColor, HasLabel
 {
     case Draft = 'draft';
@@ -18,9 +18,9 @@ enum TreatmentPlanStatus: string implements HasColor, HasLabel
     public function getLabel(): string
     {
         return match ($this) {
-            self::Draft => 'Borrador',
-            self::Proposed => 'Presentado al paciente',
-            self::Accepted => 'Aceptado',
+            self::Draft => 'Presupuesto en borrador',
+            self::Proposed => 'Presupuesto presentado',
+            self::Accepted => 'Plan aceptado',
             self::InProgress => 'En tratamiento',
             self::Completed => 'Terminado',
             self::Cancelled => 'Cancelado',

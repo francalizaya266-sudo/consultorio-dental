@@ -6,6 +6,7 @@ use App\Enums\PaymentMethod;
 use App\Filament\Actions\RegisterPaymentAction;
 use App\Models\Doctor;
 use App\Models\Payment;
+use Carbon\CarbonImmutable;
 use Filament\Actions\Action;
 use Filament\Forms\Components\DatePicker;
 use Filament\Forms\Components\Textarea;
@@ -66,16 +67,17 @@ class PaymentsTable
                     ->label('Fecha')
                     ->schema([
                         // Una semana por defecto: el día solo ya está en "Cierre del día" y un día sin pagos dejaba la lista vacía.
-                        DatePicker::make('from')->label('Desde')->default(today()->subDays(6)),
-                        DatePicker::make('until')->label('Hasta')->default(today()),
+                        // Con el calendario del panel, como en Cierre del día y Reportes: dd/mm/aaaa en cualquier computadora.
+                        DatePicker::make('from')->label('Desde')->native(false)->displayFormat('d/m/Y')->firstDayOfWeek(1)->closeOnDateSelection()->default(today()->subDays(6)->toDateString()),
+                        DatePicker::make('until')->label('Hasta')->native(false)->displayFormat('d/m/Y')->firstDayOfWeek(1)->closeOnDateSelection()->default(today()->toDateString()),
                     ])
                     ->columns(2)
                     ->query(fn (Builder $query, array $data) => $query
-                        ->when($data['from'] ?? null, fn (Builder $q, $date) => $q->whereDate('paid_at', '>=', $date))
-                        ->when($data['until'] ?? null, fn (Builder $q, $date) => $q->whereDate('paid_at', '<=', $date)))
+                        ->when(self::day($data['from'] ?? null), fn (Builder $q, $date) => $q->whereDate('paid_at', '>=', $date))
+                        ->when(self::day($data['until'] ?? null), fn (Builder $q, $date) => $q->whereDate('paid_at', '<=', $date)))
                     ->indicateUsing(function (array $data): array {
-                        $from = $data['from'] ?? null;
-                        $until = $data['until'] ?? null;
+                        $from = self::day($data['from'] ?? null);
+                        $until = self::day($data['until'] ?? null);
 
                         if (! $from && ! $until) {
                             return [];
@@ -104,7 +106,7 @@ class PaymentsTable
                 self::voidAction(),
             ])
             ->emptyStateHeading('No hay pagos en estas fechas')
-            ->emptyStateDescription('Usa "Registrar pago" cuando el paciente pague en el consultorio, o mira los pagos de otros días.')
+            ->emptyStateDescription('Usa "Cobrar" cuando el paciente pague en el consultorio, o mira los pagos de otros días.')
             // Un día sin pagos no deja la pantalla en blanco: un clic quita el filtro de fecha.
             ->emptyStateActions([
                 Action::make('allDates')
@@ -124,6 +126,12 @@ class PaymentsTable
             ->icon(Heroicon::OutlinedDocumentText)
             ->color('gray')
             ->url(fn (Payment $record) => RegisterPaymentAction::receiptUrl($record), shouldOpenInNewTab: true);
+    }
+
+    /** El calendario del panel guarda "2026-11-01 00:00:00": para filtrar por día basta "2026-11-01". */
+    private static function day(?string $value): ?string
+    {
+        return filled($value) ? CarbonImmutable::parse($value)->toDateString() : null;
     }
 
     /** Anular un pago: queda registrado (no se borra) y deja de sumar. */

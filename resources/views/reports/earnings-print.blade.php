@@ -1,5 +1,5 @@
 @use('App\Support\Money')
-<x-print-layout title="Ganancias">
+<x-print-layout title="Ingresos">
     <style>
         .period { font-size: 1rem; font-weight: 700; margin: -4px 0 12px; }
         .totals { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 8px; margin-bottom: 18px; }

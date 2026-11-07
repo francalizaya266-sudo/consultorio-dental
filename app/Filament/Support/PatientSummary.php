@@ -162,7 +162,8 @@ final class PatientSummary
     }
 
     /**
-     * Cuánto debe, y si una cuota se le pasó. Lo que debe se cobra ahí mismo.
+     * Cuánto debe, y si una cuota se le pasó. Es el único lugar de la ficha con el saldo: lo que debe se cobra
+     * ahí mismo y lo que tiene a favor, ahí mismo se le devuelve.
      *
      * @return Chip
      */
@@ -180,7 +181,11 @@ final class PatientSummary
             },
             'icon' => 'heroicon-m-banknotes',
             'url' => null,
-            'action' => $canCollect && $balance > 0 ? ['name' => 'collectPayment', 'arguments' => []] : null,
+            'action' => match (true) {
+                ! $canCollect || $balance == 0 => null,
+                $balance > 0 => ['name' => 'collectPayment', 'arguments' => []],
+                default => ['name' => 'refund', 'arguments' => []],
+            },
         ];
     }
 

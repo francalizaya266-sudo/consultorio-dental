@@ -11,6 +11,7 @@ use App\Filament\Resources\Consultations\Pages\ListConsultations;
 use App\Filament\Resources\Consultations\Pages\ViewConsultation;
 use App\Filament\Resources\Patients\Pages\ViewClinicalRecord;
 use App\Filament\Resources\Patients\PatientResource;
+use App\Filament\Support\ClinicalAlerts;
 use App\Filament\Widgets\TodayAppointments;
 use App\Livewire\OdontogramChart;
 use App\Models\Appointment;
@@ -243,9 +244,21 @@ class ClinicalPanelTest extends TestCase
         $this->assertSame(['diabetes'], $patient->medicalBackground->conditions);
         $this->assertSame($doctor->user->id, $patient->medicalBackground->updated_by_user_id);
 
+        // Por gravedad: la alergia en rojo y con ⚠; la diabetes, en ámbar para tenerla presente.
         Livewire::test(EditConsultation::class, ['record' => $consultation->getRouteKey()])
-            ->assertSee(['⚠ Alergia: Penicilina', '⚠ Diabetes'])
-            ->assertDontSee('Toma: Ninguna');
+            ->assertSeeHtml('cb-flag is-danger">⚠ Alergia: Penicilina')
+            ->assertSeeHtml('cb-flag is-caution">Diabetes')
+            ->assertDontSee(['⚠ Diabetes', 'Toma: Ninguna']);
+
+        // Un medicamento común (Losartán) va en ámbar; un anticoagulante, en rojo y primero.
+        $patient->medicalBackground->update(['allergies' => null, 'conditions' => ['hypertension'], 'medications' => 'Losartán 50 mg']);
+        $this->assertSame([['text' => 'Hipertensión', 'severe' => false], ['text' => 'Toma: Losartán 50 mg', 'severe' => false]], ClinicalAlerts::withSeverity($patient->fresh()));
+        $this->assertFalse(ClinicalAlerts::isSevere($patient->fresh()));
+        $this->assertSame('warning', ClinicalAlerts::callout($patient->fresh())->getColor());
+
+        $patient->medicalBackground->update(['medications' => 'Warfarina 5 mg']);
+        $this->assertSame(['Toma: Warfarina 5 mg', 'Hipertensión'], ClinicalAlerts::for($patient->fresh()));
+        $this->assertSame('danger', ClinicalAlerts::callout($patient->fresh())->getColor());
 
         // Recepción no puede tocar los antecedentes.
         $this->actingAs(User::factory()->reception()->create());

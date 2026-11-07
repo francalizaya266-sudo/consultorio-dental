@@ -8,7 +8,7 @@
         @if ($appointment->isPastAndOpen())
             <x-filament::badge color="danger" icon="heroicon-m-exclamation-triangle">Sin cerrar: marca si vino</x-filament::badge>
         @elseif ($appointment->needsCall())
-            <x-filament::badge color="danger" icon="heroicon-m-phone">Sin confirmar: llamar</x-filament::badge>
+            <x-filament::badge color="danger" icon="heroicon-m-phone">Por confirmar: llamar</x-filament::badge>
         @endif
         @if ($appointment->is_new_patient)
             <x-filament::badge color="info">Paciente nuevo</x-filament::badge>
@@ -19,7 +19,7 @@
     </div>
 
     @if ($alerts)
-        <div class="appt-panel-alert" role="alert">⚠ {{ implode(' · ', $alerts) }}</div>
+        <div @class(['appt-panel-alert', 'is-caution' => ! $alertsSevere]) role="alert">{{ $alertsSevere ? '⚠ ' : '' }}{{ implode(' · ', $alerts) }}</div>
     @endif
 
     <dl>

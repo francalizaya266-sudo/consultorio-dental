@@ -65,7 +65,7 @@ class AttentionFollowsScheduleTest extends TestCase
 
         // Iba a ser una resina, pero el doctor decidió extraer: cambia lo programado por lo que hizo.
         Livewire::test(EditConsultation::class, ['record' => $consultation->getRouteKey()])
-            ->assertSee(['Tratamientos y cobro', 'Al terminar se carga'])
+            ->assertSee(['Lo que se hizo', 'Al terminar se carga'])
             ->assertSet('data.prices', ['treatment-'.$resin->id => '150.00'])
             ->fillForm(['treatments' => [$extraction->id]])
             ->assertSet('data.prices', ['treatment-'.$extraction->id => '130.00'])

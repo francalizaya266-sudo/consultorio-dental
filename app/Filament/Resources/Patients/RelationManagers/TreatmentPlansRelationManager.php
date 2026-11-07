@@ -36,12 +36,12 @@ use Filament\Tables\Table;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 
-/** Planes de tratamiento del paciente con su presupuesto y avance. */
+/** Presupuestos y planes del paciente con su avance: presupuesto mientras no lo acepta, plan después. */
 class TreatmentPlansRelationManager extends RelationManager
 {
     protected static string $relationship = 'treatmentPlans';
 
-    protected static ?string $title = 'Planes de tratamiento';
+    protected static ?string $title = 'Presupuestos y planes';
 
     protected static ?string $modelLabel = 'plan de tratamiento';
 
@@ -120,9 +120,9 @@ class TreatmentPlansRelationManager extends RelationManager
             ->recordAction(fn (TreatmentPlan $record) => auth()->user()->can('update', $record) ? 'edit' : 'view')
             ->headerActions([
                 CreateAction::make()
-                    ->label('Nuevo plan')
+                    ->label('Nuevo presupuesto')
                     ->icon(Heroicon::OutlinedPlus)
-                    ->modalHeading('Nuevo plan de tratamiento')
+                    ->modalHeading('Nuevo presupuesto')
                     ->modalDescription('Ya vienen los hallazgos en rojo del último odontograma con el precio del catálogo. Ajusta lo que haga falta y guarda.')
                     ->modalWidth(Width::FiveExtraLarge)
                     ->modalSubmitActionLabel('Guardar plan')

@@ -4,7 +4,6 @@ namespace Tests\Feature\Filament;
 
 use App\Enums\PaymentMethod;
 use App\Filament\Resources\Patients\Pages\ViewPatient;
-use App\Filament\Resources\Patients\RelationManagers\PaymentsRelationManager;
 use App\Filament\Resources\Payments\Pages\ManagePayments;
 use App\Filament\Widgets\CashClosingCheck;
 use App\Models\Appointment;
@@ -12,6 +11,7 @@ use App\Models\Charge;
 use App\Models\DailyClosing;
 use App\Models\Patient;
 use App\Models\Payment;
+use App\Models\Treatment;
 use App\Models\User;
 use App\Services\Billing\CashClosing;
 use Filament\Actions\Testing\TestAction;
@@ -52,8 +52,10 @@ class DailyClosingTest extends TestCase
 
     public function test_the_day_says_what_was_due_who_left_owing_and_which_visits_were_left_open(): void
     {
-        Appointment::factory()->for($this->rosa)->at('2026-11-02 17:00')->confirmed()->create();
-        Appointment::factory()->for($this->rosa)->at('2026-11-02 21:00')->confirmed()->create(); // Todavía no llega.
+        // Un nombre fijo: uno al azar podría llamarse "Curación con resina" y confundirse con lo que debe.
+        $control = Treatment::factory()->create(['name' => 'Control']);
+        Appointment::factory()->for($this->rosa)->for($control)->at('2026-11-02 17:00')->confirmed()->create();
+        Appointment::factory()->for($this->rosa)->for($control)->at('2026-11-02 21:00')->confirmed()->create(); // Todavía no llega.
         $closing = new CashClosing(today()->toImmutable());
 
         $this->assertSame([['Rosa Huamán', 120.0, 'Curación con resina'], ['Luis Soto', 80.0, 'Radiografía']], $closing->pending()->map(fn (array $line) => [$line['patient']->full_name, $line['due'], $line['concepts']])->all());
@@ -161,9 +163,10 @@ class DailyClosingTest extends TestCase
         $payment = $this->pay($patient, 500, PaymentMethod::Card);
         $this->actingAs($this->reception);
 
-        Livewire::test(PaymentsRelationManager::class, ['ownerRecord' => $patient, 'pageClass' => ViewPatient::class])
-            ->assertCanSeeTableRecords([$payment])
-            ->mountAction(TestAction::make('refund')->table())
+        // Desde la ficha, la etiqueta "A favor" abre la devolución.
+        Livewire::test(ViewPatient::class, ['record' => $patient->getRouteKey()])
+            ->assertSee('A favor S/ 200.00')
+            ->mountAction('refund')
             ->assertActionDataSet(['amount' => 200.0, 'method' => PaymentMethod::Cash])
             ->setActionData(['amount' => 250])
             ->callMountedAction()
@@ -172,8 +175,9 @@ class DailyClosingTest extends TestCase
             ->callMountedAction()
             ->assertHasNoActionErrors()
             ->assertNotified('Devolución registrada')
-            ->assertSee('Devolución: Pagó de más con tarjeta')
-            ->assertActionHidden(TestAction::make('refund')->table());
+            // En la línea de tiempo queda como devolución, con su motivo.
+            ->assertSee(['Se le devolvió S/ 200.00', 'Pagó de más con tarjeta', 'Al día'])
+            ->assertActionHidden('refund');
 
         $refund = Payment::query()->latest('id')->first();
         $this->assertSame([-200.0, PaymentMethod::Cash, $this->reception->id], [(float) $refund->amount, $refund->method, $refund->received_by_user_id]);

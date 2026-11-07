@@ -12,8 +12,9 @@ use Filament\Widgets\Widget;
 
 /**
  * Quién está en sala y hace cuánto, de quien más espera a quien acaba de llegar. Desde
- * TodayAppointments::LONG_WAIT_MINUTES la espera va en rojo. Es de recepción: el doctor ve
- * a quien lo espera en "Tu próximo paciente". Se actualiza sola cada 30 s.
+ * TodayAppointments::LONG_WAIT_MINUTES la espera va en rojo. Es de recepción: el doctor (aunque
+ * también administre) ve a quien lo espera en "Tu próximo paciente" y no la ve otra vez aquí.
+ * Se actualiza sola cada 30 s.
  */
 class WaitingRoom extends Widget
 {
@@ -29,7 +30,7 @@ class WaitingRoom extends Widget
         /** @var User|null $user */
         $user = auth()->user();
 
-        return (bool) $user?->managesAllAgendas();
+        return (bool) $user?->managesAllAgendas() && ! NextPatient::canView();
     }
 
     /** @return array{patients: list<array{name: string, detail: string, waited: string, long: bool, url: string}>} */

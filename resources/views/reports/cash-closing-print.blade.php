@@ -1,6 +1,6 @@
 @use('App\Support\Money')
 @use('App\Filament\Widgets\CashClosingCheck')
-<x-print-layout title="Cierre de caja">
+<x-print-layout title="Cierre del día">
     <style>
         .period { font-size: 1rem; font-weight: 700; margin: -4px 0 12px; }
         .totals { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 8px; margin-bottom: 18px; }

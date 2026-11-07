@@ -15,7 +15,7 @@ use Illuminate\Http\Request;
 use Illuminate\Http\Response;
 use Illuminate\View\View;
 
-/** Las ganancias del período elegido en el panel, para imprimir (o guardar en PDF) y para Excel. */
+/** Los ingresos del período elegido en el panel, para imprimir (o guardar en PDF) y para Excel. */
 class EarningsExportController extends Controller
 {
     public function print(Request $request): View
@@ -38,7 +38,7 @@ class EarningsExportController extends Controller
         $collected = $report->collected();
         $count = $report->paymentsCount();
 
-        $book->sheet('Resumen', ['Ganancias', ''], [Spreadsheet::TEXT, Spreadsheet::MONEY], array_values(array_filter([
+        $book->sheet('Resumen', ['Ingresos', ''], [Spreadsheet::TEXT, Spreadsheet::MONEY], array_values(array_filter([
             ['Consultorio', Setting::get('clinic.name')],
             ['Período', $report->period->label()],
             ['Doctor', $doctor ?? 'Todos'],
@@ -78,7 +78,7 @@ class EarningsExportController extends Controller
             $payments->isEmpty() ? null : ['Total', null, null, null, null, null, null, $collected],
         );
 
-        $name = 'ganancias_'.$report->period->slug();
+        $name = 'ingresos_'.$report->period->slug();
 
         if (Spreadsheet::canWriteXlsx()) {
             return response($book->toXlsx(), 200, [

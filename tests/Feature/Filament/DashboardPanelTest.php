@@ -16,7 +16,6 @@ use App\Filament\Resources\Consultations\ConsultationResource;
 use App\Filament\Resources\Patients\Pages\ListPatients;
 use App\Filament\Widgets\FollowUpsToday;
 use App\Filament\Widgets\MonthOverview;
-use App\Filament\Widgets\MonthTrend;
 use App\Filament\Widgets\NextPatient;
 use App\Filament\Widgets\SystemHealth;
 use App\Filament\Widgets\TodayAppointments;
@@ -62,26 +61,34 @@ class DashboardPanelTest extends TestCase
         $doctor = Doctor::factory()->withSchedule()->create();
 
         $this->actingAs(User::factory()->admin()->create());
-        $this->assertSame([SystemHealth::class, TodayStats::class, TodayAppointments::class, MonthOverview::class, MonthTrend::class, WaitingRoom::class, FollowUpsToday::class, WeekGaps::class], $this->visibleWidgets());
-        $this->get(Dashboard::getUrl())->assertOk()->assertSee(['Lunes 2 de noviembre', 'Nueva cita', 'Registrar pago', 'Anotar en espera']);
+        // Lo del mes va al final, después de todo lo del día.
+        $this->assertSame([SystemHealth::class, TodayStats::class, TodayAppointments::class, WaitingRoom::class, FollowUpsToday::class, WeekGaps::class, MonthOverview::class], $this->visibleWidgets());
+        $this->get(Dashboard::getUrl())->assertOk()->assertSee(['Lunes 2 de noviembre', 'Nueva cita', 'Cobrar', 'Anotar en espera']);
+
+        // Quien administra y también atiende ve a quien lo espera en "Tu próximo paciente", no otra vez en la sala.
+        $dentist = User::factory()->admin(isDentist: true)->create();
+        Doctor::factory()->withSchedule()->create(['user_id' => $dentist->id]);
+        $this->actingAs($dentist);
+        $this->assertSame([SystemHealth::class, TodayStats::class, NextPatient::class, TodayAppointments::class, FollowUpsToday::class, WeekGaps::class, MonthOverview::class], $this->visibleWidgets());
 
         $this->actingAs(User::factory()->reception()->create());
         $this->assertSame([TodayStats::class, TodayAppointments::class, WaitingRoom::class, FollowUpsToday::class, WeekGaps::class], $this->visibleWidgets());
         $this->get(Dashboard::getUrl())->assertOk();
         Livewire::test(TodayStats::class)
-            ->assertSeeInOrder(['Citas de hoy', 'Sin confirmar', 'Cobrado hoy', 'Horas libres'])
-            ->assertDontSee(['Solicitudes de cambio', 'Avisos por enviar']);
+            ->assertSeeInOrder(['Citas de hoy', 'Por confirmar', 'Cobrado hoy'])
+            // Las horas libres se ven en "Huecos de la semana", no también aquí.
+            ->assertDontSee(['Horas libres', 'Solicitudes de cambio', 'Avisos por enviar']);
 
         // El doctor ve su paciente; cómo va el mes, solo si el consultorio se lo permite.
         $this->actingAs($doctor->user);
         $this->assertSame([TodayStats::class, NextPatient::class, TodayAppointments::class], $this->visibleWidgets());
-        $this->get(Dashboard::getUrl())->assertOk()->assertDontSee(['Registrar pago', 'Anotar en espera']);
+        $this->get(Dashboard::getUrl())->assertOk()->assertDontSee(['Cobrar', 'Anotar en espera']);
         Livewire::test(TodayStats::class)
-            ->assertSeeInOrder(['Citas de hoy', 'Sin confirmar', 'Solicitudes de cambio', 'Avisos por enviar'])
+            ->assertSeeInOrder(['Citas de hoy', 'Por confirmar', 'Solicitudes de cambio', 'Avisos por enviar'])
             ->assertDontSee(['Cobrado hoy', 'Horas libres']);
 
         Setting::set('reports.doctors_see_own', true);
-        $this->assertSame([TodayStats::class, NextPatient::class, TodayAppointments::class, MonthOverview::class, MonthTrend::class], $this->visibleWidgets());
+        $this->assertSame([TodayStats::class, NextPatient::class, TodayAppointments::class, MonthOverview::class], $this->visibleWidgets());
         $this->get(Dashboard::getUrl())->assertOk();
     }
 
@@ -152,7 +159,7 @@ class DashboardPanelTest extends TestCase
             ->assertDontSee(['S/ 450.00', 'Por cobrar', 'Meta del mes']);
     }
 
-    public function test_the_month_chart_adds_up_day_by_day_and_projects_the_close(): void
+    public function test_the_month_says_where_it_would_close_at_this_pace(): void
     {
         $patient = $this->patient('Rosa', 'Quispe');
         Payment::factory()->for($patient)->create(['amount' => 300, 'paid_at' => '2026-11-01 10:00']);
@@ -162,26 +169,24 @@ class DashboardPanelTest extends TestCase
         Payment::factory()->for($patient)->create(['amount' => 999, 'paid_at' => '2026-10-31 11:00', 'voided_at' => '2026-10-31 12:00']);
         $this->actingAs(User::factory()->admin()->create());
 
-        $series = (new MonthFigures)->cumulative();
-        $this->assertSame([300.0, 450.0], $series['this_month']);
-        $this->assertCount(31, $series['last_month']);
-        $this->assertSame([200.0, 200.0, 1200.0], [$series['last_month'][0], $series['last_month'][29], $series['last_month'][30]]);
+        $this->assertSame(1200.0, (new MonthFigures)->figures()['collected_last_month']);
 
         // Los primeros días no se proyecta: un solo pago lo cambia todo.
-        Livewire::test(MonthTrend::class)
-            ->assertSee(['Cobrado en noviembre, día a día', 'Van S/ 450.00 en 2 días. Desde el día 7 te digo a cuánto cerraría el mes.']);
+        Livewire::test(MonthOverview::class)
+            ->assertSee('Con tan pocos días, las diferencias todavía no dicen mucho.')
+            ->assertDontSee('A este ritmo');
 
         $this->travelTo(CarbonImmutable::parse('2026-11-10 18:00', 'America/Lima'));
         Payment::factory()->for($patient)->create(['amount' => 550, 'paid_at' => '2026-11-10 09:00']);
 
         // S/ 1,000 en 10 días de 30: a este ritmo, S/ 3,000.
-        Livewire::test(MonthTrend::class)
+        Livewire::test(MonthOverview::class)
             ->assertSee('A este ritmo, noviembre cerraría en S/ 3,000.00; octubre cerró en S/ 1,200.00.');
 
         Setting::set('reports.monthly_goal', 4500);
 
-        Livewire::test(MonthTrend::class)
-            ->assertSee(['Ritmo para la meta', 'A este ritmo, noviembre cerraría en S/ 3,000.00, por debajo de la meta de S/ 4,500.']);
+        Livewire::test(MonthOverview::class)
+            ->assertSee('A este ritmo, noviembre cerraría en S/ 3,000.00, por debajo de la meta de S/ 4,500.');
     }
 
     public function test_reception_sees_whom_to_follow_up_with_and_the_lists_count_the_same(): void
@@ -285,6 +290,8 @@ class DashboardPanelTest extends TestCase
         $this->actingAs(User::factory()->reception()->create());
 
         Livewire::test(WeekGaps::class)
+            // Arriba, el total de la semana (el que antes repetía "Horas libres" en los números del día).
+            ->assertSee('Quedan 39'.self::NBSP.'h 20'.self::NBSP.'min libres de hoy a 7 días.')
             ->assertSeeInOrder(['Hoy', '7'.self::NBSP.'h 20'.self::NBSP.'min libres', '09:40–13:00 · 15:00–19:00', 'Mañana', 'Sin huecos', 'Miércoles 4', '8'.self::NBSP.'h libres'])
             // El domingo no se atiende.
             ->assertDontSee('Domingo');
@@ -316,7 +323,8 @@ class DashboardPanelTest extends TestCase
             ->assertDontSee('María Quispe')
             ->assertSee(['Atenciones sin terminar', 'Luz Ramos', 'Continuar']);
 
-        Livewire::test(TodayAppointments::class)->assertSee('En sala hace 25'.self::NBSP.'min');
+        // En la agenda, la etiqueta ya dice "En sala": la fila solo agrega cuánto lleva.
+        Livewire::test(TodayAppointments::class)->assertSee('Esperando 25'.self::NBSP.'min')->assertDontSee('En sala hace');
 
         Livewire::test(NextPatient::class)
             ->callAction('start', arguments: ['appointment' => $waiting->id])
@@ -351,10 +359,11 @@ class DashboardPanelTest extends TestCase
         $this->travelTo(CarbonImmutable::parse('2026-11-02 20:35', 'America/Lima'));
         Livewire::test(NextPatient::class)->assertDontSee(['Luis Paz', 'Rosa Huamán']);
 
-        // Los números del día dicen lo que está pasando, no solo lo terminado.
+        // Los números del día dicen cuánto va y cuánto falta; quién está en sala o en atención lo dicen la sala y la agenda.
         $this->actingAs(User::factory()->admin()->create());
         Livewire::test(TodayStats::class)
-            ->assertSee('1 en atención · 0 atendidas')
+            ->assertSee('0 atendidas · 2 por llegar')
+            ->assertDontSee('en atención')
             ->assertSee('Aún no se terminó ninguna atención');
     }
 

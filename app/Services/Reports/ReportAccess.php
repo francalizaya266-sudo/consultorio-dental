@@ -7,7 +7,7 @@ use App\Models\Setting;
 use App\Models\User;
 
 /**
- * Quién ve ganancias y gráficos: la administración, todo; un doctor, solo lo suyo y
+ * Quién ve ingresos y gráficos: la administración, todo; un doctor, solo lo suyo y
  * solo si el consultorio lo activó en Ajustes. Recepción, nada.
  */
 final class ReportAccess

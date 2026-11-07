@@ -815,6 +815,7 @@ class Agenda extends Page
             'balance' => $balance,
             'toCharge' => $toCharge,
             'alerts' => $user->canSeeClinical() ? ClinicalAlerts::for($appointment->patient) : null,
+            'alertsSevere' => $user->canSeeClinical() && ClinicalAlerts::isSevere($appointment->patient),
             'patientUrl' => PatientResource::getUrl('view', ['record' => $appointment->patient]),
             'appointmentUrl' => AppointmentResource::getUrl('view', ['record' => $appointment]),
         ];

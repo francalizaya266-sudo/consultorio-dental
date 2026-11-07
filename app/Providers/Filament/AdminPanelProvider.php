@@ -5,11 +5,11 @@ namespace App\Providers\Filament;
 use App\Filament\Pages\Backups;
 use App\Filament\Pages\Dashboard;
 use App\Filament\Pages\Settings;
+use App\Filament\Pages\WebSetup;
 use App\Filament\Resources\Campaigns\CampaignResource;
 use App\Filament\Resources\ConsentTemplates\ConsentTemplateResource;
 use App\Filament\Resources\Doctors\DoctorResource;
 use App\Filament\Resources\Faqs\FaqResource;
-use App\Filament\Resources\Patients\PatientResource;
 use App\Filament\Resources\Reviews\ReviewResource;
 use App\Filament\Resources\SmileCases\SmileCaseResource;
 use App\Filament\Resources\TextSnippets\TextSnippetResource;
@@ -24,9 +24,11 @@ use App\Http\Controllers\Clinical\ClinicalFileController;
 use App\Http\Controllers\Clinical\PrintController;
 use App\Http\Controllers\Reports\CashClosingController;
 use App\Http\Controllers\Reports\EarningsExportController;
-use App\Models\Charge;
 use App\Models\Setting;
 use App\Services\Web\ClinicInfo;
+use Filament\Actions\CreateAction;
+use Filament\Forms\Components\DatePicker;
+use Filament\Forms\Components\DateTimePicker;
 use Filament\Http\Middleware\Authenticate;
 use Filament\Http\Middleware\AuthenticateSession;
 use Filament\Http\Middleware\DisableBladeIconComponents;
@@ -61,8 +63,9 @@ class AdminPanelProvider extends PanelProvider
         Backups::class,
     ];
 
-    /** @var list<class-string> Lo que se publica en la página web, aparte de la configuración de la clínica. */
+    /** @var list<class-string> Todo lo de la página web, en un solo lugar: primero su puesta a punto. */
     private const WEB = [
+        WebSetup::class,
         CampaignResource::class,
         SmileCaseResource::class,
         ReviewResource::class,
@@ -101,6 +104,24 @@ class AdminPanelProvider extends PanelProvider
         ];
     }
 
+    /**
+     * Lo que vale para todas las pantallas: cada "Nuevo …" abre una ventana con ese mismo nombre y se guarda con
+     * "Guardar"; y una fecha con hora se elige con el calendario del panel y se lee dd/mm/aaaa hh:mm, sea cual sea
+     * el idioma de la computadora (el del navegador la mostraba mm/dd/aaaa en una en inglés). Las fechas solas
+     * (nacimiento, por ejemplo) siguen con el del navegador, que deja escribirlas de corrido.
+     */
+    public function boot(): void
+    {
+        CreateAction::configureUsing(fn (CreateAction $action) => $action
+            ->modalHeading(fn (CreateAction $action): string => (string) $action->getLabel())
+            ->modalSubmitActionLabel('Guardar'));
+
+        DateTimePicker::configureUsing(fn (DateTimePicker $picker) => $picker instanceof DatePicker ? $picker : $picker
+            ->native(false)
+            ->displayFormat('d/m/Y H:i')
+            ->firstDayOfWeek(1));
+    }
+
     public function panel(Panel $panel): Panel
     {
         return $panel
@@ -112,7 +133,7 @@ class AdminPanelProvider extends PanelProvider
             // "Mi perfil" en el menú del usuario: cada uno cambia su propia clave sin pedírsela al administrador.
             ->profile(isSimple: false)
             ->brandName(fn () => Setting::get('clinic.name'))
-            // Con logo subido en Ajustes, el panel lo muestra en lugar del nombre.
+            // Con logo subido en la puesta a punto de la web, el panel lo muestra en lugar del nombre.
             ->brandLogo(fn () => app(ClinicInfo::class)->logoUrl())
             ->brandLogoHeight('2.25rem')
             ->colors([
@@ -131,14 +152,6 @@ class AdminPanelProvider extends PanelProvider
             ->globalSearchFieldKeyBindingSuffix()
             // Nueve entradas en el menú; lo demás aparece dentro de cada una al entrar.
             ->navigationItems([
-                // La lista de pacientes filtrada: quién debe y cuánto.
-                NavigationItem::make('Saldos pendientes')
-                    ->parentItem('Caja')
-                    ->sort(1)
-                    ->icon(Heroicon::OutlinedScale)
-                    ->url(fn () => PatientResource::getUrl('index', ['tab' => 'owing']))
-                    ->isActiveWhen(fn () => request()->routeIs(PatientResource::getRouteBaseName().'.index') && request()->query('tab') === 'owing')
-                    ->visible(fn () => auth()->user()?->can('viewAny', Charge::class) ?? false),
                 NavigationItem::make('Configuración')
                     ->sort(7)
                     ->icon(Heroicon::OutlinedCog6Tooth)
@@ -151,7 +164,7 @@ class AdminPanelProvider extends PanelProvider
                     ->visible(fn () => self::firstUrl(self::WEB) !== null),
                 NavigationItem::make('Ver la página')
                     ->parentItem('Página web')
-                    ->sort(9)
+                    ->sort(1)
                     ->icon(Heroicon::OutlinedArrowTopRightOnSquare)
                     ->url(fn () => route('site.home'), shouldOpenInNewTab: true)
                     ->visible(fn () => self::firstUrl(self::WEB) !== null),
@@ -185,8 +198,8 @@ class AdminPanelProvider extends PanelProvider
                 Route::get('imprimir/consentimiento/{consent}', [PrintController::class, 'consent'])->name('print.consent');
                 Route::get('imprimir/historia/{patient}', [PrintController::class, 'history'])->name('print.history');
                 Route::get('archivos/{file}', [ClinicalFileController::class, 'show'])->name('clinical-files.show');
-                Route::get('reportes/ganancias/imprimir', [EarningsExportController::class, 'print'])->name('reports.earnings.print');
-                Route::get('reportes/ganancias/excel', [EarningsExportController::class, 'excel'])->name('reports.earnings.excel');
+                Route::get('reportes/ingresos/imprimir', [EarningsExportController::class, 'print'])->name('reports.earnings.print');
+                Route::get('reportes/ingresos/excel', [EarningsExportController::class, 'excel'])->name('reports.earnings.excel');
                 Route::get('caja/cierre/imprimir', [CashClosingController::class, 'print'])->name('cash-closing.print');
                 Route::get('imprimir/constancia/{payment}', [PaymentReceiptController::class, 'show'])->name('print.receipt');
                 Route::post('imprimir/constancia/{payment}/whatsapp', [PaymentReceiptController::class, 'whatsapp'])->name('print.receipt.whatsapp');

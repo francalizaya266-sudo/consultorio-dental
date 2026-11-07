@@ -37,7 +37,7 @@
                                 <div class="agenda-item-title">
                                     <a href="{{ $item['url'] }}" class="agenda-item-name" x-on:click="open($event, {{ $item['id'] }})">{{ $item['patient'] }}</a>
                                     @if ($item['unclosed'])<span class="tag tag-unclosed">Sin cerrar</span>@endif
-                                    @if ($item['flags']['alert'])<span class="tag tag-alert" title="{{ $item['flags']['alert'] }}">Alerta médica</span>@endif
+                                    @if ($item['flags']['alert'])<span @class(['tag', 'tag-alert', 'is-caution' => ! $item['flags']['alertSevere']]) title="{{ $item['flags']['alert'] }}">Alerta médica</span>@endif
                                     @if ($item['flags']['reschedule'])<span class="tag tag-change">Pidió cambio</span>@endif
                                     @if ($item['flags']['noShows'])<span class="tag tag-missed">{{ $item['flags']['noShows'] }}</span>@endif
                                     @if ($item['isNew'])<span class="tag tag-new">Nuevo</span>@endif

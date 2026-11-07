@@ -168,7 +168,7 @@ class Appointment extends Model
         return (int) max(0, $this->checked_in_at->diffInMinutes(now()));
     }
 
-    /** "Sin confirmar": falta poco y el paciente aún no confirmó con su enlace. */
+    /** "Por confirmar": falta poco y el paciente aún no confirmó con su enlace. */
     public function needsCall(): bool
     {
         return $this->status === AppointmentStatus::Pending && $this->unconfirmed_flagged_at !== null;

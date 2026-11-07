@@ -1,5 +1,5 @@
 <x-filament-widgets::widget>
-    <x-filament::section heading="Huecos de la semana" icon="heroicon-o-calendar" description="Dónde aún entra una cita. Toca un día para abrir la agenda.">
+    <x-filament::section heading="Huecos de la semana" icon="heroicon-o-calendar" :description="$summary">
         @if ($days === [])
             <div class="dash-empty">
                 <x-filament::icon icon="heroicon-o-calendar" class="dash-empty-icon" />

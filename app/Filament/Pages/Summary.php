@@ -15,7 +15,10 @@ use BackedEnum;
 use Filament\Pages\Dashboard as BaseDashboard;
 use Filament\Support\Icons\Heroicon;
 
-/** Cómo va el consultorio: el período en números y los gráficos que piden las decisiones. */
+/**
+ * Cómo va el consultorio: el período en números y los gráficos que piden las decisiones. Es el tablero; el
+ * detalle del dinero para imprimir o bajar en Excel está en Ingresos (el número "Cobrado" lleva ahí).
+ */
 class Summary extends BaseDashboard
 {
     use HasReportFilters;

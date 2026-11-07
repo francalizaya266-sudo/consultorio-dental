@@ -29,9 +29,9 @@ class MessageTemplateResource extends Resource
 
     protected static ?string $model = MessageTemplate::class;
 
-    protected static ?string $modelLabel = 'texto de WhatsApp';
+    protected static ?string $modelLabel = 'texto de aviso';
 
-    protected static ?string $pluralModelLabel = 'textos de WhatsApp';
+    protected static ?string $pluralModelLabel = 'textos de los avisos';
 
     protected static ?string $navigationParentItem = 'Avisos';
 
@@ -91,6 +91,7 @@ class MessageTemplateResource extends Resource
                     ->color('gray')
                     ->requiresConfirmation()
                     ->modalHeading('¿Volver al texto original?')
+                    ->modalSubmitActionLabel('Volver al original')
                     ->modalDescription(fn (MessageTemplate $record) => $record->key->defaultBody())
                     ->authorize('update')
                     ->visible(fn (MessageTemplate $record) => $record->body !== $record->key->defaultBody())

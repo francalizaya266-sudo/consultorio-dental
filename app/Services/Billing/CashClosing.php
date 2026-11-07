@@ -17,7 +17,7 @@ use Illuminate\Support\Collection;
 /**
  * El cierre de caja de un día: lo que entró por cada medio de pago y lo que recibió cada persona,
  * para cuadrar el efectivo al final del turno. Lo anulado se lista aparte y no suma. Las tablas
- * tienen la forma de las de Ganancias: el panel y la hoja para imprimir las muestran igual.
+ * tienen la forma de las de Ingresos: el panel y la hoja para imprimir las muestran igual.
  */
 final class CashClosing
 {

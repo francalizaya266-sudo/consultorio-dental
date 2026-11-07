@@ -4,7 +4,6 @@ namespace App\Filament\Widgets;
 
 use App\Enums\AppointmentStatus;
 use App\Enums\RescheduleRequestStatus;
-use App\Filament\Pages\Agenda;
 use App\Filament\Pages\CashClosing;
 use App\Filament\Resources\Appointments\AppointmentResource;
 use App\Filament\Resources\RescheduleRequests\RescheduleRequestResource;
@@ -13,17 +12,16 @@ use App\Models\Appointment;
 use App\Models\Patient;
 use App\Models\Payment;
 use App\Models\User;
-use App\Services\Dashboard\WeekGaps as WeekGapsService;
-use App\Support\Dates;
 use App\Support\Money;
 use Filament\Widgets\Widget;
 use Illuminate\Database\Eloquent\Builder;
 
 /**
- * Los cuatro números del día, grandes y a la vista. Solo se colorea el que espera una acción
- * (alguien sin confirmar, alguien que se fue debiendo); el resto queda neutro para que lo urgente
- * resalte. Recepción ve lo cobrado y las horas libres de la semana; el doctor, sus solicitudes de
- * cambio y sus avisos (recepción los tiene en "Por hacer hoy"). Cada número lleva a su lista.
+ * Los números del día, grandes y a la vista. Solo se colorea el que espera una acción (alguien sin
+ * confirmar, alguien que se fue debiendo); el resto queda neutro para que lo urgente resalte.
+ * Recepción ve lo cobrado (las horas libres están en "Huecos de la semana"); el doctor, sus
+ * solicitudes de cambio y sus avisos (recepción los tiene en "Por hacer hoy"). Quién está en sala
+ * no se repite aquí: lo dicen la sala de espera y "Tu próximo paciente". Cada número lleva a su lista.
  */
 class TodayStats extends Widget
 {
@@ -44,7 +42,7 @@ class TodayStats extends Widget
             $this->appointments(),
             $this->unconfirmed(),
             ...($user->managesAllAgendas()
-                ? [$this->collectedToday($user), $this->freeTime()]
+                ? [$this->collectedToday($user)]
                 : [$this->pendingRequests(), $this->dueMessages()]),
         ]))];
     }
@@ -57,19 +55,16 @@ class TodayStats extends Widget
             ->whereIn('status', AppointmentStatus::occupying())
             ->pluck('status');
 
-        $count = fn (AppointmentStatus $status) => $today->filter(fn (AppointmentStatus $s) => $s === $status)->count();
-        $done = $count(AppointmentStatus::Completed);
-        $waiting = $count(AppointmentStatus::CheckedIn);
-        $inProgress = $count(AppointmentStatus::InProgress);
+        $done = $today->filter(fn (AppointmentStatus $status) => $status === AppointmentStatus::Completed)->count();
+        $toCome = $today->filter(fn (AppointmentStatus $status) => in_array($status, [AppointmentStatus::Pending, AppointmentStatus::Confirmed], true))->count();
 
         return [
             'label' => 'Citas de hoy',
             'value' => $today->count(),
-            // Lo que está pasando primero; "atendidas" siempre, para que el cero se lea como cero y no como olvido.
+            // Cuánto va del día; "atendidas" siempre, para que el cero se lea como cero y no como olvido.
             'hint' => collect([
-                $waiting > 0 ? "{$waiting} en sala" : null,
-                $inProgress > 0 ? "{$inProgress} en atención" : null,
                 $done === 1 ? '1 atendida' : "{$done} atendidas",
+                $toCome > 0 ? "{$toCome} por llegar" : null,
             ])->filter()->implode(' · '),
             'color' => 'gray',
             'icon' => 'heroicon-o-calendar-days',
@@ -86,7 +81,7 @@ class TodayStats extends Widget
             ->count();
 
         return [
-            'label' => 'Sin confirmar',
+            'label' => 'Por confirmar',
             'value' => $count,
             'hint' => $count > 0 ? 'Hoy y mañana · reenvía el aviso o llama' : 'Hoy y mañana, todo confirmado',
             'color' => $count > 0 ? 'warning' : 'gray',
@@ -125,27 +120,6 @@ class TodayStats extends Widget
             'color' => $owing > 0 ? 'warning' : 'gray',
             'icon' => 'heroicon-o-banknotes',
             'url' => $owing > 0 ? AppointmentResource::getUrl('index', ['tab' => 'today']) : CashClosing::getUrl(),
-        ];
-    }
-
-    /**
-     * Cuánto tiempo libre queda en la agenda de hoy a 7 días: lo que se puede llenar.
-     *
-     * @return array{label: string, value: string, hint: string, color: string, icon: string, url: string}
-     */
-    private function freeTime(): array
-    {
-        $days = app(WeekGapsService::class)->days();
-        $free = array_sum(array_column($days, 'free_minutes'));
-        $waiting = array_sum(array_column($days, 'waiting'));
-
-        return [
-            'label' => 'Horas libres',
-            'value' => $free > 0 ? Dates::duration($free) : 'Ninguna',
-            'hint' => $waiting > 0 ? 'Esta semana · hay lista de espera' : 'De hoy a 7 días',
-            'color' => 'gray',
-            'icon' => 'heroicon-o-clock',
-            'url' => Agenda::getUrl(['mode' => 'week']),
         ];
     }
 

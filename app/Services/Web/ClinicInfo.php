@@ -11,7 +11,7 @@ use App\Support\Phone;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Str;
 
-/** Datos del consultorio para la web, tal como se configuran en Ajustes. */
+/** Datos del consultorio para la web, tal como se configuran en Ajustes y en Página web › Puesta a punto. */
 final class ClinicInfo
 {
     private ?OpeningHours $hours = null;
@@ -94,7 +94,7 @@ final class ClinicInfo
     }
 
     /**
-     * Puntaje en Google tal como lo copiaron en Ajustes, o null si no lo pusieron.
+     * Puntaje en Google tal como lo copiaron en la puesta a punto de la web, o null si no lo pusieron.
      *
      * @return array{rating: float, count: int|null, url: string|null}|null
      */
@@ -156,7 +156,7 @@ final class ClinicInfo
         return PublicImages::url($this->text('web.hero_image'));
     }
 
-    /** Logo subido en Ajustes, o null para mostrar el nombre. */
+    /** Logo subido en la puesta a punto de la web, o null para mostrar el nombre. */
     public function logoUrl(): ?string
     {
         return PublicImages::url($this->text('web.logo'));

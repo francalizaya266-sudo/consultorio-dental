@@ -6,6 +6,7 @@ use App\Filament\Concerns\HasSpanishLabels;
 use App\Filament\Resources\Faqs\Pages\ManageFaqs;
 use App\Models\Faq;
 use BackedEnum;
+use Filament\Actions\ActionGroup;
 use Filament\Actions\DeleteAction;
 use Filament\Actions\EditAction;
 use Filament\Actions\RestoreAction;
@@ -39,7 +40,7 @@ class FaqResource extends Resource
 
     protected static ?string $navigationParentItem = 'Página web';
 
-    protected static ?int $navigationSort = 4;
+    protected static ?int $navigationSort = 5;
 
     protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedQuestionMarkCircle;
 
@@ -95,8 +96,11 @@ class FaqResource extends Resource
             ])
             ->recordActions([
                 EditAction::make(),
-                DeleteAction::make(),
-                RestoreAction::make(),
+                // Borrar va en el menú ⋮: el rojo queda para lo urgente.
+                ActionGroup::make([
+                    DeleteAction::make(),
+                    RestoreAction::make(),
+                ]),
             ])
             ->emptyStateHeading('Todavía no hay preguntas')
             ->emptyStateDescription('Agrega las dudas que más escuchan en recepción: precios, formas de pago, si atienden niños, estacionamiento…');

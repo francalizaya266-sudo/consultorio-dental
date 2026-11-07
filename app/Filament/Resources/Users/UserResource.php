@@ -54,7 +54,11 @@ class UserResource extends Resource
                     ->unique(ignoreRecord: true),
                 Select::make('role')
                     ->label('Rol')
-                    ->options(UserRole::class)
+                    // Un doctor nuevo se crea en Doctores, con su acceso: así no son dos altas para la misma persona.
+                    ->options(fn (string $operation) => collect(UserRole::cases())
+                        ->reject(fn (UserRole $role) => $operation === 'create' && $role === UserRole::Doctor)
+                        ->mapWithKeys(fn (UserRole $role) => [$role->value => $role->getLabel()])
+                        ->all())
                     ->required()
                     ->live()
                     ->helperText(fn (Get $get) => match ($get('role') instanceof UserRole ? $get('role') : UserRole::tryFrom((string) $get('role'))) {

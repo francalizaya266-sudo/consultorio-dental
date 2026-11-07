@@ -9,6 +9,18 @@
 /* La caja de acciones de arriba de una lista, vacía hasta que se marcan filas, no deja un hueco. */
 .fi-ta-header-toolbar > .fi-ta-actions:not(:has(*)) { display: none; }
 
+/* Al tocar un botón se hunde apenas: se nota que respondió aunque la respuesta tarde. */
+@media (prefers-reduced-motion: no-preference) {
+    .fi-btn:not([disabled], .fi-disabled):active,
+    .fi-icon-btn:not([disabled], .fi-disabled):active,
+    .fi-ta-actions > .fi-link:active { transform: scale(.97); }
+}
+
+/* En el celular las pestañas bajan a otra fila en vez de quedar escondidas a la derecha. */
+@media (max-width: 40rem) {
+    .fi-tabs:not(.fi-vertical, .agenda-modes) { flex-wrap: wrap; row-gap: .25rem; }
+}
+
 /* En pantallas táctiles, los botones de cada fila se tocan con el dedo sin errar. */
 @media (pointer: coarse) {
     .fi-ta-actions { flex-wrap: wrap; gap: .5rem; }
@@ -46,7 +58,13 @@
 @media (max-width: 63.99rem) {
     .mobile-bar { position: fixed; inset: auto 0 0 0; z-index: 25; display: grid; grid-template-columns: repeat(var(--items), minmax(0, 1fr)); padding: .3rem .4rem calc(.3rem + env(safe-area-inset-bottom)); background: rgb(255 255 255 / .96); backdrop-filter: blur(8px); box-shadow: 0 -1px 0 rgb(3 7 18 / .08), 0 -4px 16px rgb(0 0 0 / .04); }
     .dark .mobile-bar { background: rgb(24 24 27 / .96); box-shadow: 0 -1px 0 rgb(255 255 255 / .08); }
-    .mobile-bar-item { display: grid; justify-items: center; gap: .15rem; min-height: 3.1rem; padding: .3rem .2rem; border-radius: .7rem; color: var(--gray-500); font-size: .68rem; font-weight: 600; text-decoration: none; -webkit-tap-highlight-color: transparent; }
+    .mobile-bar-item { display: grid; justify-items: center; align-content: start; gap: .2rem; min-height: 3.3rem; padding: .3rem .1rem; border-radius: .7rem; color: var(--gray-500); font-size: .75rem; line-height: 1rem; font-weight: 600; letter-spacing: -.01em; white-space: nowrap; text-decoration: none; -webkit-tap-highlight-color: transparent; transition: transform 160ms cubic-bezier(.23, 1, .32, 1), color 150ms ease; }
+    /* Al tocar, el botón se hunde un poco: se nota que respondió aunque la página tarde en cambiar. */
+    @media (prefers-reduced-motion: no-preference) { .mobile-bar-item:active { transform: scale(.94); } }
+    .mobile-bar-glyph { position: relative; display: grid; }
+    /* Cuántos avisos toca enviar, en ámbar como en el menú. */
+    .mobile-bar-badge { position: absolute; top: -.35rem; inset-inline-start: calc(100% - .55rem); min-width: 1.15rem; height: 1.15rem; padding: 0 .3rem; border-radius: 999px; background: var(--warning-500); color: var(--gray-950); font-size: .6875rem; line-height: 1.15rem; font-weight: 700; text-align: center; font-variant-numeric: tabular-nums; letter-spacing: 0; box-shadow: 0 0 0 2px #fff; }
+    .dark .mobile-bar-badge { background: var(--warning-400); box-shadow: 0 0 0 2px rgb(24 24 27); }
     .mobile-bar-item.is-active { color: var(--primary-600); }
     .dark .mobile-bar-item { color: var(--gray-400); }
     .dark .mobile-bar-item.is-active { color: var(--primary-400); }
@@ -244,6 +262,7 @@
 :is(.agenda-appt, .agenda-item) .tag-note { color: var(--gray-700); --t-ring: color-mix(in oklab, var(--gray-500) 25%, transparent); }
 :is(.agenda-appt, .agenda-item) .tag-unclosed { background: var(--danger-600); color: #fff; box-shadow: none; }
 :is(.agenda-appt, .agenda-item) .tag-alert { color: var(--danger-700); --t-ring: color-mix(in oklab, var(--danger-500) 30%, transparent); cursor: help; }
+:is(.agenda-appt, .agenda-item) .tag-alert.is-caution { color: var(--warning-800); --t-ring: color-mix(in oklab, var(--warning-500) 40%, transparent); }
 :is(.agenda-appt, .agenda-item) :is(.tag-change, .tag-missed) { color: var(--warning-800); --t-ring: color-mix(in oklab, var(--warning-500) 40%, transparent); }
 .dark :is(.agenda-appt, .agenda-item) .tag { background: rgb(0 0 0 / .3); }
 .dark :is(.agenda-appt, .agenda-item) .tag-call { color: var(--danger-300); }
@@ -252,6 +271,7 @@
 .dark :is(.agenda-appt, .agenda-item) .tag-note { color: var(--gray-300); }
 .dark :is(.agenda-appt, .agenda-item) .tag-unclosed { background: var(--danger-600); color: #fff; }
 .dark :is(.agenda-appt, .agenda-item) .tag-alert { color: var(--danger-300); }
+.dark :is(.agenda-appt, .agenda-item) .tag-alert.is-caution { color: var(--warning-300); }
 .dark :is(.agenda-appt, .agenda-item) :is(.tag-change, .tag-missed) { color: var(--warning-300); }
 /* En una columna angosta (la semana) las etiquetas no entran junto al nombre: el nombre queda entero
    y lo que pide algo (sin cerrar, llamar) se ve como un punto rojo en la esquina. */
@@ -511,6 +531,9 @@ button.agenda-slot:focus-visible { outline: 2px solid var(--primary-600); outlin
 .appt-panel-chips { display: flex; flex-wrap: wrap; gap: .35rem; align-items: center; }
 .appt-panel-alert { border-radius: .6rem; padding: .6rem .75rem; background: var(--danger-50); color: var(--danger-700); font-weight: 600; }
 .dark .appt-panel-alert { background: rgb(239 68 68 / .12); color: var(--danger-300); }
+/* Antecedentes para tener presentes (presión, diabetes, embarazo, un medicamento común): ámbar, no rojo. */
+.appt-panel-alert.is-caution { background: var(--warning-50); color: var(--warning-800); font-weight: 500; }
+.dark .appt-panel-alert.is-caution { background: rgb(245 158 11 / .12); color: var(--warning-300); }
 .appt-panel dl { display: grid; grid-template-columns: max-content 1fr; gap: .45rem 1rem; margin: 0; }
 .appt-panel dt { color: var(--gray-500); }
 .appt-panel dd { margin: 0; color: var(--gray-950); font-weight: 500; overflow-wrap: anywhere; }
@@ -555,6 +578,8 @@ button.agenda-slot:focus-visible { outline: 2px solid var(--primary-600); outlin
 .cb-flag.is-ok { color: var(--success-700); background: var(--success-50); border-color: var(--success-200); }
 .dark .cb-flag.is-danger { color: var(--danger-300); background: rgb(239 68 68 / .12); border-color: rgb(239 68 68 / .35); }
 .dark .cb-flag.is-warning { color: var(--warning-300); background: rgb(245 158 11 / .12); border-color: rgb(245 158 11 / .35); }
+.cb-flag.is-caution { color: var(--warning-800); background: var(--warning-50); border-color: var(--warning-300); }
+.dark .cb-flag.is-caution { color: var(--warning-300); background: rgb(245 158 11 / .12); border-color: rgb(245 158 11 / .35); }
 .dark .cb-flag.is-ok { color: var(--success-300); background: rgb(34 197 94 / .1); border-color: rgb(34 197 94 / .3); }
 .cb-sections { display: flex; gap: .35rem; overflow-x: auto; scrollbar-width: none; }
 .cb-sections::-webkit-scrollbar { display: none; }
@@ -626,7 +651,7 @@ button.agenda-slot:focus-visible { outline: 2px solid var(--primary-600); outlin
 
 /*
  * La hoja del odontograma es siempre blanca, como impresa, para que el rojo (por tratar) y el azul (tratado) de la
- * norma se lean igual con el modo oscuro. Lo de alrededor (filtros, buscador, ficha, lista) sigue el tema.
+ * norma se lean igual con el modo oscuro (ahí se apaga un poco). Lo de alrededor (filtros, buscador, ficha, lista) sigue el tema.
  */
 .odv {
     --odv-bad: #dc2626; --odv-good: #2563eb; --odv-today: #f59e0b;
@@ -739,6 +764,8 @@ button.agenda-slot:focus-visible { outline: 2px solid var(--primary-600); outlin
 .odv-stage { display: flex; flex-direction: column; gap: .75rem; min-width: 0; }
 .odv-sheet { position: relative; min-width: 0; padding: .375rem .5rem .75rem; border-radius: .875rem; background: #fff; box-shadow: inset 0 0 0 1px var(--gray-200); outline: 0; }
 .dark .odv-sheet { box-shadow: none; }
+/* En modo oscuro la hoja sigue siendo papel, pero un poco apagada para que no encandile; el rojo y el azul se leen igual. */
+@media screen { .dark .odv-sheet { filter: brightness(.86); } }
 .odv-sheet:focus-visible { box-shadow: inset 0 0 0 2px var(--primary-500); }
 .odv-sides { display: flex; justify-content: space-between; padding: .125rem .375rem .25rem; font-size: .6875rem; font-weight: 500; color: #94a3b8; }
 .odv-scroll { overflow-x: auto; overscroll-behavior-x: contain; scrollbar-width: thin; }
@@ -919,6 +946,28 @@ a.pt-event:hover { background: var(--gray-50); }
 .pt-text small { display: block; font-size: .78rem; color: var(--gray-500); }
 .pt-meta { font-size: .72rem; color: var(--gray-500); white-space: nowrap; text-align: right; }
 .pt-empty { color: var(--gray-500); font-size: .875rem; }
+/* El filtro de la línea de tiempo: Todo, Citas, Atenciones, Pagos, Mensajes; el elegido queda relleno. */
+.pt-filter { display: flex; flex-wrap: wrap; gap: .4rem; }
+.pt-filter-chip { display: inline-flex; align-items: center; gap: .35rem; min-height: 2rem; padding: .25rem .75rem; border-radius: 9999px; font-size: .8125rem; font-weight: 500; color: var(--gray-700); background: #fff; box-shadow: 0 0 0 1px rgb(3 7 18 / .1); transition: background-color .15s ease, color .15s ease, transform .16s cubic-bezier(.23, 1, .32, 1); }
+.pt-filter-chip span { font-size: .72rem; color: var(--gray-500); font-variant-numeric: tabular-nums; }
+.pt-filter-chip:active { transform: scale(.97); }
+.pt-filter-chip:focus-visible { outline: 2px solid var(--primary-500); outline-offset: 2px; }
+.pt-filter-chip[aria-pressed="true"] { background: var(--primary-600); color: #fff; box-shadow: none; }
+.pt-filter-chip[aria-pressed="true"] span { color: rgb(255 255 255 / .8); }
+.dark .pt-filter-chip { background: rgb(255 255 255 / .05); color: var(--gray-200); box-shadow: 0 0 0 1px rgb(255 255 255 / .1); }
+.dark .pt-filter-chip[aria-pressed="true"] { background: var(--primary-500); color: #fff; }
+@media (hover: hover) and (pointer: fine) { .pt-filter-chip:not([aria-pressed="true"]):hover { background: var(--gray-50); } .dark .pt-filter-chip:not([aria-pressed="true"]):hover { background: rgb(255 255 255 / .08); } }
+/* Lo que se hace con un pago, bajo su línea: la constancia y, si se puede, anularlo. */
+.pt-event-actions { display: flex; gap: .9rem; margin-top: .2rem; font-size: .78rem; font-weight: 500; }
+.pt-event-actions a { color: var(--primary-600); text-decoration: none; }
+.pt-event-actions button { color: var(--gray-500); }
+.dark .pt-event-actions a { color: var(--primary-400); }
+.dark .pt-event-actions button { color: var(--gray-400); }
+.pt-more { justify-self: start; min-height: 2.25rem; padding: .35rem .9rem; border-radius: .6rem; font-size: .8125rem; font-weight: 600; color: var(--primary-600); box-shadow: 0 0 0 1px rgb(3 7 18 / .1); transition: background-color .15s ease, transform .16s cubic-bezier(.23, 1, .32, 1); }
+.pt-more:active { transform: scale(.97); }
+.dark .pt-more { color: var(--primary-400); box-shadow: 0 0 0 1px rgb(255 255 255 / .1); }
+@media (hover: hover) and (pointer: fine) { .pt-more:hover { background: var(--gray-50); } .dark .pt-more:hover { background: rgb(255 255 255 / .05); } }
+.pt-event-actions a:hover, .pt-event-actions button:hover { text-decoration: underline; }
 
 /* Ficha del paciente: lo importante en etiquetas bajo el nombre; el color dice si hay algo que hacer. */
 .pt-summary { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: .6rem 1.25rem; }
@@ -1002,9 +1051,22 @@ button.pt-chip { transition: transform 160ms ease-out; }
 
 /* ---------- "Hoy": el dashboard ---------- */
 
-/* Los números del día: cuatro tarjetas en fila; en el celular, de a dos. Solo se pinta la que espera a alguien. */
+/* Hoy en tres bloques (Dashboard::content): en pantalla ancha el costado ocupa las dos filas y el mes
+   queda pegado bajo la agenda; la fila del mes se estira (1fr) para que el alto del costado no abra un
+   hueco entre la agenda y el mes. En el celular van uno debajo del otro: hoy, el costado, el mes. */
+@media (min-width: 64rem) {
+    .dash-layout > .fi-grid { grid-template-rows: auto 1fr; }
+    .dash-layout > .fi-grid > :has(> .fi-sc-component > .dash-side) { grid-row: span 2; }
+}
+
+/* Los números del día: todos en una fila (tres o cuatro, según quién mire); en el celular, de a dos,
+   y si queda uno solo abajo, ocupa el ancho. Solo se pinta la que espera a alguien. */
 .dash-kpis { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .75rem; }
-@media (min-width: 64rem) { .dash-kpis { grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 1rem; } }
+.dash-kpi:last-child:nth-child(odd) { grid-column: 1 / -1; }
+@media (min-width: 64rem) {
+    .dash-kpis { grid-template-columns: repeat(auto-fit, minmax(10rem, 1fr)); gap: 1rem; }
+    .dash-kpi:last-child:nth-child(odd) { grid-column: auto; }
+}
 .dash-kpi { display: grid; gap: .3rem; align-content: start; padding: 1rem 1.1rem; border-radius: .9rem; background: #fff; box-shadow: 0 1px 2px rgb(0 0 0 / .05), 0 0 0 1px rgb(3 7 18 / .06); text-decoration: none; color: var(--gray-600); transition: box-shadow .15s ease, transform .16s cubic-bezier(.23, 1, .32, 1); }
 /* Con mouse se levanta un poco; en el celular, tocarla la achica (el hover quedaba pegado tras el toque). */
 @media (hover: hover) and (pointer: fine) { .dash-kpi:hover { box-shadow: 0 4px 12px rgb(0 0 0 / .08), 0 0 0 1px rgb(3 7 18 / .08); transform: translateY(-1px); } }
@@ -1281,3 +1343,7 @@ a.ap-visit:hover { background: var(--gray-50); }
 .dark .cc-rows li { border-color: rgb(255 255 255 / .06); }
 .dark .cc-status { background: rgb(59 130 246 / .1); box-shadow: inset 0 0 0 1px rgb(59 130 246 / .28); }
 @media (max-width: 40rem) { .cc-figures dd { font-size: 1rem; } .cc-rows li, .cc-status { flex-wrap: wrap; } .cc-status .cc-row-text { flex: 1 1 calc(100% - 2rem); } .cc-status > .fi-btn { margin-left: 2rem; } }
+
+/* Opciones rápidas: junto al nombre, solo lo que no es lo de siempre ("Solo tuya", "Propuesta de Ana"). */
+.snip-note { display: inline-block; margin-left: .35rem; padding: 0 .45rem; border-radius: 9999px; font-size: .72rem; font-weight: 500; line-height: 1.25rem; vertical-align: 1px; color: var(--gray-600); background: var(--gray-100); }
+.dark .snip-note { color: var(--gray-300); background: rgb(255 255 255 / .08); }

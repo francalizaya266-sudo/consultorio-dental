@@ -37,12 +37,12 @@ final class RegisterPaymentAction
         $resolve = fn (Action $action): ?Patient => $patient ? $action->evaluate($patient) : null;
 
         return Action::make('registerPayment')
-            ->label('Registrar pago')
+            ->label('Cobrar')
             ->icon(Heroicon::OutlinedBanknotes)
             ->color(fn (Action $action) => ($resolve($action)?->balance() ?? 0) > 0 ? 'success' : 'gray')
             ->visible(fn () => self::user()->can('create', Payment::class))
-            ->modalHeading(fn (Action $action) => ($found = $resolve($action)) ? 'Cobrar a '.$found->full_name : 'Registrar pago')
-            ->modalSubmitAction(fn (Action $submit) => $submit->label('Registrar pago')->color('primary'))
+            ->modalHeading(fn (Action $action) => ($found = $resolve($action)) ? 'Cobrar a '.$found->full_name : 'Cobrar')
+            ->modalSubmitAction(fn (Action $submit) => $submit->label('Cobrar')->color('primary'))
             ->modalWidth('lg')
             ->fillForm(function (Action $action) use ($resolve, $amount) {
                 $found = $resolve($action);

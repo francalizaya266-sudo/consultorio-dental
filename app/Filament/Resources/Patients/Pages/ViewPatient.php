@@ -6,6 +6,7 @@ use App\Filament\Actions\RegisterPaymentAction;
 use App\Filament\Concerns\HasPatientSummaryActions;
 use App\Filament\Resources\Appointments\AppointmentResource;
 use App\Filament\Resources\Patients\PatientResource;
+use App\Filament\Resources\Payments\Tables\PaymentsTable;
 use App\Filament\Support\PatientSummary;
 use App\Models\Patient;
 use App\Services\Billing\BillingService;
@@ -31,6 +32,14 @@ class ViewPatient extends ViewRecord
     protected function summaryPatient(): Patient
     {
         return $this->getRecord();
+    }
+
+    /** "Anular" en un pago de la línea de tiempo: el mismo de Caja, con su motivo y el día cerrado. */
+    public function voidPaymentAction(): Action
+    {
+        return PaymentsTable::voidAction()
+            ->name('voidPayment')
+            ->record(fn (array $arguments) => $this->getRecord()->payments()->find($arguments['payment'] ?? null));
     }
 
     /** Edad, documento, distrito y desde cuándo viene, bajo el nombre. */

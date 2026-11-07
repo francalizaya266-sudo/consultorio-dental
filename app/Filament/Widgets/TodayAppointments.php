@@ -86,7 +86,7 @@ class TodayAppointments extends TableWidget
                     Stack::make([
                         TextColumn::make('status')->badge(),
                         TextColumn::make('waiting')
-                            ->state(fn (Appointment $record) => ($minutes = $record->waitingMinutes()) !== null ? 'En sala hace '.Dates::duration($minutes) : null)
+                            ->state(fn (Appointment $record) => ($minutes = $record->waitingMinutes()) !== null ? 'Esperando '.Dates::duration($minutes) : null)
                             ->icon('heroicon-m-clock')
                             ->color(fn (Appointment $record) => $record->waitingMinutes() >= self::LONG_WAIT_MINUTES ? 'danger' : 'warning')
                             ->size(TextSize::Small),
