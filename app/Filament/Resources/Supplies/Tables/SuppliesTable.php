@@ -6,6 +6,7 @@ use App\Enums\SupplyCategory;
 use App\Filament\Resources\Supplies\SupplyActions;
 use App\Filament\Resources\Supplies\SupplyResource;
 use App\Models\Supply;
+use App\Services\Inventory\SupplyForecast;
 use App\Support\Money;
 use App\Support\Quantity;
 use Filament\Actions\EditAction;
@@ -41,8 +42,13 @@ class SuppliesTable
                             (float) $record->min_stock > 0 => 'Avisa con menos de '.Quantity::number($record->min_stock),
                             default => null,
                         },
+                        SupplyForecast::label(app(SupplyForecast::class)->for($record)),
                     ])->filter()->implode(' · ') ?: null)
-                    ->color(fn (Supply $record) => $record->isLow() ? 'danger' : null)
+                    ->color(fn (Supply $record) => match (true) {
+                        $record->isLow() => 'danger',
+                        SupplyForecast::label(app(SupplyForecast::class)->for($record)) !== null => 'warning',
+                        default => null,
+                    })
                     ->weight(fn (Supply $record) => $record->isLow() ? 'bold' : null)
                     ->sortable(),
                 TextColumn::make('next_expiry')

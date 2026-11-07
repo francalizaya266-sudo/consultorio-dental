@@ -1352,3 +1352,41 @@ a.ap-visit:hover { background: var(--gray-50); }
 /* Opciones rápidas: junto al nombre, solo lo que no es lo de siempre ("Solo tuya", "Propuesta de Ana"). */
 .snip-note { display: inline-block; margin-left: .35rem; padding: 0 .45rem; border-radius: 9999px; font-size: .72rem; font-weight: 500; line-height: 1.25rem; vertical-align: 1px; color: var(--gray-600); background: var(--gray-100); }
 .dark .snip-note { color: var(--gray-300); background: rgb(255 255 255 / .08); }
+
+/* ---------- Bandeja del día (Inventario) ---------- */
+
+/* Una tarjeta por cita, con casillas para ir marcando lo que ya está en la bandeja (también en papel). */
+.tray { display: grid; gap: 1rem; grid-template-columns: repeat(auto-fill, minmax(min(100%, 22rem), 1fr)); align-items: start; }
+.tray-visit { display: grid; gap: .75rem; padding: 1rem 1.125rem; border-radius: .875rem; background: #fff; box-shadow: 0 0 0 1px rgb(3 7 18 / .07), 0 1px 2px rgb(0 0 0 / .04); break-inside: avoid; }
+.dark .tray-visit { background: var(--gray-900); box-shadow: 0 0 0 1px rgb(255 255 255 / .08); }
+.tray-visit-head { display: flex; align-items: baseline; gap: .75rem; }
+.tray-time { font-size: 1.125rem; font-weight: 700; font-variant-numeric: tabular-nums; color: var(--gray-950); }
+.dark .tray-time { color: #fff; }
+.tray-who { display: grid; min-width: 0; }
+.tray-who b { font-weight: 600; color: var(--gray-950); }
+.dark .tray-who b { color: #fff; }
+.tray-who small { font-size: .8125rem; color: var(--gray-500); }
+.tray-alerts { display: flex; flex-wrap: wrap; gap: .375rem; }
+.tray-alert { padding: .1875rem .5rem; border-radius: .375rem; font-size: .8125rem; font-weight: 500; color: #92400e; background: #fef3c7; }
+.tray-alert.is-severe { color: #991b1b; background: #fee2e2; font-weight: 600; }
+.dark .tray-alert { color: #fcd34d; background: rgb(245 158 11 / .15); }
+.dark .tray-alert.is-severe { color: #fca5a5; background: rgb(239 68 68 / .18); }
+.tray-items { display: grid; gap: .125rem; }
+.tray-item { display: grid; grid-template-columns: auto 1fr auto; column-gap: .625rem; align-items: baseline; padding: .375rem 0; border-top: 1px solid var(--gray-100); font-size: .875rem; }
+.dark .tray-item { border-color: rgb(255 255 255 / .06); }
+.tray-item:first-child { border-top: 0; }
+.tray-check { width: .875rem; height: .875rem; border-radius: .25rem; box-shadow: inset 0 0 0 1.5px var(--gray-300); align-self: center; }
+.tray-item-name { color: var(--gray-900); }
+.dark .tray-item-name { color: var(--gray-100); }
+.tray-item-qty { font-weight: 600; font-variant-numeric: tabular-nums; color: var(--gray-700); }
+.dark .tray-item-qty { color: var(--gray-200); }
+.tray-item-from { grid-column: 2 / -1; font-size: .75rem; color: var(--gray-500); }
+.tray-item.is-short .tray-item-from { color: var(--danger-600); font-weight: 600; }
+.dark .tray-item.is-short .tray-item-from { color: var(--danger-400); }
+.tray-empty, .tray-none { font-size: .875rem; color: var(--gray-500); }
+@media print {
+    body:has(.tray) :is(.fi-sidebar, .fi-topbar, .fi-header-actions-ctn, .fi-header .fi-ac) { display: none !important; }
+    body:has(.tray) .fi-main-ctn { margin: 0 !important; }
+    .tray { grid-template-columns: 1fr 1fr; gap: .5rem; }
+    .tray-visit { box-shadow: 0 0 0 1px #d1d5db; padding: .625rem .75rem; }
+}

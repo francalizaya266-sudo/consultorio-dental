@@ -3,12 +3,14 @@
 namespace App\Filament\Resources\Supplies\Pages;
 
 use App\Filament\Pages\StockCount;
+use App\Filament\Pages\TomorrowTray;
 use App\Filament\Resources\PurchaseOrders\PlaceOrderAction;
 use App\Filament\Resources\StockMovements\StockMovementResource;
 use App\Filament\Resources\Supplies\SupplyResource;
 use App\Models\PurchaseOrder;
 use App\Models\Supply;
 use App\Services\Inventory\StarterCatalog;
+use App\Services\Inventory\SupplyForecast;
 use Filament\Actions\Action;
 use Filament\Actions\CreateAction;
 use Filament\Notifications\Notification;
@@ -34,6 +36,11 @@ class ManageSupplies extends ManageRecords
         return [
             PlaceOrderAction::make()
                 ->visible(fn () => auth()->user()->can('create', PurchaseOrder::class) && Supply::query()->toReorder()->exists()),
+            Action::make('tray')
+                ->label('Bandeja de mañana')
+                ->icon(Heroicon::OutlinedClipboardDocumentList)
+                ->color('gray')
+                ->url(fn () => TomorrowTray::getUrl()),
             Action::make('count')
                 ->label('Contar')
                 ->icon(Heroicon::OutlinedClipboardDocumentCheck)
@@ -64,6 +71,11 @@ class ManageSupplies extends ManageRecords
                 ->badge(fn () => Supply::query()->toReorder()->count() ?: null)
                 ->badgeColor('warning')
                 ->modifyQueryUsing(fn (Builder $query) => $query->toReorder()),
+            // No están bajo el mínimo todavía, pero con las citas agendadas se acaban o bajan en dos semanas.
+            'soon' => Tab::make('Se acaban pronto')
+                ->badge(fn () => app(SupplyForecast::class)->runningLow()->count() ?: null)
+                ->badgeColor('warning')
+                ->modifyQueryUsing(fn (Builder $query) => $query->whereKey(app(SupplyForecast::class)->runningLow()->keys())),
             'expiring' => Tab::make('Por vencer')
                 ->badge(fn () => Supply::query()->expiringSoon()->count() ?: null)
                 ->badgeColor('warning')
