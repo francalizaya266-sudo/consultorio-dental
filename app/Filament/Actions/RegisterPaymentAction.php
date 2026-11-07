@@ -4,6 +4,7 @@ namespace App\Filament\Actions;
 
 use App\Enums\PaymentMethod;
 use App\Filament\Forms\PaymentFields;
+use App\Models\DailyClosing;
 use App\Models\Patient;
 use App\Models\Payment;
 use App\Models\User;
@@ -85,7 +86,8 @@ final class RegisterPaymentAction
                     ->label('Fecha')
                     ->seconds(false)
                     ->maxDate(now()->endOfDay())
-                    ->required(),
+                    ->required()
+                    ->rule(fn () => self::openDay()),
                 TextInput::make('notes')
                     ->label('Nota')
                     ->placeholder('Por ejemplo: cuota 2 de ortodoncia')
@@ -99,12 +101,12 @@ final class RegisterPaymentAction
             });
     }
 
-    /** "Pago registrado", con el saldo que quedó y la constancia para imprimir o enviar. */
+    /** "Pago registrado" (o "Devolución registrada"), con el saldo que quedó y la constancia para imprimir o enviar. */
     public static function notifyRegistered(Payment $payment): void
     {
         Notification::make()
             ->success()
-            ->title('Pago registrado')
+            ->title((float) $payment->amount < 0 ? 'Devolución registrada' : 'Pago registrado')
             ->body('Saldo de '.$payment->patient->full_name.': '.Money::balance($payment->patient->balance()))
             ->actions([
                 Action::make('receipt')
@@ -120,6 +122,16 @@ final class RegisterPaymentAction
     public static function receiptUrl(Payment $payment): string
     {
         return Filament::getPanel('admin')->route('print.receipt', ['payment' => $payment]);
+    }
+
+    /** Un pago no entra en un día cuya caja ya se cerró (salvo que lo registre la administradora). */
+    public static function openDay(): Closure
+    {
+        return function (string $attribute, mixed $value, Closure $fail) {
+            if (filled($value) && DailyClosing::locksFor(self::user(), $value)) {
+                $fail(DailyClosing::LOCKED);
+            }
+        };
     }
 
     /** "Debe S/ 120.00: Curación con resina S/ 120.00 (5/11)." */

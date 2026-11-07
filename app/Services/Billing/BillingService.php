@@ -602,6 +602,22 @@ final class BillingService
     }
 
     /**
+     * Devolución de lo que el paciente tenía a favor: un movimiento propio, en negativo, con su motivo.
+     * Sale de la caja del día y el saldo vuelve a cero (o a lo que quede a favor).
+     */
+    public function registerRefund(Patient $patient, float $amount, PaymentMethod|string $method, string $reason, User $by): Payment
+    {
+        return Payment::create([
+            'patient_id' => $patient->getKey(),
+            'amount' => -round(abs($amount), 2),
+            'method' => $method,
+            'notes' => trim($reason),
+            'paid_at' => now(),
+            'received_by_user_id' => $by->getKey(),
+        ]);
+    }
+
+    /**
      * El precio que puso el dentista para esa línea, o null si dejó el sugerido.
      *
      * @param  array<string, mixed>  $prices

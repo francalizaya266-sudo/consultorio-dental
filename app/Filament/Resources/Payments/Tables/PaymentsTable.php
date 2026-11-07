@@ -38,7 +38,8 @@ class PaymentsTable
                     ->searchable(query: fn (Builder $query, string $search) => $query->whereHas('patient', fn (Builder $p) => $p->search($search))),
                 TextColumn::make('treatment.name')
                     ->label('Concepto')
-                    ->description(fn (Payment $record) => $record->doctor?->name)
+                    ->state(fn (Payment $record) => (float) $record->amount < 0 ? 'Devolución' : $record->treatment?->name)
+                    ->description(fn (Payment $record) => (float) $record->amount < 0 ? $record->notes : $record->doctor?->name)
                     ->placeholder('—'),
                 TextColumn::make('method')
                     ->label('Medio')
@@ -134,6 +135,8 @@ class PaymentsTable
             ->color('danger')
             ->visible(fn (Payment $record) => $record->voided_at === null)
             ->authorize('update')
+            // En un día cerrado se ve, apagado, con el porqué.
+            ->authorizationTooltip()
             ->modalHeading('Anular pago')
             ->modalDescription('El pago queda registrado como anulado (no se borra).')
             ->modalSubmitActionLabel('Anular')

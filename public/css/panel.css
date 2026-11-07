@@ -1253,3 +1253,31 @@ a.ap-visit:hover { background: var(--gray-50); }
 .close-checks { margin-top: .75rem; padding: .6rem .75rem; border-radius: .5rem; background: var(--warning-50); box-shadow: inset 0 0 0 1px var(--warning-200); color: var(--warning-800); text-align: left; }
 .close-checks ul { margin: .25rem 0 0; padding-left: 1.1rem; list-style: disc; }
 .dark .close-checks { background: rgb(245 158 11 / .1); box-shadow: inset 0 0 0 1px rgb(245 158 11 / .3); color: var(--warning-300); }
+
+/* Cierre de caja: el cuadre del día (para cobrar, cobrado, falta), quién se fue debiendo y el arqueo. */
+.cc-figures { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: .75rem; margin: 0 0 1rem; }
+.cc-figures div { padding: .6rem .75rem; border-radius: .6rem; background: var(--gray-50); box-shadow: inset 0 0 0 1px var(--gray-200); }
+.cc-figures dt { font-size: .75rem; color: var(--gray-600); }
+.cc-figures dd { margin: 0; font-size: 1.125rem; font-weight: 700; font-variant-numeric: tabular-nums; color: var(--gray-950); }
+.cc-figures .is-short { background: var(--warning-50); box-shadow: inset 0 0 0 1px var(--warning-200); }
+.cc-figures .is-short dd { color: var(--warning-700); }
+.cc-title { margin: 1rem 0 .25rem; font-size: .8125rem; font-weight: 600; color: var(--gray-700); }
+.cc-rows { margin: 0; padding: 0; list-style: none; }
+.cc-rows li { display: flex; align-items: center; gap: .75rem; padding: .5rem 0; border-top: 1px solid var(--gray-100); }
+.cc-row-text { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.cc-row-text strong { font-size: .875rem; font-weight: 600; color: var(--gray-950); }
+.cc-row-text small { font-size: .8125rem; color: var(--gray-600); }
+.cc-amount { font-weight: 700; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.cc-ok { margin: 0; font-size: .875rem; color: var(--gray-600); }
+.cc-status { display: flex; align-items: center; gap: .75rem; margin-top: 1rem; padding: .65rem .75rem; border-radius: .75rem; background: var(--primary-50); box-shadow: inset 0 0 0 1px var(--primary-200); }
+.cc-status.is-closed { background: var(--gray-50); box-shadow: inset 0 0 0 1px var(--gray-200); }
+.cc-status-icon { width: 1.25rem; height: 1.25rem; flex: none; color: var(--primary-600); }
+.cc-status.is-closed .cc-status-icon { color: var(--gray-500); }
+.dark .cc-figures div, .dark .cc-status.is-closed { background: rgb(255 255 255 / .03); box-shadow: inset 0 0 0 1px rgb(255 255 255 / .1); }
+.dark .cc-figures dt, .dark .cc-row-text small, .dark .cc-ok { color: var(--gray-400); }
+.dark .cc-figures dd, .dark .cc-row-text strong { color: #fff; }
+.dark .cc-figures .is-short { background: rgb(245 158 11 / .1); box-shadow: inset 0 0 0 1px rgb(245 158 11 / .3); }
+.dark .cc-figures .is-short dd { color: var(--warning-300); }
+.dark .cc-rows li { border-color: rgb(255 255 255 / .06); }
+.dark .cc-status { background: rgb(59 130 246 / .1); box-shadow: inset 0 0 0 1px rgb(59 130 246 / .28); }
+@media (max-width: 40rem) { .cc-figures dd { font-size: 1rem; } .cc-rows li, .cc-status { flex-wrap: wrap; } }

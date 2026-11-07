@@ -71,6 +71,7 @@ final class CheckoutAction
                     'amount' => $balance > 0 ? $balance : null,
                     'method' => $record->patient->usualPaymentMethod()->value,
                     'upcoming' => self::upcomingInstallment($record),
+                    'paid_at' => now()->toDateTimeString(),
                 ];
             })
             ->schema([
@@ -124,6 +125,10 @@ final class CheckoutAction
                     ->color('warning')
                     ->visible(fn (Get $get) => filled($get('upcoming'))),
                 ...PaymentFields::make(amountRequired: false),
+                // Se paga hoy: si la caja de hoy ya se cerró, el pago espera a que la administradora la reabra.
+                Hidden::make('paid_at')
+                    ->dehydrated(false)
+                    ->rule(fn () => RegisterPaymentAction::openDay(), fn (Get $get) => (float) $get('amount') > 0),
             ])
             ->action(function (array $data, Appointment $record) {
                 $billing = app(BillingService::class);

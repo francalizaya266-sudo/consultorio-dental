@@ -1,4 +1,5 @@
 @use('App\Support\Money')
+@use('App\Filament\Widgets\CashClosingCheck')
 <x-print-layout title="Cierre de caja">
     <style>
         .period { font-size: 1rem; font-weight: 700; margin: -4px 0 12px; }
@@ -19,6 +20,8 @@
         .count-grid .line { display: block; border-bottom: 1px solid var(--ink); height: 22px; }
         .count-notes { margin-top: 12px; }
         .count-notes .line { display: block; border-bottom: 1px solid var(--line); height: 22px; }
+        .owed { margin-top: 18px; break-inside: avoid; }
+        .owed .num { text-align: right; white-space: nowrap; }
         .fine { margin-top: 16px; font-size: .8rem; color: var(--muted); }
         @media print { .tables section { break-inside: avoid; } }
     </style>
@@ -41,17 +44,47 @@
         @endforeach
     </div>
 
+    @if ($closing->receivedBy === null && $closing->pending()->isNotEmpty())
+        <section class="owed">
+            <h2>Se fueron debiendo · {{ Money::format($closing->pendingTotal()) }}</h2>
+            <table class="report-table">
+                <tbody>
+                    @foreach ($closing->pending() as $row)
+                        <tr>
+                            <td>{{ $row['patient']->full_name }}</td>
+                            <td class="muted">{{ $row['concepts'] }}</td>
+                            <td class="num">{{ Money::format($row['due']) }}</td>
+                        </tr>
+                    @endforeach
+                </tbody>
+            </table>
+        </section>
+    @endif
+
+    {{-- Con el día cerrado, el arqueo ya está hecho: se imprime lo que se contó. --}}
+    @php($record = $closing->receivedBy === null ? $closing->record() : null)
     <section class="count">
         <h2>Arqueo del efectivo</h2>
         <div class="count-grid">
-            <div><span>Según el sistema</span><strong>{{ Money::format($closing->cash()) }}</strong></div>
-            <div><span>Contado</span><span class="line"></span></div>
-            <div><span>Diferencia</span><span class="line"></span></div>
+            @if ($record)
+                <div><span>Fondo</span><strong>{{ Money::format($record->opening_cash) }}</strong></div>
+                <div><span>Debía haber</span><strong>{{ Money::format($record->expected_cash) }}</strong></div>
+                <div><span>Contado</span><strong>{{ Money::format($record->counted_cash) }}</strong></div>
+            @else
+                <div><span>Fondo</span><span class="line"></span></div>
+                <div><span>Según el sistema (sin el fondo)</span><strong>{{ Money::format($closing->cash()) }}</strong></div>
+                <div><span>Contado</span><span class="line"></span></div>
+            @endif
         </div>
         <div class="count-notes">
-            <span class="muted">Observaciones</span>
-            <span class="line"></span>
-            <span class="line"></span>
+            @if ($record)
+                <strong>{{ CashClosingCheck::differenceText($record->difference()) }}</strong>
+                <span class="muted">Cerró {{ $record->closedBy?->name ?? '—' }} a las {{ $record->created_at->format('H:i') }}.{{ $record->notes ? ' '.$record->notes : '' }}</span>
+            @else
+                <span class="muted">Diferencia y observaciones</span>
+                <span class="line"></span>
+                <span class="line"></span>
+            @endif
         </div>
     </section>
 
