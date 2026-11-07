@@ -41,6 +41,11 @@ Schedule::command('queue:work --stop-when-empty --max-time=50')
 
 Schedule::command('model:prune')->daily();
 
+// Lo que cada doctor realmente tarda en cada tratamiento, con las atenciones hasta ayer.
+Schedule::command('agenda:aprender-duraciones')
+    ->dailyAt('02:30')
+    ->withoutOverlapping();
+
 // Copia de la base de datos de madrugada, cuando nadie está usando el sistema.
 Schedule::command('respaldo:crear')
     ->dailyAt('03:00')
