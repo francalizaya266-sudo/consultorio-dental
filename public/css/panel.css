@@ -1412,3 +1412,43 @@ a.ap-visit:hover { background: var(--gray-50); }
     .report-stack td.empty { grid-column: 1 / -1; }
     .report-stack tfoot tr { border-bottom: 0; }
 }
+
+/* ---------- Puesta a punto: lo que falta configurar ---------- */
+/* Arriba de la página web: lo pendiente con su enlace, lo listo al final con su check. Se va cuando está todo. */
+.setup { display: grid; gap: .875rem; padding: 1.125rem 1.25rem; border-radius: .875rem; background: #fff; box-shadow: 0 0 0 1px rgb(3 7 18 / .07), 0 1px 2px rgb(0 0 0 / .04); }
+.dark .setup { background: var(--gray-900); box-shadow: 0 0 0 1px rgb(255 255 255 / .08); }
+.setup-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 1rem; }
+.setup-title { font-size: 1rem; font-weight: 600; color: var(--gray-950); }
+.dark .setup-title { color: #fff; }
+.setup-sub { margin-top: .125rem; font-size: .8125rem; color: var(--gray-500); }
+.setup-count { flex: none; font-size: .8125rem; font-weight: 600; font-variant-numeric: tabular-nums; color: var(--gray-700); }
+.dark .setup-count { color: var(--gray-200); }
+.setup-bar { height: .375rem; border-radius: 99px; background: var(--gray-100); overflow: hidden; }
+.dark .setup-bar { background: rgb(255 255 255 / .08); }
+.setup-bar span { display: block; height: 100%; border-radius: inherit; background: var(--success-500); }
+.setup-list { display: grid; }
+.setup-item { display: flex; align-items: center; gap: .75rem; padding: .75rem 0; border-top: 1px solid var(--gray-100); }
+.dark .setup-item { border-color: rgb(255 255 255 / .06); }
+.setup-item:first-child { border-top: 0; padding-top: .25rem; }
+.setup-icon { width: 1.25rem; height: 1.25rem; flex: none; color: var(--primary-600); }
+.dark .setup-icon { color: var(--primary-400); }
+.setup-text { flex: 1; min-width: 0; display: grid; gap: .125rem; }
+.setup-text strong { font-size: .9375rem; font-weight: 600; color: var(--gray-950); }
+.dark .setup-text strong { color: #fff; }
+.setup-text span { font-size: .8125rem; color: var(--gray-600); }
+.dark .setup-text span { color: var(--gray-400); }
+.setup-link { flex: none; }
+/* Los enlaces llevan a una sección de esta misma página: que el título no quede bajo la barra de arriba. */
+.fi-section[id] { scroll-margin-top: 5.5rem; }
+.setup-link:active { transform: scale(.97); }
+.setup-item.is-done { padding: .5rem 0; }
+.setup-item.is-done .setup-icon { color: var(--success-600); }
+.dark .setup-item.is-done .setup-icon { color: var(--success-400); }
+.setup-item.is-done .setup-text strong { font-weight: 500; color: var(--gray-500); }
+@media (max-width: 40rem) {
+    .setup { padding: 1rem; }
+    .setup-head { flex-direction: column; gap: .25rem; }
+    .setup-item { flex-wrap: wrap; align-items: flex-start; row-gap: .5rem; }
+    .setup-text { flex-basis: calc(100% - 2rem); }
+    .setup-link { margin-left: 2rem; }
+}
