@@ -3,7 +3,9 @@
 namespace App\Filament\Resources\Appointments\Schemas;
 
 use App\Enums\AppointmentOrigin;
+use App\Enums\DocumentType;
 use App\Enums\PatientRelationship;
+use App\Filament\Resources\Patients\Schemas\PatientForm;
 use App\Filament\Support\SlotPicker;
 use App\Models\Patient;
 use App\Models\TreatmentPlanItem;
@@ -161,23 +163,39 @@ class AppointmentForm
     public static function newPatientFields(): array
     {
         return [
-            TextInput::make('first_name')->label('Nombres')->required(),
-            TextInput::make('last_name')->label('Apellidos')->required(),
+            TextInput::make('first_name')->label('Nombres')->required()->live(onBlur: true),
+            TextInput::make('last_name')->label('Apellidos')->required()->live(onBlur: true),
             TextInput::make('phone')
                 ->label('Celular')
                 ->tel()
                 ->helperText('Si es un familiar a cargo, usa el celular del titular.')
+                ->live(onBlur: true)
                 ->rule(fn () => function (string $attribute, $value, $fail) {
                     if (filled($value) && ! Phone::isValid($value)) {
                         $fail('Escribe un celular válido de 9 dígitos.');
                     }
                 }),
-            Select::make('relationship')
-                ->label('Parentesco con el titular del celular')
-                ->options(PatientRelationship::class)
+            PatientForm::relationshipSelect()
+                ->helperText(null)
                 ->default(PatientRelationship::Self->value),
-            DatePicker::make('birth_date')->label('Fecha de nacimiento')->maxDate(today()),
-            TextInput::make('document_number')->label('DNI')->maxLength(20),
+            DatePicker::make('birth_date')->label('Fecha de nacimiento')->maxDate(today())->live(),
+            Grid::make(['default' => 3])
+                ->schema([
+                    Select::make('document_type')
+                        ->label('Documento')
+                        ->options(DocumentType::class)
+                        ->default(DocumentType::Dni->value)
+                        ->selectablePlaceholder(false)
+                        ->live(),
+                    PatientForm::documentNumberInput()
+                        ->label('Número')
+                        ->columnSpan(2),
+                ]),
+            // Si ya está registrado, se agenda a su nombre en vez de crear otro paciente.
+            PatientForm::duplicatesCheck(onPick: function (int $patientId, Set $set) {
+                $set('../new_patient', false);
+                $set('../patient_id', $patientId);
+            }),
         ];
     }
 }

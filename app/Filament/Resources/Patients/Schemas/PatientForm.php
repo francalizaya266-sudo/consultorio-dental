@@ -6,14 +6,23 @@ use App\Enums\AppointmentOrigin;
 use App\Enums\DocumentType;
 use App\Enums\PatientRelationship;
 use App\Enums\Sex;
+use App\Filament\Resources\Patients\PatientResource;
+use App\Models\Account;
+use App\Models\Patient;
+use App\Services\Patients\PatientRegistrar;
 use App\Support\Phone;
+use Closure;
 use Filament\Forms\Components\DatePicker;
+use Filament\Forms\Components\Radio;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\Textarea;
 use Filament\Forms\Components\TextInput;
 use Filament\Schemas\Components\Section;
 use Filament\Schemas\Components\Utilities\Get;
+use Filament\Schemas\Components\Utilities\Set;
 use Filament\Schemas\Schema;
+use Illuminate\Database\Eloquent\Model;
+use Illuminate\Support\Arr;
 use Illuminate\Validation\Rules\Unique;
 
 class PatientForm
@@ -28,31 +37,34 @@ class PatientForm
                         TextInput::make('first_name')
                             ->label('Nombres')
                             ->required()
-                            ->maxLength(100),
+                            ->maxLength(100)
+                            ->live(onBlur: true),
                         TextInput::make('last_name')
                             ->label('Apellidos')
                             ->required()
-                            ->maxLength(100),
+                            ->maxLength(100)
+                            ->live(onBlur: true),
                         self::phoneInput()
+                            ->live(onBlur: true)
                             ->visibleOn('create'),
-                        Select::make('relationship')
-                            ->label('Parentesco con el titular del celular')
-                            ->options(PatientRelationship::class)
-                            ->helperText('"Titular" si el celular es suyo.')
-                            ->visibleOn('create'),
+                        // Se corrige después si se registró mal (un niño que quedó como "Titular" del celular de su mamá).
+                        self::relationshipSelect()
+                            ->visible(fn (string $operation, ?Patient $record) => $operation === 'create' || $record?->account_id !== null),
                         Select::make('document_type')
                             ->label('Documento')
                             ->options(DocumentType::class)
                             ->default(DocumentType::Dni->value)
                             ->live(),
-                        TextInput::make('document_number')
-                            ->label('Número de documento')
-                            ->maxLength(20)
-                            ->unique(ignoreRecord: true, modifyRuleUsing: fn (Unique $rule, Get $get) => $rule->where('document_type', $get('document_type')))
+                        self::documentNumberInput()
+                            ->unique(ignoreRecord: true, modifyRuleUsing: fn (Unique $rule, Get $get) => $rule->where('document_type', $get('document_type') instanceof DocumentType ? $get('document_type')->value : $get('document_type')))
                             ->validationMessages(['unique' => 'Ya hay un paciente con este documento.']),
                         DatePicker::make('birth_date')
                             ->label('Fecha de nacimiento')
-                            ->maxDate(today()),
+                            ->maxDate(today())
+                            ->live(),
+                        // hiddenOn y no visibleOn: este campo ya decide cuándo se ve según lo que se encontró.
+                        self::duplicatesCheck()
+                            ->hiddenOn('edit'),
                         Select::make('sex')
                             ->label('Sexo')
                             ->options(Sex::class),
@@ -84,6 +96,117 @@ class PatientForm
                             ->columnSpanFull(),
                     ]),
             ]);
+    }
+
+    /**
+     * Parentesco con el titular del celular. Un celular tiene un solo titular: si ya lo tiene, se pide el
+     * parentesco con esa persona (así un niño no queda como "Titular" del celular de su mamá).
+     */
+    public static function relationshipSelect(): Select
+    {
+        return Select::make('relationship')
+            ->label('Parentesco con el titular del celular')
+            ->options(PatientRelationship::class)
+            ->helperText('"Titular" si el celular es suyo.')
+            ->rule(fn (Get $get, ?Model $record) => function (string $attribute, mixed $value, Closure $fail) use ($get, $record) {
+                $relationship = $value instanceof PatientRelationship ? $value : PatientRelationship::tryFrom((string) $value);
+                $phone = $get('phone');
+                $accountId = filled($phone) && Phone::isValid($phone)
+                    ? Account::query()->where('phone', Phone::normalize($phone))->value('id')
+                    : ($record instanceof Patient ? $record->account_id : null);
+
+                if ($relationship !== PatientRelationship::Self || $accountId === null) {
+                    return;
+                }
+
+                $holder = Patient::query()
+                    ->where('account_id', $accountId)
+                    ->where('relationship', PatientRelationship::Self)
+                    ->when($record instanceof Patient, fn ($query) => $query->whereKeyNot($record->getKey()))
+                    ->first();
+
+                if ($holder) {
+                    $fail('Este celular ya es de '.$holder->full_name.': elige el parentesco con esa persona.');
+                }
+            });
+    }
+
+    /** Número de documento: se guarda sin espacios ni guiones y se revisa según el tipo (el DNI tiene 8 dígitos). */
+    public static function documentNumberInput(string $typeField = 'document_type'): TextInput
+    {
+        return TextInput::make('document_number')
+            ->label('Número de documento')
+            ->maxLength(20)
+            ->live(onBlur: true)
+            ->mutateStateForValidationUsing(fn (?string $state) => DocumentType::clean($state))
+            ->dehydrateStateUsing(fn (?string $state) => DocumentType::clean($state))
+            ->rule(fn (Get $get) => function (string $attribute, mixed $value, Closure $fail) use ($get, $typeField) {
+                $type = $get($typeField);
+                $type = $type instanceof DocumentType ? $type : (DocumentType::tryFrom((string) $type) ?? DocumentType::Dni);
+
+                if (filled($value) && $type->pattern() !== null && ! preg_match($type->pattern(), (string) $value)) {
+                    $fail($type->invalidMessage());
+                }
+            });
+    }
+
+    /**
+     * Mientras se escribe el nombre, el documento, la fecha de nacimiento o el celular, los pacientes que ya
+     * están y podrían ser el mismo. Un paciente repetido parte su historia en dos: hay que elegir si es uno de
+     * ellos o es otra persona. Al elegir uno, $onPick decide qué hacer (abrir su ficha, usarlo en la cita).
+     *
+     * @param  string  $path  Dónde están los datos del paciente respecto de este campo ('' o '../patient.' por ejemplo).
+     * @param  Closure(int, Set, mixed): void|null  $onPick
+     */
+    public static function duplicatesCheck(string $path = '', ?Closure $onPick = null): Radio
+    {
+        // Se busca una vez por cada cambio de los datos, no una vez por cada parte del campo.
+        $found = [];
+        $candidates = function (Get $get) use ($path, &$found) {
+            $data = collect(['first_name', 'last_name', 'birth_date', 'document_number', 'phone'])
+                ->mapWithKeys(fn (string $field) => [$field => $get($path.$field)])
+                ->all();
+
+            return $found[md5(serialize($data))] ??= app(PatientRegistrar::class)->possibleDuplicates($data);
+        };
+
+        return Radio::make('same_as')
+            ->label(function (Get $get) use ($candidates) {
+                $found = $candidates($get);
+
+                return match (true) {
+                    $found->contains('reason', 'mismo documento') => 'Ya hay un paciente con este documento: ¿es él?',
+                    $found->every(fn (array $row) => $row['reason'] === 'mismo celular') => 'Este celular ya tiene a '.Arr::join($found->map(fn (array $row) => $row['patient']->first_name)->all(), ', ', ' y ').': ¿es uno de ellos?',
+                    default => '¿Ya está registrado? Encontramos pacientes parecidos',
+                };
+            })
+            ->helperText('Un paciente repetido parte su historia en dos.')
+            ->options(fn (Get $get) => $candidates($get)
+                ->mapWithKeys(fn (array $row) => [$row['patient']->getKey() => 'Es '.$row['patient']->full_name])
+                ->put('new', 'No, es otra persona')
+                ->all())
+            ->descriptions(fn (Get $get) => $candidates($get)
+                ->mapWithKeys(fn (array $row) => [$row['patient']->getKey() => collect([
+                    $row['patient']->document_number ? $row['patient']->document_type?->getLabel().' '.$row['patient']->document_number : null,
+                    $row['patient']->age !== null ? $row['patient']->age.' años' : null,
+                    $row['patient']->account ? Phone::display($row['patient']->account->phone) : null,
+                    $row['patient']->relationship && $row['reason'] === 'mismo celular' ? $row['patient']->relationship->getLabel() : null,
+                    ucfirst($row['reason']),
+                ])->filter()->implode(' · ')])
+                ->all())
+            ->visible(fn (Get $get) => $candidates($get)->isNotEmpty())
+            ->required()
+            ->validationMessages(['required' => 'Elige si es uno de ellos o es otra persona.'])
+            ->live()
+            ->afterStateUpdated(function (mixed $state, Set $set, $livewire) use ($onPick) {
+                if (filled($state) && $state !== 'new') {
+                    $onPick
+                        ? $onPick((int) $state, $set, $livewire)
+                        : $livewire->redirect(PatientResource::getUrl('view', ['record' => $state]));
+                }
+            })
+            ->dehydrated(false)
+            ->columnSpanFull();
     }
 
     /** Celular peruano; el de un menor o familiar a cargo es el del titular. */

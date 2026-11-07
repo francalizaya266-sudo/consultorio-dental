@@ -50,6 +50,7 @@ class PatientsAndSetupPanelTest extends TestCase
         $mother = Patient::factory()->create();
         $this->actingAs(User::factory()->reception()->create());
 
+        // El celular ya tiene a su mamá: se pregunta si es ella antes de registrarlo.
         Livewire::test(CreatePatient::class)
             ->fillForm([
                 'first_name' => 'Mateo',
@@ -57,6 +58,8 @@ class PatientsAndSetupPanelTest extends TestCase
                 'phone' => substr($mother->account->phone, 3),
                 'relationship' => PatientRelationship::Child->value,
             ])
+            ->assertSee('Este celular ya tiene a '.$mother->first_name.': ¿es uno de ellos?')
+            ->fillForm(['same_as' => 'new'])
             ->call('create')
             ->assertHasNoFormErrors();
 
