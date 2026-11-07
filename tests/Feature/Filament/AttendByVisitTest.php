@@ -89,6 +89,32 @@ class AttendByVisitTest extends TestCase
         $this->assertSame('Arco NiTi 0.016 · Higiene buena', $consultation->fresh()->procedureSummary());
     }
 
+    public function test_the_last_visit_brings_its_resin_shade_and_its_prescription_without_what_no_longer_suits(): void
+    {
+        [$doctor, $consultation] = $this->attend('curacion-con-resina');
+        $patient = $consultation->patient;
+        $before = Consultation::factory()->for($patient)->for($doctor)->create(['attended_at' => '2026-10-12 10:00', 'procedure_details' => ['tooth' => '36', 'shade' => 'A2']]);
+        $before->prescriptions()->create(['patient_id' => $patient->id, 'doctor_id' => $doctor->id, 'issued_at' => '2026-10-12 10:30'])
+            ->items()->createMany([['medication' => 'Amoxicilina 500 mg', 'instructions' => '1 cada 8 horas por 7 días'], ['medication' => 'Paracetamol 500 mg', 'instructions' => '1 cada 8 horas si hay dolor']]);
+        // Desde entonces se supo que es alérgica a la penicilina.
+        $patient->medicalBackground()->create(['allergies' => 'Penicilina']);
+        $this->actingAs($doctor->user);
+
+        $page = Livewire::test(EditConsultation::class, ['record' => $consultation->getRouteKey()])
+            ->assertSee(['La última: A2 · pieza 36 · 12 oct. 2026', 'Repetir la del 12/10: Amoxicilina 500 mg, Paracetamol 500 mg'])
+            ->callAction(TestAction::make('useLastShade')->schemaComponent('procedureDetails.procedure_details.shade'))
+            ->assertSchemaStateSet(['procedure_details.shade' => 'A2'])
+            ->callAction(TestAction::make('repeatPrescription')->schemaComponent('prescription'))
+            ->assertNotified('La receta anterior traía un medicamento que no le conviene')
+            ->call('save')
+            ->assertHasNoFormErrors();
+
+        $this->assertSame('A2', $consultation->fresh()->procedure_details['shade']);
+        $this->assertSame(['Paracetamol 500 mg'], $consultation->fresh()->prescription->items->pluck('medication')->all());
+        // Ya está todo lo que se podía repetir: el botón no vuelve a ofrecerlo.
+        $page->assertDontSee('Repetir la del 12/10');
+    }
+
     public function test_without_an_appointment_it_cannot_finish_without_a_reason(): void
     {
         $treatment = Treatment::where('slug', 'curacion-con-resina')->firstOrFail();

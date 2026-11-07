@@ -9,6 +9,7 @@ use App\Enums\TreatmentPlanStatus;
 use App\Models\Appointment;
 use App\Models\Consultation;
 use App\Models\Patient;
+use App\Models\Prescription;
 use App\Models\TreatmentPlan;
 use App\Models\TreatmentPlanInstallment;
 use App\Models\TreatmentPlanItem;
@@ -123,6 +124,56 @@ class PatientInsights
             ->first(fn (Consultation $previous) => filled($previous->vital_signs['blood_pressure'] ?? null));
 
         return $previous ? ['value' => $previous->vital_signs['blood_pressure'], 'on' => $previous->attended_at] : null;
+    }
+
+    /**
+     * Lo anotado la última vez en los datos que conviene recordar (el color de la resina, el arco, los conductos),
+     * de atenciones anteriores del paciente.
+     *
+     * @param  list<string>  $keys  Las claves de procedure_details que se buscan.
+     * @return array<string, array{value: string, tooth: string|null, on: CarbonInterface}> Clave => lo último anotado
+     */
+    public function lastDetails(Consultation $consultation, array $keys): array
+    {
+        if ($keys === []) {
+            return [];
+        }
+
+        $previous = $consultation->patient->consultations()
+            ->whereKeyNot($consultation->getKey())
+            ->whereNotNull('procedure_details')
+            ->where('attended_at', '<=', $consultation->attended_at ?? now())
+            ->latest('attended_at')
+            ->limit(30)
+            ->get(['id', 'attended_at', 'procedure_details']);
+
+        return collect($keys)
+            ->mapWithKeys(function (string $key) use ($previous) {
+                $last = $previous->first(fn (Consultation $consultation) => filled($consultation->procedure_details[$key] ?? null));
+
+                return [$key => $last ? [
+                    'value' => (string) $last->procedure_details[$key],
+                    'tooth' => filled($last->procedure_details['tooth'] ?? null) ? (string) $last->procedure_details['tooth'] : null,
+                    'on' => $last->attended_at,
+                ] : null];
+            })
+            ->filter()
+            ->all();
+    }
+
+    /**
+     * La última receta que se le dio en otra atención, con sus medicamentos.
+     */
+    public function lastPrescription(Consultation $consultation): ?Prescription
+    {
+        return Prescription::query()
+            ->where('patient_id', $consultation->patient_id)
+            ->where(fn ($prescriptions) => $prescriptions->whereNull('consultation_id')->orWhere('consultation_id', '!=', $consultation->getKey()))
+            ->whereHas('items')
+            ->with(['items' => fn ($items) => $items->orderBy('sort_order')->orderBy('id')])
+            ->latest('issued_at')
+            ->latest('id')
+            ->first();
     }
 
     /** El presupuesto que se le presentó hace una semana o más y no respondió. */

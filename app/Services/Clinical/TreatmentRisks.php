@@ -3,6 +3,7 @@
 namespace App\Services\Clinical;
 
 use App\Enums\TreatmentKind;
+use App\Filament\Support\ClinicalAlerts;
 use App\Models\Patient;
 
 /**
@@ -40,7 +41,7 @@ final class TreatmentRisks
             MedicationCheck::takesAnticoagulants($patient) && $kind->bleeds()
                 ? 'Anticoagulantes o coagulación: que no los deje sin hablar con su médico. Con warfarina, pide su INR reciente: con 3.5 o menos, por lo general se puede. Ten hemostático y sutura a mano.' : null,
             MedicationCheck::takesBoneDrugs($patient) && $kind->isSurgical()
-                ? 'Bifosfonatos: el hueso puede no sanar (osteonecrosis). Explícaselo y que quede en el consentimiento.' : null,
+                ? 'Bifosfonatos: el hueso puede no sanar (osteonecrosis). Explícaselo: su consentimiento ya lo dice.' : null,
             $background?->smoker && $kind->isSurgical()
                 ? 'Fuma: '.($kind === TreatmentKind::Implant ? 'más riesgo de que el implante falle' : 'más riesgo de alveolitis').'. Pídele que no fume al menos 72 horas.' : null,
             $kind === TreatmentKind::Whitening && ($pregnant || $background?->is_breastfeeding)
@@ -59,6 +60,40 @@ final class TreatmentRisks
                 ? 'Reacción a la anestesia: pregúntale qué pasó. Casi siempre fue un desmayo o palpitaciones por la epinefrina, no alergia.' : null,
             $hasConsent && $age !== null && $age < 18
                 ? 'Es menor de edad: el consentimiento lo firma su apoderado.' : null,
+        ]));
+    }
+
+    /**
+     * Lo mismo, dicho para el consentimiento: los riesgos que corre este paciente por sus antecedentes, en palabras
+     * que entiende quien firma (el paciente o su apoderado). Solo lo que cambia algo en este tratamiento.
+     *
+     * @return list<string>
+     */
+    public static function forConsent(Patient $patient, TreatmentKind $kind): array
+    {
+        $background = $patient->medicalBackground;
+        $has = fn (string $condition): bool => in_array($condition, $background?->conditions ?? [], true);
+        $works = $kind->usesAnesthesia() || $kind->bleeds() || $kind === TreatmentKind::Whitening;
+
+        return array_values(array_filter([
+            $works && ClinicalAlerts::meaningful($background?->allergies)
+                ? 'Tiene alergia a: '.rtrim(trim((string) $background->allergies), '.').'. No se usará ningún material ni medicamento que la contenga.' : null,
+            MedicationCheck::takesAnticoagulants($patient) && $kind->bleeds()
+                ? 'Por los anticoagulantes o el problema de coagulación, puede sangrar más durante y después del tratamiento. No debe dejar sus medicamentos sin indicación de su médico.' : null,
+            MedicationCheck::takesBoneDrugs($patient) && $kind->isSurgical()
+                ? 'Por los bifosfonatos u otros medicamentos para los huesos, existe el riesgo de que el hueso no sane después del tratamiento (osteonecrosis de los maxilares).' : null,
+            $has('diabetes') && $kind->isSurgical()
+                ? 'Por la diabetes, la herida puede tardar más en sanar y hay más riesgo de infección.' : null,
+            $background?->smoker && $kind->isSurgical()
+                ? ($kind === TreatmentKind::Implant ? 'Por fumar, hay más riesgo de que el implante no se una al hueso.' : 'Por fumar, hay más riesgo de que la herida se infecte (alveolitis).').' Se recomienda no fumar al menos 72 horas.' : null,
+            $has('hypertension') && $kind->usesAnesthesia()
+                ? 'Por la presión alta, se le tomará la presión antes de la anestesia. Si está muy alta, el tratamiento se puede postergar.' : null,
+            $has('heart_disease') && $kind->usesAnesthesia()
+                ? 'Por la enfermedad del corazón, la anestesia se usará en dosis reducida y, si su médico lo indica, tomará antibiótico antes.' : null,
+            $background?->is_pregnant && $kind->usesAnesthesia()
+                ? 'Por el embarazo, se usarán solo anestesia y medicamentos compatibles, y lo que pueda esperar se puede postergar.' : null,
+            $kind === TreatmentKind::Whitening && ($background?->is_pregnant || $background?->is_breastfeeding)
+                ? 'Por el embarazo o la lactancia, se recomienda postergar el blanqueamiento.' : null,
         ]));
     }
 }
