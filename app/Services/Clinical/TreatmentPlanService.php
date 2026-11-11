@@ -675,30 +675,34 @@ final class TreatmentPlanService
 
     /**
      * Texto del presupuesto para WhatsApp: un renglón por procedimiento, en el orden en que se hacen, con la pieza
-     * por su nombre, el diagnóstico que lo justifica, las sesiones y el precio.
+     * por su nombre, el diagnóstico que lo justifica, las sesiones y el precio. Un paquete va en un renglón con su
+     * precio y, debajo, lo que incluye.
      * "1. Curación con resina en el primer molar inferior izquierdo (pieza 36), cara oclusal, por caries de la dentina: S/ 150.00".
      */
     public function text(TreatmentPlan $plan): string
     {
         $diagnoses = $plan->diagnosesByTooth();
+        $describe = function (TreatmentPlanItem $item, int $quantity) use ($diagnoses): string {
+            $name = Teeth::nameOf($item->tooth);
+            $where = match (true) {
+                $name !== null => ' en el '.Str::lcfirst($name).' (pieza '.$item->tooth.')'.(($surfaces = Teeth::surfacesText($item->surfaces)) ? ', '.$surfaces : ''),
+                filled($item->tooth) => ' · pieza '.$item->tooth,
+                default => '',
+            };
+            $why = $diagnoses[(string) $item->tooth] ?? [];
 
-        return $plan->items
-            ->reject(fn (TreatmentPlanItem $item) => $item->status === PlanItemStatus::Cancelled)
-            ->values()
-            ->map(function (TreatmentPlanItem $item, int $i) use ($diagnoses) {
-                $name = Teeth::nameOf($item->tooth);
-                $where = match (true) {
-                    $name !== null => ' en el '.Str::lcfirst($name).' (pieza '.$item->tooth.')'.(($surfaces = Teeth::surfacesText($item->surfaces)) ? ', '.$surfaces : ''),
-                    filled($item->tooth) => ' · pieza '.$item->tooth,
-                    default => '',
-                };
-                $why = $diagnoses[(string) $item->tooth] ?? [];
+            return $item->description.($quantity > 1 ? " × {$quantity}" : '').$where
+                .($why !== [] ? ', por '.mb_strtolower(Arr::join($why, ', ', ' y ')) : '')
+                .($item->sessions_planned > 1 ? " · {$item->sessions_planned} sesiones" : '');
+        };
 
-                return ($i + 1).'. '.$item->description.($item->quantity > 1 ? " × {$item->quantity}" : '').$where
-                    .($why !== [] ? ', por '.mb_strtolower(Arr::join($why, ', ', ' y ')) : '')
-                    .($item->sessions_planned > 1 ? " · {$item->sessions_planned} sesiones" : '')
-                    .': '.Money::format($item->subtotal());
-            })
+        return TreatmentPlan::lines($plan->items->reject(fn (TreatmentPlanItem $item) => $item->status === PlanItemStatus::Cancelled)->values())
+            ->map(fn (array $line, int $i) => ($i + 1).'. '.($line['package']
+                ? $line['label'].': '.Money::format($line['price']).'. Incluye:'."\n".$line['items']
+                    ->groupBy(fn (TreatmentPlanItem $item) => $describe($item, 1))
+                    ->map(fn (Collection $same) => '   - '.$describe($same->first(), (int) $same->sum('quantity')))
+                    ->implode("\n")
+                : $describe($line['items']->first(), (int) $line['items']->first()->quantity).': '.Money::format($line['price'])))
             ->implode("\n");
     }
 

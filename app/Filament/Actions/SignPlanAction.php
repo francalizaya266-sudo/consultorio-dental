@@ -186,7 +186,11 @@ final class SignPlanAction
     /** @param  Collection<int, TreatmentPlanItem>  $items */
     private static function itemsHtml(Collection $items): string
     {
-        $rows = $items->map(fn (TreatmentPlanItem $item) => '<li>'.e($item->label()).($item->quantity > 1 ? ' × '.$item->quantity : '').': '.e(Money::format($item->subtotal())).'</li>')->implode('');
+        $rows = TreatmentPlan::lines($items)
+            ->map(fn (array $line) => '<li>'.e($line['label']).': '.e(Money::format($line['price']))
+                .($line['contents'] !== [] ? '<br><span style="color: var(--gray-500); font-size: .875em">Incluye: '.e(implode(' · ', $line['contents'])).'</span>' : '')
+                .'</li>')
+            ->implode('');
 
         return '<ul style="list-style: disc; padding-left: 1.25rem">'.$rows.'</ul>'
             .'<p style="margin-top: .5rem; font-size: 1.05rem"><strong>Total: '.e(Money::format($items->sum(fn (TreatmentPlanItem $item) => $item->subtotal()))).'</strong></p>';

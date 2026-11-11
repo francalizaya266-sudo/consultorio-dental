@@ -89,8 +89,9 @@ final class VisitCloseOut
         $first = $plan->accepted_at === null;
         $items = $plan->itemsToAccept();
         $canSign = $user->can('update', $plan);
-        $names = $items->take(3)->map(fn (TreatmentPlanItem $item) => $item->label())->implode(' · ')
-            .($items->count() > 3 ? ' y '.($items->count() - 3).' más' : '');
+        $lines = TreatmentPlan::lines($items);
+        $names = $lines->take(3)->pluck('label')->implode(' · ')
+            .($lines->count() > 3 ? ' y '.($lines->count() - 3).' más' : '');
         $until = $plan->validUntil();
 
         return [

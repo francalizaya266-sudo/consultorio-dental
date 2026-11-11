@@ -5,6 +5,7 @@ namespace Tests\Feature\Filament;
 use App\Enums\ToothState;
 use App\Filament\Resources\Consultations\Pages\EditConsultation;
 use App\Filament\Resources\Consultations\Pages\ViewConsultation;
+use App\Filament\Resources\Patients\RelationManagers\TreatmentPlansRelationManager;
 use App\Models\Consultation;
 use App\Models\Doctor;
 use App\Models\OdontogramCondition;
@@ -99,13 +100,25 @@ class PackageAtTheVisitTest extends TestCase
         // Con la curación de 26 aparte, el pago único y las cuotas se calculan sobre todo el plan.
         $options = ['Pago único de S/ 950.00 (con S/ 200.00 de descuento por pagar todo junto).', 'En cuotas: inicial de S/ 500.00 y 5 cuotas mensuales de S/ 130.00.'];
         $this->assertSame($options, app(TreatmentPlanService::class)->paymentOptions($plan));
-        $this->assertStringContainsString("Formas de pago:\n• ".$options[0], app(WhatsAppOutbox::class)->draft(app(TreatmentPlanService::class)->whatsappDraft($plan)));
+
+        // Al paciente el paquete le llega en un renglón, con su precio y lo que incluye: su precio no se reparte a la vista.
+        $whatsapp = app(WhatsAppOutbox::class)->draft(app(TreatmentPlanService::class)->whatsappDraft($plan));
+        $this->assertStringContainsString("1. Paquete Ortodoncia: S/ 1,000.00. Incluye:\n   - Curación con resina en el ", $whatsapp);
+        $this->assertStringContainsString("   - Control de ortodoncia × 2\n   - Colocación de brackets\n2. Curación con resina en el ", $whatsapp);
+        $this->assertStringContainsString("Formas de pago:\n• ".$options[0], $whatsapp);
 
         app(ConsultationService::class)->close($this->evaluation, $this->doctor->user);
 
         Livewire::test(ViewConsultation::class, ['record' => $this->evaluation->getRouteKey()])
-            ->assertSeeInOrder(['Presupuesto por aceptar: S/ 1,150.00', 'Formas de pago, se elige al firmar: pago único de S/ 950.00'])
-            ->assertSeeInOrder(['Formas de pago, se elige al firmar:', 'En cuotas: inicial de S/ 500.00 y 5 cuotas mensuales de S/ 130.00.', 'Total', 'S/ 1,150.00']);
+            ->assertSeeInOrder(['Presupuesto por aceptar: S/ 1,150.00', 'Paquete Ortodoncia · Curación con resina · pieza 26 (O) · vale hasta el', 'Formas de pago, se elige al firmar: pago único de S/ 950.00'])
+            ->assertSeeInOrder(['Paquete Ortodoncia', 'S/ 1,000.00', 'Curación con resina · pieza 16 (O)', 'Por hacer', 'Control de ortodoncia', 'Colocación de brackets', 'Curación con resina · pieza 26 (O)', 'S/ 150.00'])
+            ->assertSeeInOrder(['Formas de pago, se elige al firmar:', 'En cuotas: inicial de S/ 500.00 y 5 cuotas mensuales de S/ 130.00.', 'Total', 'S/ 1,150.00'])
+            ->mountAction('acceptPlan')
+            ->assertMountedActionModalSee(['Paquete Ortodoncia: S/ 1,000.00', 'Incluye: Curación con resina · pieza 16 (O) · Control de ortodoncia × 2 · Colocación de brackets', 'Curación con resina · pieza 26 (O): S/ 150.00', 'Total: S/ 1,150.00']);
+
+        $this->get(TreatmentPlansRelationManager::printUrl($plan))
+            ->assertOk()
+            ->assertSeeInOrder(['Paquete Ortodoncia', 'Curación con resina', 'Control de ortodoncia', 'Colocación de brackets', 'S/ 1,000.00', 'Curación con resina', 'S/ 150.00', 'Total', 'S/ 1,150.00']);
     }
 
     public function test_what_the_doctor_puts_inside_the_package_does_not_raise_its_price(): void

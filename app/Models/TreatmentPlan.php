@@ -11,6 +11,7 @@ use Carbon\CarbonInterface;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Attributes\Scope;
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Database\Eloquent\Collection as EloquentCollection;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
@@ -228,6 +229,39 @@ class TreatmentPlan extends Model
             ])
             ->values()
             ->all();
+    }
+
+    /**
+     * Lo del plan como se le muestra al paciente: cada paquete en una sola línea, con su precio y lo que
+     * incluye (su precio no se reparte a la vista), y lo demás, cada procedimiento con el suyo.
+     *
+     * @param  Collection<int, TreatmentPlanItem>  $items
+     * @return Collection<int, array{label: string, price: float, package: bool, contents: list<string>, items: Collection<int, TreatmentPlanItem>}>
+     */
+    public static function lines(Collection $items): Collection
+    {
+        EloquentCollection::make($items->all())->loadMissing('package');
+
+        return $items
+            ->groupBy(fn (TreatmentPlanItem $item) => $item->treatment_package_id !== null ? 'package-'.$item->treatment_package_id : 'item-'.$item->getKey())
+            ->map(function (Collection $group) {
+                $first = $group->first();
+                $package = $first->treatment_package_id !== null;
+
+                return [
+                    'label' => $package ? 'Paquete '.$first->package->name : $first->label().($first->quantity > 1 ? ' × '.$first->quantity : ''),
+                    'price' => round($group->sum(fn (TreatmentPlanItem $item) => $item->subtotal()), 2),
+                    'package' => $package,
+                    'contents' => $package
+                        ? $group->groupBy(fn (TreatmentPlanItem $item) => $item->label())
+                            ->map(fn (Collection $same, string $label) => $label.(($quantity = $same->sum('quantity')) > 1 ? ' × '.$quantity : ''))
+                            ->values()
+                            ->all()
+                        : [],
+                    'items' => $group->values(),
+                ];
+            })
+            ->values();
     }
 
     /** El paquete 2x1 del plan, si tiene uno: con el mismo pago se atiende también a otra persona. */

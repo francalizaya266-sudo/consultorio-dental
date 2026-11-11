@@ -20,6 +20,7 @@
         .fine { margin-top: 16px; font-size: .8rem; color: var(--muted); }
         .payment { margin-top: 16px; }
         .package { margin: 10px 0 0; }
+        .package-items { margin: 4px 0 0; padding-left: 18px; font-size: .85rem; }
         .payment h3 { font-size: .95rem; margin: 0 0 6px; }
         .tag { font-size: .75rem; font-weight: 700; color: #b45309; }
         .signed { display: flex; justify-content: space-around; gap: 24px; margin-top: 32px; align-items: flex-end; flex-wrap: wrap; }
@@ -67,7 +68,42 @@
             </tr>
         </thead>
         <tbody>
-            @foreach ($items as $item)
+            @foreach (\App\Models\TreatmentPlan::lines($items) as $line)
+                @if ($line['package'])
+                    {{-- El paquete va en un renglón, con su precio normal, lo que ahorra y lo que incluye. --}}
+                    <tr>
+                        <td>{{ $loop->iteration }}</td>
+                        <td>
+                            <strong>{{ $line['label'] }}</strong>
+                            <ul class="package-items">
+                                @foreach ($line['items']->groupBy(fn ($item) => $item->description.'|'.$item->tooth.'|'.$item->surfaces) as $same)
+                                    @php($item = $same->first())
+                                    <li>
+                                        {{ $item->description }}@if (($quantity = $same->sum('quantity')) > 1) × {{ $quantity }}@endif
+                                        @if ($why = $diagnoses[(string) $item->tooth] ?? [])
+                                            <span class="why">· por {{ \Illuminate\Support\Arr::join($why, ', ', ' y ') }}</span>
+                                        @endif
+                                        @if ($item->sessions_planned > 1)
+                                            <span class="muted">· {{ $item->sessions_planned }} sesiones</span>
+                                        @endif
+                                        @if ($plan->accepted_at && ! $item->accepted_at)
+                                            <span class="tag">· agregado, falta la firma</span>
+                                        @endif
+                                    </li>
+                                @endforeach
+                            </ul>
+                        </td>
+                        @if ($clinical)
+                            <td>{{ $line['items']->map(fn ($item) => collect([$item->tooth, $item->surfaces])->filter()->implode(' '))->filter()->implode(', ') ?: '—' }}</td>
+                        @endif
+                        <td class="num">1</td>
+                        <td class="num">{{ Money::format($line['items']->sum(fn ($item) => $item->quantity * (float) $item->unit_price)) }}</td>
+                        <td class="num">{{ ($discount = $line['items']->sum(fn ($item) => (float) $item->discount)) > 0 ? '− '.Money::format($discount) : '—' }}</td>
+                        <td class="num">{{ Money::format($line['price']) }}</td>
+                    </tr>
+                    @continue
+                @endif
+                @php($item = $line['items']->first())
                 <tr>
                     <td>{{ $loop->iteration }}</td>
                     <td>
@@ -75,8 +111,8 @@
                         @if ($why = $diagnoses[(string) $item->tooth] ?? [])
                             <div class="why">Por: {{ \Illuminate\Support\Arr::join($why, ', ', ' y ') }}</div>
                         @endif
-                        @if ($item->sessions_planned > 1 || $item->package)
-                            <div class="muted">{{ collect([$item->sessions_planned > 1 ? $item->sessions_planned.' sesiones' : null, $item->package ? 'Paquete '.$item->package->name : null])->filter()->implode(' · ') }}</div>
+                        @if ($item->sessions_planned > 1)
+                            <div class="muted">{{ $item->sessions_planned }} sesiones</div>
                         @endif
                         @if ($plan->accepted_at && ! $item->accepted_at)
                             <div class="tag">Agregado: falta la firma del paciente</div>

@@ -1533,6 +1533,10 @@ a.ap-visit:hover { background: var(--gray-50); }
 .dark .visit-plan-name, .dark .visit-plan-price, .dark .visit-plan-foot strong { color: #fff; }
 .dark .visit-plan-items li.is-done .visit-plan-name, .dark .visit-plan-items li.is-done .visit-plan-price { color: var(--gray-500); }
 .dark .visit-plan-foot { border-color: rgb(255 255 255 / .1); color: var(--gray-400); }
+.visit-plan-package > .visit-plan-name { font-weight: 600; }
+.visit-plan-package-items { grid-column: 1 / -1; display: grid; margin: .2rem 0 0 .2rem; padding-left: .75rem; border-left: 2px solid var(--gray-200); }
+.visit-plan-items .visit-plan-package-items li { padding: .3rem 0; border-top: 0; }
+.dark .visit-plan-package-items { border-color: rgb(255 255 255 / .1); }
 .visit-plan-options { margin-top: .25rem; padding: .6rem .75rem; border-radius: .5rem; background: var(--gray-50); font-size: .8125rem; color: var(--gray-700); }
 .visit-plan-options ul { margin-top: .2rem; padding-left: 1.1rem; list-style: disc; display: grid; gap: .15rem; }
 .dark .visit-plan-options { background: rgb(255 255 255 / .04); color: var(--gray-300); }
