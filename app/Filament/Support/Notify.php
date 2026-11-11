@@ -12,7 +12,10 @@ use Illuminate\Auth\Access\AuthorizationException;
 /** Ejecuta una acción del panel y muestra el resultado (o el motivo del error) en español simple. */
 final class Notify
 {
-    public static function run(Closure $callback, string $success, ?Action $action = null): void
+    /**
+     * @param  (Closure(Notification): Notification)|null  $decorate  Completa el aviso de éxito (un detalle, un botón) antes de mostrarlo.
+     */
+    public static function run(Closure $callback, string $success, ?Action $action = null, ?Closure $decorate = null): void
     {
         try {
             $callback();
@@ -23,7 +26,9 @@ final class Notify
             return;
         }
 
-        Notification::make()->success()->title($success)->send();
+        $notification = Notification::make()->success()->title($success);
+
+        ($decorate ? $decorate($notification) : $notification)->send();
     }
 
     /**

@@ -37,9 +37,6 @@ final class SlotPicker
      */
     public static function fields(?Appointment $moving = null): array
     {
-        /** @var User $user */
-        $user = auth()->user();
-        $ownDoctorId = $user->managesAllAgendas() ? null : $user->doctorId();
         $suggest = fn (Set $set, Get $get) => $set('slot', self::suggestedSlot($get, $moving));
 
         return [
@@ -54,35 +51,8 @@ final class SlotPicker
                 ->dehydrated(false),
 
             // Primero qué se hace y después con quién: así lo cuenta el paciente al llamar.
-            Select::make('treatment_id')
-                ->label('Tratamiento')
-                ->options(fn (Get $get) => Treatment::query()
-                    ->active()
-                    ->when($get('doctor_id'), fn ($q, $doctorId) => $q->whereHas('doctors', fn ($d) => $d->whereKey($doctorId)))
-                    ->orderBy('sort_order')
-                    ->pluck('name', 'id'))
-                ->default($moving?->treatment_id ?? (request()->integer('treatment') ?: null))
-                ->hidden($moving !== null)
-                ->dehydrated($moving === null)
-                ->required($moving === null)
-                ->searchable()
-                ->live()
-                ->afterStateUpdated($suggest),
-
-            Select::make('doctor_id')
-                ->label('Doctor')
-                // Solo quienes hacen el tratamiento elegido (si ya hay uno).
-                ->options(fn (Get $get) => Doctor::query()
-                    ->active()
-                    ->when($moving?->treatment_id ?? $get('treatment_id'), fn ($q, $treatmentId) => $q->whereHas('treatments', fn ($t) => $t->whereKey($treatmentId)))
-                    ->orderBy('sort_order')
-                    ->pluck('name', 'id'))
-                ->default(fn () => $moving?->doctor_id ?? $ownDoctorId ?? (request()->integer('doctor') ?: null) ?? self::onlyActiveDoctorId())
-                ->disabled($ownDoctorId !== null)
-                ->dehydrated()
-                ->required()
-                ->live()
-                ->afterStateUpdated($suggest),
+            self::treatmentSelect($moving)->afterStateUpdated($suggest),
+            self::doctorSelect($moving)->afterStateUpdated($suggest),
 
             DatePicker::make('date')
                 ->label('Día')
@@ -125,6 +95,45 @@ final class SlotPicker
                 ->visible(fn (Get $get) => (bool) $get('manual'))
                 ->required(fn (Get $get) => (bool) $get('manual')),
         ];
+    }
+
+    /** Qué se hace: solo lo que realiza el doctor elegido (si ya hay uno). */
+    public static function treatmentSelect(?Appointment $moving = null): Select
+    {
+        return Select::make('treatment_id')
+            ->label('Tratamiento')
+            ->options(fn (Get $get) => Treatment::query()
+                ->active()
+                ->when($get('doctor_id'), fn ($q, $doctorId) => $q->whereHas('doctors', fn ($d) => $d->whereKey($doctorId)))
+                ->orderBy('sort_order')
+                ->pluck('name', 'id'))
+            ->default($moving?->treatment_id ?? (request()->integer('treatment') ?: null))
+            ->hidden($moving !== null)
+            ->dehydrated($moving === null)
+            ->required($moving === null)
+            ->searchable()
+            ->live();
+    }
+
+    /** Con quién: solo quienes hacen el tratamiento elegido (si ya hay uno). El doctor solo agenda con él mismo. */
+    public static function doctorSelect(?Appointment $moving = null): Select
+    {
+        /** @var User $user */
+        $user = auth()->user();
+        $ownDoctorId = $user->managesAllAgendas() ? null : $user->doctorId();
+
+        return Select::make('doctor_id')
+            ->label('Doctor')
+            ->options(fn (Get $get) => Doctor::query()
+                ->active()
+                ->when($moving?->treatment_id ?? $get('treatment_id'), fn ($q, $treatmentId) => $q->whereHas('treatments', fn ($t) => $t->whereKey($treatmentId)))
+                ->orderBy('sort_order')
+                ->pluck('name', 'id'))
+            ->default(fn () => $moving?->doctor_id ?? $ownDoctorId ?? (request()->integer('doctor') ?: null) ?? self::onlyActiveDoctorId())
+            ->disabled($ownDoctorId !== null)
+            ->dehydrated()
+            ->required()
+            ->live();
     }
 
     /** Fecha y hora elegidas en el formulario. */

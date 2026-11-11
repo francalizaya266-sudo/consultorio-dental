@@ -7,6 +7,7 @@ use App\Enums\MessageTemplateKey;
 use App\Filament\Resources\Appointments\Pages\ViewAppointment;
 use App\Filament\Resources\Consultations\ConsultationResource;
 use App\Filament\Resources\Patients\PatientResource;
+use App\Filament\Support\ArrivalChecklist;
 use App\Filament\Support\Notify;
 use App\Filament\Support\SlotPicker;
 use App\Models\Appointment;
@@ -103,9 +104,11 @@ final class AppointmentActions
             ->color('info')
             ->visible(fn (Appointment $record) => $record->status->isChangeable() && $record->starts_at->isToday())
             ->authorize('update')
+            // Al llegar se dice lo que conviene resolver mientras espera: datos que faltan, deuda, laboratorio.
             ->action(fn (Appointment $record) => Notify::run(
                 fn () => app(AppointmentService::class)->markArrived($record, auth()->user()),
                 'Paciente en sala',
+                decorate: fn (Notification $notification) => ArrivalChecklist::addTo($notification, $record, auth()->user()),
             ));
     }
 

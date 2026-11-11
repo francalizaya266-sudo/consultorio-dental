@@ -49,10 +49,11 @@ final class CreateAppointmentAction
      * se registra en la misma transacción (si el horario ya se ocupó, no queda un paciente suelto).
      *
      * @param  array<string, mixed>  $data
+     * @param  bool  $walkIn  Llegó sin cita: toma el primer hueco de hoy y queda en sala de una vez.
      */
-    public static function book(array $data): Appointment
+    public static function book(array $data, bool $walkIn = false): Appointment
     {
-        return DB::transaction(function () use ($data) {
+        return DB::transaction(function () use ($data, $walkIn) {
             $patient = ($data['new_patient'] ?? false)
                 ? app(PatientRegistrar::class)->register(array_filter($data['patient'] ?? [], fn ($value) => $value !== null && $value !== ''))
                 : Patient::findOrFail($data['patient_id']);
@@ -61,19 +62,18 @@ final class CreateAppointmentAction
                 ? app(TreatmentPlanService::class)->workableItems($patient)->firstWhere('id', (int) $data['treatment_plan_item_id'])
                 : null;
 
-            $appointment = app(AppointmentService::class)->bookFromStaff(
-                auth()->user(),
-                $patient,
-                Doctor::findOrFail($data['doctor_id']),
-                Treatment::findOrFail($data['treatment_id']),
-                SlotPicker::startsAt($data),
-                [
-                    'origin' => $data['origin'] ?? null,
-                    'fixed_date' => (bool) ($data['fixed_date'] ?? false),
-                    'internal_notes' => $data['internal_notes'] ?? null,
-                    'treatment_plan_item_id' => $planItem?->getKey(),
-                ],
-            );
+            $doctor = Doctor::findOrFail($data['doctor_id']);
+            $treatment = Treatment::findOrFail($data['treatment_id']);
+            $options = [
+                'origin' => $data['origin'] ?? null,
+                'fixed_date' => (bool) ($data['fixed_date'] ?? false),
+                'internal_notes' => $data['internal_notes'] ?? null,
+                'treatment_plan_item_id' => $planItem?->getKey(),
+            ];
+
+            $appointment = $walkIn
+                ? app(AppointmentService::class)->walkIn(auth()->user(), $patient, $doctor, $treatment, $options)
+                : app(AppointmentService::class)->bookFromStaff(auth()->user(), $patient, $doctor, $treatment, SlotPicker::startsAt($data), $options);
 
             // Agendar una sesión no es aceptar el plan: solo si recepción marcó que el paciente lo aceptó.
             // Si no, al menos ya se le presentó.

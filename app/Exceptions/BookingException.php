@@ -2,6 +2,7 @@
 
 namespace App\Exceptions;
 
+use App\Models\Doctor;
 use App\Models\WaitlistEntry;
 use RuntimeException;
 
@@ -23,6 +24,11 @@ class BookingException extends RuntimeException
     public static function held(WaitlistEntry $hold): self
     {
         return new self("Ese horario está apartado para {$hold->patient->full_name} (lista de espera) hasta las {$hold->held_until->format('H:i')}, mientras responde. Si ya no lo quiere, libéralo en la lista de espera.");
+    }
+
+    public static function noRoomToday(Doctor $doctor): self
+    {
+        return new self("{$doctor->name} ya no tiene un hueco hoy para ese tratamiento. Elige otro doctor, o agéndalo con \"Nueva cita\" para otro día.");
     }
 
     public static function outsideWorkingHours(): self

@@ -4,6 +4,7 @@ namespace App\Filament\Pages;
 
 use App\Filament\Actions\CreateAppointmentAction;
 use App\Filament\Actions\RegisterPaymentAction;
+use App\Filament\Actions\WalkInAction;
 use App\Filament\Resources\Appointments\AppointmentResource;
 use App\Filament\Resources\WaitlistEntries\WaitlistEntryResource;
 use App\Filament\Widgets\DayMomentCard;
@@ -89,6 +90,8 @@ class Dashboard extends BaseDashboard
     {
         return [
             CreateAppointmentAction::make('newAppointment')
+                ->visible(fn () => AppointmentResource::canCreate()),
+            WalkInAction::make()
                 ->visible(fn () => AppointmentResource::canCreate()),
             RegisterPaymentAction::make()->color('gray'),
             Action::make('waitlist')
