@@ -1151,6 +1151,9 @@ button.pt-chip { transition: transform 160ms ease-out; }
 .dash-appt-time .fi-ta-text-description { font-size: .72rem; color: var(--gray-500); white-space: nowrap; }
 .dash-appt-next { border-top: 2px dashed var(--danger-400) !important; }
 .dash-appt-next::before { content: "Ahora"; position: absolute; top: 0; left: .6rem; transform: translateY(-55%); z-index: 2; padding: .05rem .45rem; border-radius: 999px; background: var(--danger-500); color: #fff; font-size: .62rem; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; pointer-events: none; }
+/* Teléfono y doctor: si no entran en una línea, el doctor baja entero y el teléfono no se parte en dos. */
+.dash-appt .fi-ta-stack .fi-ta-split { flex-wrap: wrap; row-gap: .125rem; }
+.dash-appt .fi-ta-stack .fi-ta-split > .fi-ta-col:first-child .fi-ta-text { white-space: nowrap; }
 /* En el celular, el estado y las etiquetas bajan debajo del nombre para que el nombre no se parta en tres líneas. */
 @media (max-width: 40rem) {
     .dash-appt .fi-ta-record-content > .fi-grid-col > .fi-ta-split { flex-wrap: wrap; row-gap: .4rem; }
@@ -1523,10 +1526,18 @@ a.ap-visit:hover { background: var(--gray-50); }
     .stock-count > .fi-sc:last-child .fi-ac > .fi-btn:not(:first-child) { display: none; }
 }
 
-/* Laptops chicas (hasta 1400 px): el menú más angosto y menos margen, para que las tablas entren sin barra. */
-@media (min-width: 64rem) and (max-width: 87.5rem) {
+/* En las columnas marcadas, el nombre (.wraps-name) o lo que va debajo del dato (.wraps-description) baja de línea
+   cuando la tabla no entra, antes de sacar de la pantalla los botones de la fila. El teléfono y la fecha no se parten. */
+.fi-ta-cell.wraps-name .fi-ta-text-item,
+.fi-ta-cell.wraps-description .fi-ta-text-description { white-space: normal; }
+/* Avisos: el mensaje a la vista no se lleva el ancho que necesitan el nombre del paciente y el del doctor (en laptop, menos aún). */
+.fi-ta-cell.wa-preview .fi-ta-text { max-width: 18rem; }
+
+/* Laptops (hasta 1535 px, incluye las de 1440): el menú más angosto y menos margen, para que las tablas entren sin barra. */
+@media (min-width: 64rem) and (max-width: 95.99rem) {
     html:root { --sidebar-width: 17rem; }
     .fi-main { padding-inline: 1.25rem; }
+    .fi-ta-cell.wa-preview .fi-ta-text { max-width: 13rem; }
 }
 
 /* Quién está conectado: nombre y rol junto a la foto (en pantallas anchas) y al abrir el menú del usuario. */

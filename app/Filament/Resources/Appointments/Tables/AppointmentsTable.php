@@ -73,12 +73,15 @@ class AppointmentsTable
                 ->label('Paciente')
                 ->formatStateUsing(fn (Appointment $record) => $record->patient->full_name)
                 ->description(fn (Appointment $record) => $record->patient->account ? Phone::display($record->patient->account->phone) : null)
-                ->searchable(query: fn (Builder $query, string $search) => $query->whereHas('patient', fn (Builder $p) => $p->search($search))),
+                ->searchable(query: fn (Builder $query, string $search) => $query->whereHas('patient', fn (Builder $p) => $p->search($search)))
+                // En una laptop, un nombre largo baja de línea antes de sacar de la pantalla los botones de la fila.
+                ->extraCellAttributes(['class' => 'wraps-name']),
             TextColumn::make('treatment.name')
                 ->label('Tratamiento')
                 ->wrap(),
             TextColumn::make('doctor.name')
                 ->label('Doctor')
+                ->wrap()
                 ->visible($showDoctor),
             TextColumn::make('status')
                 ->label('Estado')
