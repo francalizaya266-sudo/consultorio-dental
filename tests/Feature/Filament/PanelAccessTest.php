@@ -225,6 +225,23 @@ class PanelAccessTest extends TestCase
         $this->assertTrue(Hash::check('clave-nueva-2026', $reception->fresh()->password));
     }
 
+    public function test_my_profile_says_plainly_when_the_two_new_passwords_do_not_match(): void
+    {
+        $reception = User::factory()->reception()->create();
+        $this->actingAs($reception);
+
+        Livewire::test(EditProfile::class)
+            ->fillForm([
+                'password' => 'clave-nueva-2026',
+                'passwordConfirmation' => 'clave-nueva-2027',
+                'currentPassword' => 'password',
+            ])
+            ->call('save')
+            ->assertHasFormErrors(['password' => 'Las dos contraseñas no coinciden.']);
+
+        $this->assertTrue(Hash::check('password', $reception->fresh()->password));
+    }
+
     public function test_errors_explain_what_happened_in_spanish_and_offer_a_way_out(): void
     {
         $this->seed(CatalogSeeder::class);

@@ -1810,3 +1810,18 @@ a.ap-visit:hover { background: var(--gray-50); }
     .fi-no.fi-vertical-align-start { flex-direction: column; justify-content: flex-end; }
 }
 
+
+/* ---------- "¿Olvidaste tu contraseña?" sin correo en el hosting ---------- */
+
+/* No hay formulario que llenar: una nota que dice a quién pedirle la contraseña nueva. */
+.auth-note { display: grid; gap: .5rem; padding: 1rem 1.1rem; border-radius: .85rem; background: var(--primary-50); box-shadow: inset 0 0 0 1px var(--primary-200); font-size: .9375rem; line-height: 1.5; color: var(--gray-700); }
+.auth-note-lead { font-size: 1rem; font-weight: 600; color: var(--gray-950); }
+.auth-note-muted { font-size: .8125rem; color: var(--gray-500); }
+.dark .auth-note { background: color-mix(in oklab, var(--primary-400) 12%, transparent); box-shadow: inset 0 0 0 1px color-mix(in oklab, var(--primary-400) 30%, transparent); color: var(--gray-300); }
+.dark .auth-note-lead { color: #fff; }
+.dark .auth-note-muted { color: var(--gray-400); }
+
+/* ---------- Errores de un campo: empiezan con mayúscula ---------- */
+
+/* El mensaje arranca con el nombre del campo, que llega en minúscula ("contraseña debe tener al menos 8 caracteres."). */
+.fi-fo-field-wrp-error-message::first-letter { text-transform: uppercase; }

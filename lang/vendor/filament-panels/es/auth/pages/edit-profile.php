@@ -20,7 +20,7 @@ return [
     'notifications' => [
 
         'throttled' => [
-            'title' => 'Demasiados intentos. Vuelve a intentarlo en :seconds segundos.',
+            'title' => 'Demasiados intentos',
             'body' => 'Vuelve a intentarlo en :seconds segundos.',
         ],
 
