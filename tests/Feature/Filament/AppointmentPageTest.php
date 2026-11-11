@@ -190,6 +190,20 @@ class AppointmentPageTest extends TestCase
             ->assertDontSee('Falta de esta cita');
     }
 
+    public function test_the_notes_window_saves_with_a_button_that_says_guardar(): void
+    {
+        $appointment = $this->appointment('2026-11-03 10:00');
+        $this->actingAs(User::factory()->reception()->create());
+
+        $page = Livewire::test(ViewAppointment::class, ['record' => $appointment->getKey()])->mountAction('notes');
+
+        // No se envía nada a nadie: el botón de una ventana que guarda dice "Guardar".
+        $this->assertSame('Guardar', $page->instance()->getMountedAction()->getModalSubmitAction()->getLabel());
+
+        $page->setActionData(['internal_notes' => 'Prefiere la tarde'])->callMountedAction()->assertHasNoActionErrors();
+        $this->assertSame('Prefiere la tarde', $appointment->fresh()->internal_notes);
+    }
+
     /** Una cita con el doctor de la prueba, reservada "ahora" (lunes 8:00) salvo que se diga otra cosa. */
     private function appointment(string $startsAt, array $attributes = []): Appointment
     {

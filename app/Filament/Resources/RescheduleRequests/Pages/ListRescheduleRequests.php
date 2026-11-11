@@ -3,6 +3,7 @@
 namespace App\Filament\Resources\RescheduleRequests\Pages;
 
 use App\Enums\RescheduleRequestStatus;
+use App\Filament\Concerns\HasNoBreadcrumbs;
 use App\Filament\Resources\RescheduleRequests\RescheduleRequestResource;
 use Filament\Resources\Pages\ListRecords;
 use Filament\Schemas\Components\Tabs\Tab;
@@ -10,6 +11,8 @@ use Illuminate\Database\Eloquent\Builder;
 
 class ListRescheduleRequests extends ListRecords
 {
+    use HasNoBreadcrumbs;
+
     protected static string $resource = RescheduleRequestResource::class;
 
     public function getTabs(): array

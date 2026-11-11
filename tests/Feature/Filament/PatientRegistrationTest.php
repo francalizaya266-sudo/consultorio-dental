@@ -9,6 +9,7 @@ use App\Filament\Resources\Patients\Pages\CreatePatient;
 use App\Filament\Resources\Patients\Pages\EditPatient;
 use App\Filament\Resources\Patients\Pages\ViewPatient;
 use App\Filament\Resources\Patients\PatientResource;
+use App\Filament\Resources\Patients\Schemas\PatientForm;
 use App\Models\Account;
 use App\Models\Patient;
 use App\Models\Treatment;
@@ -18,6 +19,7 @@ use App\Services\Patients\PatientRegistrar;
 use Filament\Actions\Testing\TestAction;
 use Illuminate\Foundation\Testing\LazilyRefreshDatabase;
 use Livewire\Livewire;
+use PHPUnit\Framework\Attributes\DataProvider;
 use Tests\Concerns\CreatesAgenda;
 use Tests\TestCase;
 
@@ -129,6 +131,39 @@ class PatientRegistrationTest extends TestCase
 
         $this->assertSame(1, Patient::query()->count());
         $this->assertSame('2026-11-03 16:00', $ana->appointments()->sole()->starts_at->format('Y-m-d H:i'));
+    }
+
+    public function test_the_birth_date_is_read_back_in_words_with_the_age(): void
+    {
+        $this->freezeMonday();
+        $this->actingAs(User::factory()->reception()->create());
+
+        // El navegador puede mostrarla como día/mes o mes/día: en palabras se ve si quedó al revés.
+        Livewire::test(CreatePatient::class)
+            ->assertDontSee('años')
+            ->fillForm(['birth_date' => '1985-04-12'])
+            ->assertSee('12 de abril de 1985 · 41 años');
+    }
+
+    #[DataProvider('birthDatesInWords')]
+    public function test_the_birth_date_in_words_covers_babies_and_ignores_what_is_not_a_past_date(mixed $typed, ?string $expected): void
+    {
+        $this->freezeMonday();
+
+        $this->assertSame($expected, PatientForm::birthDateInWords($typed));
+    }
+
+    /** @return array<string, array{mixed, string|null}> */
+    public static function birthDatesInWords(): array
+    {
+        return [
+            'adult' => ['1985-04-12', '12 de abril de 1985 · 41 años'],
+            'one year old' => ['2025-06-01', '1 de junio de 2025 · 1 año'],
+            'baby' => ['2026-03-01', '1 de marzo de 2026 · menos de un año'],
+            'empty' => [null, null],
+            'in the future' => ['2027-01-01', null],
+            'not a date' => ['abc', null],
+        ];
     }
 
     public function test_a_minor_has_a_guardian_who_signs_for_them(): void

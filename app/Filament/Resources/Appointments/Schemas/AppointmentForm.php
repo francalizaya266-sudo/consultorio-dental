@@ -14,7 +14,6 @@ use App\Models\User;
 use App\Services\Clinical\TreatmentPlanService;
 use App\Support\Phone;
 use Filament\Forms\Components\Checkbox;
-use Filament\Forms\Components\DatePicker;
 use Filament\Forms\Components\Field;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\Textarea;
@@ -208,7 +207,7 @@ class AppointmentForm
             PatientForm::relationshipSelect()
                 ->helperText(null)
                 ->default(PatientRelationship::Self->value),
-            DatePicker::make('birth_date')->label('Fecha de nacimiento')->maxDate(today())->live(),
+            PatientForm::birthDateInput(),
             Grid::make(['default' => 3])
                 ->schema([
                     Select::make('document_type')

@@ -3,6 +3,7 @@
 namespace App\Filament\Resources\TreatmentPlans\Pages;
 
 use App\Enums\TreatmentPlanStatus;
+use App\Filament\Concerns\HasNoBreadcrumbs;
 use App\Filament\Resources\TreatmentPlans\TreatmentPlanResource;
 use Filament\Resources\Pages\ListRecords;
 use Filament\Schemas\Components\Tabs\Tab;
@@ -11,6 +12,8 @@ use Illuminate\Database\Eloquent\Builder;
 /** Las pestañas cuentan con las mismas consultas que "Por hacer hoy", así los números coinciden. */
 class ListTreatmentPlans extends ListRecords
 {
+    use HasNoBreadcrumbs;
+
     protected static string $resource = TreatmentPlanResource::class;
 
     public function getTabs(): array

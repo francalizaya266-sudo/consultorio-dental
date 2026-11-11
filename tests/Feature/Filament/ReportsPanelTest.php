@@ -72,7 +72,8 @@ class ReportsPanelTest extends TestCase
         $this->actingAs(User::factory()->admin()->create());
         $filters = ['pageFilters' => ['period' => 'month']];
 
-        $this->get(Summary::getUrl())->assertOk()->assertSee('Resumen');
+        // La página se llama igual que su entrada del menú; debajo dice qué muestra.
+        $this->get(Summary::getUrl())->assertOk()->assertSeeInOrder(['fi-header-heading', 'Reportes', 'Resumen del período'], false);
         $this->get(Earnings::getUrl())->assertOk()->assertSee('Descargar Excel')->assertSee('Imprimir o PDF');
 
         Livewire::test(EarningsStats::class, $filters)->assertSee(['Cobrado', 'S/ 570.00', 'S/ 0.00 en 1–23 sep.', 'Pagos', 'Promedio S/ 285.00', 'Por cobrar (a hoy)']);

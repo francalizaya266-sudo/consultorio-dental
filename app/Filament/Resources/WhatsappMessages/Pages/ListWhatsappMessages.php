@@ -3,6 +3,7 @@
 namespace App\Filament\Resources\WhatsappMessages\Pages;
 
 use App\Enums\MessageStatus;
+use App\Filament\Concerns\HasNoBreadcrumbs;
 use App\Filament\Resources\WhatsappMessages\WhatsappMessageResource;
 use Filament\Resources\Pages\ListRecords;
 use Filament\Schemas\Components\Tabs\Tab;
@@ -10,6 +11,8 @@ use Illuminate\Database\Eloquent\Builder;
 
 class ListWhatsappMessages extends ListRecords
 {
+    use HasNoBreadcrumbs;
+
     protected static string $resource = WhatsappMessageResource::class;
 
     protected static ?string $title = 'Avisos';

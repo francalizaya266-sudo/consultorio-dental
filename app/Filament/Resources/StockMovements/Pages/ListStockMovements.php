@@ -2,11 +2,14 @@
 
 namespace App\Filament\Resources\StockMovements\Pages;
 
+use App\Filament\Concerns\HasNoBreadcrumbs;
 use App\Filament\Resources\StockMovements\StockMovementResource;
 use Filament\Resources\Pages\ListRecords;
 
 class ListStockMovements extends ListRecords
 {
+    use HasNoBreadcrumbs;
+
     protected static string $resource = StockMovementResource::class;
 
     public function getSubheading(): ?string

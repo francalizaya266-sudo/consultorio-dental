@@ -78,6 +78,21 @@ class PanelNavigationTest extends TestCase
             ->assertSee(SupplierResource::getUrl('index'));
     }
 
+    public function test_a_list_that_opens_its_section_has_no_trail_above_and_the_pages_inside_keep_it(): void
+    {
+        $patient = Patient::factory()->create();
+        $this->actingAs(User::factory()->admin()->create());
+
+        foreach ([PatientResource::class, AppointmentResource::class, CampaignResource::class] as $resource) {
+            $this->get($resource::getUrl('index'))->assertOk()->assertDontSee(['fi-breadcrumbs', 'Listado'], false);
+        }
+
+        // Adentro sí sirve para volver.
+        $this->get(PatientResource::getUrl('edit', ['record' => $patient]))
+            ->assertOk()
+            ->assertSeeInOrder(['fi-breadcrumbs', 'Pacientes', $patient->full_name], false);
+    }
+
     public function test_reception_only_sees_its_entries(): void
     {
         $this->actingAs(User::factory()->reception()->create());
