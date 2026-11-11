@@ -1010,6 +1010,8 @@ a.pt-chip:hover { filter: brightness(.97); text-decoration: underline; text-unde
 .closeout-row.is-done .pt-step-kicker { color: var(--gray-500); }
 .dark .closeout-row.is-done { background: rgb(255 255 255 / .03); box-shadow: inset 0 0 0 1px rgb(255 255 255 / .1); }
 .dark .closeout-row.is-done .pt-step-icon { color: var(--success-400); }
+.closeout-options { flex-basis: 100%; color: var(--gray-700); }
+.dark .closeout-options { color: var(--gray-300); }
 .closeout-actions { flex: none; display: flex; flex-wrap: wrap; gap: .5rem 1rem; align-items: center; }
 @media (max-width: 40rem) { .closeout-actions { flex-basis: 100%; margin-left: 2rem; } .closeout-actions .pt-step-button { margin-left: 0; } }
 button.pt-chip { border: 0; cursor: pointer; font-family: inherit; }
@@ -1531,3 +1533,10 @@ a.ap-visit:hover { background: var(--gray-50); }
 .dark .visit-plan-name, .dark .visit-plan-price, .dark .visit-plan-foot strong { color: #fff; }
 .dark .visit-plan-items li.is-done .visit-plan-name, .dark .visit-plan-items li.is-done .visit-plan-price { color: var(--gray-500); }
 .dark .visit-plan-foot { border-color: rgb(255 255 255 / .1); color: var(--gray-400); }
+.visit-plan-package > .visit-plan-name { font-weight: 600; }
+.visit-plan-package-items { grid-column: 1 / -1; display: grid; margin: .2rem 0 0 .2rem; padding-left: .75rem; border-left: 2px solid var(--gray-200); }
+.visit-plan-items .visit-plan-package-items li { padding: .3rem 0; border-top: 0; }
+.dark .visit-plan-package-items { border-color: rgb(255 255 255 / .1); }
+.visit-plan-options { margin-top: .25rem; padding: .6rem .75rem; border-radius: .5rem; background: var(--gray-50); font-size: .8125rem; color: var(--gray-700); }
+.visit-plan-options ul { margin-top: .2rem; padding-left: 1.1rem; list-style: disc; display: grid; gap: .15rem; }
+.dark .visit-plan-options { background: rgb(255 255 255 / .04); color: var(--gray-300); }

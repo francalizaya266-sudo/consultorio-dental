@@ -107,7 +107,6 @@ class PrintController extends Controller
         abort_unless($clinical || $user->managesAllAgendas(), 403);
 
         $plan->load('patient', 'doctor', 'items.package', 'installments', 'signatures', 'includedIn.patient', 'companionPlans.patient');
-        $package = $plan->accepted_at ? null : $plan->offeredPackage();
         // El odontograma de la atención donde se armó el plan o, si no hay, el último: lo rojo es lo que se va a tratar.
         $odontogram = $clinical
             ? Odontogram::query()
@@ -130,7 +129,7 @@ class PrintController extends Controller
             'paymentText' => $plan->accepted_at ? $plans->paymentText($plan) : null,
             'packages' => $plan->packageSummaries(),
             // Antes de firmar, las formas de pago que ofrece el paquete.
-            'packageOptions' => $package ? TreatmentPlanService::packagePaymentOptions($package) : [],
+            'packageOptions' => $plans->paymentOptions($plan),
             // 2x1: a quién más se atiende con este plan, o quién paga el de este paciente.
             'companions' => $plan->companionNames(),
             'payer' => $plan->includedIn?->patient?->full_name,

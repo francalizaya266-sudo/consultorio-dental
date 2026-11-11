@@ -304,7 +304,7 @@ class ConsultationForm
                                     CheckboxList::make('planItems')
                                         ->label('Del plan de tratamiento')
                                         ->relationship('planItems', 'description', modifyQueryUsing: fn (Builder $query, ?Consultation $record) => $query
-                                            ->with('plan')
+                                            ->with(['plan', 'package'])
                                             ->whereHas('plan', fn (Builder $plan) => $plan->open()->where('patient_id', $record?->patient_id))
                                             ->where(fn (Builder $items) => $items
                                                 ->whereIn('treatment_plan_items.status', [PlanItemStatus::Pending, PlanItemStatus::InProgress])
@@ -315,7 +315,8 @@ class ConsultationForm
                                         ->getOptionLabelFromRecordUsing(fn (TreatmentPlanItem $record) => $record->label())
                                         ->getOptionDescriptionFromRecordUsing(fn (TreatmentPlanItem $record) => collect([
                                             $record->sessions_planned > 1 ? "Sesiones hechas: {$record->sessions_done} de {$record->sessions_planned}" : null,
-                                            $record->plan->title,
+                                            $record->package ? 'Paquete '.$record->package->name : null,
+                                            $record->package?->name === $record->plan->title ? null : $record->plan->title,
                                         ])->filter()->implode(' · '))
                                         ->bulkToggleable(false)
                                         ->live()
@@ -1138,47 +1139,87 @@ class ConsultationForm
                 : 'Sus tratamientos se suman al borrador del plan, con el precio del paquete repartido.')
             ->modalWidth(Width::TwoExtraLarge)
             ->modalSubmitActionLabel('Agregar al plan')
-            ->fillForm(fn (Consultation $record) => ['package_id' => self::campaignWithPackage($record)?->treatment_package_id])
+            ->fillForm(function (Consultation $record) {
+                $package = self::campaignWithPackage($record)?->package;
+
+                return ['package_id' => $package?->getKey(), 'included' => $package ? self::coveredByPackage($record, $package) : []];
+            })
             ->schema(fn (Consultation $record) => [
                 Select::make('package_id')
                     ->label('Paquete')
                     ->options(fn () => TreatmentPackage::query()->active()->orderBy('name')->get()
                         ->mapWithKeys(fn (TreatmentPackage $package) => [$package->getKey() => $package->name.' · '.Money::format($package->price)]))
                     ->required()
-                    ->live(),
+                    ->live()
+                    ->afterStateUpdated(function (?string $state, Set $set) use ($record) {
+                        $package = TreatmentPackage::query()->active()->find($state);
+                        $set('included', $package ? self::coveredByPackage($record, $package) : []);
+                    }),
                 Text::make(function (Get $get) {
                     $package = TreatmentPackage::query()->active()->find($get('package_id'));
 
                     return $package ? collect([
                         'Incluye: '.$package->contents().'.',
                         'Precio normal '.Money::format($package->normalPrice()).', en el paquete '.Money::format($package->price).($package->savings() > 0 ? ' (ahorra '.Money::format($package->savings()).')' : '').'.',
-                        ...TreatmentPlanService::packagePaymentOptions($package),
                     ])->implode(' ') : '';
                 })
                     ->visible(fn (Get $get) => filled($get('package_id'))),
+                Text::make(function (Get $get) {
+                    $package = TreatmentPackage::query()->active()->find($get('package_id'));
+
+                    return $package ? new HtmlString('<p>Formas de pago, se elige al aceptar y firmar:</p>'.self::bulletList(TreatmentPlanService::packagePaymentOptions($package))->toHtml()) : '';
+                })
+                    ->visible(fn (Get $get) => filled($get('package_id'))),
+                CheckboxList::make('included')
+                    ->label('Lo del diagnóstico que entra al paquete')
+                    ->helperText('Lo que marques queda dentro del precio del paquete; lo que el paquete ya trae toma la pieza del diagnóstico. Lo que no marques se cobra aparte, a su precio.')
+                    ->options(fn () => app(TreatmentPlanService::class)->includableInPackage($record)
+                        ->mapWithKeys(fn (TreatmentPlanItem $item) => [$item->getKey() => $item->label().' · '.Money::format($item->subtotal())])
+                        ->all())
+                    ->visible(fn (Get $get) => filled($get('package_id')) && app(TreatmentPlanService::class)->includableInPackage($record)->isNotEmpty()),
                 TreatmentPlanForm::companionSelect($record->patient)
                     ->visible(fn (Get $get) => (bool) TreatmentPackage::query()->active()->find($get('package_id'))?->for_two),
             ])
             ->action(function (Consultation $record, array $data) {
                 /** @var User $user */
                 $user = auth()->user();
+                $plans = app(TreatmentPlanService::class);
                 $package = TreatmentPackage::query()->active()->findOrFail($data['package_id']);
                 $companion = filled($data['companion_patient_id'] ?? null) ? Patient::find($data['companion_patient_id']) : null;
 
                 try {
-                    [, $companionPlan] = app(TreatmentPlanService::class)->addPackageToDraft($record, $user, $package, $companion);
+                    [$plan, $companionPlan] = $plans->addPackageToDraft($record, $user, $package, $companion, $data['included'] ?? []);
                 } catch (ClinicalException $e) {
                     Notification::make()->danger()->title($e->getMessage())->send();
 
                     return;
                 }
 
+                $inside = $plan?->items()->where('treatment_package_id', $package->getKey())->whereNotNull('tooth')->get() ?? collect();
+
                 Notification::make()
                     ->success()
                     ->title('Se agregó '.$package->name.' al plan ('.Money::format($package->price).').')
-                    ->body($companionPlan ? '2x1: se armó el plan de '.$companion->full_name.', sin costo.' : null)
+                    ->body(collect([
+                        $inside->isNotEmpty() ? 'Dentro del paquete: '.$inside->map(fn (TreatmentPlanItem $item) => $item->label())->implode(', ').'.' : null,
+                        'Se paga como elija al firmar: '.collect(TreatmentPlanService::packagePaymentOptions($package))->map(fn (string $option) => Str::lcfirst(rtrim($option, '.')))->implode(', o ').'.',
+                        $companionPlan ? '2x1: se armó el plan de '.$companion->full_name.', sin costo.' : null,
+                    ])->filter()->implode(' '))
                     ->send();
             });
+    }
+
+    /**
+     * Lo del borrador que el paquete ya trae, para dejarlo marcado: así la curación de la pieza 16 es la del
+     * paquete y no se cobra dos veces.
+     *
+     * @return list<string>
+     */
+    private static function coveredByPackage(Consultation $consultation, TreatmentPackage $package): array
+    {
+        $plans = app(TreatmentPlanService::class);
+
+        return array_map('strval', $plans->coveredByPackage($package, $plans->includableInPackage($consultation)));
     }
 
     /** La campaña por la que vino a la cita, si ofrece un paquete que se sigue ofreciendo. */

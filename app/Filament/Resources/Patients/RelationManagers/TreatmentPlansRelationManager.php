@@ -79,7 +79,7 @@ class TreatmentPlansRelationManager extends RelationManager
 
         return $table
             ->stackedOnMobile()
-            ->modifyQueryUsing(fn (Builder $query) => $query->with(['doctor', 'items', 'patient.account', 'installments', 'includedIn.patient', 'companionPlans.patient']))
+            ->modifyQueryUsing(fn (Builder $query) => $query->with(['doctor', 'items.package', 'patient.account', 'installments', 'includedIn.patient', 'companionPlans.patient']))
             ->defaultSort('created_at', 'desc')
             ->columns([
                 TextColumn::make('created_at')
@@ -89,9 +89,8 @@ class TreatmentPlansRelationManager extends RelationManager
                     ->label('Plan')
                     ->placeholder('Plan de tratamiento')
                     ->weight('bold')
-                    ->description(fn (TreatmentPlan $record) => $record->items
-                        ->reject(fn (TreatmentPlanItem $item) => $item->status === PlanItemStatus::Cancelled)
-                        ->map(fn (TreatmentPlanItem $item) => $item->label())
+                    ->description(fn (TreatmentPlan $record) => TreatmentPlan::lines($record->items->reject(fn (TreatmentPlanItem $item) => $item->status === PlanItemStatus::Cancelled))
+                        ->pluck('label')
                         ->implode(' · '))
                     ->wrap(),
                 TextColumn::make('progress')
