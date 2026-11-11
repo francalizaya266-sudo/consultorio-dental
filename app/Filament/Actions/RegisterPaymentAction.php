@@ -4,11 +4,14 @@ namespace App\Filament\Actions;
 
 use App\Enums\PaymentMethod;
 use App\Filament\Forms\PaymentFields;
+use App\Filament\Resources\Appointments\AppointmentResource;
+use App\Models\Appointment;
 use App\Models\DailyClosing;
 use App\Models\Patient;
 use App\Models\Payment;
 use App\Models\User;
 use App\Services\Billing\BillingService;
+use App\Services\Patients\PatientInsights;
 use App\Support\Money;
 use Closure;
 use Filament\Actions\Action;
@@ -101,21 +104,70 @@ final class RegisterPaymentAction
             });
     }
 
-    /** "Pago registrado" (o "Devolución registrada"), con el saldo que quedó y la constancia para imprimir o enviar. */
+    /**
+     * "Pago registrado" (o "Devolución registrada"), con el saldo que quedó y la constancia para imprimir o enviar.
+     * Al cobrar se dice también cuándo vuelve: su próxima cita si ya la tiene o, si no, lo que le toca y el botón
+     * para agendarla ahí mismo, mientras el paciente sigue en el mostrador.
+     */
     public static function notifyRegistered(Payment $payment): void
     {
+        $next = (float) $payment->amount > 0 ? self::nextVisit($payment) : null;
+
         Notification::make()
             ->success()
             ->title((float) $payment->amount < 0 ? 'Devolución registrada' : 'Pago registrado')
-            ->body('Saldo de '.$payment->patient->full_name.': '.Money::balance($payment->patient->balance()))
-            ->actions([
+            ->body(collect(['Saldo de '.$payment->patient->full_name.': '.Money::balance($payment->patient->balance()), $next['text'] ?? null])->filter()->implode('<br>'))
+            ->actions(array_values(array_filter([
+                ($next['url'] ?? null) ? Action::make('book')
+                    ->label('Agendar próxima cita')
+                    ->icon(Heroicon::OutlinedCalendarDays)
+                    ->url($next['url'])
+                    ->button() : null,
                 Action::make('receipt')
                     ->label('Ver constancia')
                     ->icon(Heroicon::OutlinedDocumentText)
                     ->url(self::receiptUrl($payment), shouldOpenInNewTab: true)
-                    ->button(),
-            ])
+                    ->button()
+                    ->color(($next['url'] ?? null) ? 'gray' : 'primary'),
+            ])))
+            ->persistent(($next['url'] ?? null) !== null)
             ->send();
+    }
+
+    /**
+     * Cuándo vuelve el paciente que acaba de pagar: la cita que ya tiene, la sesión que sigue de su plan con su
+     * fecha sugerida, o su control. Con url, falta agendarla.
+     *
+     * @return array{text: string, url: string|null}
+     */
+    private static function nextVisit(Payment $payment): array
+    {
+        $insights = app(PatientInsights::class);
+        $patient = $payment->patient;
+        $user = self::user();
+
+        if ($booked = $insights->upcomingVisit($patient)) {
+            return ['text' => 'Su próxima cita: '.$booked->starts_at->translatedFormat('l j \d\e F, g:i a').' · '.$booked->treatment->name.'.', 'url' => null];
+        }
+
+        $canBook = $user->can('create', Appointment::class);
+        $doctorId = $payment->appointment?->doctor_id ?? $payment->doctor_id;
+
+        if ($suggested = $insights->suggestedNextVisit($patient, withTooth: $user->canSeeClinical())) {
+            return [
+                'text' => 'Sin próxima cita. Le toca: '.$suggested['label'].', el '.$suggested['on']->translatedFormat('l j \d\e F').' ('.mb_strtolower(mb_substr($suggested['why'], 0, 1)).mb_substr($suggested['why'], 1).').',
+                'url' => $canBook ? AppointmentResource::nextVisitUrl($patient, $doctorId, $suggested['on']) : null,
+            ];
+        }
+
+        $checkup = $insights->checkup($patient);
+
+        return [
+            'text' => $checkup
+                ? 'Sin próxima cita. Su '.$checkup['kind']->checkupLabel().' le toca en '.$checkup['on']->translatedFormat('F \d\e Y').'.'
+                : 'Sin próxima cita.',
+            'url' => $canBook ? AppointmentResource::nextVisitUrl($patient, $doctorId, $checkup && ! $checkup['due'] ? $checkup['on'] : null) : null,
+        ];
     }
 
     /** La hoja de la constancia, para imprimirla o enviarla por WhatsApp. */

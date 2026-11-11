@@ -361,10 +361,11 @@ class PatientInsights
     /**
      * La sesión que sigue de su plan y cuándo agendarla: ortodoncia al mes, lo demás a la semana, corrida al día
      * en que suele venir. Null si su plan no tiene nada pendiente por agendar.
+     * Sin $withTooth, el nombre va sin la pieza: recepción ve el procedimiento, no la pieza (Ley 29733).
      *
      * @return array{item: TreatmentPlanItem, label: string, on: CarbonImmutable, why: string}|null
      */
-    public function suggestedNextVisit(Patient $patient): ?array
+    public function suggestedNextVisit(Patient $patient, bool $withTooth = true): ?array
     {
         $item = $this->plans->nextToSchedule($patient);
 
@@ -385,7 +386,7 @@ class PatientInsights
 
         return [
             'item' => $item,
-            'label' => $item->label().($sessions > 1 ? ' · sesión '.min($item->sessions_done + 1, $sessions).' de '.$sessions : ''),
+            'label' => $item->label(withTooth: $withTooth).($sessions > 1 ? ' · sesión '.min($item->sessions_done + 1, $sessions).' de '.$sessions : ''),
             'on' => $on,
             'why' => self::after($days).($usual ? ' · '.mb_strtolower(mb_substr($usual['label'], 0, 1)).mb_substr($usual['label'], 1) : ''),
         ];
