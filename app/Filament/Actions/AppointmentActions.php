@@ -48,6 +48,7 @@ final class AppointmentActions
                 self::viewConsultation(),
                 self::whatsapp(),
                 self::move(),
+                self::closeWithoutDoctor(),
                 self::noShow(),
                 self::cancel(),
             ]),
@@ -75,6 +76,7 @@ final class AppointmentActions
                 self::patientProfile(),
                 self::viewConsultation(),
                 self::move(),
+                self::closeWithoutDoctor(),
                 self::noShow(),
                 self::cancel(),
             ])->label('Más')->button()->color('gray')->icon(Heroicon::OutlinedEllipsisHorizontal),
@@ -119,7 +121,12 @@ final class AppointmentActions
     public static function start(): Action
     {
         return Action::make('start')
-            ->label(fn (Appointment $record) => $record->isFromAnEarlierDay() ? 'Registrar atención' : 'Atender')
+            // Recepción no atiende: solo anota que el paciente ya pasó con el doctor.
+            ->label(fn (Appointment $record) => match (true) {
+                ! self::attendsClinically($record) => 'Pasó a consulta',
+                $record->isFromAnEarlierDay() => 'Registrar atención',
+                default => 'Atender',
+            })
             ->icon(Heroicon::OutlinedPlay)
             ->color('primary')
             ->visible(fn (Appointment $record) => self::attendsClinically($record)
@@ -129,7 +136,7 @@ final class AppointmentActions
             ->authorize('update')
             ->action(function (Appointment $record, Action $action) {
                 if (! self::attendsClinically($record)) {
-                    Notify::run(fn () => app(AppointmentService::class)->markStarted($record, auth()->user()), 'Atención iniciada');
+                    Notify::run(fn () => app(AppointmentService::class)->markStarted($record, auth()->user()), 'Paciente en consulta');
 
                     return;
                 }
@@ -184,26 +191,75 @@ final class AppointmentActions
     }
 
     /**
-     * Recepción cierra la cita sin historia escrita. También la que ya terminó su hora y quedó sin cerrar (de hoy
-     * o de un día anterior), si el paciente sí vino: como nadie anotó que llegó, se pregunta antes.
+     * Recepción cierra la cita sin historia escrita: la que ya terminó su hora y quedó sin cerrar (de hoy o de un
+     * día anterior) o la de un doctor que no usa el panel. Mientras la visita sigue en curso con un doctor que sí
+     * lo usa, cerrarla le toca a él (con su historia): para recepción queda como excepción, en "Más".
      */
     public static function complete(): Action
     {
-        return Action::make('complete')
+        return self::closing(Action::make('complete'))
             ->label('Atendido')
-            ->icon(Heroicon::OutlinedCheckBadge)
             ->color('gray')
-            ->visible(fn (Appointment $record) => (in_array($record->status, [AppointmentStatus::CheckedIn, AppointmentStatus::InProgress], true) || $record->endedWithoutArriving() || $record->isLeftOpen())
-                && ! self::attendsClinically($record))
-            ->requiresConfirmation(fn (Appointment $record) => $record->isFromAnEarlierDay() || $record->endedWithoutArriving())
-            ->modalHeading(fn (Appointment $record) => '¿El paciente vino el '.$record->starts_at->translatedFormat('l j \d\e F').'?')
-            ->modalDescription(fn (Appointment $record) => 'La cita queda atendida con su fecha y se registra lo programado: '.($record->planItem?->label(withTooth: false) ?? $record->treatment->name).'. Si no vino, usa "No asistió".')
-            ->modalSubmitActionLabel('Sí, se atendió')
+            ->visible(fn (Appointment $record) => self::closableWithoutHistory($record) && ! self::doctorIsStillWithIt($record));
+    }
+
+    /** La excepción: el doctor no va a registrar la atención y el paciente ya está en el mostrador para pagar. */
+    public static function closeWithoutDoctor(): Action
+    {
+        return self::closing(Action::make('closeWithoutDoctor'))
+            ->label('Cerrar sin el doctor')
+            ->visible(fn (Appointment $record) => self::closableWithoutHistory($record) && self::doctorIsStillWithIt($record));
+    }
+
+    /**
+     * Lo común de cerrar una cita sin historia: se pregunta antes si nadie anotó que llegó, si es de otro día o si
+     * su doctor usa el panel (lo normal es que la cierre él).
+     */
+    private static function closing(Action $action): Action
+    {
+        return $action
+            ->icon(Heroicon::OutlinedCheckBadge)
+            ->requiresConfirmation(fn (Appointment $record) => $record->isFromAnEarlierDay() || $record->endedWithoutArriving() || self::doctorUsesThePanel($record))
+            ->modalHeading(fn (Appointment $record) => $record->isFromAnEarlierDay() || $record->endedWithoutArriving()
+                ? '¿El paciente vino el '.$record->starts_at->translatedFormat('l j \d\e F').'?'
+                : '¿Cerrar la cita sin la atención del doctor?')
+            ->modalDescription(fn (Appointment $record) => ($record->isFromAnEarlierDay() || $record->endedWithoutArriving()
+                ? 'La cita queda atendida con su fecha y se registra lo programado: '.self::scheduled($record).'. Si no vino, usa "No asistió".'
+                : 'Lo normal es que '.$record->loadMissing('doctor')->doctor->name.' la cierre al terminar. Si la cierras tú, se registra lo programado: '.self::scheduled($record).'.')
+                .(self::doctorUsesThePanel($record) ? ' Queda sin historia clínica escrita.' : ''))
+            ->modalSubmitActionLabel(fn (Appointment $record) => $record->isFromAnEarlierDay() || $record->endedWithoutArriving() ? 'Sí, se atendió' : 'Sí, cerrarla')
             ->authorize('update')
             ->action(fn (Appointment $record) => Notify::run(
                 fn () => app(AppointmentService::class)->markCompleted($record, auth()->user()),
                 'Cita atendida',
             ));
+    }
+
+    /** Lo que se carga al cerrar sin historia: la sesión de su plan o el tratamiento de la cita. */
+    private static function scheduled(Appointment $record): string
+    {
+        return $record->planItem?->label(withTooth: false) ?? $record->treatment->name;
+    }
+
+    /** Puede cerrarla quien no es su doctor, mientras el doctor no haya abierto ya su atención. */
+    private static function closableWithoutHistory(Appointment $record): bool
+    {
+        return (in_array($record->status, [AppointmentStatus::CheckedIn, AppointmentStatus::InProgress], true) || $record->endedWithoutArriving() || $record->isLeftOpen())
+            && ! self::attendsClinically($record)
+            && self::openConsultation($record) === null;
+    }
+
+    /** El paciente está en sala o en consulta, la hora de la cita no terminó y su doctor usa el panel. */
+    private static function doctorIsStillWithIt(Appointment $record): bool
+    {
+        return in_array($record->status, [AppointmentStatus::CheckedIn, AppointmentStatus::InProgress], true)
+            && ! $record->ends_at->isPast()
+            && self::doctorUsesThePanel($record);
+    }
+
+    private static function doctorUsesThePanel(Appointment $record): bool
+    {
+        return $record->loadMissing('doctor')->doctor->user_id !== null;
     }
 
     /** En "Más", mientras la cita está en curso: el paciente todavía puede llegar tarde. */
