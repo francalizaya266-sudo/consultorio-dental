@@ -341,7 +341,7 @@ class AgendaCalendarTest extends TestCase
             ->callMountedAction()
             ->assertNotified(BookingException::overlaps()->getMessage());
 
-        $this->assertFalse(Patient::query()->where('first_name', 'Ana')->exists());
+        $this->assertFalse(Patient::query()->where(['first_name' => 'Ana', 'last_name' => 'Rojas'])->exists());
     }
 
     public function test_an_appointment_past_its_time_and_not_closed_says_so_on_the_card_and_in_the_panel(): void

@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Enums\TreatmentKind;
 use App\Models\Concerns\Auditable;
 use App\Support\Money;
 use Database\Factories\TreatmentFactory;
@@ -15,7 +16,7 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\SoftDeletes;
 
 /** Tratamiento o tipo de cita, con duración y precio referencial. */
-#[Fillable(['name', 'slug', 'summary', 'description', 'price_from', 'show_price', 'duration_minutes', 'buffer_minutes', 'sessions_label', 'is_evaluation', 'online_bookable', 'is_public', 'image_path', 'seo_title', 'seo_description', 'sort_order', 'is_active'])]
+#[Fillable(['name', 'slug', 'summary', 'description', 'price_from', 'show_price', 'duration_minutes', 'buffer_minutes', 'sessions_label', 'checkup_months', 'next_session_days', 'before_instructions', 'aftercare', 'is_evaluation', 'online_bookable', 'is_public', 'image_path', 'seo_title', 'seo_description', 'sort_order', 'is_active'])]
 class Treatment extends Model
 {
     /** @use HasFactory<TreatmentFactory> */
@@ -25,6 +26,8 @@ class Treatment extends Model
     {
         return [
             'price_from' => 'decimal:2',
+            'checkup_months' => 'integer',
+            'next_session_days' => 'integer',
             'show_price' => 'boolean',
             'is_evaluation' => 'boolean',
             'online_bookable' => 'boolean',
@@ -103,6 +106,18 @@ class Treatment extends Model
             (bool) preg_match('/^\d+\s*[–-]\s*\d+$/u', $label) => preg_replace('/\s*[–-]\s*/u', ' – ', $label).' sesiones',
             default => $label,
         };
+    }
+
+    /** Cada cuántos meses vuelve a control si esto fue lo último que se le hizo: lo que diga su ficha o, si no dice, lo usual según su nombre. */
+    public function checkupMonths(): int
+    {
+        return $this->checkup_months ?: TreatmentKind::for($this)->checkupMonths();
+    }
+
+    /** A cuántos días se agenda la sesión siguiente: lo que diga su ficha o, si no dice, lo usual según su nombre. */
+    public function nextSessionDays(): int
+    {
+        return $this->next_session_days ?: TreatmentKind::for($this)->nextSessionDays();
     }
 
     /** Minutos de limpieza y esterilización después de la cita. */

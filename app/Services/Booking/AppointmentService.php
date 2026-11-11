@@ -421,6 +421,11 @@ class AppointmentService
         // Sin atención escrita (la cerró recepción), se carga el tratamiento de la cita y se descuentan sus materiales.
         $this->billing->chargeAppointment($appointment, $by);
         $this->inventory->useForAppointment($appointment, $by);
+
+        // Los cuidados de ese tratamiento quedan listos en Avisos. Si la cita se cierra días después, ya no sirven.
+        if (! $appointment->isFromAnEarlierDay() && filled($appointment->treatment?->aftercare)) {
+            $this->outbox->queueForAppointment($appointment, MessageTemplateKey::Aftercare, extra: ['cuidados' => trim($appointment->treatment->aftercare)]);
+        }
     }
 
     public function markNoShow(Appointment $appointment, User $by): void

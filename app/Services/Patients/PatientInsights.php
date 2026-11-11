@@ -200,7 +200,7 @@ class PatientInsights
             ->latest('starts_at')
             ->first();
         $kind = TreatmentKind::for($last?->treatment);
-        $on = $patient->last_visit_at->copy()->addMonths($kind->checkupMonths());
+        $on = $patient->last_visit_at->copy()->addMonths($last?->treatment?->checkupMonths() ?? $kind->checkupMonths());
 
         return ['kind' => $kind, 'due' => $on->lte(now()), 'on' => $on];
     }
@@ -340,6 +340,18 @@ class PatientInsights
             ->first();
     }
 
+    /** "A la semana", "A las 2 semanas", "Al mes" o "A los 10 días". */
+    private static function after(int $days): string
+    {
+        return match (true) {
+            $days === 1 => 'Al día siguiente',
+            $days === 7 => 'A la semana',
+            $days % 30 === 0 => $days === 30 ? 'Al mes' : 'A los '.intdiv($days, 30).' meses',
+            $days % 7 === 0 => 'A las '.intdiv($days, 7).' semanas',
+            default => "A los {$days} días",
+        };
+    }
+
     /**
      * La sesión que sigue de su plan y cuándo agendarla: ortodoncia al mes, lo demás a la semana, corrida al día
      * en que suele venir. Null si su plan no tiene nada pendiente por agendar.
@@ -355,7 +367,7 @@ class PatientInsights
         }
 
         $item->loadMissing('treatment');
-        $days = TreatmentKind::for($item->treatment)->nextSessionDays();
+        $days = $item->treatment?->nextSessionDays() ?? TreatmentKind::Other->nextSessionDays();
         $on = CarbonImmutable::today()->addDays($days);
         $usual = $this->usualVisit($patient);
 
@@ -369,7 +381,7 @@ class PatientInsights
             'item' => $item,
             'label' => $item->label().($sessions > 1 ? ' · sesión '.min($item->sessions_done + 1, $sessions).' de '.$sessions : ''),
             'on' => $on,
-            'why' => ($days === 30 ? 'Al mes' : 'A la semana').($usual ? ' · '.mb_strtolower(mb_substr($usual['label'], 0, 1)).mb_substr($usual['label'], 1) : ''),
+            'why' => self::after($days).($usual ? ' · '.mb_strtolower(mb_substr($usual['label'], 0, 1)).mb_substr($usual['label'], 1) : ''),
         ];
     }
 

@@ -27,6 +27,7 @@ enum MessageTemplateKey: string implements HasLabel
     case PaymentReceipt = 'payment_receipt';
     case ReviewRequest = 'review_request';
     case CampaignAnnouncement = 'campaign_announcement';
+    case Aftercare = 'aftercare';
 
     public function getLabel(): string
     {
@@ -51,6 +52,7 @@ enum MessageTemplateKey: string implements HasLabel
             self::PaymentReceipt => 'Constancia de pago',
             self::ReviewRequest => 'Pedido de opinión en Google',
             self::CampaignAnnouncement => 'Promoción a quien acepta recibirlas',
+            self::Aftercare => 'Cuidados después de la atención',
         };
     }
 
@@ -60,7 +62,7 @@ enum MessageTemplateKey: string implements HasLabel
         return match ($this) {
             self::BookingConfirmation => "Hola {nombre} 👋, te escribimos de {consultorio}.\nTu cita de {tratamiento} quedó reservada para el {fecha} a las {hora} con {doctor}.\n{precio}\n\nConfirma tu asistencia, cambia el horario o cancela aquí:\n{enlace}",
             self::AppointmentScheduled => "Hola {nombre}, te escribimos de {consultorio}.\nTu próxima cita de {tratamiento} es el {fecha} a las {hora} con {doctor}.\n\nPuedes confirmarla aquí:\n{enlace}",
-            self::Reminder => "Hola {nombre}, te recordamos tu cita de mañana {fecha} a las {hora} con {doctor} en {consultorio}.\n\nConfirma tu asistencia aquí:\n{enlace}",
+            self::Reminder => "Hola {nombre}, te recordamos tu cita de mañana {fecha} a las {hora} con {doctor} en {consultorio}.\n{indicaciones}\n\nConfirma tu asistencia aquí:\n{enlace}",
             self::Rescheduled => "Hola {nombre}, tu cita de {tratamiento} cambió al {fecha} a las {hora} con {doctor}.\n\nConfirma el nuevo horario aquí:\n{enlace}",
             self::Cancelled => 'Hola {nombre}, lamentamos avisarte que tu cita del {fecha} a las {hora} fue cancelada. Escríbenos y te ayudamos a elegir otro horario.',
             self::RescheduleApproved => "Hola {nombre}, aprobamos tu cambio. Tu cita de {tratamiento} ahora es el {fecha} a las {hora} con {doctor}.\n\nDetalles aquí:\n{enlace}",
@@ -78,6 +80,7 @@ enum MessageTemplateKey: string implements HasLabel
             self::PaymentReceipt => "Hola {nombre}, te escribimos de {consultorio}.\nRecibimos tu pago de {monto} ({medio}) el {fecha}. Constancia {numero}:\n{detalle}\n\nSaldo: {saldo}. ¡Gracias!",
             self::ReviewRequest => "Hola {nombre}, gracias por confiar en {consultorio}. Si te sentiste bien atendido, ¿nos dejas tu opinión en Google? Toma un minuto y ayuda a otras personas a encontrarnos:\n{opinion}",
             self::CampaignAnnouncement => "Hola {nombre}, te escribimos de {consultorio}.\n{promocion}\nVale hasta el {hasta}.\n\nMira los detalles y reserva aquí:\n{pagina}\n\nSi prefieres no recibir promociones, respóndenos «no» y no te escribimos más.",
+            self::Aftercare => "Hola {nombre}, gracias por venir hoy a {consultorio}. Para que tu {tratamiento} quede bien:\n\n{cuidados}\n\nSi tienes dolor fuerte, sangrado que no para o fiebre, escríbenos.",
         };
     }
 }
