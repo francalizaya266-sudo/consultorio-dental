@@ -266,6 +266,26 @@ class AgendaPanelTest extends TestCase
         $this->assertSame(MessageStatus::Pending, $message->fresh()->status);
     }
 
+    public function test_notices_to_send_start_with_the_nearest_appointment_and_show_their_text(): void
+    {
+        $treatment = Treatment::factory()->create(['name' => 'Limpieza dental']);
+        $doctor = $this->doctorOffering($treatment);
+        $outbox = app(WhatsAppOutbox::class);
+        $thursday = $outbox->queueForAppointment(Appointment::factory()->for($doctor)->for($treatment)->for(Patient::factory()->create(['first_name' => 'Rosa']))->at('2026-11-05 10:00')->create(), MessageTemplateKey::BookingConfirmation);
+        $this->travel(5)->minutes();
+        $tuesday = $outbox->queueForAppointment(Appointment::factory()->for($doctor)->for($treatment)->for(Patient::factory()->create(['first_name' => 'Pedro']))->at('2026-11-03 09:00')->create(), MessageTemplateKey::BookingConfirmation);
+        $this->actingAs(User::factory()->reception()->create());
+
+        Livewire::test(ListWhatsappMessages::class)
+            // Pedro se preparó después, pero su cita es antes: va primero.
+            ->assertCanSeeTableRecords([$tuesday, $thursday], inOrder: true)
+            ->assertSee('Hola Pedro 👋')
+            ->assertSee('Tu cita de limpieza dental quedó reservada')
+            // En Enviados y Todos, el último preparado arriba.
+            ->set('activeTab', 'all')
+            ->assertCanSeeTableRecords([$tuesday, $thursday], inOrder: true);
+    }
+
     public function test_approving_a_request_from_the_panel_moves_the_appointment(): void
     {
         $treatment = Treatment::factory()->create(['duration_minutes' => 30]);
