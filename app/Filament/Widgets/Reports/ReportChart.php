@@ -12,10 +12,11 @@ use Illuminate\Support\Js;
 /**
  * Base de los gráficos de reportes: una sola forma de dibujar y de escribir los números.
  *
- * Colores (en modo claro y oscuro) con significado: la serie 1 es azul para la actividad (citas,
- * horarios, ocupación), verde para la plata que entra y rojo para lo que se pierde (inasistencias);
- * la 2, naranja. Barras finas con la punta redondeada, sin bordes, grilla tenue y el valor completo
- * al pasar el mouse. Debajo de cada gráfico hay una tabla para lectores de pantalla.
+ * Colores (en modo claro y oscuro) con significado: la serie 1 es el azul de la marca para la actividad
+ * (citas, horarios, ocupación), verde para la plata que entra y rojo para lo que se pierde (inasistencias);
+ * la 2, naranja. El par azul y naranja se distingue también con daltonismo, en claro y en oscuro.
+ * Barras finas con la punta redondeada, sin bordes, grilla tenue y el valor completo al pasar el
+ * mouse. Debajo de cada gráfico hay una tabla para lectores de pantalla.
  */
 abstract class ReportChart extends ChartWidget
 {
@@ -23,7 +24,7 @@ abstract class ReportChart extends ChartWidget
 
     /** [claro, oscuro] de la serie 1 según lo que muestra el gráfico. */
     private const TONES = [
-        'activity' => ['#2563eb', '#3b82f6'],
+        'activity' => ['#1e4f91', '#5f87c2'],
         'money' => ['#059669', '#10b981'],
         'loss' => ['#e11d48', '#f43f5e'],
     ];
@@ -32,7 +33,10 @@ abstract class ReportChart extends ChartWidget
     private const SECOND_SERIES = ['#eb6834', '#d95926'];
 
     /** Fondo de la tarjeta, para separar segmentos apilados con un hilo del mismo color. */
-    private const SURFACE = ['#ffffff', '#18181b'];
+    private const SURFACE = ['#ffffff', '#0f172a'];
+
+    /** [claro, oscuro] de las barras que no son un dato: el gris azulado del panel. */
+    private const MUTED = ['#cbd5e1', '#475569'];
 
     protected ?string $maxHeight = '260px';
 
@@ -148,6 +152,7 @@ abstract class ReportChart extends ChartWidget
         $config = Js::from([
             'colors' => [self::TONES[$this->tone], self::SECOND_SERIES],
             'surface' => self::SURFACE,
+            'mutedColor' => self::MUTED,
             'unit' => $this->unit,
             'noun' => $this->noun,
             'valueAxis' => $valueAxis,
@@ -170,7 +175,7 @@ abstract class ReportChart extends ChartWidget
                 const muted = (ctx) => c.muted.includes(ctx.chart.data.labels[ctx.dataIndex]);
                 const isLast = (chart, index) => index === chart.data.labels.length - 1;
                 const inProgress = (ctx) => c.inProgress && isLast(ctx.chart, ctx.dataIndex);
-                const barColor = (ctx) => muted(ctx) ? (dark() ? '#52525b' : '#d4d4d8') : color(ctx.datasetIndex) + (inProgress(ctx) ? '66' : '');
+                const barColor = (ctx) => muted(ctx) ? c.mutedColor[dark() ? 1 : 0] : color(ctx.datasetIndex) + (inProgress(ctx) ? '66' : '');
                 const whole = new Intl.NumberFormat('es-PE', { maximumFractionDigits: 0 });
                 const decimal = new Intl.NumberFormat('es-PE', { maximumFractionDigits: 1 });
                 const money = new Intl.NumberFormat('es-PE', { minimumFractionDigits: 2, maximumFractionDigits: 2 });

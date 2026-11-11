@@ -1038,7 +1038,21 @@ button.pt-chip { transition: transform 160ms ease-out; }
 
 .earnings-grid { display: grid; gap: 1.5rem; grid-template-columns: minmax(0, 1fr); align-items: start; }
 @media (min-width: 64rem) { .earnings-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } .earnings-grid .is-wide { grid-column: 1 / -1; } }
-.earnings-scroll { overflow-x: auto; }
+/*
+ * En el celular las tablas anchas se deslizan de lado. Una sombra en el borde avisa que hay más columnas
+ * (el total suele ser la última): aparece solo del lado donde queda algo por ver.
+ */
+.earnings-scroll {
+    --scroll-surface: #fff;
+    --scroll-shade: rgb(15 23 42 / .16);
+    overflow-x: auto;
+    background:
+        linear-gradient(to right, var(--scroll-surface) 40%, transparent) left center / 2.5rem 100% no-repeat local,
+        linear-gradient(to left, var(--scroll-surface) 40%, transparent) right center / 2.5rem 100% no-repeat local,
+        linear-gradient(to right, var(--scroll-shade), transparent) left center / .875rem 100% no-repeat scroll,
+        linear-gradient(to left, var(--scroll-shade), transparent) right center / .875rem 100% no-repeat scroll;
+}
+.dark .earnings-scroll { --scroll-surface: var(--gray-900); --scroll-shade: rgb(0 0 0 / .55); }
 .report-table { width: 100%; border-collapse: collapse; font-size: .875rem; font-variant-numeric: tabular-nums; }
 .report-table th, .report-table td { padding: .5rem .75rem; text-align: left; border-bottom: 1px solid var(--gray-200); white-space: nowrap; }
 .report-table th:first-child, .report-table td:first-child { padding-left: 0; }
@@ -1048,6 +1062,8 @@ button.pt-chip { transition: transform 160ms ease-out; }
 .report-table .num { text-align: right; }
 /* Los nombres largos bajan de línea antes de que los montos queden fuera de la tarjeta. */
 .report-table td:not(.num) { white-space: normal; }
+/* En el celular, columnas más juntas y letra un punto menor: así entran más antes de tener que deslizar. */
+@media (max-width: 40rem) { .report-table { font-size: .8125rem; } .report-table th, .report-table td { padding-inline: .4rem; } }
 .report-table tfoot td { font-weight: 700; color: var(--gray-950); border-bottom: 0; border-top: 1px solid var(--gray-300); }
 .dark .report-table tfoot td { color: #fff; border-color: rgb(255 255 255 / .2); }
 .report-table .empty { text-align: center; color: var(--gray-500); padding: 1.5rem; }

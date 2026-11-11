@@ -41,4 +41,11 @@ return [
         'moved' => ':label se movió a la posición :position de :count.',
     ],
 
+    // Al pie de una tabla con totales: "Esta página" y, debajo, el de todas ("Todos pagos" no era español).
+    'summary' => [
+        'subheadings' => [
+            'all' => 'En total',
+        ],
+    ],
+
 ];

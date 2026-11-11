@@ -132,6 +132,20 @@ class PatientsAndSetupPanelTest extends TestCase
         $this->assertSame(1, Payment::count());
     }
 
+    public function test_the_payments_footer_adds_up_this_page_and_all_of_them_without_the_voided(): void
+    {
+        $patient = Patient::factory()->create();
+        Payment::factory()->for($patient)->count(11)->create(['amount' => 10, 'paid_at' => now()->subDay()]);
+        // El más reciente está anulado: sale primero en la lista y no cuenta en ninguno de los dos totales.
+        Payment::factory()->for($patient)->create(['amount' => 500, 'paid_at' => now(), 'voided_at' => now(), 'void_reason' => 'Se registró dos veces']);
+        $this->actingAs(User::factory()->reception()->create());
+
+        Livewire::test(ManagePayments::class)
+            // El monto de la tabla lleva un espacio que no se parte entre "S/" y la cifra.
+            ->assertSeeInOrder(['Esta página', "S/\u{a0}90.00", 'En total', "S/\u{a0}110.00"])
+            ->assertDontSee('Todos pagos');
+    }
+
     public function test_only_what_was_registered_by_mistake_can_be_deleted_so_the_agenda_keeps_working(): void
     {
         $this->freezeMonday();
