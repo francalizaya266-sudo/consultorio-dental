@@ -6,6 +6,7 @@ use App\Enums\AppointmentStatus;
 use App\Enums\VisitType;
 use App\Exceptions\ClinicalException;
 use App\Models\Appointment;
+use App\Models\Charge;
 use App\Models\ClinicalTemplate;
 use App\Models\Consultation;
 use App\Models\Doctor;
@@ -76,7 +77,58 @@ final class ConsultationService
     {
         $doctor = $this->doctorOf($by);
 
-        return DB::transaction(fn () => $this->open($patient, $doctor, $by, $treatment));
+        // Si ya le abrió una y no la terminó, se retoma: dos abiertas a la vez solo confunden y se cobran mal.
+        return $this->unfinishedWithoutAppointment($patient, $by)
+            ?? DB::transaction(fn () => $this->open($patient, $doctor, $by, $treatment));
+    }
+
+    /** La atención sin cita que el doctor dejó sin terminar con este paciente. */
+    public function unfinishedWithoutAppointment(Patient $patient, User $by): ?Consultation
+    {
+        return Consultation::query()
+            ->where('patient_id', $patient->getKey())
+            ->where('doctor_id', $by->doctorId())
+            ->whereNull('appointment_id')
+            ->whereNull('closed_at')
+            ->latest('id')
+            ->first();
+    }
+
+    /** Se puede descartar si se abrió por error: sin diagnóstico, archivos ni cargos (la receta de la plantilla se va con ella). */
+    public function canDiscard(Consultation $consultation): bool
+    {
+        return $consultation->closed_at === null
+            && $consultation->diagnoses()->doesntExist()
+            && $consultation->files()->doesntExist()
+            && Charge::query()->where('consultation_id', $consultation->getKey())->doesntExist();
+    }
+
+    /**
+     * Descarta una atención abierta por error: sale de la lista (queda en la auditoría), con su copia del
+     * odontograma, y la cita vuelve a "llegó" para atenderla cuando toque. Lo que ya tiene registro clínico
+     * no se descarta: se termina.
+     */
+    public function discard(Consultation $consultation, User $by): void
+    {
+        $this->assertWritable($consultation, $by);
+
+        if (! $this->canDiscard($consultation)) {
+            throw ClinicalException::cannotDiscard();
+        }
+
+        DB::transaction(function () use ($consultation) {
+            $appointment = $consultation->appointment;
+
+            if ($appointment?->status === AppointmentStatus::InProgress) {
+                $appointment->update(['status' => AppointmentStatus::CheckedIn, 'started_at' => null]);
+            }
+
+            $consultation->planItems()->detach();
+            $consultation->treatments()->detach();
+            $consultation->prescriptions()->get()->each->delete();
+            $consultation->odontogram?->delete();
+            $consultation->delete();
+        });
     }
 
     /** Agrega el texto de la plantilla: llena los campos vacíos y suma al final de los que ya tienen texto. */
@@ -122,7 +174,8 @@ final class ConsultationService
     }
 
     /**
-     * Lo que suele olvidarse al terminar: el diagnóstico, el consentimiento firmado y los avisos de la receta.
+     * Lo que suele olvidarse al terminar: el diagnóstico, el consentimiento firmado, la firma del paquete que se
+     * empezó y los avisos de la receta.
      * No impide terminar: el doctor decide.
      *
      * @param  array<string, mixed>  $data  Lo que hay en pantalla (diagnoses, prescription_items).
@@ -139,6 +192,12 @@ final class ConsultationService
 
         if ($appointment && app(ConsentService::class)->signedForVisit($appointment) === false) {
             $checks[] = 'Falta firmar el consentimiento de '.mb_strtolower($appointment->treatment->name).'.';
+        }
+
+        $worked = TreatmentPlanItem::query()->with('plan')->whereKey(array_values((array) ($data['planItems'] ?? [])))->get();
+
+        if ($worked->contains(fn (TreatmentPlanItem $item) => TreatmentPlanService::paidWithPackage($item))) {
+            $checks[] = 'Falta que firme el paquete: lo hecho del paquete no se cobra hasta que firme cómo lo pagará.';
         }
 
         foreach ($data['prescription_items'] ?? [] as $item) {

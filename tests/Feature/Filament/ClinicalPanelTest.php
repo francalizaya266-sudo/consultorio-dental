@@ -3,8 +3,10 @@
 namespace Tests\Feature\Filament;
 
 use App\Enums\AppointmentStatus;
+use App\Enums\DiagnosisType;
 use App\Enums\SnippetField;
 use App\Enums\ToothState;
+use App\Exceptions\ClinicalException;
 use App\Filament\Resources\Consultations\ConsultationResource;
 use App\Filament\Resources\Consultations\Pages\EditConsultation;
 use App\Filament\Resources\Consultations\Pages\ListConsultations;
@@ -298,6 +300,38 @@ class ClinicalPanelTest extends TestCase
             ->assertRedirect(ConsultationResource::getUrl('edit', ['record' => Consultation::sole()]));
 
         $this->assertNull(Consultation::sole()->appointment_id);
+
+        // Si la dejó sin terminar y vuelve a empezar una, se retoma la misma: no quedan dos abiertas.
+        Livewire::test(ListConsultations::class)
+            ->callAction('withoutAppointment', data: ['patient_id' => $appointment->patient_id])
+            ->assertNotified('Ya tenía una atención sin terminar: se retoma esa')
+            ->assertRedirect(ConsultationResource::getUrl('edit', ['record' => Consultation::sole()]));
+    }
+
+    public function test_a_visit_opened_by_mistake_is_discarded_and_the_appointment_waits_again(): void
+    {
+        [$doctor, $appointment] = $this->appointmentToday();
+        $this->actingAs($doctor->user);
+        $consultation = app(ConsultationService::class)->startFromAppointment($appointment, $doctor->user);
+        $this->assertSame('1', ConsultationResource::getNavigationBadge());
+
+        Livewire::test(EditConsultation::class, ['record' => $consultation->getRouteKey()])
+            ->callAction('discard')
+            ->assertNotified('Atención descartada')
+            ->assertRedirect(ConsultationResource::getUrl('index'));
+
+        $this->assertSoftDeleted($consultation);
+        $this->assertNull(ConsultationResource::getNavigationBadge());
+        $this->assertSame(AppointmentStatus::CheckedIn, $appointment->fresh()->status);
+        $this->assertSame(0, $appointment->patient->charges()->count());
+
+        // Se puede volver a atender la cita; con diagnóstico ya no se descarta: se termina.
+        $again = app(ConsultationService::class)->startFromAppointment($appointment->fresh(), $doctor->user);
+        $this->assertTrue($again->isNot($consultation));
+        $again->diagnoses()->create(['icd10_code_id' => Icd10Code::query()->value('id'), 'type' => DiagnosisType::Definitive]);
+
+        $this->expectExceptionObject(ClinicalException::cannotDiscard());
+        app(ConsultationService::class)->discard($again, $doctor->user);
     }
 
     /** @return array{0: Doctor, 1: Appointment} */

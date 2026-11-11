@@ -95,6 +95,10 @@ class ClinicalServicesTest extends TestCase
         $this->assertSame(Dentition::Mixed, $first->odontogram->dentition);
         $this->odontograms()->toggle($first->odontogram, $this->condition('caries'), ToothState::Bad, 16, 'O');
 
+        // Mientras no la termine, empezar otra retoma la misma.
+        $this->assertTrue($this->consultations()->startWithoutAppointment($patient, $doctor->user)->is($first));
+        $this->consultations()->close($first, $doctor->user);
+
         $second = $this->consultations()->startWithoutAppointment($patient, $doctor->user);
 
         $this->assertSame(OdontogramType::Evolution, $second->odontogram->type);

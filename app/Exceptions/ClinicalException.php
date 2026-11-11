@@ -27,6 +27,11 @@ class ClinicalException extends RuntimeException
         return new self('Esta atención ya se cerró y no se puede cambiar.');
     }
 
+    public static function cannotDiscard(): self
+    {
+        return new self('Ya tiene diagnóstico, archivos o cargos: termínala en vez de descartarla.');
+    }
+
     public static function reopenExpired(): self
     {
         return new self('Solo se puede reabrir una atención hasta 24 horas después de cerrarla.');

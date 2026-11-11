@@ -57,11 +57,12 @@ class ListConsultations extends ListRecords
 
                 $consultations = app(ConsultationService::class);
                 $consultation = null;
+                $resumes = $consultations->unfinishedWithoutAppointment($patient, auth()->user()) !== null;
                 Notify::run(
                     function () use ($patient, $data, $consultations, &$consultation) {
                         $consultation = $consultations->startWithoutAppointment($patient, auth()->user(), Treatment::find($data['treatment_id'] ?? null));
                     },
-                    'Atención iniciada',
+                    $resumes ? 'Ya tenía una atención sin terminar: se retoma esa' : 'Atención iniciada',
                 );
 
                 if ($consultation) {

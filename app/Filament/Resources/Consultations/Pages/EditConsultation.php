@@ -306,6 +306,34 @@ class EditConsultation extends EditRecord
             });
     }
 
+    /** Se abrió por error (otro paciente, una prueba): sale de la lista sin cobrar nada. */
+    public function discardAction(): Action
+    {
+        return Action::make('discard')
+            ->label('Descartar atención')
+            ->icon(Heroicon::OutlinedTrash)
+            ->color('danger')
+            ->requiresConfirmation()
+            ->modalHeading('¿Descartar esta atención?')
+            ->modalDescription(fn () => app(ConsultationService::class)->canDiscard($this->getConsultation())
+                ? 'Es para una atención abierta por error. No se cobra nada, lo escrito y lo marcado en el odontograma se pierden, y la cita vuelve a quedar por atender.'
+                : 'Esta atención ya tiene diagnóstico, archivos o cargos, así que no se puede descartar: termínala.')
+            ->modalSubmitActionLabel('Sí, descartar')
+            ->modalSubmitAction(fn ($action) => app(ConsultationService::class)->canDiscard($this->getConsultation()) ? $action : false)
+            ->action(function () {
+                try {
+                    app(ConsultationService::class)->discard($this->getConsultation(), auth()->user());
+                } catch (ClinicalException $e) {
+                    Notification::make()->danger()->title($e->getMessage())->send();
+
+                    return;
+                }
+
+                Notification::make()->success()->title('Atención descartada')->send();
+                $this->redirect(ConsultationResource::getUrl('index'));
+            });
+    }
+
     /** Lo que se cargará, lo que pasa al terminar y, si algo falta, la lista para revisarlo antes. */
     private function closeDescription(): HtmlString
     {
