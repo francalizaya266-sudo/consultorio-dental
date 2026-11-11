@@ -47,6 +47,23 @@
         .toolbar button.secondary { background: #334155; color: #fff; }
         .toolbar form { margin: 0; }
         .toolbar .note { align-self: center; color: #cbd5e1; font-size: .9rem; }
+        /* En el celular la hoja ocupa la pantalla: sin márgenes de papel, y una tabla ancha se desliza dentro de la hoja. */
+        @media screen and (max-width: 640px) {
+            .sheet { margin: 0; padding: 16px; min-height: auto; box-shadow: none; }
+            header { flex-direction: column; gap: 6px; }
+            .doctor { text-align: left; }
+            .nowrap { white-space: normal; }
+            main { overflow-x: auto; }
+            th, td { padding: 6px 4px; }
+            .signatures { flex-wrap: wrap; }
+            .signature { min-width: 130px; flex: 1; }
+            /* Las tablas que en papel van de a dos (cierre, ingresos) aquí van una debajo de otra. */
+            .sheet .tables { grid-template-columns: minmax(0, 1fr); }
+            .sheet .tables > * { overflow-x: auto; }
+            .sheet dl { grid-template-columns: 110px 1fr; }
+            .toolbar { flex-wrap: wrap; gap: 8px; padding: 8px; }
+            .toolbar button { padding: 10px 14px; }
+        }
         @media print {
             body { background: #fff; }
             .sheet { margin: 0; padding: 0; box-shadow: none; max-width: none; min-height: auto; }
