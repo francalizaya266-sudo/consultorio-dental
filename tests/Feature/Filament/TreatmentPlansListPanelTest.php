@@ -10,8 +10,10 @@ use App\Filament\Resources\Patients\PatientResource;
 use App\Filament\Resources\TreatmentPlans\Pages\ListTreatmentPlans;
 use App\Filament\Resources\TreatmentPlans\TreatmentPlanResource;
 use App\Models\Appointment;
+use App\Models\Charge;
 use App\Models\Doctor;
 use App\Models\Patient;
+use App\Models\Payment;
 use App\Models\Treatment;
 use App\Models\TreatmentPlan;
 use App\Models\User;
@@ -163,6 +165,41 @@ class TreatmentPlansListPanelTest extends TestCase
             ->set('activeTab', 'cancelled')
             ->assertCanSeeTableRecords([$declined])
             ->assertSee('El 02/11/2026 · el paciente no lo aceptó (el precio)');
+    }
+
+    public function test_under_the_amount_it_says_what_was_paid_and_what_is_owed(): void
+    {
+        // Ana ya se hizo la corona (S/ 800) y dejó S/ 300; le falta la endodoncia, que todavía no se hace.
+        $ana = $this->patient('Ana', 'Flores');
+        $plan = $this->plan($ana, $this->torres, TreatmentPlanStatus::InProgress, [['Corona', '46', 800], ['Endodoncia', '46', 400]]);
+        Charge::factory()->for($ana)->create(['treatment_plan_item_id' => $plan->items()->first()->id, 'amount' => 800]);
+        Payment::factory()->for($ana)->create(['amount' => 300]);
+
+        // Luis pagó todo lo suyo; Rosa todavía no acepta: no lleva pagos.
+        $luis = $this->patient('Luis', 'Paredes');
+        $paid = $this->plan($luis, $this->torres, TreatmentPlanStatus::Completed, [['Limpieza', null, 120]]);
+        $paid->update(['accepted_at' => now()->subWeek()]);
+        $paid->items()->update(['accepted_at' => now()->subWeek()]);
+        Charge::factory()->for($luis)->create(['treatment_plan_item_id' => $paid->items()->first()->id, 'amount' => 120]);
+        Payment::factory()->for($luis)->create(['amount' => 120]);
+        $this->plan($this->patient('Rosa', 'Quispe'), $this->torres, TreatmentPlanStatus::Proposed, [['Ortodoncia', null, 450]]);
+
+        $this->actingAs(User::factory()->reception()->create());
+
+        Livewire::test(ListTreatmentPlans::class)
+            ->assertSeeInOrder(['S/ 1,200.00', 'Pagó S/ 300.00', 'Debe S/ 500.00'])
+            ->assertDontSee(['Sin pagos', 'Falta S/']);
+
+        Livewire::test(ListTreatmentPlans::class)
+            ->set('activeTab', 'completed')
+            ->assertCanSeeTableRecords([$paid])
+            ->assertSee('Pagado')
+            ->assertDontSee(['Debe', 'Sin pagos']);
+
+        // Con todo lo hecho pagado, dice lo que le falta pagar del plan.
+        Payment::factory()->for($ana)->create(['amount' => 500]);
+
+        Livewire::test(ListTreatmentPlans::class)->assertSeeInOrder(['Pagó S/ 800.00', 'Falta S/ 400.00']);
     }
 
     private function patient(string $firstName, string $lastName): Patient

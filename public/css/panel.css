@@ -1537,6 +1537,14 @@ a.ap-visit:hover { background: var(--gray-50); }
 .visit-plan-package-items { grid-column: 1 / -1; display: grid; margin: .2rem 0 0 .2rem; padding-left: .75rem; border-left: 2px solid var(--gray-200); }
 .visit-plan-items .visit-plan-package-items li { padding: .3rem 0; border-top: 0; }
 .dark .visit-plan-package-items { border-color: rgb(255 255 255 / .1); }
+/* Presupuestos y planes: bajo el monto, lo que pagó y lo que debe. */
+.plan-pay { display: block; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.plan-pay.is-paid { color: var(--success-700); }
+.plan-pay.is-due { color: var(--warning-800); font-weight: 600; }
+.plan-pay.is-late { color: var(--danger-700); font-weight: 600; }
+.dark .plan-pay.is-paid { color: var(--success-300); }
+.dark .plan-pay.is-due { color: var(--warning-300); }
+.dark .plan-pay.is-late { color: var(--danger-300); }
 .visit-plan-options { margin-top: .25rem; padding: .6rem .75rem; border-radius: .5rem; background: var(--gray-50); font-size: .8125rem; color: var(--gray-700); }
 .visit-plan-options ul { margin-top: .2rem; padding-left: 1.1rem; list-style: disc; display: grid; gap: .15rem; }
 .dark .visit-plan-options { background: rgb(255 255 255 / .04); color: var(--gray-300); }
