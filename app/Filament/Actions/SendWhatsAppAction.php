@@ -109,7 +109,7 @@ final class SendWhatsAppAction
             ->icon(Heroicon::OutlinedChatBubbleLeftEllipsis)
             ->color('success')
             ->modalSubmitActionLabel('Abrir WhatsApp')
-            ->modalSubmitAction(fn (Action $submit) => $submit->extraAttributes([
+            ->modalSubmitAction(fn (Action $action) => $action->extraAttributes([
                 'x-on:click' => "window.waTab = window.open('', '_blank')",
             ]));
     }

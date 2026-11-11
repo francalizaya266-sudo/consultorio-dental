@@ -45,7 +45,7 @@ final class RegisterPaymentAction
             ->color(fn (Action $action) => ($resolve($action)?->balance() ?? 0) > 0 ? 'success' : 'gray')
             ->visible(fn () => self::user()->can('create', Payment::class))
             ->modalHeading(fn (Action $action) => ($found = $resolve($action)) ? 'Cobrar a '.$found->full_name : 'Cobrar')
-            ->modalSubmitAction(fn (Action $submit) => $submit->label('Cobrar')->color('primary'))
+            ->modalSubmitAction(fn (Action $action) => $action->label('Cobrar')->color('primary'))
             ->modalWidth('lg')
             ->fillForm(function (Action $action) use ($resolve, $amount) {
                 $found = $resolve($action);
