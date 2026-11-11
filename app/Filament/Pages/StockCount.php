@@ -18,6 +18,9 @@ use Filament\Schemas\Components\EmbeddedSchema;
 use Filament\Schemas\Components\Form;
 use Filament\Schemas\Components\Section;
 use Filament\Schemas\Components\Text;
+use Filament\Schemas\Components\Utilities\Get;
+use Filament\Schemas\Components\Utilities\Set;
+use Filament\Schemas\Components\View;
 use Filament\Schemas\Schema;
 use Filament\Support\Icons\Heroicon;
 use Illuminate\Contracts\Support\Htmlable;
@@ -27,6 +30,9 @@ use Illuminate\Support\Collection;
  * El conteo del mes: se escribe lo que hay en el estante y cada diferencia queda como ajuste,
  * con quién contó y por qué. Lo que se deja vacío no cambia. Los implantes van aparte: se
  * controlan unidad por unidad, con su número de serie.
+ *
+ * Pensado para hacerlo con el celular frente al estante: si coincide, basta un toque en "Coincide";
+ * abajo queda fijo cuántos lleva contados y el botón de guardar.
  */
 class StockCount extends Page
 {
@@ -92,8 +98,11 @@ class StockCount extends Page
             ->components([
                 Form::make([EmbeddedSchema::make('form')])
                     ->id('form')
+                    ->extraAttributes(['class' => 'stock-count'])
                     ->livewireSubmitHandler('save')
                     ->footer([
+                        View::make('filament.pages.stock-count-progress')
+                            ->viewData(['total' => $this->countable()->count()]),
                         Actions::make([
                             Action::make('save')->label('Guardar conteo')->submit('save'),
                             Action::make('back')->label('Volver al inventario')->color('gray')->url(SupplyResource::getUrl('index')),
@@ -140,7 +149,12 @@ class StockCount extends Page
         $this->form->fill(['reason' => $state['reason'], 'counted' => []]);
     }
 
-    /** @return list<Section> Una sección por categoría, con lo que dice el sistema bajo cada material. */
+    /**
+     * Una sección por categoría, con lo que dice el sistema bajo cada material y "Coincide" para
+     * anotarlo de un toque cuando el estante dice lo mismo.
+     *
+     * @return list<Section>
+     */
     private function categorySections(): array
     {
         return $this->countable()
@@ -154,7 +168,13 @@ class StockCount extends Page
                     ->minValue(0)
                     ->suffix(Quantity::unit($supply->unit, 2))
                     ->helperText('En el sistema: '.$supply->quantity($supply->stock))
-                    ->placeholder('¿Cuánto hay?'))
+                    ->placeholder('¿Cuánto hay?')
+                    ->hintAction(Action::make('matches'.$supply->getKey())
+                        ->label('Coincide')
+                        ->icon(Heroicon::OutlinedCheck)
+                        ->link()
+                        ->visible(fn (Get $get) => blank($get('counted.'.$supply->getKey())))
+                        ->action(fn (Set $set) => $set('counted.'.$supply->getKey(), (float) $supply->stock))))
                     ->all()))
             ->values()
             ->all();

@@ -1456,3 +1456,22 @@ a.ap-visit:hover { background: var(--gray-50); }
 /* ---------- Hoy según la hora: antes de abrir y al cerrar ---------- */
 .day-moment-figures { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 .day-moment .cc-title:first-child { margin-top: 0; }
+
+/* ---------- Conteo del inventario ---------- */
+/* Se cuenta con el celular frente al estante: Guardar y cuántos lleva quedan fijos abajo, a un pulgar. */
+.stock-count > .fi-sc:last-child { position: sticky; bottom: 0; z-index: 20; display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: .5rem 1rem; margin-inline: -.75rem; padding: .75rem .75rem calc(.75rem + env(safe-area-inset-bottom)); border-radius: .75rem .75rem 0 0; background: rgb(255 255 255 / .96); backdrop-filter: blur(8px); box-shadow: 0 -1px 0 rgb(3 7 18 / .08), 0 -4px 16px rgb(0 0 0 / .04); }
+.dark .stock-count > .fi-sc:last-child { background: rgb(24 24 27 / .96); box-shadow: 0 -1px 0 rgb(255 255 255 / .08); }
+.stock-count-progress { margin: 0; font-size: .875rem; font-weight: 600; color: var(--gray-700); font-variant-numeric: tabular-nums; }
+.dark .stock-count-progress { color: var(--gray-300); }
+/* "Coincide" se toca con el dedo sin errar, sin agrandar la fila. */
+@media (pointer: coarse) { .stock-count .fi-fo-field-label-ctn .fi-link { margin-block: -.5rem; padding: .5rem .25rem .5rem .5rem; } }
+@media (max-width: 63.99rem) {
+    /* Mientras cuenta, la barra de accesos se esconde: abajo queda solo Guardar. */
+    body:has(.stock-count) .mobile-bar { display: none; }
+    body:has(.stock-count) .fi-main { padding-bottom: calc(1.5rem + env(safe-area-inset-bottom)); }
+}
+/* En el celular, una sola fila: cuántos lleva y Guardar. Para volver está el menú. */
+@media (max-width: 39.99rem) {
+    .stock-count > .fi-sc:last-child { flex-wrap: nowrap; }
+    .stock-count > .fi-sc:last-child .fi-ac > .fi-btn:not(:first-child) { display: none; }
+}

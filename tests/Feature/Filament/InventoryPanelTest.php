@@ -107,6 +107,31 @@ class InventoryPanelTest extends TestCase
         Livewire::test(ManageSupplies::class)->assertActionHidden('starter');
     }
 
+    public function test_counting_with_the_phone_what_matches_is_one_tap_and_saving_stays_at_hand(): void
+    {
+        $this->actingAs(User::factory()->reception()->create());
+        $gloves = Supply::factory()->create(['name' => 'Guantes de nitrilo', 'stock' => 12]);
+        $masks = Supply::factory()->create(['name' => 'Mascarillas', 'stock' => 50]);
+        $matchesGloves = TestAction::make('matches'.$gloves->id)->schemaComponent('counted.'.$gloves->id, 'form');
+
+        Livewire::test(StockCount::class)
+            ->assertSeeHtml('stock-count')
+            ->assertSee('Llevas 0 de 2')
+            ->assertSeeHtml("mountAction('matches{$gloves->id}'")
+            ->callAction($matchesGloves)
+            ->assertSet('data.counted.'.$gloves->id, 12.0)
+            ->assertDontSeeHtml("mountAction('matches{$gloves->id}'")
+            ->assertSeeHtml("mountAction('matches{$masks->id}'")
+            ->set('data.counted.'.$masks->id, 47)
+            ->call('save')
+            ->assertNotified('Conteo guardado: 1 material ajustado.');
+
+        // Lo que coincidió quedó igual; solo se ajustó lo que faltaba.
+        $this->assertSame(12.0, (float) $gloves->fresh()->stock);
+        $this->assertSame(47.0, (float) $masks->fresh()->stock);
+        $this->assertSame([$masks->id], StockMovement::where('type', StockMovementType::Adjustment)->distinct()->pluck('supply_id')->all());
+    }
+
     public function test_reception_receives_material_orders_what_is_missing_by_whatsapp_and_receives_the_order(): void
     {
         $supplier = Supplier::factory()->create(['name' => 'Dental Sur', 'contact_name' => 'Rocío', 'phone' => '+51987111222']);
