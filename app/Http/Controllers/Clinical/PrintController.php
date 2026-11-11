@@ -16,6 +16,7 @@ use App\Models\Setting;
 use App\Models\TreatmentPlan;
 use App\Models\TreatmentPlanItem;
 use App\Models\TreatmentPlanSignature;
+use App\Models\User;
 use App\Services\Clinical\ConsentService;
 use App\Services\Clinical\PrescriptionService;
 use App\Services\Clinical\TreatmentPlanService;
@@ -94,23 +95,33 @@ class PrintController extends Controller
         ]);
     }
 
+    /**
+     * El plan con su presupuesto. Quien ve la historia lo imprime completo; recepción y administración, que le
+     * hacen seguimiento y lo cobran, solo el presupuesto: sin odontograma, pieza, diagnóstico ni notas (Ley 29733).
+     */
     public function plan(TreatmentPlan $plan, TreatmentPlanService $plans): View
     {
-        abort_unless(auth()->user()->can('viewClinical', $plan->patient), 403);
+        /** @var User $user */
+        $user = auth()->user();
+        $clinical = $user->can('viewClinical', $plan->patient);
+        abort_unless($clinical || $user->managesAllAgendas(), 403);
 
         $plan->load('patient', 'doctor', 'items.package', 'installments', 'signatures', 'includedIn.patient', 'companionPlans.patient');
         $package = $plan->accepted_at ? null : $plan->offeredPackage();
         // El odontograma de la atención donde se armó el plan o, si no hay, el último: lo rojo es lo que se va a tratar.
-        $odontogram = Odontogram::query()
-            ->where('patient_id', $plan->patient_id)
-            ->when($plan->consultation_id, fn ($odontograms) => $odontograms->orderByRaw('consultation_id = ? desc', [$plan->consultation_id]))
-            ->latest('id')
-            ->with('entries.condition')
-            ->first();
+        $odontogram = $clinical
+            ? Odontogram::query()
+                ->where('patient_id', $plan->patient_id)
+                ->when($plan->consultation_id, fn ($odontograms) => $odontograms->orderByRaw('consultation_id = ? desc', [$plan->consultation_id]))
+                ->latest('id')
+                ->with('entries.condition')
+                ->first()
+            : null;
 
         return view('print.plan', [
             ...self::drawing($odontogram),
-            'diagnoses' => $plan->diagnosesByTooth(),
+            'clinical' => $clinical,
+            'diagnoses' => $clinical ? $plan->diagnosesByTooth() : [],
             'validUntil' => $plan->validUntil(),
             'plan' => $plan,
             'patient' => $plan->patient,
