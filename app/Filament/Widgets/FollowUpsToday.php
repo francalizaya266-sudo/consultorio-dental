@@ -2,16 +2,20 @@
 
 namespace App\Filament\Widgets;
 
+use App\Enums\AppointmentStatus;
 use App\Enums\MessageTemplateKey;
 use App\Enums\RescheduleRequestStatus;
 use App\Filament\Actions\SendWhatsAppAction;
 use App\Filament\Pages\TomorrowTray;
 use App\Filament\Resources\Appointments\AppointmentResource;
 use App\Filament\Resources\Installments\InstallmentResource;
+use App\Filament\Resources\LabOrders\LabOrderResource;
 use App\Filament\Resources\Patients\PatientResource;
 use App\Filament\Resources\RescheduleRequests\RescheduleRequestResource;
 use App\Filament\Resources\Supplies\SupplyResource;
 use App\Filament\Resources\WhatsappMessages\WhatsappMessageResource;
+use App\Models\Appointment;
+use App\Models\LabOrder;
 use App\Models\Patient;
 use App\Models\Supply;
 use App\Models\SupplyBatch;
@@ -85,7 +89,9 @@ class FollowUpsToday extends Widget implements HasActions, HasSchemas
             $this->pendingRequests(),
             $this->awaitingAnswer($followUps),
             $this->unscheduled($followUps),
+            $this->missedVisits($followUps),
             $this->installments($followUps),
+            $this->labOrders(),
             $this->suppliesToReorder(),
             $this->suppliesRunningLow(),
             $this->tomorrowTray(),
@@ -208,6 +214,39 @@ class FollowUpsToday extends Widget implements HasActions, HasSchemas
         ];
     }
 
+    /**
+     * Faltaron o cancelaron y nadie les dio otro horario: se les escribe o se les agenda de nuevo lo mismo.
+     *
+     * @return array<string, mixed>
+     */
+    private function missedVisits(FollowUps $followUps): array
+    {
+        ['count' => $count, 'patients' => $patients] = $followUps->missedVisits();
+        $key = MessageTemplateKey::MissedVisit;
+        $contacted = $followUps->recentlyContacted($patients->modelKeys(), $key);
+
+        return [
+            'key' => 'missed',
+            'title' => 'Faltaron o cancelaron',
+            'hint' => 'En los últimos '.intdiv(Patient::MISSED_VISIT_DAYS, 30).' meses y siguen sin otra cita',
+            'count' => $count,
+            'url' => PatientResource::getUrl('index', ['tab' => 'missed']),
+            'summary' => null,
+            'template' => $key->value,
+            'rows' => $patients->map(function (Patient $patient) use ($contacted) {
+                /** @var Appointment $missed */
+                $missed = $patient->appointments->first();
+
+                return $this->row(
+                    $patient,
+                    ($missed->status === AppointmentStatus::NoShow ? 'No asistió el ' : 'Se canceló su cita del ').$missed->starts_at->translatedFormat('j \d\e F').' · '.$missed->treatment->name,
+                    $contacted,
+                    AppointmentResource::getUrl('create', ['patient' => $patient->getKey(), 'treatment' => $missed->treatment_id, 'doctor' => $missed->doctor_id]),
+                );
+            })->all(),
+        ];
+    }
+
     /** @return array<string, mixed> */
     private function installments(FollowUps $followUps): array
     {
@@ -220,6 +259,28 @@ class FollowUpsToday extends Widget implements HasActions, HasSchemas
             'count' => $count,
             'url' => InstallmentResource::getUrl('index', ['tab' => 'late']),
             'summary' => Money::format($amount).' por cobrar. En la lista, "Escribir" prepara el aviso de cada una.',
+            'template' => null,
+            'rows' => [],
+        ];
+    }
+
+    /**
+     * Trabajos de laboratorio que piden algo hoy: se atrasaron, llegan hoy, el paciente tiene cita antes de la
+     * entrega, o ya llegaron y nadie lo citó para colocarlos.
+     *
+     * @return array<string, mixed>
+     */
+    private function labOrders(): array
+    {
+        $orders = LabOrderResource::getEloquentQuery()->needingAttention()->orderBy('due_on')->get();
+
+        return [
+            'key' => 'lab',
+            'title' => 'Trabajos de laboratorio',
+            'hint' => 'Atrasados, llegan hoy, con la cita antes de la entrega o falta citar',
+            'count' => $orders->count(),
+            'url' => LabOrderResource::getUrl('index', ['tab' => 'attention']),
+            'summary' => self::firstNames($orders->map(fn (LabOrder $order) => $order->description.' de '.$order->patient->full_name.' ('.mb_strtolower(mb_substr((string) $order->alert(), 0, 1)).mb_substr((string) $order->alert(), 1).')')).'.',
             'template' => null,
             'rows' => [],
         ];

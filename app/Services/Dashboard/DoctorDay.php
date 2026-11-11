@@ -23,7 +23,7 @@ final class DoctorDay
             ->where('doctor_id', $this->doctorId)
             ->whereDate('starts_at', today())
             ->where(fn ($query) => $query
-                ->where('status', AppointmentStatus::CheckedIn)
+                ->where(fn ($query) => $query->waitingNow())
                 ->orWhere(fn ($query) => $query
                     ->whereIn('status', [AppointmentStatus::Confirmed, AppointmentStatus::Pending])
                     ->where('ends_at', '>', now())))
@@ -39,8 +39,7 @@ final class DoctorDay
     {
         return Appointment::query()
             ->where('doctor_id', $this->doctorId)
-            ->whereDate('starts_at', today())
-            ->where('status', AppointmentStatus::CheckedIn)
+            ->waitingNow()
             ->count();
     }
 

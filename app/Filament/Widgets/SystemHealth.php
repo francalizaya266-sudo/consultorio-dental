@@ -45,7 +45,7 @@ class SystemHealth extends Widget
             $latest = $backups->latestAt();
             $issues[] = [
                 'heading' => $latest ? 'La última copia de seguridad es de '.$latest->diffForHumans() : 'Todavía no hay copias de seguridad',
-                'description' => 'Las copias se hacen solas cada noche con la tarea programada (cron) del hosting. Revisa que esté activa.',
+                'description' => 'Se crean solas cada madrugada y la última no se creó. Entra a "Ver copias", toca "Crear copia ahora" y avisa a quien te ayuda con el hosting.',
                 'url' => Backups::canAccess() ? Backups::getUrl() : null,
                 'link' => 'Ver copias',
             ];

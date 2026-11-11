@@ -20,8 +20,8 @@ use Illuminate\Support\Arr;
 use Illuminate\Support\Collection;
 
 /**
- * Lo que recepción tiene que perseguir hoy: presupuestos sin respuesta, planes sin próxima cita,
- * cuotas atrasadas, pacientes para control y cumpleaños. Cuenta con las mismas consultas que las
+ * Lo que recepción tiene que perseguir hoy: presupuestos sin respuesta, planes sin próxima cita, quien faltó
+ * o canceló, cuotas atrasadas, pacientes para control y cumpleaños. Cuenta con las mismas consultas que las
  * pestañas de Pacientes y Cuotas, así el número del inicio y el de la lista coinciden.
  */
 final class FollowUps
@@ -33,6 +33,7 @@ final class FollowUps
     public const CONTACT_DAYS = [
         MessageTemplateKey::PlanFollowUp->value => TreatmentPlan::ANSWER_WAIT_DAYS,
         MessageTemplateKey::PlanNextSession->value => 7,
+        MessageTemplateKey::MissedVisit->value => 14,
         MessageTemplateKey::CheckupRecall->value => 30,
         MessageTemplateKey::Birthday->value => 0,
         MessageTemplateKey::ReviewRequest->value => 180,
@@ -81,6 +82,29 @@ final class FollowUps
 
         return [
             'count' => Patient::query()->withUnscheduledPlan()->count(),
+            'patients' => $patients,
+        ];
+    }
+
+    /**
+     * Faltaron o cancelaron y nadie les dio otro horario: los más recientes primero, que son los que más vuelven.
+     * Cada uno trae en appointments la cita que perdió.
+     *
+     * @return array{count: int, patients: Collection<int, Patient>}
+     */
+    public function missedVisits(): array
+    {
+        $missed = fn ($appointments) => $appointments->missedAndNotRebooked();
+        $patients = Patient::query()
+            ->missedAndNotRebooked()
+            ->withMax(['appointments as missed_at' => $missed], 'starts_at')
+            ->with(['account', 'appointments' => fn ($appointments) => $missed($appointments)->with('treatment')->latest('starts_at')])
+            ->orderByDesc('missed_at')
+            ->limit(self::LIMIT)
+            ->get();
+
+        return [
+            'count' => Patient::query()->missedAndNotRebooked()->count(),
             'patients' => $patients,
         ];
     }
@@ -201,6 +225,17 @@ final class FollowUps
                 ->unique()
                 ->all();
             $params['pendiente'] = $pending === [] ? 'lo que falta' : Arr::join($pending, ', ', ' y ');
+        }
+
+        if ($key === MessageTemplateKey::MissedVisit) {
+            $missed = app(PatientInsights::class)->missedVisit($patient);
+
+            if (! $missed) {
+                return null;
+            }
+
+            $params['tratamiento'] = mb_strtolower($missed->treatment->name);
+            $params['fecha'] = $missed->starts_at->translatedFormat('l j \d\e F');
         }
 
         if ($key === MessageTemplateKey::ReviewRequest) {

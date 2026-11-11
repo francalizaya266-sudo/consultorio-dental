@@ -107,7 +107,8 @@ class WhatsAppOutbox
         $template = MessageTemplate::query()->where('key', $message->template_key)->where('is_active', true)->first();
         $body = $template?->body ?? $message->template_key->defaultBody();
 
-        $params = $message->params ?? [];
+        // Un aviso preparado antes de que el recordatorio llevara {indicaciones} no las trae: va sin ellas.
+        $params = ($message->params ?? []) + ['indicaciones' => ''];
 
         if ($issueLink && str_contains($body, '{enlace}') && ($link = $this->linkFor($message, $by))) {
             $params['enlace'] = $link;
@@ -202,6 +203,8 @@ class WhatsAppOutbox
             'precio' => ($price = CampaignText::price($appointment->treatment, $appointment->campaign)) ? $price.' '.CampaignText::HOW_TO_PAY : '',
             'consultorio' => (string) Setting::get('clinic.name'),
             'direccion' => (string) Setting::get('clinic.address'),
+            // Lo que ese tratamiento pide antes de venir ("Antes de venir: ven habiendo comido…"), o nada.
+            'indicaciones' => filled($appointment->treatment->before_instructions) ? 'Antes de venir: '.trim($appointment->treatment->before_instructions) : '',
         ];
     }
 }

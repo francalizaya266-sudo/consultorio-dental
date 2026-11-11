@@ -5,6 +5,7 @@ namespace App\Filament\Resources\WhatsappMessages\Tables;
 use App\Enums\MessageStatus;
 use App\Enums\MessageTemplateKey;
 use App\Filament\Actions\SendWhatsAppAction;
+use App\Filament\Resources\Appointments\Tables\AppointmentsTable;
 use App\Models\WhatsappMessage;
 use App\Services\WhatsApp\WhatsAppOutbox;
 use App\Support\Phone;
@@ -24,22 +25,22 @@ class WhatsappMessagesTable
         return $table
             ->stackedOnMobile()
             ->columns([
-                TextColumn::make('created_at')
-                    ->label('Preparado')
-                    ->since()
-                    ->dateTimeTooltip('d/m/Y H:i')
-                    ->sortable(),
+                // Cuándo se preparó va debajo del nombre del aviso: así el botón de enviar entra sin correr la tabla.
                 TextColumn::make('template_key')
                     ->label('Aviso')
                     ->badge()
-                    ->color('gray'),
+                    ->color('gray')
+                    ->description(fn (WhatsappMessage $record) => 'Preparado '.$record->created_at->diffForHumans()),
                 // El mensaje a la vista, para saber qué se manda sin abrirlo.
                 TextColumn::make('preview')
                     ->label('Mensaje')
                     ->state(fn (WhatsappMessage $record) => Str::limit(Str::squish(str_replace('{enlace}', '(su enlace)', app(WhatsAppOutbox::class)->draft($record))), 140))
                     ->color('gray')
                     ->size('sm')
-                    ->wrap(),
+                    ->wrap()
+                    ->lineClamp(3)
+                    // Sin un ancho mínimo, la tabla la aprieta hasta dejar una palabra por línea.
+                    ->extraAttributes(['style' => 'min-width: 13rem']),
                 TextColumn::make('phone')
                     ->label('Para')
                     ->formatStateUsing(fn (WhatsappMessage $record) => $record->patient?->full_name ?? Phone::display($record->phone))
@@ -50,11 +51,13 @@ class WhatsappMessagesTable
                 TextColumn::make('appointment.starts_at')
                     ->label('Cita')
                     ->dateTime('D d/m H:i')
-                    ->description(fn (WhatsappMessage $record) => $record->appointment?->doctor->name)
+                    ->description(fn (WhatsappMessage $record) => AppointmentsTable::showsDoctor(auth()->user()) ? $record->appointment?->doctor->name : null)
                     ->placeholder('—'),
                 TextColumn::make('status')
                     ->label('Estado')
                     ->badge()
+                    // En "Por enviar" y "Promociones" todos dicen lo mismo, y la columna sacaba el botón de la pantalla.
+                    ->hidden(fn ($livewire) => in_array($livewire->activeTab ?? 'due', ['due', 'promotions'], true))
                     ->description(fn (WhatsappMessage $record) => match (true) {
                         $record->status === MessageStatus::Sent => trim(($record->sentBy?->name ?? 'Automático').' · '.$record->sent_at?->format('d/m H:i')),
                         $record->status === MessageStatus::Pending && $record->due_at?->isFuture() => 'Sale el '.$record->due_at->translatedFormat('d/m \a \l\a\s H:i'),

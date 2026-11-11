@@ -180,16 +180,19 @@ final class AppointmentActions
             ->url(fn (Appointment $record) => ConsultationResource::urlFor($record->consultation));
     }
 
-    /** Recepción cierra la cita sin historia escrita. También la de un día anterior que quedó sin cerrar, si el paciente sí vino. */
+    /**
+     * Recepción cierra la cita sin historia escrita. También la que ya terminó su hora y quedó sin cerrar (de hoy
+     * o de un día anterior), si el paciente sí vino: como nadie anotó que llegó, se pregunta antes.
+     */
     public static function complete(): Action
     {
         return Action::make('complete')
             ->label('Atendido')
             ->icon(Heroicon::OutlinedCheckBadge)
             ->color('gray')
-            ->visible(fn (Appointment $record) => (in_array($record->status, [AppointmentStatus::CheckedIn, AppointmentStatus::InProgress], true) || $record->isLeftOpen())
+            ->visible(fn (Appointment $record) => (in_array($record->status, [AppointmentStatus::CheckedIn, AppointmentStatus::InProgress], true) || $record->endedWithoutArriving() || $record->isLeftOpen())
                 && ! self::attendsClinically($record))
-            ->requiresConfirmation(fn (Appointment $record) => $record->isFromAnEarlierDay())
+            ->requiresConfirmation(fn (Appointment $record) => $record->isFromAnEarlierDay() || $record->endedWithoutArriving())
             ->modalHeading(fn (Appointment $record) => '¿El paciente vino el '.$record->starts_at->translatedFormat('l j \d\e F').'?')
             ->modalDescription(fn (Appointment $record) => 'La cita queda atendida con su fecha y se registra lo programado: '.($record->planItem?->label(withTooth: false) ?? $record->treatment->name).'. Si no vino, usa "No asistió".')
             ->modalSubmitActionLabel('Sí, se atendió')

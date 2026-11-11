@@ -114,7 +114,7 @@ class EarningsReportTest extends TestCase
     {
         $tables = collect(EarningsTables::for($this->report()))->keyBy('key');
 
-        $this->assertSame(['period', 'doctor', 'treatment', 'method'], $tables->keys()->all());
+        $this->assertSame(['period', 'profit', 'doctor', 'treatment', 'method'], $tables->keys()->all());
         $this->assertSame(['Total', 150.0, 400.0, 2], $tables['period']['total']);
         $this->assertSame(['Total', 2, 150.0, 100.0], $tables['method']['total']);
         $this->assertSame('S/ 1,250.50', EarningsTables::format(1250.5, EarningsTables::MONEY));

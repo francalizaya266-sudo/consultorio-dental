@@ -2,7 +2,6 @@
 
 namespace App\Filament\Widgets;
 
-use App\Enums\AppointmentStatus;
 use App\Filament\Resources\Appointments\AppointmentResource;
 use App\Filament\Resources\Appointments\Tables\AppointmentsTable;
 use App\Models\Appointment;
@@ -14,7 +13,7 @@ use Filament\Widgets\Widget;
  * Quién está en sala y hace cuánto, de quien más espera a quien acaba de llegar. Desde
  * TodayAppointments::LONG_WAIT_MINUTES la espera va en rojo. Es de recepción: el doctor (aunque
  * también administre) ve a quien lo espera en "Tu próximo paciente" y no la ve otra vez aquí.
- * Se actualiza sola cada 30 s.
+ * Quien quedó "en sala" horas después de su cita ya no sale: es una cita sin cerrar. Se actualiza sola cada 30 s.
  */
 class WaitingRoom extends Widget
 {
@@ -42,8 +41,7 @@ class WaitingRoom extends Widget
 
         $waiting = AppointmentResource::getEloquentQuery()
             ->with(['patient', 'treatment', 'doctor'])
-            ->whereDate('starts_at', today())
-            ->where('status', AppointmentStatus::CheckedIn)
+            ->waitingNow()
             ->orderBy('checked_in_at')
             ->get();
 

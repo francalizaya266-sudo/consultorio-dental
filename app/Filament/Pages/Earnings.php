@@ -14,7 +14,8 @@ use Filament\Support\Icons\Heroicon;
 /**
  * Ingresos por día, doctor, tratamiento y medio de pago, para imprimir o bajar en Excel: el detalle detrás
  * del Resumen, que es el tablero con los gráficos. Aquí no se repiten los gráficos, solo los totales y las
- * tablas. Se llaman ingresos y no ganancias porque no descuentan costos (materiales, laboratorio, sueldos).
+ * tablas. "Lo que queda" resta de lo cobrado los gastos anotados en Caja (laboratorio, sueldos, alquiler) y lo
+ * que costaron los materiales usados.
  */
 class Earnings extends BaseDashboard
 {
@@ -32,7 +33,7 @@ class Earnings extends BaseDashboard
 
     public function getSubheading(): string
     {
-        return 'Lo atendido y lo cobrado en el período, al detalle. No descuenta costos de materiales, laboratorio ni sueldos.';
+        return 'Lo atendido y lo cobrado en el período, al detalle. "Lo que queda" descuenta los gastos anotados en Caja y los materiales usados.';
     }
 
     public function getWidgets(): array

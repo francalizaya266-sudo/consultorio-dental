@@ -35,6 +35,10 @@ class ListPatients extends ListRecords
                 ->badge(fn () => PatientResource::getEloquentQuery()->withUnscheduledPlan()->count() ?: null)
                 ->badgeColor('warning')
                 ->modifyQueryUsing(fn (Builder $query) => $query->withUnscheduledPlan()),
+            'missed' => Tab::make('Faltaron o cancelaron')
+                ->badge(fn () => PatientResource::getEloquentQuery()->missedAndNotRebooked()->count() ?: null)
+                ->badgeColor('warning')
+                ->modifyQueryUsing(fn (Builder $query) => $query->missedAndNotRebooked()),
             'proposed' => Tab::make('Presupuesto sin respuesta')
                 ->badge(fn () => PatientResource::getEloquentQuery()->withPlanAwaitingAnswer()->count() ?: null)
                 ->badgeColor('warning')

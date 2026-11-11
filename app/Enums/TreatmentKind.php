@@ -117,12 +117,41 @@ enum TreatmentKind: string
     public static function treatmentsByCheckupMonths(): array
     {
         return Treatment::withTrashed()
-            ->get(['id', 'name', 'is_evaluation'])
+            ->get(['id', 'name', 'is_evaluation', 'checkup_months'])
             ->toBase()
-            ->groupBy(fn (Treatment $treatment) => self::for($treatment)->checkupMonths())
+            ->groupBy(fn (Treatment $treatment) => $treatment->checkupMonths())
             ->except(self::Other->checkupMonths())
             ->map(fn ($treatments) => $treatments->pluck('id')->all())
             ->all();
+    }
+
+    /** Lo que se le suele pedir al paciente antes de venir, para proponerlo en la ficha del tratamiento. */
+    public function suggestedBeforeInstructions(): ?string
+    {
+        return match ($this) {
+            self::Extraction, self::Implant => 'Ven habiendo comido algo ligero y con los dientes cepillados. Si tomas medicinas todos los días, avísanos antes.',
+            self::RootCanal => 'Ven habiendo comido y con los dientes cepillados. Si tienes radiografías de esa pieza, tráelas.',
+            self::Whitening => 'Ven con los dientes cepillados y evita café, té y gaseosas oscuras desde hoy.',
+            self::Orthodontics => 'Ven con los dientes bien cepillados y trae tus ligas o retenedores si los usas.',
+            self::Cleaning, self::Filling => 'Ven con los dientes cepillados.',
+            self::Evaluation => 'Si tienes radiografías o exámenes anteriores, tráelos.',
+            self::Other => null,
+        };
+    }
+
+    /** Los cuidados usuales después de la atención, para proponerlos en la ficha del tratamiento. */
+    public function suggestedAftercare(): ?string
+    {
+        return match ($this) {
+            self::Extraction => "- Muerde la gasa 30 minutos y hoy no escupas ni te enjuagues.\n- No fumes ni tomes con cañita por 3 días.\n- Hoy come blando y frío o tibio, y mastica por el otro lado.\n- Toma solo lo que te recetó el doctor.\n- Desde mañana cepíllate con cuidado, sin tocar la herida.",
+            self::Implant => "- Ponte hielo por fuera, 10 minutos sí y 10 no, durante las primeras horas.\n- Hoy no escupas ni te enjuagues, y no fumes por una semana.\n- Come blando y frío o tibio, y mastica por el otro lado.\n- Toma solo lo que te recetó el doctor.\n- Desde mañana cepíllate con cuidado, sin tocar la zona.",
+            self::RootCanal => "- No mastiques con ese lado hasta que pase la anestesia.\n- Evita lo duro en esa pieza hasta su restauración final.\n- Es normal sentir sensibilidad unos días.\n- Toma solo lo que te recetó el doctor.",
+            self::Filling => "- No comas hasta que pase la anestesia, para no morderte.\n- Si al morder sientes la curación alta, avísanos para ajustarla.",
+            self::Cleaning => "- Es normal sentir sensibilidad uno o dos días.\n- Cepíllate tres veces al día y usa hilo dental.",
+            self::Whitening => "- Por 48 horas evita café, té, vino, gaseosas oscuras, salsas con color y fumar.\n- Es normal sentir sensibilidad uno o dos días.",
+            self::Orthodontics => "- Es normal sentir presión dos o tres días.\n- Evita alimentos duros o pegajosos.\n- Cepíllate después de cada comida.",
+            self::Evaluation, self::Other => null,
+        };
     }
 
     /** Suele llevar anestesia local. */

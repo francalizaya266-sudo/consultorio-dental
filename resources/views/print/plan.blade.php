@@ -1,5 +1,6 @@
 @use('App\Support\Money')
-<x-print-layout title="Plan de tratamiento y presupuesto" :doctor="$doctor" :patient="$patient" :date="$plan->created_at" :auto-print="! $delivered">
+{{-- Sin $clinical (recepción y administración) sale solo el presupuesto: sin odontograma, pieza, diagnóstico ni notas. --}}
+<x-print-layout :title="$clinical ? 'Plan de tratamiento y presupuesto' : 'Presupuesto'" :doctor="$doctor" :patient="$patient" :date="$plan->created_at" :auto-print="! $delivered">
     @if ($deliverUrl)
         <x-slot:actions>
             <form method="POST" action="{{ $deliverUrl }}">
@@ -33,7 +34,7 @@
         .why { font-size: .8rem; color: var(--muted); }
     </style>
 
-    @if ($plan->title)
+    @if ($clinical && $plan->title)
         <div class="plan-title">{{ $plan->title }}</div>
     @endif
 
@@ -56,7 +57,9 @@
             <tr>
                 <th>#</th>
                 <th>Procedimiento</th>
-                <th>Pieza</th>
+                @if ($clinical)
+                    <th>Pieza</th>
+                @endif
                 <th class="num">Cant.</th>
                 <th class="num">Precio</th>
                 <th class="num">Desc.</th>
@@ -79,12 +82,14 @@
                             <div class="tag">Agregado: falta la firma del paciente</div>
                         @endif
                     </td>
-                    <td>
-                        {{ collect([$item->tooth, $item->surfaces])->filter()->implode(' ') ?: '—' }}
-                        @if ($toothName = $item->toothDescription())
-                            <div class="tooth-name">{{ $toothName }}</div>
-                        @endif
-                    </td>
+                    @if ($clinical)
+                        <td>
+                            {{ collect([$item->tooth, $item->surfaces])->filter()->implode(' ') ?: '—' }}
+                            @if ($toothName = $item->toothDescription())
+                                <div class="tooth-name">{{ $toothName }}</div>
+                            @endif
+                        </td>
+                    @endif
                     <td class="num">{{ $item->quantity }}</td>
                     <td class="num">{{ Money::format($item->unit_price) }}</td>
                     <td class="num">{{ (float) $item->discount > 0 ? '− '.Money::format($item->discount) : '—' }}</td>
@@ -94,7 +99,7 @@
         </tbody>
         <tfoot>
             <tr>
-                <td colspan="6" class="num">Total</td>
+                <td colspan="{{ $clinical ? 6 : 5 }}" class="num">Total</td>
                 <td class="num">{{ Money::format($plan->total()) }}</td>
             </tr>
         </tfoot>
@@ -153,7 +158,7 @@
         </div>
     @endif
 
-    @if (filled($plan->notes))
+    @if ($clinical && filled($plan->notes))
         <p class="notes">{{ $plan->notes }}</p>
     @endif
 

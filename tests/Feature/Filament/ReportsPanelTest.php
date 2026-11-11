@@ -208,11 +208,11 @@ class ReportsPanelTest extends TestCase
         $this->assertTrue($zip->open($path));
 
         $workbook = $zip->getFromName('xl/workbook.xml');
-        foreach (['Resumen', 'Por día', 'Por doctor', 'Por tratamiento', 'Por medio de pago', 'Pagos'] as $sheet) {
+        foreach (['Resumen', 'Por día', 'Lo que queda', 'Por doctor', 'Por tratamiento', 'Por medio de pago', 'Pagos'] as $sheet) {
             $this->assertStringContainsString('name="'.$sheet.'"', $workbook);
         }
 
-        $payments = $zip->getFromName('xl/worksheets/sheet6.xml');
+        $payments = $zip->getFromName('xl/worksheets/sheet7.xml');
         $this->assertStringContainsString('Rosa Quispe', $payments);
         $this->assertStringContainsString('<v>450</v>', $payments);
         // Las fechas van como fecha de Excel: 2 de octubre de 2026.

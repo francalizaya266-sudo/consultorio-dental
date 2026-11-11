@@ -5,6 +5,7 @@ namespace App\Filament\Support;
 use App\Enums\DayPeriod;
 use App\Models\Appointment;
 use App\Models\Doctor;
+use App\Models\LabOrder;
 use App\Models\Patient;
 use App\Models\Treatment;
 use App\Models\User;
@@ -94,6 +95,8 @@ final class SlotPicker
                 ->minDate(today())
                 ->required()
                 ->live()
+                // Si algo suyo sigue en el laboratorio y llega después de ese día, se avisa antes de agendar.
+                ->helperText(fn (Get $get) => self::labWorkArrivingAfter($moving?->patient_id ?? $get('patient_id'), $get('date')))
                 ->afterStateUpdated($suggest),
 
             // Todos los horarios a la vista, un toque cada uno (antes era una lista desplegable).
@@ -191,6 +194,20 @@ final class SlotPicker
 
         return collect(array_keys(self::slotOptions($get, $moving)))
             ->first(fn (string $time) => $time >= $preferred);
+    }
+
+    /** "Su corona de zirconio llega del laboratorio el sáb. 14 nov.: si esta cita es para colocarla, agéndala desde ese día." */
+    private static function labWorkArrivingAfter(mixed $patientId, mixed $date): ?string
+    {
+        if (blank($patientId) || blank($date)) {
+            return null;
+        }
+
+        $order = LabOrder::query()->arrivingAfter((int) $patientId, CarbonImmutable::parse($date))->orderBy('due_on')->first();
+
+        return $order
+            ? 'Ojo: "'.$order->description.'" llega del laboratorio el '.$order->due_on->translatedFormat('D j M').'. Si esta cita es para colocarlo, agéndala desde ese día.'
+            : null;
     }
 
     /** Si el consultorio tiene un solo doctor activo, ya viene elegido. */

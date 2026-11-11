@@ -2,6 +2,7 @@
 
 namespace App\Filament\Resources\Treatments;
 
+use App\Enums\TreatmentKind;
 use App\Filament\Concerns\HasSpanishLabels;
 use App\Filament\Forms\WebPhotoUpload;
 use App\Filament\Resources\Treatments\Pages\ManageTreatments;
@@ -12,6 +13,8 @@ use App\Models\Treatment;
 use App\Services\Inventory\InventoryService;
 use App\Support\Money;
 use BackedEnum;
+use Closure;
+use Filament\Actions\Action;
 use Filament\Actions\ActionGroup;
 use Filament\Actions\DeleteAction;
 use Filament\Actions\EditAction;
@@ -106,6 +109,46 @@ class TreatmentResource extends Resource
                     ->maxLength(500)
                     ->helperText('Una o dos frases: sale en la lista de tratamientos.')
                     ->columnSpanFull(),
+                Section::make('Seguimiento y avisos')
+                    ->description('Lo que el sistema hace solo con este tratamiento: cuándo llama a control, cuándo propone la sesión siguiente y qué le dice al paciente.')
+                    ->columnSpanFull()
+                    ->columns(2)
+                    ->schema([
+                        TextInput::make('checkup_months')
+                            ->label('Vuelve a control cada')
+                            ->suffix('meses')
+                            ->numeric()
+                            ->integer()
+                            ->minValue(1)
+                            ->maxValue(36)
+                            ->placeholder(fn (Get $get) => (string) self::kindOf($get)->checkupMonths())
+                            ->helperText('Pasado ese tiempo sin cita, el paciente sale en "Les toca control". Vacío = lo usual para este tratamiento.'),
+                        TextInput::make('next_session_days')
+                            ->label('Sesión siguiente a los')
+                            ->suffix('días')
+                            ->numeric()
+                            ->integer()
+                            ->minValue(1)
+                            ->maxValue(365)
+                            ->placeholder(fn (Get $get) => (string) self::kindOf($get)->nextSessionDays())
+                            ->helperText('La fecha que se propone al programar la sesión que sigue. Vacío = lo usual para este tratamiento.'),
+                        Textarea::make('before_instructions')
+                            ->label('Antes de venir')
+                            ->rows(2)
+                            ->maxLength(300)
+                            ->placeholder('Por ejemplo: ven habiendo comido y trae tus radiografías.')
+                            ->helperText('Sale solo en el recordatorio del día anterior. Vacío = el recordatorio va sin indicaciones.')
+                            ->hintAction(self::suggestAction('before_instructions', fn (TreatmentKind $kind) => $kind->suggestedBeforeInstructions()))
+                            ->columnSpanFull(),
+                        Textarea::make('aftercare')
+                            ->label('Cuidados después de la atención')
+                            ->rows(5)
+                            ->maxLength(1500)
+                            ->placeholder("Por ejemplo:\n- Hoy no escupas ni te enjuagues.\n- Come blando y frío.")
+                            ->helperText('Al terminar la cita, queda listo en Avisos para enviarlo por WhatsApp. Vacío = no se prepara ningún aviso.')
+                            ->hintAction(self::suggestAction('aftercare', fn (TreatmentKind $kind) => $kind->suggestedAftercare()))
+                            ->columnSpanFull(),
+                    ]),
                 Section::make('Página del tratamiento')
                     ->columnSpanFull()
                     ->collapsed()
@@ -160,6 +203,27 @@ class TreatmentResource extends Resource
             ]);
     }
 
+    /** El tipo de tratamiento según el nombre que hay en pantalla. */
+    private static function kindOf(Get $get): TreatmentKind
+    {
+        return TreatmentKind::for(new Treatment(['name' => (string) $get('name'), 'is_evaluation' => (bool) $get('is_evaluation')]));
+    }
+
+    /**
+     * "Usar texto sugerido": propone lo usual para ese tipo de tratamiento. Solo aparece con el campo vacío y
+     * cuando hay algo que sugerir; el consultorio lo revisa y lo cambia antes de guardar.
+     *
+     * @param  Closure(TreatmentKind): ?string  $suggestion
+     */
+    private static function suggestAction(string $field, Closure $suggestion): Action
+    {
+        return Action::make('suggest_'.$field)
+            ->label('Usar texto sugerido')
+            ->link()
+            ->visible(fn (Get $get) => blank($get($field)) && $suggestion(self::kindOf($get)) !== null)
+            ->action(fn (Get $get, Set $set) => $set($field, $suggestion(self::kindOf($get))));
+    }
+
     public static function table(Table $table): Table
     {
         return $table
@@ -168,11 +232,12 @@ class TreatmentResource extends Resource
                 TextColumn::make('name')
                     ->label('Tratamiento')
                     ->searchable()
-                    ->description(fn (Treatment $record) => $record->sessions_label),
+                    ->description(fn (Treatment $record) => $record->sessionsText())
+                    ->wrap(),
                 TextColumn::make('duration_minutes')
                     ->label('Duración')
                     ->suffix(' min')
-                    ->description(fn (Treatment $record) => '+'.$record->bufferMinutes().' de esterilización'),
+                    ->description(fn (Treatment $record) => '+'.$record->bufferMinutes().' de limpieza'),
                 TextColumn::make('price_from')
                     ->label('Desde')
                     ->money('PEN', locale: 'es_PE')
@@ -212,7 +277,7 @@ class TreatmentResource extends Resource
                 ->withExists(['doctors as has_web_doctor' => fn (Builder $doctors) => $doctors->active()->where('accepts_online_booking', true)]))
             ->recordActions([
                 TreatmentRecipeAction::make(),
-                EditAction::make(),
+                EditAction::make()->iconButton()->tooltip('Editar'),
                 // Borrar va en el menú para que la fila entre entera. Con citas o cobros no se borra: avisa que se apaga "Activo".
                 ActionGroup::make([
                     DeleteAction::make()

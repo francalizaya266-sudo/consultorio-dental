@@ -13,6 +13,7 @@ use App\Filament\Resources\Consultations\ConsultationResource;
 use App\Filament\Resources\Consultations\Pages\EditConsultation;
 use App\Filament\Resources\Patients\Pages\ViewClinicalRecord;
 use App\Filament\Resources\Patients\RelationManagers\TreatmentPlansRelationManager;
+use App\Filament\Resources\TreatmentPlans\Pages\ListTreatmentPlans;
 use App\Livewire\OdontogramChart;
 use App\Models\Appointment;
 use App\Models\Doctor;
@@ -110,9 +111,14 @@ class TreatmentPlanPanelTest extends TestCase
             ->assertOk()
             ->assertSee(['Forma de pago', 'Cuota 2 de 2', '02/01/2027', 'Aceptó el plan', 'Precio acordado el 02/11/2026']);
 
-        // Recepción no ve presupuestos clínicos.
+        // Recepción imprime solo el presupuesto: sin odontograma, pieza, diagnóstico ni el título clínico.
         $this->actingAs(User::factory()->reception()->create());
-        $this->get(TreatmentPlansRelationManager::printUrl($plan))->assertForbidden();
+        $this->get(TreatmentPlansRelationManager::printUrl($plan))
+            ->assertOk()
+            ->assertSee(['Presupuesto', 'Curación con resina', 'S/ 150.00', 'Forma de pago', 'Cuota 2 de 2', 'Aceptó el plan'])
+            ->assertDontSee(['Plan de tratamiento y presupuesto', 'Plan inicial', 'Pieza', 'Su odontograma', 'Por: ']);
+        Livewire::test(ListTreatmentPlans::class)
+            ->assertActionHasUrl(TestAction::make('print')->table($plan), TreatmentPlansRelationManager::printUrl($plan));
     }
 
     public function test_reception_books_a_plan_session_and_attending_it_marks_it(): void

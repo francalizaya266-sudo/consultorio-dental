@@ -34,6 +34,9 @@ class Patient extends Model
     /** @use HasFactory<PatientFactory> */
     use Auditable, HasFactory, SoftDeletes;
 
+    /** Días que quien faltó o canceló sigue en la lista para ofrecerle otro horario. */
+    public const MISSED_VISIT_DAYS = 60;
+
     protected function casts(): array
     {
         return [
@@ -122,8 +125,14 @@ class Patient extends Model
     {
         return collect([
             $this->appointments(), $this->consultations(), $this->odontograms(), $this->treatmentPlans(),
-            $this->clinicalFiles(), $this->consents(), $this->prescriptions(), $this->charges(), $this->payments(),
+            $this->clinicalFiles(), $this->consents(), $this->prescriptions(), $this->charges(), $this->payments(), $this->labOrders(),
         ])->contains(fn (HasMany $records) => $records->exists());
+    }
+
+    /** Trabajos que se mandaron al laboratorio dental para este paciente. */
+    public function labOrders(): HasMany
+    {
+        return $this->hasMany(LabOrder::class);
     }
 
     /** Avisos de WhatsApp preparados para este paciente (los de la cuenta sin paciente no). */
@@ -267,6 +276,18 @@ class Patient extends Model
         return $query
             ->whereRaw('patients.last_visit_at <= '.($cases === '' ? '?' : "case{$cases} else ? end"), $bindings)
             ->whereDoesntHave('appointments', fn (Builder $a) => $a->where('starts_at', '>=', now())->whereIn('status', AppointmentStatus::changeable()));
+    }
+
+    /**
+     * Para recuperarlos: faltaron o cancelaron una cita en los últimos dos meses y después no vinieron ni tienen
+     * otra cita. Quien dejó un plan a medias no sale aquí: ya está en "Plan sin agendar".
+     */
+    #[Scope]
+    protected function missedAndNotRebooked(Builder $query): Builder
+    {
+        return $query
+            ->whereHas('appointments', fn (Builder $missed) => $missed->missedAndNotRebooked())
+            ->whereDoesntHave('treatmentPlans', fn (Builder $plans) => $plans->unscheduled());
     }
 
     /** Tiene un presupuesto presentado hace una semana o más, sin respuesta. */

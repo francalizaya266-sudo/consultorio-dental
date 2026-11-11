@@ -8,6 +8,7 @@ use App\Enums\TreatmentPlanStatus;
 use App\Filament\Actions\SendWhatsAppAction;
 use App\Filament\Resources\Appointments\AppointmentResource;
 use App\Filament\Resources\Patients\PatientResource;
+use App\Filament\Resources\Patients\RelationManagers\TreatmentPlansRelationManager;
 use App\Models\Doctor;
 use App\Models\TreatmentPlan;
 use App\Models\TreatmentPlanItem;
@@ -99,6 +100,11 @@ class TreatmentPlansTable
                         'plan_item' => self::openItems($record)->first()?->getKey(),
                     ])),
                 ActionGroup::make([
+                    // Quien no ve la historia imprime solo el presupuesto, sin pieza ni diagnóstico.
+                    Action::make('print')
+                        ->label('Ver e imprimir')
+                        ->icon(Heroicon::OutlinedPrinter)
+                        ->url(fn (TreatmentPlan $record) => TreatmentPlansRelationManager::printUrl($record), shouldOpenInNewTab: true),
                     self::declineAction(),
                 ]),
             ])

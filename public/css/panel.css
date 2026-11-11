@@ -1334,6 +1334,9 @@ a.ap-visit:hover { background: var(--gray-50); }
 .cc-row-text { flex: 1; min-width: 0; display: flex; flex-direction: column; }
 .cc-row-text strong { font-size: .875rem; font-weight: 600; color: var(--gray-950); }
 .cc-row-text small { font-size: .8125rem; color: var(--gray-600); }
+.cc-row-actions { display: flex; align-items: center; gap: .875rem; flex: none; }
+.cc-title-amount { margin-left: .375rem; font-variant-numeric: tabular-nums; color: var(--danger-600); }
+.dark .cc-title-amount { color: var(--danger-400); }
 .cc-amount { font-weight: 700; font-variant-numeric: tabular-nums; white-space: nowrap; }
 .cc-ok { margin: 0; font-size: .875rem; color: var(--gray-600); }
 .cc-status { display: flex; align-items: center; gap: .75rem; margin-top: 1rem; padding: .65rem .75rem; border-radius: .75rem; background: var(--primary-50); box-shadow: inset 0 0 0 1px var(--primary-200); }
@@ -1454,7 +1457,6 @@ a.ap-visit:hover { background: var(--gray-50); }
 }
 
 /* ---------- Hoy según la hora: antes de abrir y al cerrar ---------- */
-.day-moment-figures { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 .day-moment .cc-title:first-child { margin-top: 0; }
 
 /* ---------- Conteo del inventario ---------- */
@@ -1474,4 +1476,10 @@ a.ap-visit:hover { background: var(--gray-50); }
 @media (max-width: 39.99rem) {
     .stock-count > .fi-sc:last-child { flex-wrap: nowrap; }
     .stock-count > .fi-sc:last-child .fi-ac > .fi-btn:not(:first-child) { display: none; }
+}
+
+/* Laptops chicas (hasta 1400 px): el menú más angosto y menos margen, para que las tablas entren sin barra. */
+@media (min-width: 64rem) and (max-width: 87.5rem) {
+    html:root { --sidebar-width: 17rem; }
+    .fi-main { padding-inline: 1.25rem; }
 }

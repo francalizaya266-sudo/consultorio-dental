@@ -39,8 +39,10 @@ class CashClosingStats extends StatsOverviewWidget
                     default => $count.' pagos',
                 }.($voided > 0 ? ' · '.$voided.' anulado'.($voided > 1 ? 's' : '').' aparte' : ''))
                 ->icon('heroicon-o-banknotes'),
-            Stat::make('Efectivo en caja', Money::format($closing->cash()))
-                ->description('Lo que debe haber al contar')
+            Stat::make('Efectivo en caja', Money::format($closing->cashInDrawer()))
+                ->description($closing->cashExpenses() > 0
+                    ? Money::format($closing->cash()).' cobrados menos '.Money::format($closing->cashExpenses()).' de gastos'
+                    : 'Lo que debe haber al contar')
                 ->icon('heroicon-o-calculator'),
             Stat::make('Yape y Plin', Money::format($closing->totalFor(PaymentMethod::Yape) + $closing->totalFor(PaymentMethod::Plin)))
                 ->description($digital)

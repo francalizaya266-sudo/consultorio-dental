@@ -3,15 +3,18 @@
 namespace App\Filament\Support;
 
 use App\Enums\AppointmentStatus;
+use App\Enums\LabOrderStatus;
 use App\Enums\MessageTemplateKey;
 use App\Enums\PatientRelationship;
 use App\Enums\PaymentMethod;
 use App\Filament\Concerns\HasPatientSummaryActions;
 use App\Filament\Resources\Appointments\AppointmentResource;
 use App\Filament\Resources\Consultations\ConsultationResource;
+use App\Filament\Resources\LabOrders\LabOrderResource;
 use App\Filament\Resources\Patients\PatientResource;
 use App\Models\Appointment;
 use App\Models\Charge;
+use App\Models\LabOrder;
 use App\Models\Patient;
 use App\Models\Payment;
 use App\Models\User;
@@ -52,7 +55,7 @@ final class PatientSummary
     /**
      * Lo que toca hacer con el paciente, en este orden: terminar la atención que quedó abierta, firmar el
      * consentimiento de la cita de hoy, agendar lo que sigue de su plan, recordarle el presupuesto que no
-     * respondió o llamarlo a su control. Cada uno solo para quien lo puede hacer.
+     * respondió, darle otro horario si faltó o canceló, o llamarlo a su control. Cada uno solo para quien lo puede hacer.
      *
      * @return Step|null
      */
@@ -94,6 +97,13 @@ final class PatientSummary
         if ($plan) {
             return self::step('plan_answer', 'Presupuesto sin respuesta', Money::format($plan->total()).' · se le presentó '.$plan->proposed_at->diffForHumans(), 'Recordar por WhatsApp', 'heroicon-m-clipboard-document-list',
                 action: $withActions && $patient->account ? ['name' => 'followUp', 'arguments' => ['template' => MessageTemplateKey::PlanFollowUp->value]] : null);
+        }
+
+        $missed = $insights->missedVisit($patient);
+
+        if ($missed) {
+            return self::step('missed', ($missed->status === AppointmentStatus::NoShow ? 'Faltó a su cita del ' : 'Se canceló su cita del ').$missed->starts_at->translatedFormat('j \d\e F'), $missed->treatment->name.' · sigue sin otra cita', $canBook ? 'Agendar' : null, 'heroicon-m-arrow-path',
+                url: $canBook ? AppointmentResource::getUrl('create', ['patient' => $patient->getKey(), 'treatment' => $missed->treatment_id, 'doctor' => $missed->doctor_id]) : null);
         }
 
         $checkup = $insights->checkup($patient);
@@ -140,6 +150,7 @@ final class PatientSummary
             self::nextVisit($patient, $next),
             $next === null ? self::lastVisit($patient, $insights, $step) : null,
             in_array($step, ['schedule', 'plan_answer'], true) ? null : self::unfinishedPlan($patient),
+            self::labWork($patient, $user),
             self::noShows($patient, $insights),
             self::birthday($patient, $withActions),
             self::usualVisit($patient, $insights),
@@ -261,6 +272,43 @@ final class PatientSummary
             ],
             default => null,
         };
+    }
+
+    /**
+     * Lo que tiene en el laboratorio dental: cuándo llega, o lo que hay que resolver (se atrasó, su cita es antes
+     * de la entrega, ya llegó y falta citarlo).
+     *
+     * @return Chip|null
+     */
+    private static function labWork(Patient $patient, User $user): ?array
+    {
+        if (! $user->can('viewAny', LabOrder::class)) {
+            return null;
+        }
+
+        /** @var LabOrder|null $order */
+        $order = LabOrderResource::getEloquentQuery()
+            ->where('patient_id', $patient->getKey())
+            ->where(fn ($orders) => $orders->pending()->orWhere(fn ($arrived) => $arrived->needingAttention()))
+            ->orderBy('due_on')
+            ->first();
+
+        if ($order === null) {
+            return null;
+        }
+
+        $alert = $order->alert();
+
+        return [
+            'label' => 'Laboratorio: '.$order->description.' · '.($alert ? mb_strtolower(mb_substr($alert, 0, 1)).mb_substr($alert, 1) : 'llega el '.$order->due_on->translatedFormat('D j M')),
+            'color' => match (true) {
+                $alert === null => 'info',
+                $order->status() === LabOrderStatus::Late => 'danger',
+                default => 'warning',
+            },
+            'icon' => 'heroicon-m-beaker',
+            'url' => LabOrderResource::getUrl('index', ['tab' => $alert ? 'attention' : 'pending', 'search' => $patient->full_name]),
+        ];
     }
 
     /**

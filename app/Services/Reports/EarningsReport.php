@@ -2,11 +2,15 @@
 
 namespace App\Services\Reports;
 
+use App\Enums\ExpenseCategory;
 use App\Enums\PaymentMethod;
+use App\Enums\StockMovementType;
 use App\Models\Charge;
 use App\Models\Doctor;
+use App\Models\Expense;
 use App\Models\Patient;
 use App\Models\Payment;
+use App\Models\StockMovement;
 use App\Models\Treatment;
 use Carbon\CarbonImmutable;
 use Illuminate\Database\Eloquent\Builder;
@@ -17,7 +21,8 @@ use Illuminate\Support\Facades\DB;
  * Ingresos de un período. Dos miradas que no siempre coinciden:
  * - Cobrado: los pagos que entraron a caja (lo que importa para cuadrar la caja).
  * - Realizado: lo atendido, según los cargos (lo que dejó cada tratamiento y cada doctor, se haya pagado o no).
- * Nada anulado cuenta. Con $doctorId, solo lo de ese doctor.
+ * Nada anulado cuenta. Con $doctorId, solo lo de ese doctor. Lo que queda (cobrado menos gastos y materiales) es
+ * del consultorio entero.
  */
 final class EarningsReport
 {
@@ -62,6 +67,52 @@ final class EarningsReport
     public function produced(): float
     {
         return round((float) $this->charges()->sum(DB::raw('amount - discount')), 2);
+    }
+
+    /** @return Builder<Expense> Los gastos anotados en Caja en el período. Son del consultorio, no de un doctor. */
+    public function expenses(): Builder
+    {
+        return Expense::query()->valid()->whereBetween('spent_at', [$this->period->from, $this->period->to]);
+    }
+
+    public function spent(): float
+    {
+        return round((float) $this->expenses()->sum('amount'), 2);
+    }
+
+    /** Lo que costaron los materiales que salieron del inventario en el período: usados en atenciones o dados de baja. */
+    public function materialsCost(): float
+    {
+        $cost = StockMovement::query()
+            ->whereIn('type', [StockMovementType::Use, StockMovementType::Return, StockMovementType::WriteOff])
+            ->whereBetween('created_at', [$this->period->from, $this->period->to])
+            ->sum(DB::raw('-quantity * coalesce(unit_cost, 0)'));
+
+        return round(max(0, (float) $cost), 2);
+    }
+
+    /** Lo que queda: lo cobrado menos los gastos y los materiales. */
+    public function profit(): float
+    {
+        return round($this->collected() - $this->spent() - $this->materialsCost(), 2);
+    }
+
+    /** @return list<array{label: string, count: int, amount: float}> Los gastos por tipo, el mayor primero. */
+    public function expensesByCategory(): array
+    {
+        return $this->expenses()
+            ->selectRaw('category, sum(amount) as total, count(*) as count')
+            ->groupBy('category')
+            ->toBase()
+            ->get()
+            ->map(fn (object $row) => [
+                'label' => ExpenseCategory::from($row->category)->getLabel(),
+                'count' => (int) $row->count,
+                'amount' => round((float) $row->total, 2),
+            ])
+            ->sortByDesc('amount')
+            ->values()
+            ->all();
     }
 
     /** Lo que deben hoy todos los pacientes juntos (no depende del período). */

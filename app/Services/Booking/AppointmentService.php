@@ -402,12 +402,15 @@ class AppointmentService
         ]);
     }
 
-    /** Se atendió. Una cita de un día anterior que quedó sin cerrar también se puede marcar después, aunque no se confirmara. */
+    /**
+     * Se atendió. Una cita cuya hora ya terminó (de hoy o de un día anterior) y que quedó sin cerrar también se
+     * puede marcar después, aunque no se confirmara ni se anotara que llegó.
+     */
     public function markCompleted(Appointment $appointment, User $by): void
     {
         $from = [AppointmentStatus::Confirmed, AppointmentStatus::CheckedIn, AppointmentStatus::InProgress];
 
-        $this->transition($appointment, $by, AppointmentStatus::Completed, $appointment->isFromAnEarlierDay() ? AppointmentStatus::open() : $from, [
+        $this->transition($appointment, $by, AppointmentStatus::Completed, $appointment->ends_at->isPast() ? AppointmentStatus::open() : $from, [
             'started_at' => $appointment->started_at ?? $appointment->checked_in_at ?? $appointment->starts_at,
             'finished_at' => $appointment->isFromAnEarlierDay() ? $appointment->ends_at : now(),
         ]);
@@ -421,6 +424,11 @@ class AppointmentService
         // Sin atención escrita (la cerró recepción), se carga el tratamiento de la cita y se descuentan sus materiales.
         $this->billing->chargeAppointment($appointment, $by);
         $this->inventory->useForAppointment($appointment, $by);
+
+        // Los cuidados de ese tratamiento quedan listos en Avisos. Si la cita se cierra días después, ya no sirven.
+        if (! $appointment->isFromAnEarlierDay() && filled($appointment->treatment?->aftercare)) {
+            $this->outbox->queueForAppointment($appointment, MessageTemplateKey::Aftercare, extra: ['cuidados' => trim($appointment->treatment->aftercare)]);
+        }
     }
 
     public function markNoShow(Appointment $appointment, User $by): void
