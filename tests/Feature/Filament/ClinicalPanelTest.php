@@ -224,6 +224,23 @@ class ClinicalPanelTest extends TestCase
         $this->assertSame('Pulido y fluorización de piezas anteriores.', $mine->body);
     }
 
+    public function test_what_the_patient_filled_from_the_web_says_so_until_the_doctor_saves_it(): void
+    {
+        [$doctor, $appointment] = $this->appointmentToday();
+        $patient = $appointment->patient;
+        $patient->medicalBackground()->create(['allergies' => 'Ninguna', 'medications' => 'Ninguna', 'conditions' => [], 'filled_by_patient_at' => now()->subDay()]);
+        $this->actingAs($doctor->user);
+
+        Livewire::test(ViewClinicalRecord::class, ['record' => $patient->getRouteKey()])
+            ->assertSee('Los llenó el paciente desde la web el '.now()->subDay()->format('d/m/Y').'. Confírmalos en la consulta y guárdalos.')
+            ->callAction(TestAction::make('editBackground')->schemaComponent('background', schema: 'infolist'), data: ['allergies' => 'Ninguna', 'medications' => 'Ninguna'])
+            ->assertHasNoActionErrors()
+            ->assertDontSee('Los llenó el paciente');
+
+        $this->assertNull($patient->medicalBackground()->sole()->filled_by_patient_at);
+        $this->assertSame($doctor->user->id, $patient->medicalBackground()->sole()->updated_by_user_id);
+    }
+
     public function test_doctors_register_medical_background_and_alerts_show_up(): void
     {
         [$doctor, $appointment] = $this->appointmentToday();

@@ -7,8 +7,11 @@ use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
-/** Antecedentes médicos del paciente: alergias, enfermedades, medicamentos, embarazo. */
-#[Fillable(['patient_id', 'conditions', 'allergies', 'medications', 'surgeries', 'is_pregnant', 'pregnancy_weeks', 'is_breastfeeding', 'smoker', 'notes', 'updated_by_user_id'])]
+/**
+ * Antecedentes médicos del paciente: alergias, enfermedades, medicamentos, embarazo. Los puede llenar el
+ * propio paciente desde Mi cuenta antes de su cita ("filled_by_patient_at"); el doctor los confirma al guardarlos.
+ */
+#[Fillable(['patient_id', 'conditions', 'allergies', 'medications', 'surgeries', 'is_pregnant', 'pregnancy_weeks', 'is_breastfeeding', 'smoker', 'notes', 'filled_by_patient_at', 'updated_by_user_id'])]
 class MedicalBackground extends Model
 {
     use Auditable;
@@ -36,6 +39,7 @@ class MedicalBackground extends Model
             'is_pregnant' => 'boolean',
             'is_breastfeeding' => 'boolean',
             'smoker' => 'boolean',
+            'filled_by_patient_at' => 'datetime',
         ];
     }
 

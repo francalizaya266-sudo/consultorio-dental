@@ -42,6 +42,8 @@ Route::controller(AccountController::class)
         Route::post('citas/{appointment}/cancelar', 'cancel')->name('site.account.cancel');
         Route::get('citas/{appointment}/cambiar', 'change')->name('site.account.change');
         Route::post('pacientes/{patient}/proxima-sesion', 'requestSession')->name('site.account.session');
+        Route::get('pacientes/{patient}/salud', 'health')->name('site.account.health');
+        Route::post('pacientes/{patient}/salud', 'storeHealth')->name('site.account.health.store');
     });
 
 // Enlace personal que viaja por WhatsApp (de una cita o de acceso a Mi cuenta).

@@ -44,7 +44,7 @@ final class ReturningPatient
             ->whereIn('patient_id', $family->modelKeys())
             ->where('starts_at', '>=', now())
             ->whereIn('status', AppointmentStatus::changeable())
-            ->with(['patient', 'doctor', 'treatment'])
+            ->with(['patient.medicalBackground', 'doctor', 'treatment'])
             ->oldest('starts_at')
             ->get();
 

@@ -8,8 +8,10 @@ use App\Enums\MessageStatus;
 use App\Enums\MessageTemplateKey;
 use App\Enums\PlanItemStatus;
 use App\Enums\PlanPaymentMode;
+use App\Enums\Sex;
 use App\Enums\TreatmentPlanStatus;
 use App\Filament\Resources\Accounts\Pages\ViewAccount;
+use App\Filament\Support\ClinicalAlerts;
 use App\Livewire\Site\BookingWizard;
 use App\Models\Account;
 use App\Models\Appointment;
@@ -206,6 +208,69 @@ class AccountControllerTest extends TestCase
         $other = Account::factory()->verified()->create(['phone' => '+51912345678']);
         RememberedDevice::create(['account_id' => $other->id, 'token_hash' => hash('sha256', 'otro-celular'), 'expires_at' => now()->addMonth()]);
         $this->withCookie(DeviceService::COOKIE, 'otro-celular')->post(route('site.account.session', $this->child))->assertForbidden();
+    }
+
+    public function test_before_the_appointment_the_family_tells_the_doctor_about_their_health_once(): void
+    {
+        $this->mother->update(['sex' => Sex::Female]);
+        Appointment::factory()->for($this->mother)->at('2026-11-04 10:00')->create();
+        Appointment::factory()->for($this->mother)->at('2026-11-11 10:00')->create();
+
+        $this->rememberDevice()
+            ->get(route('site.account'))
+            ->assertOk()
+            ->assertSee(route('site.account.health', $this->mother));
+        // Una vez por persona, en su primera cita.
+        $this->assertSame(1, substr_count($this->get(route('site.account'))->getContent(), 'data-health-ask'));
+        $this->get(route('site.home'))->assertSee('Cuéntanos de tu salud');
+
+        $this->get(route('site.account.health', $this->mother))
+            ->assertOk()
+            ->assertSee(['¿Tienes alguna alergia?', '¿Tomas alguna medicina todos los días?', 'Hipertensión', 'Estoy embarazada', 'Fumo']);
+
+        // "Sí" sin decir a qué no se acepta.
+        $this->post(route('site.account.health.store', $this->mother), ['has_allergies' => 'yes', 'takes_medications' => 'no'])
+            ->assertSessionHasErrors(['allergies' => 'Escribe a qué.']);
+
+        $this->post(route('site.account.health.store', $this->mother), [
+            'has_allergies' => 'yes',
+            'allergies' => ' Penicilina ',
+            'takes_medications' => 'no',
+            'medications' => 'quedó escrito antes de elegir No',
+            'conditions' => ['hypertension'],
+            'is_pregnant' => '1',
+        ])
+            ->assertRedirect(route('site.account'))
+            ->assertSessionHas('status', 'Gracias. El doctor lo tendrá a la vista y lo repasará contigo en la cita.');
+
+        $background = $this->mother->medicalBackground()->sole();
+        $this->assertSame('Penicilina', $background->allergies);
+        $this->assertSame('Ninguna', $background->medications);
+        $this->assertSame(['hypertension'], $background->conditions);
+        $this->assertTrue($background->is_pregnant);
+        $this->assertFalse($background->smoker);
+        $this->assertNull($background->updated_by_user_id);
+
+        // En el consultorio se ve que lo llenó el paciente, con las alertas de siempre.
+        $this->assertSame(['Alergia: Penicilina', 'Hipertensión', 'Embarazada'], ClinicalAlerts::for($this->mother->fresh()));
+        $this->assertSame('Los llenó el paciente desde la web el 02/11/2026. Confírmalos en la consulta y guárdalos.', ClinicalAlerts::filledByPatient($this->mother->fresh()));
+
+        // Ya no se pide, y lo registrado no se ve ni se cambia desde la web.
+        $this->get(route('site.account'))->assertDontSee('data-health-ask', false);
+        $this->get(route('site.account.health', $this->mother))->assertRedirect(route('site.account'));
+        $this->post(route('site.account.health.store', $this->mother), ['has_allergies' => 'no', 'takes_medications' => 'no'])->assertRedirect(route('site.account'));
+        $this->assertSame('Penicilina', $this->mother->medicalBackground()->sole()->allergies);
+
+        // A un niño no se le pregunta por embarazo ni si fuma.
+        $this->child->update(['birth_date' => '2019-05-01']);
+        $this->get(route('site.account.health', $this->child))->assertOk()->assertSee('¿Mateo tiene alguna alergia?')->assertDontSee(['Está embarazada', 'Fuma']);
+
+        // Otro celular no puede llenarlos por esta familia.
+        $other = Account::factory()->verified()->create(['phone' => '+51912345678']);
+        RememberedDevice::create(['account_id' => $other->id, 'token_hash' => hash('sha256', 'otro-celular'), 'expires_at' => now()->addMonth()]);
+        $this->withCookie(DeviceService::COOKIE, 'otro-celular')->get(route('site.account.health', $this->child))->assertForbidden();
+        $this->withCookie(DeviceService::COOKIE, 'otro-celular')->post(route('site.account.health.store', $this->child), ['has_allergies' => 'no', 'takes_medications' => 'no'])->assertForbidden();
+        $this->assertNull($this->child->medicalBackground()->first());
     }
 
     private function mateoHalfwayThroughHisPlan(Doctor $doctor): TreatmentPlan

@@ -9,6 +9,7 @@
 
     $policy = app(\App\Services\Booking\PatientChangePolicy::class);
     $isSelf = fn ($patient) => $patient->relationship === PatientRelationship::Self;
+    $askedHealth = [];
     $nothing = $welcome['appointments']->isEmpty() && $welcome['sessions']->isEmpty() && $welcome['checkups']->isEmpty();
 @endphp
 <section class="welcome" aria-labelledby="bienvenida">
@@ -27,6 +28,10 @@
                     <span class="welcome-kicker">{{ $isSelf($appointment->patient) ? 'Tu próxima cita' : 'Cita de '.$appointment->patient->first_name }}</span>
                     <strong class="welcome-when">{{ Dates::day($appointment->starts_at->toImmutable()) }}, {{ Dates::time($appointment->starts_at->format('H:i')) }}</strong>
                     <p>{{ $appointment->treatment->name }} · {{ $appointment->doctor->name }}</p>
+                    @if ($appointment->patient->medicalBackground === null && ! in_array($appointment->patient_id, $askedHealth, true))
+                        @php($askedHealth[] = $appointment->patient_id)
+                        @include('site.partials.health-ask', ['patient' => $appointment->patient])
+                    @endif
                     @if ($policy->canChange($appointment))
                         <div class="welcome-actions">
                             @if ($pending)

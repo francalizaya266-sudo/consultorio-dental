@@ -29,9 +29,9 @@ class ClinicalRecordInfolist
                 Section::make('Antecedentes médicos')
                     ->key('background')
                     ->icon(Heroicon::OutlinedHeart)
-                    ->description(fn (Patient $record) => $record->medicalBackground
+                    ->description(fn (Patient $record) => ClinicalAlerts::filledByPatient($record) ?? ($record->medicalBackground
                         ? 'Actualizado el '.$record->medicalBackground->updated_at->format('d/m/Y').($record->medicalBackground->updatedBy ? ' por '.$record->medicalBackground->updatedBy->name : '')
-                        : 'Todavía no se registraron.')
+                        : 'Todavía no se registraron.'))
                     ->headerActions([EditMedicalBackgroundAction::make(fn (Patient $record) => $record)])
                     ->columns(3)
                     ->collapsible()
