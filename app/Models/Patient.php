@@ -125,8 +125,14 @@ class Patient extends Model
     {
         return collect([
             $this->appointments(), $this->consultations(), $this->odontograms(), $this->treatmentPlans(),
-            $this->clinicalFiles(), $this->consents(), $this->prescriptions(), $this->charges(), $this->payments(),
+            $this->clinicalFiles(), $this->consents(), $this->prescriptions(), $this->charges(), $this->payments(), $this->labOrders(),
         ])->contains(fn (HasMany $records) => $records->exists());
+    }
+
+    /** Trabajos que se mandaron al laboratorio dental para este paciente. */
+    public function labOrders(): HasMany
+    {
+        return $this->hasMany(LabOrder::class);
     }
 
     /** Avisos de WhatsApp preparados para este paciente (los de la cuenta sin paciente no). */

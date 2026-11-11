@@ -108,7 +108,8 @@ class MissedVisitFollowUpTest extends TestCase
 
     private function patient(string $firstName, string $lastName): Patient
     {
-        return Patient::factory()->create(['first_name' => $firstName, 'last_name' => $lastName]);
+        // Con fecha fija: si a alguno le toca cumplir años ese lunes, sale en "Cumpleaños de hoy".
+        return Patient::factory()->create(['first_name' => $firstName, 'last_name' => $lastName, 'birth_date' => '1990-05-15']);
     }
 
     private function visit(Patient $patient, string $when, AppointmentStatus $status): Appointment
