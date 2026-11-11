@@ -76,6 +76,23 @@ class MoneyWaitingReportTest extends TestCase
             ->assertSee('Ninguna cuota atrasada.');
     }
 
+    public function test_the_five_numbers_fill_two_rows_and_the_four_of_one_doctor_fill_one(): void
+    {
+        $this->actingAs(User::factory()->admin()->create());
+
+        // Tres arriba (2 + 2 + 2 de 6 columnas) y dos abajo (3 + 3): ningún hueco al final.
+        $everyone = Livewire::test(MoneyWaitingStats::class, ['pageFilters' => ['period' => 'month']])
+            ->assertSee('Saldos por cobrar');
+        $this->assertSame(3, substr_count($everyone->html(), '--col-span-lg: span 2 / span 2'));
+        $this->assertSame(2, substr_count($everyone->html(), '--col-span-lg: span 3 / span 3'));
+
+        // Con un doctor no hay saldos: quedan cuatro, del mismo ancho.
+        $oneDoctor = Livewire::test(MoneyWaitingStats::class, ['pageFilters' => ['period' => 'month', 'doctor' => $this->ramos->id]])
+            ->assertDontSee('Saldos por cobrar');
+        $this->assertStringNotContainsString('--col-span-lg: span', $oneDoctor->html());
+        $this->assertStringContainsString('--cols-xl: repeat(4,', $oneDoctor->html());
+    }
+
     public function test_by_doctor_it_shows_only_their_budgets_and_no_shows_and_leaves_balances_out(): void
     {
         $this->actingAs(User::factory()->admin()->create());

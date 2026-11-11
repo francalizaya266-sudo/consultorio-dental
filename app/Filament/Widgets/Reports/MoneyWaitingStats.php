@@ -18,9 +18,15 @@ class MoneyWaitingStats extends StatsOverviewWidget
 
     protected ?string $pollingInterval = null;
 
-    protected function getColumns(): int
+    /**
+     * Cinco números van en dos filas sin hueco: tres arriba y dos abajo, más anchos (ver getStats).
+     * Con un doctor elegido son cuatro y entran en una sola fila.
+     *
+     * @return array<string, int>
+     */
+    protected function getColumns(): array
     {
-        return 3;
+        return count($this->getCachedStats()) === 5 ? ['lg' => 6] : ['md' => 2, 'xl' => 4];
     }
 
     protected function getStats(): array
@@ -32,7 +38,7 @@ class MoneyWaitingStats extends StatsOverviewWidget
         $noShows = $waiting->noShows();
         $balances = $waiting->doctorId === null ? $waiting->balances() : null;
 
-        return array_values(array_filter([
+        $stats = array_values(array_filter([
             Stat::make('Presupuestos sin respuesta', Money::format($plans->sum('total')))
                 ->description($plans->isEmpty() ? 'Todos respondieron' : $plans->count().($plans->count() === 1 ? ' presupuesto' : ' presupuestos').' · el más antiguo, hace '.$plans->max('waiting_days').' días')
                 ->icon('heroicon-o-document-text'),
@@ -54,6 +60,14 @@ class MoneyWaitingStats extends StatsOverviewWidget
                 ->description($noShows->isEmpty() ? 'Nadie faltó en el período' : $noShows->count().($noShows->count() === 1 ? ' falta' : ' faltas').' · '.(($rebooked = $noShows->where('rebooked', true)->count()) === 1 ? '1 volvió' : $rebooked.' volvieron').' a agendar')
                 ->icon('heroicon-o-user-minus'),
         ]));
+
+        if (count($stats) === 5) {
+            foreach ($stats as $position => $stat) {
+                $stat->columnSpan(['lg' => $position < 3 ? 2 : 3]);
+            }
+        }
+
+        return $stats;
     }
 
     private function waiting(): MoneyWaiting

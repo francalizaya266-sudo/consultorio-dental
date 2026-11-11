@@ -40,11 +40,15 @@ class WhatsappMessagesTable
                     ->wrap()
                     ->lineClamp(3)
                     // Sin un ancho mínimo, la tabla la aprieta hasta dejar una palabra por línea.
-                    ->extraAttributes(['style' => 'min-width: 13rem']),
+                    ->extraAttributes(['style' => 'min-width: 13rem'])
+                    ->extraCellAttributes(['class' => 'wa-preview']),
                 TextColumn::make('phone')
                     ->label('Para')
                     ->formatStateUsing(fn (WhatsappMessage $record) => $record->patient?->full_name ?? Phone::display($record->phone))
                     ->description(fn (WhatsappMessage $record) => $record->patient ? Phone::display($record->phone) : null)
+                    // Con dos doctores y nombres largos, el botón de enviar quedaba cortado en una laptop: el nombre
+                    // del paciente y el del doctor bajan de línea; el teléfono y la fecha no se parten.
+                    ->extraCellAttributes(['class' => 'wraps-name'])
                     ->searchable(query: fn (Builder $query, string $search) => $query->where(fn (Builder $w) => $w
                         ->whereHas('patient', fn (Builder $p) => $p->search($search))
                         ->orWhere('phone', 'like', '%'.preg_replace('/\D/', '', $search).'%'))),
@@ -52,6 +56,7 @@ class WhatsappMessagesTable
                     ->label('Cita')
                     ->dateTime('D d/m H:i')
                     ->description(fn (WhatsappMessage $record) => AppointmentsTable::showsDoctor(auth()->user()) ? $record->appointment?->doctor->name : null)
+                    ->extraCellAttributes(['class' => 'wraps-description'])
                     ->placeholder('—'),
                 TextColumn::make('status')
                     ->label('Estado')
