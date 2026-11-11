@@ -159,7 +159,11 @@ return [
     'ulid' => ':attribute debe ser un ULID válido.',
     'uuid' => ':attribute debe ser un UUID válido.',
 
-    'custom' => [],
+    'custom' => [
+        // Al poner una contraseña nueva: por el enlace del correo ("password") y en "Mi perfil" ("data.password").
+        'password' => ['same' => 'Las dos contraseñas no coinciden.'],
+        'data' => ['password' => ['same' => 'Las dos contraseñas no coinciden.']],
+    ],
 
     'attributes' => [],
 

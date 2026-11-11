@@ -2,6 +2,7 @@
 
 namespace App\Providers\Filament;
 
+use App\Filament\Pages\Auth\RequestPasswordReset;
 use App\Filament\Pages\Backups;
 use App\Filament\Pages\Dashboard;
 use App\Filament\Pages\Settings;
@@ -131,6 +132,8 @@ class AdminPanelProvider extends PanelProvider
             ->path('panel')
             ->unsavedChangesAlerts()
             ->login()
+            // "¿Olvidaste tu contraseña?": el enlace llega por correo cuando el hosting ya tiene uno configurado.
+            ->passwordReset(RequestPasswordReset::class)
             // "Mi perfil" en el menú del usuario: cada uno cambia su propia clave sin pedírsela al administrador.
             ->profile(isSimple: false)
             ->brandName(fn () => Setting::get('clinic.name'))
