@@ -134,12 +134,14 @@ class AdminPanelProvider extends PanelProvider
             // "Mi perfil" en el menú del usuario: cada uno cambia su propia clave sin pedírsela al administrador.
             ->profile(isSimple: false)
             ->brandName(fn () => Setting::get('clinic.name'))
-            // Con logo subido en la puesta a punto de la web, el panel lo muestra en lugar del nombre.
-            ->brandLogo(fn () => app(ClinicInfo::class)->logoUrl())
+            // Con logo subido en la puesta a punto de la web, el panel lo muestra; si no, el diente de la web junto al nombre.
+            ->brandLogo(fn () => app(ClinicInfo::class)->logoUrl() ?? view('filament.brand', ['name' => Setting::get('clinic.name')]))
             ->brandLogoHeight('2.25rem')
             ->colors([
                 // El azul del recetario, el mismo de la página web, en el tono 600 (el de los botones, con texto blanco).
                 'primary' => self::brandPalette(),
+                // Grises azulados en vez de neutros: el claro acompaña al azul de la marca y el oscuro es azul noche, no negro.
+                'gray' => Color::Slate,
                 'success' => self::oneShadeDarker(Color::Emerald),
                 'info' => self::oneShadeDarker(Color::Sky),
             ])
