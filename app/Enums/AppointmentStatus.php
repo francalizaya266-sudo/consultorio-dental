@@ -60,6 +60,12 @@ enum AppointmentStatus: string implements HasColor, HasLabel
         return [self::Pending, self::Confirmed, self::CheckedIn, self::InProgress];
     }
 
+    /** @return list<self> El paciente no llegó a venir: faltó o se canceló. */
+    public static function missed(): array
+    {
+        return [self::NoShow, self::Cancelled];
+    }
+
     public function isChangeable(): bool
     {
         return in_array($this, self::changeable(), true);

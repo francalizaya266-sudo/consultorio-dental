@@ -36,6 +36,7 @@ use App\Models\TreatmentPlan;
 use App\Models\User;
 use App\Models\WhatsappMessage;
 use App\Services\Clinical\TreatmentPlanService;
+use App\Services\Dashboard\DoctorDay;
 use App\Services\Dashboard\MonthFigures;
 use Carbon\CarbonImmutable;
 use Illuminate\Foundation\Testing\LazilyRefreshDatabase;
@@ -94,6 +95,63 @@ class DashboardPanelTest extends TestCase
         $this->get(Dashboard::getUrl())->assertOk();
     }
 
+    public function test_each_visit_is_settled_on_the_card_without_opening_it(): void
+    {
+        $treatment = Treatment::factory()->create(['name' => 'Limpieza dental', 'price_from' => 120]);
+        $doctor = $this->doctorOffering($treatment);
+        $visit = fn (string $firstName, string $when) => Appointment::factory()->for($doctor)->for($treatment)
+            ->for(Patient::factory()->create(['first_name' => $firstName, 'last_name' => 'Prueba']))->at($when);
+        $rosa = $visit('Rosa', '2026-11-02 10:00')->create();
+        $pedro = $visit('Pedro', '2026-11-02 16:00')->confirmed()->create();
+        $ana = $visit('Ana', '2026-11-02 17:00')->create();
+        $this->actingAs(User::factory()->reception()->create());
+
+        // 08:00: se confirma desde la tarjeta.
+        Livewire::test(DayMomentCard::class)
+            ->callAction('confirm', arguments: ['appointment' => $rosa->id])
+            ->assertNotified('Cita confirmada')
+            ->assertDontSee('10:00 · Rosa Prueba');
+        $this->assertSame(AppointmentStatus::Confirmed, $rosa->refresh()->status);
+
+        // 19:30: nadie anotó si vinieron. Pedro vino (queda atendido y con su cargo); Ana no.
+        $rosa->update(['status' => AppointmentStatus::Completed]);
+        $this->travelTo(CarbonImmutable::parse('2026-11-02 19:30', 'America/Lima'));
+
+        Livewire::test(DayMomentCard::class)
+            ->assertSeeInOrder(['Citas sin cerrar', '16:00 · Pedro Prueba', 'Vino', 'No vino', '17:00 · Ana Prueba'])
+            ->mountAction('complete', ['appointment' => $pedro->id])
+            ->assertMountedActionModalSee('Limpieza dental')
+            ->callMountedAction()
+            ->assertNotified('Cita atendida')
+            ->callAction('missed', arguments: ['appointment' => $ana->id])
+            ->assertNotified('Marcada como inasistencia')
+            ->assertDontSee(['Citas sin cerrar', 'Ana Prueba'])
+            ->assertSeeInOrder(['Se fueron debiendo', 'Pedro Prueba', 'Falta el cierre de caja']);
+
+        $this->assertSame(AppointmentStatus::Completed, $pedro->refresh()->status);
+        $this->assertSame(AppointmentStatus::NoShow, $ana->refresh()->status);
+        $this->assertSame(120.0, $pedro->patient->balance());
+    }
+
+    public function test_who_stayed_checked_in_for_hours_is_no_longer_waiting(): void
+    {
+        $treatment = Treatment::factory()->create();
+        $doctor = $this->doctorOffering($treatment);
+        $arrived = fn (string $firstName, string $when) => Appointment::factory()->for($doctor)->for($treatment)
+            ->for(Patient::factory()->create(['first_name' => $firstName, 'last_name' => 'Prueba']))->at($when)
+            ->create(['status' => AppointmentStatus::CheckedIn, 'checked_in_at' => $when]);
+        $arrived('Rosa', '2026-11-02 09:00');
+        $arrived('Pedro', '2026-11-02 18:00');
+        $this->travelTo(CarbonImmutable::parse('2026-11-02 18:20', 'America/Lima'));
+        $this->actingAs(User::factory()->reception()->create());
+
+        Livewire::test(WaitingRoom::class)->assertSee('Pedro Prueba')->assertDontSee('Rosa Prueba');
+
+        // Para su doctor tampoco es "tu próximo paciente": es una cita que quedó sin cerrar.
+        $this->assertSame('Pedro', (new DoctorDay($doctor->id))->next()->patient->first_name);
+        $this->assertSame(1, (new DoctorDay($doctor->id))->waiting());
+    }
+
     public function test_home_shows_what_to_confirm_before_opening_and_what_is_left_when_closing(): void
     {
         $treatment = Treatment::factory()->create(['name' => 'Limpieza dental']);
@@ -120,7 +178,8 @@ class DashboardPanelTest extends TestCase
         Charge::factory()->for($rosa)->create(['amount' => 120, 'description' => 'Limpieza dental', 'charged_at' => '2026-11-02 10:40']);
         $this->travelTo(CarbonImmutable::parse('2026-11-02 19:30', 'America/Lima'));
         Livewire::test(DayMomentCard::class)
-            ->assertSeeInOrder(['Para cerrar el día', 'Cobrado hoy', 'S/ 0.00', 'Se fueron debiendo', 'S/ 120.00'])
+            ->assertSeeInOrder(['Para cerrar el día', 'Se fueron debiendo', 'S/ 120.00'])
+            ->assertDontSee('Cobrado hoy')
             ->assertSeeInOrder(['Se fueron debiendo', 'Rosa Quispe', 'Citas sin cerrar', '16:00 · Pedro Huamán', '17:00 · Ana Rojas', 'Falta el cierre de caja', 'Cerrar la caja'])
             ->assertDontSee('Antes de abrir');
 

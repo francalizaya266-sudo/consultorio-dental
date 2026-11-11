@@ -27,6 +27,9 @@ class Appointment extends Model
     /** @use HasFactory<AppointmentFactory> */
     use Auditable, HasFactory, SoftDeletes;
 
+    /** Horas después del fin de su cita en que alguien "en sala" deja de contarse como esperando. */
+    public const WAIT_EXPIRES_HOURS = 3;
+
     protected function casts(): array
     {
         return [
@@ -138,6 +141,45 @@ class Appointment extends Model
     protected function leftOpen(Builder $query): Builder
     {
         return $query->where('starts_at', '<', today())->whereIn('status', AppointmentStatus::open());
+    }
+
+    /**
+     * Citas de los últimos dos meses a las que el paciente faltó o que se cancelaron, y después de las cuales no
+     * vino ni tiene otra cita: nadie le dio un nuevo horario.
+     */
+    #[Scope]
+    protected function missedAndNotRebooked(Builder $query): Builder
+    {
+        return $query
+            ->whereIn($query->qualifyColumn('status'), AppointmentStatus::missed())
+            ->where($query->qualifyColumn('starts_at'), '>=', now()->subDays(Patient::MISSED_VISIT_DAYS))
+            ->whereNotExists(fn ($later) => $later
+                ->from('appointments as later')
+                ->whereColumn('later.patient_id', $query->qualifyColumn('patient_id'))
+                ->whereNull('later.deleted_at')
+                ->whereNotIn('later.status', AppointmentStatus::missed())
+                ->where(fn ($after) => $after
+                    ->whereColumn('later.starts_at', '>', $query->qualifyColumn('starts_at'))
+                    ->orWhere('later.starts_at', '>=', now())));
+    }
+
+    /**
+     * En sala de verdad: llegó hoy y su cita no terminó hace horas. Quien sigue "en sala" mucho después es una
+     * cita que nadie cerró, no alguien esperando.
+     */
+    #[Scope]
+    protected function waitingNow(Builder $query): Builder
+    {
+        return $query
+            ->whereDate('starts_at', today())
+            ->where('status', AppointmentStatus::CheckedIn)
+            ->where('ends_at', '>', now()->subHours(self::WAIT_EXPIRES_HOURS));
+    }
+
+    /** Ya pasó su hora y nadie anotó que llegó: o vino y se atendió, o no asistió. */
+    public function endedWithoutArriving(): bool
+    {
+        return $this->status->isChangeable() && $this->ends_at->isPast();
     }
 
     /** Era de un día anterior: lo que se registre ahora (que vino, que se atendió) queda con su fecha y su hora. */

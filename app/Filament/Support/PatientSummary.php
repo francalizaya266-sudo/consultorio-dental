@@ -52,7 +52,7 @@ final class PatientSummary
     /**
      * Lo que toca hacer con el paciente, en este orden: terminar la atención que quedó abierta, firmar el
      * consentimiento de la cita de hoy, agendar lo que sigue de su plan, recordarle el presupuesto que no
-     * respondió o llamarlo a su control. Cada uno solo para quien lo puede hacer.
+     * respondió, darle otro horario si faltó o canceló, o llamarlo a su control. Cada uno solo para quien lo puede hacer.
      *
      * @return Step|null
      */
@@ -94,6 +94,13 @@ final class PatientSummary
         if ($plan) {
             return self::step('plan_answer', 'Presupuesto sin respuesta', Money::format($plan->total()).' · se le presentó '.$plan->proposed_at->diffForHumans(), 'Recordar por WhatsApp', 'heroicon-m-clipboard-document-list',
                 action: $withActions && $patient->account ? ['name' => 'followUp', 'arguments' => ['template' => MessageTemplateKey::PlanFollowUp->value]] : null);
+        }
+
+        $missed = $insights->missedVisit($patient);
+
+        if ($missed) {
+            return self::step('missed', ($missed->status === AppointmentStatus::NoShow ? 'Faltó a su cita del ' : 'Se canceló su cita del ').$missed->starts_at->translatedFormat('j \d\e F'), $missed->treatment->name.' · sigue sin otra cita', $canBook ? 'Agendar' : null, 'heroicon-m-arrow-path',
+                url: $canBook ? AppointmentResource::getUrl('create', ['patient' => $patient->getKey(), 'treatment' => $missed->treatment_id, 'doctor' => $missed->doctor_id]) : null);
         }
 
         $checkup = $insights->checkup($patient);

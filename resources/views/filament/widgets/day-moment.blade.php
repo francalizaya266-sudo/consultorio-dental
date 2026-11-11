@@ -13,7 +13,10 @@
                                 <strong>{{ $row['time'] }} · {{ $row['name'] }}</strong>
                                 <small>{{ $row['detail'] }}</small>
                             </span>
-                            <x-filament::link :href="$row['url']" size="sm">Confirmar</x-filament::link>
+                            <span class="cc-row-actions">
+                                {{ ($this->confirmAction)(['appointment' => $row['id']]) }}
+                                <x-filament::link :href="$row['url']" size="sm" color="gray">Ver</x-filament::link>
+                            </span>
                         </li>
                     @endforeach
                 </ul>
@@ -31,13 +34,8 @@
         </x-filament::section>
     @elseif ($moment === DayMoment::CLOSING)
         <x-filament::section heading="Para cerrar el día" icon="heroicon-o-moon" class="day-moment">
-            <dl class="cc-figures day-moment-figures">
-                <div><dt>Cobrado hoy</dt><dd>{{ Money::format($collected) }}</dd></div>
-                <div @class(['is-short' => $pendingTotal > 0])><dt>Se fueron debiendo</dt><dd>{{ Money::format($pendingTotal) }}</dd></div>
-            </dl>
-
             @if ($pending->isNotEmpty())
-                <h3 class="cc-title">Se fueron debiendo</h3>
+                <h3 class="cc-title">Se fueron debiendo <span class="cc-title-amount">{{ Money::format($pendingTotal) }}</span></h3>
                 <ul class="cc-rows">
                     @foreach ($pending as $row)
                         <li>
@@ -60,7 +58,11 @@
                                 <strong>{{ $row['time'] }} · {{ $row['name'] }}</strong>
                                 <small>{{ $row['detail'] }}</small>
                             </span>
-                            <x-filament::link :href="$row['url']" size="sm">Cerrar la cita</x-filament::link>
+                            <span class="cc-row-actions">
+                                {{ ($this->completeAction)(['appointment' => $row['id']]) }}
+                                {{ ($this->missedAction)(['appointment' => $row['id']]) }}
+                                <x-filament::link :href="$row['url']" size="sm" color="gray">Ver</x-filament::link>
+                            </span>
                         </li>
                     @endforeach
                 </ul>
@@ -84,4 +86,6 @@
             </div>
         </x-filament::section>
     @endif
+
+    <x-filament-actions::modals />
 </x-filament-widgets::widget>

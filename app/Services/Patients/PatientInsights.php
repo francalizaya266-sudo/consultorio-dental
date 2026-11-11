@@ -75,6 +75,12 @@ class PatientInsights
             ->exists();
     }
 
+    /** La cita a la que faltó o que se canceló hace poco, si después no vino ni tiene otra. */
+    public function missedVisit(Patient $patient): ?Appointment
+    {
+        return $patient->appointments()->missedAndNotRebooked()->with('treatment')->latest('starts_at')->first();
+    }
+
     /** Lo siguiente de su plan aceptado que falta agendar, si no tiene ninguna cita por delante. */
     public function itemToSchedule(Patient $patient): ?TreatmentPlanItem
     {

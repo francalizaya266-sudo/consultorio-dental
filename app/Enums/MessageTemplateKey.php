@@ -28,6 +28,7 @@ enum MessageTemplateKey: string implements HasLabel
     case ReviewRequest = 'review_request';
     case CampaignAnnouncement = 'campaign_announcement';
     case Aftercare = 'aftercare';
+    case MissedVisit = 'missed_visit';
 
     public function getLabel(): string
     {
@@ -53,6 +54,7 @@ enum MessageTemplateKey: string implements HasLabel
             self::ReviewRequest => 'Pedido de opinión en Google',
             self::CampaignAnnouncement => 'Promoción a quien acepta recibirlas',
             self::Aftercare => 'Cuidados después de la atención',
+            self::MissedVisit => 'Faltó o canceló y no tiene otra cita',
         };
     }
 
@@ -80,6 +82,7 @@ enum MessageTemplateKey: string implements HasLabel
             self::PaymentReceipt => "Hola {nombre}, te escribimos de {consultorio}.\nRecibimos tu pago de {monto} ({medio}) el {fecha}. Constancia {numero}:\n{detalle}\n\nSaldo: {saldo}. ¡Gracias!",
             self::ReviewRequest => "Hola {nombre}, gracias por confiar en {consultorio}. Si te sentiste bien atendido, ¿nos dejas tu opinión en Google? Toma un minuto y ayuda a otras personas a encontrarnos:\n{opinion}",
             self::CampaignAnnouncement => "Hola {nombre}, te escribimos de {consultorio}.\n{promocion}\nVale hasta el {hasta}.\n\nMira los detalles y reserva aquí:\n{pagina}\n\nSi prefieres no recibir promociones, respóndenos «no» y no te escribimos más.",
+            self::MissedVisit => "Hola {nombre}, te escribimos de {consultorio}.\nNo pudimos verte en tu cita de {tratamiento} del {fecha}. ¿Te reservamos otro horario? Respóndenos con el día y la hora que te acomodan.",
             self::Aftercare => "Hola {nombre}, gracias por venir hoy a {consultorio}. Para que tu {tratamiento} quede bien:\n\n{cuidados}\n\nSi tienes dolor fuerte, sangrado que no para o fiebre, escríbenos.",
         };
     }

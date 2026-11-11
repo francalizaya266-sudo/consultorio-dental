@@ -402,12 +402,15 @@ class AppointmentService
         ]);
     }
 
-    /** Se atendió. Una cita de un día anterior que quedó sin cerrar también se puede marcar después, aunque no se confirmara. */
+    /**
+     * Se atendió. Una cita cuya hora ya terminó (de hoy o de un día anterior) y que quedó sin cerrar también se
+     * puede marcar después, aunque no se confirmara ni se anotara que llegó.
+     */
     public function markCompleted(Appointment $appointment, User $by): void
     {
         $from = [AppointmentStatus::Confirmed, AppointmentStatus::CheckedIn, AppointmentStatus::InProgress];
 
-        $this->transition($appointment, $by, AppointmentStatus::Completed, $appointment->isFromAnEarlierDay() ? AppointmentStatus::open() : $from, [
+        $this->transition($appointment, $by, AppointmentStatus::Completed, $appointment->ends_at->isPast() ? AppointmentStatus::open() : $from, [
             'started_at' => $appointment->started_at ?? $appointment->checked_in_at ?? $appointment->starts_at,
             'finished_at' => $appointment->isFromAnEarlierDay() ? $appointment->ends_at : now(),
         ]);

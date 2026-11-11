@@ -2,6 +2,7 @@
 
 namespace App\Filament\Widgets;
 
+use App\Enums\AppointmentStatus;
 use App\Enums\MessageTemplateKey;
 use App\Enums\RescheduleRequestStatus;
 use App\Filament\Actions\SendWhatsAppAction;
@@ -12,6 +13,7 @@ use App\Filament\Resources\Patients\PatientResource;
 use App\Filament\Resources\RescheduleRequests\RescheduleRequestResource;
 use App\Filament\Resources\Supplies\SupplyResource;
 use App\Filament\Resources\WhatsappMessages\WhatsappMessageResource;
+use App\Models\Appointment;
 use App\Models\Patient;
 use App\Models\Supply;
 use App\Models\SupplyBatch;
@@ -85,6 +87,7 @@ class FollowUpsToday extends Widget implements HasActions, HasSchemas
             $this->pendingRequests(),
             $this->awaitingAnswer($followUps),
             $this->unscheduled($followUps),
+            $this->missedVisits($followUps),
             $this->installments($followUps),
             $this->suppliesToReorder(),
             $this->suppliesRunningLow(),
@@ -203,6 +206,39 @@ class FollowUpsToday extends Widget implements HasActions, HasSchemas
                     'Falta: '.$labels->take(2)->implode(', ').($labels->count() > 2 ? ' y '.($labels->count() - 2).' más' : ''),
                     $contacted,
                     AppointmentResource::getUrl('create', ['patient' => $patient->getKey(), 'plan_item' => $items->first()?->getKey()]),
+                );
+            })->all(),
+        ];
+    }
+
+    /**
+     * Faltaron o cancelaron y nadie les dio otro horario: se les escribe o se les agenda de nuevo lo mismo.
+     *
+     * @return array<string, mixed>
+     */
+    private function missedVisits(FollowUps $followUps): array
+    {
+        ['count' => $count, 'patients' => $patients] = $followUps->missedVisits();
+        $key = MessageTemplateKey::MissedVisit;
+        $contacted = $followUps->recentlyContacted($patients->modelKeys(), $key);
+
+        return [
+            'key' => 'missed',
+            'title' => 'Faltaron o cancelaron',
+            'hint' => 'En los últimos '.intdiv(Patient::MISSED_VISIT_DAYS, 30).' meses y siguen sin otra cita',
+            'count' => $count,
+            'url' => PatientResource::getUrl('index', ['tab' => 'missed']),
+            'summary' => null,
+            'template' => $key->value,
+            'rows' => $patients->map(function (Patient $patient) use ($contacted) {
+                /** @var Appointment $missed */
+                $missed = $patient->appointments->first();
+
+                return $this->row(
+                    $patient,
+                    ($missed->status === AppointmentStatus::NoShow ? 'No asistió el ' : 'Se canceló su cita del ').$missed->starts_at->translatedFormat('j \d\e F').' · '.$missed->treatment->name,
+                    $contacted,
+                    AppointmentResource::getUrl('create', ['patient' => $patient->getKey(), 'treatment' => $missed->treatment_id, 'doctor' => $missed->doctor_id]),
                 );
             })->all(),
         ];
