@@ -143,7 +143,7 @@ final class CashClosing
     public function unclosedAppointments(): Collection
     {
         return Appointment::query()
-            ->with(['patient', 'treatment'])
+            ->with(['patient', 'treatment', 'doctor'])
             ->whereBetween('starts_at', [$this->date->startOfDay(), min($this->date->endOfDay(), now())])
             ->whereIn('status', AppointmentStatus::open())
             ->orderBy('starts_at')

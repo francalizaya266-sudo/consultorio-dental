@@ -102,6 +102,7 @@ class DashboardPanelTest extends TestCase
         $pedro = Patient::factory()->create(['first_name' => 'Pedro', 'last_name' => 'Huamán']);
         $rosasVisit = Appointment::factory()->for($doctor)->for($treatment)->for($rosa)->at('2026-11-02 10:00')->create();
         Appointment::factory()->for($doctor)->for($treatment)->for($pedro)->at('2026-11-02 16:00')->confirmed()->create();
+        Appointment::factory()->for($doctor)->for($treatment)->for(Patient::factory()->create(['first_name' => 'Ana', 'last_name' => 'Rojas']))->at('2026-11-02 17:00')->confirmed()->create();
         $this->actingAs(User::factory()->reception()->create());
 
         // 08:00, antes de abrir: lo que falta confirmar.
@@ -120,7 +121,7 @@ class DashboardPanelTest extends TestCase
         $this->travelTo(CarbonImmutable::parse('2026-11-02 19:30', 'America/Lima'));
         Livewire::test(DayMomentCard::class)
             ->assertSeeInOrder(['Para cerrar el día', 'Cobrado hoy', 'S/ 0.00', 'Se fueron debiendo', 'S/ 120.00'])
-            ->assertSeeInOrder(['Se fueron debiendo', 'Rosa Quispe', 'Citas sin cerrar', '16:00 · Pedro Huamán', 'Falta el cierre de caja', 'Cerrar la caja'])
+            ->assertSeeInOrder(['Se fueron debiendo', 'Rosa Quispe', 'Citas sin cerrar', '16:00 · Pedro Huamán', '17:00 · Ana Rojas', 'Falta el cierre de caja', 'Cerrar la caja'])
             ->assertDontSee('Antes de abrir');
 
         // El doctor no la ve: lo suyo es su próximo paciente.
