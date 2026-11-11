@@ -63,8 +63,8 @@ final class SignPlanAction
                     'payment_mode' => ($package?->defaultPaymentMode() ?? PlanPaymentMode::PerSession)->value,
                     'down_payment' => $terms['down_payment'] ?? 0,
                     'installments' => $terms['installments'] ?? 6,
-                    // La cuota del paquete vale si el plan es solo el paquete; si se le sumó algo, se reparte.
-                    'monthly_amount' => $package && self::total($record) === (float) $package->price ? $terms['monthly_amount'] : null,
+                    // La cuota del paquete vale para su precio; lo que no es del paquete se paga aparte, en cada sesión.
+                    'monthly_amount' => $package && self::scheduledTotal($record) === (float) $package->price ? $terms['monthly_amount'] : null,
                     'first_due_on' => today()->addMonthNoOverflow()->toDateString(),
                     'upfront_discount' => $terms['upfront_discount'] ?? 0,
                 ];
@@ -92,17 +92,19 @@ final class SignPlanAction
                             ->live(),
                         Grid::make(['default' => 2, 'lg' => 4])
                             ->visible(fn (Get $get) => self::mode($get) === PlanPaymentMode::Installments)
-                            ->schema(PaymentTermsFields::make(fn () => self::total($record), withFirstDueDate: true)),
+                            ->schema(PaymentTermsFields::make(fn () => self::scheduledTotal($record), withFirstDueDate: true)),
                         TextInput::make('upfront_discount')
                             ->label('Descuento por pagar todo junto')
                             ->prefix('S/')
                             ->numeric()
                             ->minValue(0)
-                            ->maxValue(fn () => self::total($record))
+                            ->maxValue(fn () => self::scheduledTotal($record))
                             ->visible(fn (Get $get) => self::mode($get) === PlanPaymentMode::Upfront)
                             ->live(onBlur: true),
                         Text::make(fn (Get $get) => self::preview($record, $get))
                             ->weight(FontWeight::Bold),
+                        Text::make(fn () => 'Lo que no es del paquete ('.Money::format(self::total($record) - self::scheduledTotal($record)).') no entra en el pago único ni en las cuotas: se paga en cada sesión.')
+                            ->visible(fn (Get $get) => self::mode($get)->hasSchedule() && self::total($record) - self::scheduledTotal($record) > 0),
                     ]),
                 Grid::make(3)->schema([
                     Select::make('signer_relationship')
@@ -183,6 +185,12 @@ final class SignPlanAction
         return round(self::items($plan)->sum(fn (TreatmentPlanItem $item) => $item->subtotal()), 2);
     }
 
+    /** Lo que entra en el pago único o en las cuotas: con un paquete, solo lo del paquete. */
+    private static function scheduledTotal(TreatmentPlan $plan): float
+    {
+        return round(TreatmentPlanService::scheduledItems($plan, self::items($plan))->sum(fn (TreatmentPlanItem $item) => $item->subtotal()), 2);
+    }
+
     /** @param  Collection<int, TreatmentPlanItem>  $items */
     private static function itemsHtml(Collection $items): string
     {
@@ -208,7 +216,7 @@ final class SignPlanAction
         $mode = self::mode($get);
 
         try {
-            return TreatmentPlanService::scheduleText($mode, TreatmentPlanService::schedule(self::total($plan), $mode, [
+            return TreatmentPlanService::scheduleText($mode, TreatmentPlanService::schedule(self::scheduledTotal($plan), $mode, [
                 'down_payment' => $get('down_payment'),
                 'installments' => $get('installments'),
                 'monthly_amount' => $get('monthly_amount'),

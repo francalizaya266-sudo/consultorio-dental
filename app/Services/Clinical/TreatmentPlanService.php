@@ -210,7 +210,7 @@ final class TreatmentPlanService
         $terms = $package->terms();
         $options = [];
 
-        // La cuota del paquete vale si se paga solo el paquete; si se le sumó algo, el resto se reparte en las cuotas.
+        // La cuota del paquete vale para su precio; si lo del paquete cambió de precio, el resto se reparte en las cuotas.
         if (round($price, 2) !== round((float) $package->price, 2)) {
             $terms['monthly_amount'] = null;
         }
@@ -231,8 +231,9 @@ final class TreatmentPlanService
     }
 
     /**
-     * Cómo puede pagar un presupuesto con paquete que todavía no acepta: las formas del paquete, con el total
-     * del plan. Vacío si ya lo aceptó o no trae paquete (entonces paga por sesión). Se elige al firmar.
+     * Cómo puede pagar un presupuesto con paquete que todavía no acepta: las formas del paquete, con su inicial
+     * y sus cuotas, y lo que no es del paquete, en cada sesión. Vacío si ya lo aceptó o no trae paquete
+     * (entonces paga por sesión). Se elige al firmar.
      *
      * @return list<string>
      */
@@ -240,7 +241,32 @@ final class TreatmentPlanService
     {
         $package = $plan->accepted_at === null ? $plan->offeredPackage() : null;
 
-        return $package ? self::packagePaymentOptions($package, $plan->total()) : [];
+        if (! $package) {
+            return [];
+        }
+
+        $items = $plan->items->reject(fn (TreatmentPlanItem $item) => $item->status === PlanItemStatus::Cancelled)->values();
+        $scheduled = round(self::scheduledItems($plan, $items)->sum(fn (TreatmentPlanItem $item) => $item->subtotal()), 2);
+        $apart = round($plan->total() - $scheduled, 2);
+        $options = self::packagePaymentOptions($package, $scheduled);
+
+        return $apart > 0 && ($package->allows_upfront || $package->allows_installments)
+            ? [...$options, 'Lo que no es del paquete ('.Money::format($apart).') se paga en cada sesión.']
+            : $options;
+    }
+
+    /**
+     * Lo que entra en el pago único o en las cuotas al firmar. Si el plan se armó con un paquete, solo lo del
+     * paquete, que así conserva su inicial y sus cuotas; lo demás se paga en cada sesión. Si no, todo.
+     *
+     * @param  Collection<int, TreatmentPlanItem>  $items
+     * @return Collection<int, TreatmentPlanItem>
+     */
+    public static function scheduledItems(TreatmentPlan $plan, Collection $items): Collection
+    {
+        return $plan->offeredPackage()
+            ? $items->filter(fn (TreatmentPlanItem $item) => $item->treatment_package_id !== null)->values()
+            : $items;
     }
 
     /**
@@ -466,10 +492,13 @@ final class TreatmentPlanService
         $mode = $terms['payment_mode'] ?? null;
         $mode = $firstTime ? ($mode instanceof PlanPaymentMode ? $mode : PlanPaymentMode::tryFrom((string) $mode) ?? PlanPaymentMode::PerSession) : null;
         $total = round($items->sum(fn (TreatmentPlanItem $item) => $item->subtotal()), 2);
-        $schedule = $mode?->hasSchedule() ? self::schedule($total, $mode, $terms, today()) : [];
+        // Con un paquete, el cronograma es el del paquete; lo demás se paga en cada sesión.
+        $scheduled = $mode?->hasSchedule() ? self::scheduledItems($plan, $items) : collect();
+        $schedule = $mode?->hasSchedule() ? self::schedule(round($scheduled->sum(fn (TreatmentPlanItem $item) => $item->subtotal()), 2), $mode, $terms, today()) : [];
+        $apart = $items->reject(fn (TreatmentPlanItem $item) => $scheduled->contains(fn (TreatmentPlanItem $inSchedule) => $inSchedule->is($item)))->values();
         $path = Signatures::store($signature, $plan->patient_id);
 
-        $signed = DB::transaction(function () use ($plan, $items, $mode, $schedule, $total, $signer, $path, $by, $firstTime) {
+        $signed = DB::transaction(function () use ($plan, $items, $mode, $schedule, $scheduled, $apart, $total, $signer, $path, $by, $firstTime) {
             if ($firstTime) {
                 $plan->update([
                     'status' => in_array($plan->status, [TreatmentPlanStatus::Draft, TreatmentPlanStatus::Proposed], true) ? TreatmentPlanStatus::Accepted : $plan->status,
@@ -485,14 +514,15 @@ final class TreatmentPlanService
                 $plan->companionPlans()->get()->each(fn (TreatmentPlan $companionPlan) => $this->accept($companionPlan));
             }
 
-            $this->lockItems($plan, $items, $firstTime && $mode->hasSchedule());
+            $this->lockItems($plan, $scheduled, true);
+            $this->lockItems($plan, $apart, false);
 
             return $plan->signatures()->create([
                 'signer_name' => $signer['signer_name'],
                 'signer_document' => $signer['signer_document'] ?? null,
                 'signer_relationship' => $signer['signer_relationship'],
                 'signature_path' => $path,
-                'summary' => $this->summary($items, $firstTime ? $mode : PlanPaymentMode::PerSession, $schedule),
+                'summary' => $this->summary($items, $firstTime ? $mode : PlanPaymentMode::PerSession, $schedule, $scheduled->isNotEmpty() ? $apart : collect()),
                 'total' => $total,
                 'signed_at' => now(),
                 'created_by_user_id' => $by->getKey(),
@@ -615,15 +645,24 @@ final class TreatmentPlanService
         ])->filter()->implode(' y ').'.';
     }
 
-    /** La forma de pago acordada en una línea: "Por sesión: …", "Pago único de S/ 899.00 el …". */
+    /**
+     * La forma de pago acordada en una línea: "Por sesión: …", "Pago único de S/ 899.00 el …". Con cronograma,
+     * dice también lo que queda fuera de él (lo que no es del paquete, lo agregado después) y se paga en cada sesión.
+     */
     public function paymentText(TreatmentPlan $plan): string
     {
+        $plan->loadMissing('items', 'installments');
         $mode = $plan->payment_mode ?? PlanPaymentMode::PerSession;
         $schedule = $plan->installments
             ->map(fn (TreatmentPlanInstallment $installment) => ['number' => $installment->number, 'due_on' => $installment->due_on, 'amount' => (float) $installment->amount, 'discount' => (float) $installment->discount])
             ->all();
+        $apart = $plan->hasSchedule()
+            ? round($plan->items
+                ->filter(fn (TreatmentPlanItem $item) => $item->accepted_at !== null && ! $item->in_payment_schedule && $item->status !== PlanItemStatus::Cancelled)
+                ->sum(fn (TreatmentPlanItem $item) => $item->subtotal()), 2)
+            : 0;
 
-        return $mode->getLabel().'. '.self::scheduleText($mode, $schedule);
+        return $mode->getLabel().'. '.self::scheduleText($mode, $schedule).($apart > 0 ? ' Lo demás ('.Money::format($apart).') se paga en cada sesión.' : '');
     }
 
     /**
@@ -854,13 +893,15 @@ final class TreatmentPlanService
      *
      * @param  Collection<int, TreatmentPlanItem>  $items
      * @param  list<array{number: int, due_on: CarbonInterface, amount: float, discount: float}>  $schedule
+     * @param  Collection<int, TreatmentPlanItem>  $apart  Lo que, con un paquete en cuotas o pago único, se paga en cada sesión.
      */
-    private function summary(Collection $items, PlanPaymentMode $mode, array $schedule): string
+    private function summary(Collection $items, PlanPaymentMode $mode, array $schedule, Collection $apart): string
     {
-        return $items
-            ->map(fn (TreatmentPlanItem $item) => '• '.$item->label().($item->quantity > 1 ? " × {$item->quantity}" : '').': '.Money::format($item->subtotal()))
+        return TreatmentPlan::lines($items)
+            ->map(fn (array $line) => '• '.$line['label'].': '.Money::format($line['price']).($line['contents'] !== [] ? ' (incluye: '.implode(', ', $line['contents']).')' : ''))
             ->push('Total: '.Money::format($items->sum(fn (TreatmentPlanItem $item) => $item->subtotal())))
             ->push('Forma de pago: '.$mode->getLabel().'. '.self::scheduleText($mode, $schedule))
+            ->when($apart->isNotEmpty(), fn (Collection $lines) => $lines->push('Aparte, en cada sesión: '.$apart->map(fn (TreatmentPlanItem $item) => $item->label())->implode(', ').' ('.Money::format($apart->sum(fn (TreatmentPlanItem $item) => $item->subtotal())).').'))
             ->implode("\n");
     }
 
