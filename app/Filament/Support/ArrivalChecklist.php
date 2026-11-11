@@ -47,18 +47,22 @@ final class ArrivalChecklist
         ]));
     }
 
-    /** Agrega al aviso de llegada lo pendiente del paciente; si hay algo, el aviso se queda hasta que lo cierren. */
-    public static function addTo(Notification $notification, Appointment $appointment, User $user): Notification
+    /**
+     * Agrega al aviso de llegada lo pendiente del paciente; si hay algo, el aviso se queda hasta que lo cierren.
+     *
+     * @param  string|null  $headline  Primera línea del aviso; si no se da, el nombre del paciente.
+     */
+    public static function addTo(Notification $notification, Appointment $appointment, User $user, ?string $headline = null): Notification
     {
         $patient = Patient::query()->with(['account', 'medicalBackground'])->find($appointment->patient_id);
         $pending = $patient ? self::for($patient, $user) : [];
 
         if ($pending === []) {
-            return $notification;
+            return $headline ? $notification->body($headline) : $notification;
         }
 
         return $notification
-            ->body($patient->full_name.'<br>'.implode('<br>', $pending))
+            ->body(implode('<br>', [$headline ?? $patient->full_name, ...$pending]))
             ->actions([
                 Action::make('patient')
                     ->label($user->can('update', $patient) ? 'Completar su ficha' : 'Ver su ficha')

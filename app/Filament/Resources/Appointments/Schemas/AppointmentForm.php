@@ -32,34 +32,7 @@ class AppointmentForm
     {
         return $schema
             ->components([
-                Section::make('Paciente')
-                    ->schema([
-                        Toggle::make('new_patient')
-                            ->label('Es un paciente nuevo (aún no está registrado)')
-                            ->live()
-                            ->afterStateUpdated(fn (Set $set) => $set('patient_id', null)),
-                        self::patientSelect()
-                            ->hidden(fn (Get $get) => (bool) $get('new_patient'))
-                            ->required(fn (Get $get) => ! $get('new_patient'))
-                            ->live()
-                            ->afterStateUpdated(function (Set $set, Get $get) {
-                                $set('treatment_plan_item_id', null);
-                                // Si suele venir un mismo día, se propone el próximo, con sus horarios de siempre primero.
-                                SlotPicker::followUsualDay($get, $set);
-                            }),
-                        Grid::make(2)
-                            ->statePath('patient')
-                            ->visible(fn (Get $get) => (bool) $get('new_patient'))
-                            ->schema(self::newPatientFields()),
-                        self::planItemSelect(),
-                        self::planAcceptedCheckbox(),
-                        // Junto al paciente, donde recepción lo pregunta. Solo a quien viene por primera vez: a los
-                        // demás ya se les preguntó (los reportes usan el origen del paciente).
-                        Select::make('origin')
-                            ->label('¿Cómo nos encontró?')
-                            ->options(AppointmentOrigin::class)
-                            ->visible(fn (Get $get) => self::isFirstTime($get)),
-                    ]),
+                self::patientSection(),
                 Section::make('Horario')
                     ->columns(2)
                     ->schema(SlotPicker::fields()),
@@ -75,6 +48,46 @@ class AppointmentForm
                             ->rows(2)
                             ->columnSpanFull(),
                     ]),
+            ]);
+    }
+
+    /**
+     * Quién viene: uno registrado o uno nuevo que se registra ahí mismo, con su sesión del plan si la tiene.
+     *
+     * @param  bool  $followUsualDay  Al elegirlo, proponer el próximo día en que suele venir (no aplica si la cita es para hoy).
+     */
+    public static function patientSection(bool $followUsualDay = true): Section
+    {
+        return Section::make('Paciente')
+            ->schema([
+                Toggle::make('new_patient')
+                    ->label('Es un paciente nuevo (aún no está registrado)')
+                    ->live()
+                    ->afterStateUpdated(fn (Set $set) => $set('patient_id', null)),
+                self::patientSelect()
+                    ->hidden(fn (Get $get) => (bool) $get('new_patient'))
+                    ->required(fn (Get $get) => ! $get('new_patient'))
+                    ->live()
+                    ->afterStateUpdated(function (Set $set, Get $get) use ($followUsualDay) {
+                        $set('treatment_plan_item_id', null);
+
+                        // Si suele venir un mismo día, se propone el próximo, con sus horarios de siempre primero.
+                        if ($followUsualDay) {
+                            SlotPicker::followUsualDay($get, $set);
+                        }
+                    }),
+                Grid::make(2)
+                    ->statePath('patient')
+                    ->visible(fn (Get $get) => (bool) $get('new_patient'))
+                    ->schema(self::newPatientFields()),
+                self::planItemSelect(),
+                self::planAcceptedCheckbox(),
+                // Junto al paciente, donde recepción lo pregunta. Solo a quien viene por primera vez: a los
+                // demás ya se les preguntó (los reportes usan el origen del paciente).
+                Select::make('origin')
+                    ->label('¿Cómo nos encontró?')
+                    ->options(AppointmentOrigin::class)
+                    ->visible(fn (Get $get) => self::isFirstTime($get)),
             ]);
     }
 

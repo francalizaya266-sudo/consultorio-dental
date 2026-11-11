@@ -21,6 +21,7 @@ use App\Models\Treatment;
 use App\Models\User;
 use App\Services\Access\MagicLinkService;
 use App\Services\Agenda\AvailabilityService;
+use App\Services\Agenda\Slot;
 use App\Services\Billing\BillingService;
 use App\Services\Inventory\InventoryService;
 use App\Services\StaffAlerts;
@@ -140,7 +141,9 @@ class AppointmentService
 
     /**
      * Cita creada por recepción o por el doctor (por ejemplo, la próxima sesión al
-     * terminar la consulta). Queda confirmada y se prepara el aviso al paciente.
+     * terminar la consulta). Queda confirmada y se prepara el aviso al paciente (salvo que se pida que no).
+     *
+     * @param  array{duration_minutes?: int, treatment_plan_item_id?: int|null, origin?: mixed, fixed_date?: bool, internal_notes?: string|null, notify?: bool}  $options
      */
     public function bookFromStaff(
         User $by,
@@ -187,9 +190,17 @@ class AppointmentService
                 'created_by_user_id' => $by->getKey(),
             ]);
 
+            // Lo que recepción preguntó al agendar queda también en su ficha: no se le vuelve a preguntar.
+            if ($appointment->origin !== null && $patient->origin === null) {
+                $patient->update(['origin' => $appointment->origin]);
+            }
+
             $appointment->logEvent('created', 'staff');
             $this->waitlist->settle($appointment);
-            $this->outbox->queueForAppointment($appointment, MessageTemplateKey::AppointmentScheduled);
+
+            if ($options['notify'] ?? true) {
+                $this->outbox->queueForAppointment($appointment, MessageTemplateKey::AppointmentScheduled);
+            }
 
             if ($by->isDoctor()) {
                 $this->alerts->toReception(
@@ -200,6 +211,34 @@ class AppointmentService
 
             return $appointment;
         });
+    }
+
+    /**
+     * Paciente que llega sin cita: se le da el primer hueco de hoy con ese doctor y queda en sala de una vez.
+     * No se le prepara el aviso de "cita agendada": lo tenemos delante.
+     *
+     * @param  array{treatment_plan_item_id?: int|null, origin?: mixed, internal_notes?: string|null}  $options
+     */
+    public function walkIn(User $by, Patient $patient, Doctor $doctor, Treatment $treatment, array $options = []): Appointment
+    {
+        $slot = $this->firstRoomToday($doctor, $treatment, $patient->getKey());
+
+        if ($slot === null) {
+            throw BookingException::noRoomToday($doctor);
+        }
+
+        return DB::transaction(function () use ($by, $patient, $doctor, $treatment, $slot, $options) {
+            $appointment = $this->bookFromStaff($by, $patient, $doctor, $treatment, $slot->startsAt, [...$options, 'notify' => false]);
+            $this->markArrived($appointment, $by);
+
+            return $appointment;
+        });
+    }
+
+    /** El primer hueco que le queda hoy a ese doctor para ese tratamiento, desde ahora. Null si ya no tiene. */
+    public function firstRoomToday(Doctor $doctor, Treatment $treatment, ?int $patientId = null): ?Slot
+    {
+        return $this->availability->forPatient($patientId)->slotsFor($doctor, $treatment, today(), earliest: now())->first();
     }
 
     /** El paciente confirma su asistencia con el botón de su enlace personal. */
