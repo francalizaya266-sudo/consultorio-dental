@@ -283,7 +283,7 @@ class ConsultationForm
                                 ->key('plan')
                                 ->icon(Heroicon::OutlinedClipboardDocumentList)
                                 ->description('Llega con lo programado. Deja marcado solo lo que se hizo: eso se cobra, sale del inventario y avanza el plan.')
-                                ->headerActions([self::addPackageAction()])
+                                ->headerActions([self::addToPlanAction(), self::addPackageAction()])
                                 ->schema([
                                     Select::make('treatments')
                                         ->label('Tratamientos')
@@ -327,7 +327,7 @@ class ConsultationForm
                                             }
                                         })
                                         ->visible(fn (?Consultation $record) => $record && self::workableItems($record)->isNotEmpty()),
-                                    Text::make('No tiene un plan de tratamiento vigente. Si hace falta, ármalo desde las sugerencias que salen debajo del odontograma.')
+                                    Text::make('No tiene un plan de tratamiento vigente. Si necesita algo más, ármalo con las sugerencias debajo del odontograma o con "Agregar al plan".')
                                         ->color('gray')
                                         ->visible(fn (?Consultation $record) => ! $record || (self::workableItems($record)->isEmpty() && ! self::hidesOdontogram($record))),
                                     Group::make(fn (Get $get, ?Consultation $record) => $record ? self::chargeLines($record, $get('treatments'), $get('planItems'), $get('prices')) : [])
@@ -1036,6 +1036,91 @@ class ConsultationForm
     private static function workableItems(Consultation $consultation): Collection
     {
         return app(TreatmentPlanService::class)->workableItems($consultation->patient, $consultation);
+    }
+
+    /**
+     * Lo que necesita y no se hace hoy (una limpieza, una corona, otra pieza) se suma a su plan para las
+     * próximas citas. Si ya aceptó su plan, lo agregado lo firma aparte.
+     */
+    private static function addToPlanAction(): Action
+    {
+        return Action::make('addToPlan')
+            ->label('Agregar al plan')
+            ->icon(Heroicon::OutlinedPlus)
+            ->color('gray')
+            ->link()
+            ->visible(fn (?Consultation $record) => $record && auth()->user()->can('update', $record))
+            ->modalHeading('Agregar al plan')
+            ->modalDescription(fn (Consultation $record) => self::addToPlanHint($record))
+            ->modalWidth(Width::TwoExtraLarge)
+            ->modalSubmitActionLabel('Agregar al plan')
+            ->schema([
+                Select::make('treatment_id')
+                    ->label('Tratamiento')
+                    ->options(fn () => Treatment::query()->active()->orderBy('sort_order')->orderBy('name')->get()
+                        ->mapWithKeys(fn (Treatment $treatment) => [$treatment->getKey() => $treatment->name.((float) $treatment->price_from > 0 ? ' · '.Money::format($treatment->price_from) : '')]))
+                    ->searchable()
+                    ->required()
+                    ->live()
+                    ->afterStateUpdated(fn (?string $state, Set $set) => $set('unit_price', (float) (Treatment::find($state)?->price_from ?? 0))),
+                Grid::make(3)->schema([
+                    TextInput::make('tooth')
+                        ->label('Pieza')
+                        ->placeholder('Opcional')
+                        ->maxLength(10),
+                    TextInput::make('unit_price')
+                        ->label('Precio')
+                        ->prefix('S/')
+                        ->numeric()
+                        ->minValue(0)
+                        ->required(),
+                    TextInput::make('sessions_planned')
+                        ->label('Sesiones')
+                        ->integer()
+                        ->minValue(1)
+                        ->maxValue(50)
+                        ->default(1)
+                        ->required(),
+                ]),
+            ])
+            ->action(function (Consultation $record, array $data) {
+                /** @var User $user */
+                $user = auth()->user();
+                $item = [
+                    ...app(TreatmentPlanService::class)->itemFor(Treatment::findOrFail($data['treatment_id'])),
+                    'tooth' => filled($data['tooth'] ?? null) ? trim((string) $data['tooth']) : null,
+                    'unit_price' => (float) $data['unit_price'],
+                    'sessions_planned' => (int) $data['sessions_planned'],
+                ];
+
+                try {
+                    [$plan] = app(TreatmentPlanService::class)->addToPlan($record, $user, [$item]);
+                } catch (ClinicalException $e) {
+                    Notification::make()->danger()->title($e->getMessage())->send();
+
+                    return;
+                }
+
+                Notification::make()
+                    ->success()
+                    ->title('Se agregó '.$item['description'].(filled($item['tooth']) ? ' · pieza '.$item['tooth'] : '').' a su plan ('.Money::format($item['unit_price']).').')
+                    ->body($plan->accepted_at !== null
+                        ? 'Ya había aceptado su plan: al terminar, que firme lo agregado.'
+                        : 'Al terminar, que acepte y firme el presupuesto.')
+                    ->send();
+            });
+    }
+
+    /** A qué plan va lo que se agrega. */
+    private static function addToPlanHint(Consultation $consultation): string
+    {
+        $plan = app(TreatmentPlanService::class)->currentPlan($consultation);
+
+        return match (true) {
+            $plan === null => 'Se arma su plan con esto. Al terminar, que lo acepte y firme.',
+            $plan->accepted_at !== null => 'Se suma a su plan en curso. Lo agregado lo firma aparte y se paga por sesión.',
+            default => 'Se suma a su presupuesto, que todavía no acepta.',
+        };
     }
 
     /** Suma un paquete al plan del paciente. Si vino por una campaña que ofrece un paquete, ya viene elegido. */

@@ -11,6 +11,7 @@ use App\Filament\Resources\Appointments\Schemas\AppointmentInfolist;
 use App\Filament\Resources\Appointments\Tables\AppointmentsTable;
 use App\Models\Appointment;
 use App\Models\Patient;
+use App\Models\TreatmentPlanItem;
 use App\Models\User;
 use App\Services\Clinical\TreatmentPlanService;
 use BackedEnum;
@@ -67,11 +68,12 @@ class AppointmentResource extends Resource
 
     /**
      * La próxima cita del paciente, ya con la siguiente sesión pendiente de su plan y su tratamiento: así
-     * nace como sesión del plan, y al atenderla se cobra al precio acordado y el plan avanza.
+     * nace como sesión del plan, y al atenderla se cobra al precio acordado y el plan avanza. Con $item, esa
+     * sesión (por ejemplo, la primera de un presupuesto que todavía no acepta: al agendar se pregunta).
      */
-    public static function nextVisitUrl(Patient $patient, ?int $doctorId, ?CarbonInterface $date = null): string
+    public static function nextVisitUrl(Patient $patient, ?int $doctorId, ?CarbonInterface $date = null, ?TreatmentPlanItem $item = null): string
     {
-        $next = app(TreatmentPlanService::class)->nextToSchedule($patient);
+        $next = $item ?? app(TreatmentPlanService::class)->nextToSchedule($patient);
 
         return self::getUrl('create', array_filter([
             'patient' => $patient->getKey(),

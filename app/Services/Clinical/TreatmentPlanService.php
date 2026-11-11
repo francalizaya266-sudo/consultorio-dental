@@ -227,11 +227,53 @@ final class TreatmentPlanService
 
     /**
      * Agrega procedimientos al borrador del plan del doctor (lo crea si no hay uno), desde la atención.
+     * Es el camino de los paquetes: llegan con su propia forma de pago, así que van en un borrador aparte.
      *
      * @param  list<array<string, mixed>>  $items
      * @return array{0: TreatmentPlan|null, 1: int} El plan y cuántos procedimientos se agregaron.
      */
     public function addToDraft(Consultation $consultation, User $by, array $items): array
+    {
+        return $this->addTo($consultation, $by, $items, [TreatmentPlanStatus::Draft]);
+    }
+
+    /**
+     * Agrega procedimientos al plan que el paciente ya lleva con el doctor: al borrador si hay uno, si no al
+     * presupuesto presentado o al plan en curso (lo agregado a un plan aceptado se firma aparte). Solo si no
+     * tiene ninguno se arma un borrador nuevo. Así lo que aparece en las citas siguientes queda en su plan.
+     *
+     * @param  list<array<string, mixed>>  $items
+     * @return array{0: TreatmentPlan|null, 1: int} El plan y cuántos procedimientos se agregaron.
+     */
+    public function addToPlan(Consultation $consultation, User $by, array $items): array
+    {
+        return $this->addTo($consultation, $by, $items, TreatmentPlan::OPEN_STATUSES);
+    }
+
+    /**
+     * El plan del paciente con el doctor de la atención al que se suma lo nuevo: el borrador si hay uno, si no
+     * el último vigente. El que va incluido en un 2x1 queda como se armó: lo nuevo va en un plan aparte.
+     *
+     * @param  list<TreatmentPlanStatus>  $statuses
+     */
+    public function currentPlan(Consultation $consultation, array $statuses = TreatmentPlan::OPEN_STATUSES): ?TreatmentPlan
+    {
+        return TreatmentPlan::query()
+            ->where('patient_id', $consultation->patient_id)
+            ->where('doctor_id', $consultation->doctor_id)
+            ->whereIn('status', $statuses)
+            ->whereNull('included_in_plan_id')
+            ->get()
+            ->sortByDesc(fn (TreatmentPlan $plan) => [$plan->status === TreatmentPlanStatus::Draft, $plan->getKey()])
+            ->first();
+    }
+
+    /**
+     * @param  list<array<string, mixed>>  $items
+     * @param  list<TreatmentPlanStatus>  $statuses  Los planes del doctor a los que se puede sumar.
+     * @return array{0: TreatmentPlan|null, 1: int}
+     */
+    private function addTo(Consultation $consultation, User $by, array $items, array $statuses): array
     {
         if ($by->doctorId() !== $consultation->doctor_id) {
             throw ClinicalException::notAuthor();
@@ -241,15 +283,8 @@ final class TreatmentPlanService
             return [null, 0];
         }
 
-        return DB::transaction(function () use ($consultation, $items) {
-            // El plan que va incluido en un 2x1 queda como se armó: lo nuevo va en un plan aparte.
-            $plan = TreatmentPlan::query()
-                ->where('patient_id', $consultation->patient_id)
-                ->where('doctor_id', $consultation->doctor_id)
-                ->where('status', TreatmentPlanStatus::Draft)
-                ->whereNull('included_in_plan_id')
-                ->latest('id')
-                ->first()
+        return DB::transaction(function () use ($consultation, $items, $statuses) {
+            $plan = $this->currentPlan($consultation, $statuses)
                 ?? TreatmentPlan::create([
                     'patient_id' => $consultation->patient_id,
                     'doctor_id' => $consultation->doctor_id,
@@ -263,6 +298,8 @@ final class TreatmentPlanService
             foreach ($items as $item) {
                 $plan->items()->create([...$item, 'sort_order' => ++$next]);
             }
+
+            $plan->unsetRelation('items');
 
             return [$plan, count($items)];
         });
@@ -609,12 +646,17 @@ final class TreatmentPlanService
             ->get();
     }
 
-    /** Lo siguiente por agendar de lo que el paciente aceptó: el primer procedimiento pendiente que todavía no tiene cita. */
-    public function nextToSchedule(Patient $patient): ?TreatmentPlanItem
+    /**
+     * Lo siguiente por agendar de lo que el paciente aceptó: el primer procedimiento pendiente que todavía no tiene cita.
+     * Con $evenIfNotAccepted cuenta también el presupuesto que aún no acepta (para ofrecerle su primera sesión).
+     */
+    public function nextToSchedule(Patient $patient, bool $evenIfNotAccepted = false): ?TreatmentPlanItem
     {
         return TreatmentPlanItem::query()
             ->with('plan')
-            ->whereHas('plan', fn ($query) => $query->whereIn('status', TreatmentPlan::ACCEPTED_STATUSES)->where('patient_id', $patient->getKey()))
+            ->whereHas('plan', fn ($query) => $query
+                ->whereIn('status', $evenIfNotAccepted ? TreatmentPlan::OPEN_STATUSES : TreatmentPlan::ACCEPTED_STATUSES)
+                ->where('patient_id', $patient->getKey()))
             ->whereIn('status', TreatmentPlanItem::OPEN_STATUSES)
             ->whereDoesntHave('appointments', fn ($query) => $query->where('starts_at', '>=', now())->whereIn('status', AppointmentStatus::changeable()))
             ->orderBy('treatment_plan_id')

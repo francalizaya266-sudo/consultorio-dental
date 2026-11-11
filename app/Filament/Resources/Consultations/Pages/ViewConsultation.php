@@ -5,6 +5,7 @@ namespace App\Filament\Resources\Consultations\Pages;
 use App\Exceptions\ClinicalException;
 use App\Filament\Actions\RegisterPaymentAction;
 use App\Filament\Actions\SendWhatsAppAction;
+use App\Filament\Actions\SignPlanAction;
 use App\Filament\Resources\Appointments\AppointmentResource;
 use App\Filament\Resources\Consultations\ConsultationResource;
 use App\Filament\Resources\Patients\PatientResource;
@@ -13,6 +14,7 @@ use App\Models\Appointment;
 use App\Models\Consultation;
 use App\Services\Clinical\ConsultationService;
 use App\Services\Clinical\PrescriptionService;
+use App\Services\Clinical\TreatmentPlanService;
 use App\Services\StaffAlerts;
 use App\Support\Money;
 use Filament\Actions\Action;
@@ -114,6 +116,23 @@ class ViewConsultation extends ViewRecord
 
                 Notification::make()->success()->title('Listo: recepción ya sabe que tiene que cobrarle')->send();
             });
+    }
+
+    /** El paciente acepta y firma el presupuesto (o lo agregado a su plan) ahí mismo, desde la tarjeta de cierre. */
+    public function acceptPlanAction(): Action
+    {
+        return SignPlanAction::make()
+            ->name('acceptPlan')
+            ->record(fn () => VisitCloseOut::planToAccept($this->getConsultation()))
+            ->hidden(fn () => VisitCloseOut::planToAccept($this->getConsultation()) === null);
+    }
+
+    /** Se lleva el presupuesto por WhatsApp: con eso queda como presentado. */
+    public function sendPlanAction(): Action
+    {
+        return SendWhatsAppAction::compose('sendPlan', fn () => app(TreatmentPlanService::class)->whatsappDraft(VisitCloseOut::planToAccept($this->getConsultation())))
+            ->hidden(fn () => ! ($plan = VisitCloseOut::planToAccept($this->getConsultation())) || $plan->patient->account === null || ! auth()->user()->can('update', $plan))
+            ->after(fn () => ($plan = VisitCloseOut::planToAccept($this->getConsultation())) ? app(TreatmentPlanService::class)->markProposed($plan) : null);
     }
 
     private function getConsultation(): Consultation
