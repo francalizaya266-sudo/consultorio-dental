@@ -37,7 +37,9 @@ class WalkInTest extends TestCase
         $this->cleaning = Treatment::factory()->create(['name' => 'Limpieza dental', 'duration_minutes' => 30]);
         $this->busy = $this->doctorOffering($this->cleaning);
         $this->free = $this->doctorOffering($this->cleaning);
-        Appointment::factory()->for($this->busy)->for($this->cleaning)->at('2026-11-02 10:00')->confirmed()->create();
+        // Con nombre fijo: el de la fábrica sale al azar y, cuando tocaba "Pedro", se confundía con el paciente nuevo de estas pruebas.
+        $booked = Patient::factory()->create(['first_name' => 'Carmen', 'last_name' => 'Rojas Díaz']);
+        Appointment::factory()->for($this->busy)->for($this->cleaning)->for($booked)->at('2026-11-02 10:00')->confirmed()->create();
         $this->travelTo(CarbonImmutable::parse('2026-11-02 10:07', 'America/Lima'));
         $this->actingAs(User::factory()->reception()->create());
     }
