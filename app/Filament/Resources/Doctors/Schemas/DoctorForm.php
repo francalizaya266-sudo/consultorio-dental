@@ -6,6 +6,8 @@ use App\Enums\UserRole;
 use App\Filament\Forms\WebPhotoUpload;
 use App\Models\Doctor;
 use App\Models\User;
+use Filament\Actions\Action;
+use Filament\Forms\Components\CheckboxList;
 use Filament\Forms\Components\ColorPicker;
 use Filament\Forms\Components\Repeater;
 use Filament\Forms\Components\Select;
@@ -14,11 +16,14 @@ use Filament\Forms\Components\TextInput;
 use Filament\Forms\Components\TimePicker;
 use Filament\Forms\Components\Toggle;
 use Filament\Forms\Components\ToggleButtons;
+use Filament\Notifications\Notification;
 use Filament\Schemas\Components\Section;
 use Filament\Schemas\Components\Utilities\Get;
 use Filament\Schemas\Components\Utilities\Set;
 use Filament\Schemas\Schema;
+use Filament\Support\Icons\Heroicon;
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Support\Arr;
 use Illuminate\Support\Str;
 
 class DoctorForm
@@ -33,6 +38,56 @@ class DoctorForm
     private const AGENDA_COLORS = ['#0ea5e9', '#10b981', '#f59e0b', '#8b5cf6', '#ec4899', '#14b8a6', '#f97316', '#64748b'];
 
     public const WEEKDAYS = [1 => 'Lunes', 2 => 'Martes', 3 => 'Miércoles', 4 => 'Jueves', 5 => 'Viernes', 6 => 'Sábado', 7 => 'Domingo'];
+
+    /**
+     * "Copiar este día a otros": arma el lunes (mañana y tarde) y lo repite en los días que se marquen, en vez
+     * de llenar tramo por tramo. Lo que esos días tenían se reemplaza; se guarda al guardar el doctor.
+     */
+    private static function copyDayAction(): Action
+    {
+        $weekdayOf = fn (array $arguments, Repeater $component): int => (int) ($component->getRawItemState($arguments['item'])['weekday'] ?? 0);
+
+        return Action::make('copyDay')
+            ->label('Copiar este día a otros')
+            ->tooltip('Copiar este día a otros')
+            ->icon(Heroicon::OutlinedDocumentDuplicate)
+            ->color('gray')
+            ->modalHeading(fn (array $arguments, Repeater $component) => 'Copiar el horario del '.Str::lower(self::WEEKDAYS[$weekdayOf($arguments, $component)] ?? 'día'))
+            ->modalDescription('Todos sus tramos pasan a los días que marques y reemplazan lo que esos días tenían.')
+            ->modalSubmitActionLabel('Copiar')
+            ->modalWidth('md')
+            ->schema(fn (array $arguments, Repeater $component) => [
+                CheckboxList::make('days')
+                    ->label('A estos días')
+                    ->options(Arr::except(self::WEEKDAYS, [$weekdayOf($arguments, $component)]))
+                    ->default(array_values(array_diff([1, 2, 3, 4, 5], [$weekdayOf($arguments, $component)])))
+                    ->columns(2)
+                    ->required(),
+            ])
+            ->action(function (array $arguments, array $data, Repeater $component) use ($weekdayOf) {
+                $weekday = $weekdayOf($arguments, $component);
+                $days = array_map('intval', $data['days']);
+                $items = collect($component->getRawState() ?? []);
+                $source = $items->filter(fn (array $item) => (int) ($item['weekday'] ?? 0) === $weekday)->values();
+                $copies = collect($days)
+                    ->flatMap(fn (int $day) => $source->map(fn (array $item) => ['weekday' => $day, 'starts_at' => $item['starts_at'] ?? null, 'ends_at' => $item['ends_at'] ?? null]))
+                    ->mapWithKeys(fn (array $item) => [$component->generateUuid() ?? (string) Str::uuid() => $item]);
+
+                $component->rawState($items
+                    ->reject(fn (array $item) => in_array((int) ($item['weekday'] ?? 0), $days, true))
+                    ->union($copies)
+                    ->sortBy(fn (array $item) => sprintf('%d %s', $item['weekday'] ?? 0, $item['starts_at'] ?? ''))
+                    ->all());
+                $component->callAfterStateUpdated();
+
+                Notification::make()
+                    ->success()
+                    ->title('Listo: '.Str::lower(collect($days)->sort()->map(fn (int $day) => self::WEEKDAYS[$day])->join(', ', ' y '))
+                        .(count($days) === 1 ? ' queda' : ' quedan').' como el '.Str::lower(self::WEEKDAYS[$weekday]).'.')
+                    ->body('Revisa y guarda los cambios.')
+                    ->send();
+            });
+    }
 
     /**
      * Crea el usuario del doctor si se pidió "Crear su acceso" (con su nombre y el rol de doctor) y lo deja
@@ -197,6 +252,7 @@ class DoctorForm
                             ->defaultItems(0)
                             ->addActionLabel('Agregar tramo')
                             ->reorderable(false)
+                            ->extraItemActions([self::copyDayAction()])
                             ->itemLabel(fn (array $state) => self::WEEKDAYS[$state['weekday'] ?? 0] ?? null),
                     ]),
             ]);
