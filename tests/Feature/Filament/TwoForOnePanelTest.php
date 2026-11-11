@@ -71,7 +71,7 @@ class TwoForOnePanelTest extends TestCase
         $this->assertSame([$plan->id, 0.0], [$companionPlan->included_in_plan_id, $companionPlan->total()]);
 
         $component
-            ->assertTableColumnHasDescription('payment', '2x1 con Lucía Quispe', $plan)
+            ->assertTableColumnHasDescription('payment', 'Pago único de S/ 500.00 · 2x1 con Lucía Quispe', $plan)
             ->mountAction(TestAction::make('accept')->table($plan))
             ->assertMountedActionModalSee('2x1: con este plan se atiende también a Lucía Quispe, sin costo.');
 

@@ -10,6 +10,7 @@ use App\Enums\TreatmentPlanStatus;
 use App\Exceptions\ClinicalException;
 use App\Filament\Resources\Consultations\Pages\EditConsultation;
 use App\Filament\Resources\Consultations\Pages\ViewConsultation;
+use App\Filament\Resources\Patients\Pages\ViewClinicalRecord;
 use App\Filament\Resources\Patients\RelationManagers\TreatmentPlansRelationManager;
 use App\Models\Consultation;
 use App\Models\Doctor;
@@ -230,6 +231,135 @@ class PackageAtTheVisitTest extends TestCase
         $this->assertTrue($next['item']->is($controls));
         $this->assertSame(today()->addDays(15)->toDateString(), $next['on']->toDateString());
         $this->assertSame('A los 15 días', $next['why']);
+    }
+
+    public function test_package_work_done_before_signing_is_not_charged_in_parts_and_waits_for_the_signature(): void
+    {
+        $this->actingAs($this->doctor->user);
+        $plans = app(TreatmentPlanService::class);
+        $resin16 = TreatmentPlanItem::where('tooth', '16')->sole();
+        [$plan] = $plans->addPackageToDraft($this->evaluation, $this->doctor->user, $this->orthodontics, includedItemIds: [$resin16->id]);
+        $brackets = $plan->items()->where('description', 'Colocación de brackets')->sole();
+        $resin26 = $plan->items()->where('tooth', '26')->sole();
+
+        // El doctor coloca los brackets y cura las dos piezas el mismo día, antes de que el paciente firme.
+        $this->evaluation->planItems()->sync([$brackets->id, $resin16->id, $resin26->id]);
+        $lines = collect(app(BillingService::class)->previewConsultation($this->evaluation, [], [$brackets->id, $resin16->id, $resin26->id]));
+
+        // El paquete va en una línea, sin su parte del precio; lo que no es del paquete, con el suyo.
+        $this->assertSame(['Paquete Ortodoncia: Curación con resina · pieza 16 (O), Colocación de brackets', 'Curación con resina · pieza 26 (O)'], $lines->pluck('label')->all());
+        $this->assertSame([null, 150.0], $lines->pluck('amount')->all());
+
+        Livewire::test(EditConsultation::class, ['record' => $this->evaluation->getRouteKey()])
+            ->assertSee(['Con el paquete, al firmar', 'Falta que firme el paquete.'])
+            ->assertDontSee('769.23');
+
+        app(ConsultationService::class)->close($this->evaluation->fresh(), $this->doctor->user);
+
+        // Solo se cargó la curación aparte. El plan no quedó "por sesión": espera la firma.
+        $this->assertSame([150.0], $this->evaluation->patient->charges()->get()->map->net()->all());
+        $plan->refresh();
+        $this->assertSame([TreatmentPlanStatus::InProgress, null, null], [$plan->status, $plan->accepted_at, $plan->payment_mode]);
+
+        Livewire::test(ViewConsultation::class, ['record' => $this->evaluation->getRouteKey()])
+            ->assertSee(['Ya empezó su paquete, falta que firme: S/ 1,150.00', 'Ya se empezó y falta que firme cómo pagará el paquete.'])
+            ->mountAction('acceptPlan')
+            ->fillForm(['signature' => $this->signature()])
+            ->callMountedAction()
+            ->assertHasNoActionErrors();
+
+        // Firmó en cuotas: lo hecho del paquete queda cubierto por ellas, y hoy se carga la inicial.
+        $plan->refresh()->load('items', 'installments');
+        $this->assertSame([TreatmentPlanStatus::InProgress, PlanPaymentMode::Installments], [$plan->status, $plan->payment_mode]);
+        $this->assertTrue($plan->items->where('treatment_package_id', $this->orthodontics->id)->every('in_payment_schedule'));
+        $this->assertEqualsCanonicalizing([150.0, 500.0], $this->evaluation->patient->charges()->get()->map->net()->all());
+
+        Livewire::test(ViewConsultation::class, ['record' => $this->evaluation->getRouteKey()])
+            ->assertSee('Forma de pago que firmó:')
+            ->assertSee('En cuotas. Inicial de S/ 500.00');
+    }
+
+    public function test_adding_the_package_again_puts_what_is_marked_inside_it_instead_of_charging_it_twice(): void
+    {
+        $this->actingAs($this->doctor->user);
+        $plans = app(TreatmentPlanService::class);
+        $resin16 = TreatmentPlanItem::where('tooth', '16')->sole();
+        $resin26 = TreatmentPlanItem::where('tooth', '26')->sole();
+        [$plan] = $plans->addPackageToDraft($this->evaluation, $this->doctor->user, $this->orthodontics, includedItemIds: [$resin16->id]);
+
+        Livewire::test(EditConsultation::class, ['record' => $this->evaluation->getRouteKey()])
+            ->mountAction(TestAction::make('addPackage')->schemaComponent('plan'))
+            ->fillForm(['package_id' => $this->orthodontics->id])
+            ->assertMountedActionModalSee(['Su plan ya tiene este paquete: no se agrega otra vez.', 'Lo que entra al paquete, sin costo'])
+            ->assertMountedActionModalDontSee('Formas de pago, se elige al aceptar y firmar:')
+            ->fillForm(['included' => [(string) $resin26->id]])
+            ->assertMountedActionModalSee('Se deja de cobrar S/ 150.00: Curación con resina · pieza 26 (O).')
+            ->callMountedAction()
+            ->assertHasNoActionErrors()
+            ->assertNotified('Entró al paquete, sin costo: Curación con resina · pieza 26 (O).');
+
+        // Un solo paquete, al mismo precio, ahora con la curación de 26 adentro.
+        $plan->refresh()->load('items');
+        $this->assertSame([1000.0, 5], [$plan->total(), $plan->items->count()]);
+        $this->assertSame([$this->orthodontics->id, 0.0], [$resin26->fresh()->treatment_package_id, $resin26->fresh()->subtotal()]);
+
+        // Lo que aparece después también puede ir dentro del paquete, a criterio del doctor.
+        $cleaning = Treatment::where('slug', 'limpieza-dental')->firstOrFail();
+        Livewire::test(EditConsultation::class, ['record' => $this->evaluation->getRouteKey()])
+            ->mountAction(TestAction::make('addToPlan')->schemaComponent('plan'))
+            ->fillForm(['treatment_id' => $cleaning->id, 'unit_price' => 80, 'in_package' => true])
+            ->assertMountedActionModalSee('Entra en su paquete Ortodoncia, sin costo')
+            ->callMountedAction()
+            ->assertHasNoActionErrors();
+
+        $this->assertSame(1000.0, $plan->fresh()->total());
+        $this->assertSame($this->orthodontics->id, $plan->items()->where('treatment_id', $cleaning->id)->sole()->treatment_package_id);
+    }
+
+    public function test_after_signing_what_goes_into_the_package_costs_nothing_and_needs_no_new_signature(): void
+    {
+        $this->actingAs($this->doctor->user);
+        $plans = app(TreatmentPlanService::class);
+        [$plan] = $plans->addPackageToDraft($this->evaluation, $this->doctor->user, $this->orthodontics);
+        $plans->sign($plan->fresh(), ['payment_mode' => PlanPaymentMode::Installments, ...$this->orthodontics->terms()], ['signer_name' => 'Ana', 'signer_relationship' => PatientRelationship::Self], $this->signature(), $this->doctor->user);
+
+        // Las dos curaciones del diagnóstico se firmaron aparte, por sesión. El doctor decide meter la de 26.
+        $resin26 = TreatmentPlanItem::where('tooth', '26')->sole();
+        $this->assertFalse($resin26->in_payment_schedule);
+
+        Livewire::test(TreatmentPlansRelationManager::class, ['ownerRecord' => $this->evaluation->patient, 'pageClass' => ViewClinicalRecord::class])
+            ->mountAction(TestAction::make('includeInPackage')->table($plan))
+            ->fillForm(['items' => [(string) $resin26->id]])
+            ->assertMountedActionModalSee('Se deja de cobrar S/ 150.00: Curación con resina · pieza 26 (O).')
+            ->callMountedAction()
+            ->assertHasNoActionErrors();
+
+        $resin26->refresh()->load('plan');
+        $this->assertSame([$this->orthodontics->id, 0.0, true], [$resin26->treatment_package_id, $resin26->subtotal(), $resin26->in_payment_schedule]);
+        $this->assertNull(app(BillingService::class)->chargePlanSession($resin26, $this->doctor->user));
+        // Las cuotas no cambian y no queda nada por firmar de ella.
+        $this->assertSame(1000.0, round($plan->installments()->sum('amount'), 2));
+        $this->assertNotContains($resin26->id, $plan->fresh()->itemsToAccept()->pluck('id')->all());
+    }
+
+    public function test_the_plan_form_shows_the_package_with_one_price_and_spreads_it_by_itself(): void
+    {
+        $this->actingAs($this->doctor->user);
+        [$plan] = app(TreatmentPlanService::class)->addPackageToDraft($this->evaluation, $this->doctor->user, $this->orthodontics);
+
+        Livewire::test(TreatmentPlansRelationManager::class, ['ownerRecord' => $this->evaluation->patient, 'pageClass' => ViewClinicalRecord::class])
+            ->mountAction(TestAction::make('edit')->table($plan))
+            ->assertSchemaStateSet(['package_price' => '1000.00'])
+            ->assertMountedActionModalSee(['Precio del paquete', 'Colocación de brackets · en el paquete'])
+            ->assertMountedActionModalDontSee('847.46')
+            ->fillForm(['package_price' => 900])
+            ->callMountedAction()
+            ->assertHasNoActionErrors();
+
+        // El paquete baja a 900 y lo que no es del paquete sigue con su precio.
+        $plan->refresh()->load('items');
+        $this->assertSame(900.0, round($plan->items->where('treatment_package_id', $this->orthodontics->id)->sum(fn (TreatmentPlanItem $item) => $item->subtotal()), 2));
+        $this->assertSame(1200.0, $plan->total());
     }
 
     private function signature(): string

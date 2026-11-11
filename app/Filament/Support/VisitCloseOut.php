@@ -2,6 +2,7 @@
 
 namespace App\Filament\Support;
 
+use App\Enums\TreatmentPlanStatus;
 use App\Filament\Resources\Appointments\AppointmentResource;
 use App\Filament\Resources\Patients\RelationManagers\TreatmentPlansRelationManager;
 use App\Models\Appointment;
@@ -95,7 +96,12 @@ final class VisitCloseOut
         $until = $plan->validUntil();
 
         return [
-            'label' => ($first ? 'Presupuesto por aceptar: ' : 'Lo agregado a su plan, por aceptar: ').Money::format($items->sum(fn (TreatmentPlanItem $item) => $item->subtotal())),
+            'label' => match (true) {
+                // Se empezó el paquete sin firmar: lo hecho se paga con el paquete, así que tiene que firmar.
+                $first && $plan->status === TreatmentPlanStatus::InProgress && TreatmentPlanService::awaitsPackageSignature($plan) => 'Ya empezó su paquete, falta que firme: ',
+                $first => 'Presupuesto por aceptar: ',
+                default => 'Lo agregado a su plan, por aceptar: ',
+            }.Money::format($items->sum(fn (TreatmentPlanItem $item) => $item->subtotal())),
             'detail' => $names.($until ? ' · vale hasta el '.$until->format('d/m/Y') : ''),
             'options' => $first ? app(TreatmentPlanService::class)->paymentOptions($plan) : [],
             'button' => $canSign ? ($first ? 'Acepta y firma' : 'Firma lo agregado') : null,

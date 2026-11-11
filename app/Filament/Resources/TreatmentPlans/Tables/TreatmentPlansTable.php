@@ -178,12 +178,11 @@ class TreatmentPlansTable
         return $plan->items->filter(fn (TreatmentPlanItem $item) => $item->isOpen())->values();
     }
 
-    /** "Corona, Endodoncia y 2 más". */
+    /** "Corona, Endodoncia y 2 más". Un paquete va como uno: "Paquete Ortodoncia (18 meses), Corona". */
     private static function summary(TreatmentPlan $plan, bool $withTooth): string
     {
-        $labels = $plan->items
-            ->reject(fn (TreatmentPlanItem $item) => $item->status === PlanItemStatus::Cancelled)
-            ->map(fn (TreatmentPlanItem $item) => $item->label($withTooth))
+        $labels = TreatmentPlan::lines($plan->items->reject(fn (TreatmentPlanItem $item) => $item->status === PlanItemStatus::Cancelled)->values(), $withTooth)
+            ->pluck('label')
             ->unique()
             ->values();
 

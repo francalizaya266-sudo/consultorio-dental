@@ -1,4 +1,5 @@
 @use('App\Enums\PlanItemStatus')
+@use('App\Enums\TreatmentPlanStatus')
 @use('App\Models\TreatmentPlan')
 @use('App\Support\Money')
 {{-- Su plan de tratamiento, como está hoy: cada procedimiento (o cada paquete, con lo que incluye) con su precio y en qué va. --}}
@@ -46,8 +47,16 @@
                     @endif
                 @endforeach
             </ul>
-            @if (($options = $paymentOptions[$plan->getKey()] ?? []) !== [])
+            @if (filled($payment = $payments[$plan->getKey()] ?? null))
                 <div class="visit-plan-options">
+                    <span>Forma de pago que firmó:</span> {{ $payment }}
+                </div>
+            @endif
+            @if (($options = $paymentOptions[$plan->getKey()] ?? []) !== [])
+                <div @class(['visit-plan-options', 'is-pending' => $plan->status === TreatmentPlanStatus::InProgress])>
+                    @if ($plan->status === TreatmentPlanStatus::InProgress)
+                        <strong>Ya se empezó y falta que firme cómo pagará el paquete.</strong>
+                    @endif
                     <span>Formas de pago, se elige al firmar:</span>
                     <ul>
                         @foreach ($options as $option)

@@ -127,6 +127,10 @@ class ConsultationInfolist
                                 ->viewData(fn (Consultation $record) => [
                                     'plans' => $plans = self::plans($record),
                                     'paymentOptions' => $plans->mapWithKeys(fn (TreatmentPlan $plan) => [$plan->getKey() => app(TreatmentPlanService::class)->paymentOptions($plan)])->all(),
+                                    // Lo que firmó: su pago único o su inicial y sus cuotas.
+                                    'payments' => $plans->filter(fn (TreatmentPlan $plan) => $plan->accepted_at !== null && $plan->included_in_plan_id === null)
+                                        ->mapWithKeys(fn (TreatmentPlan $plan) => [$plan->getKey() => app(TreatmentPlanService::class)->paymentText($plan)])
+                                        ->all(),
                                     'url' => PatientResource::getUrl('clinical', ['record' => $record->patient_id, 'relation' => '1']),
                                 ]),
                         ])
@@ -153,7 +157,7 @@ class ConsultationInfolist
         return TreatmentPlan::query()
             ->where('patient_id', $consultation->patient_id)
             ->where(fn ($query) => $query->open()->orWhere('consultation_id', $consultation->getKey()))
-            ->with('items')
+            ->with(['items', 'installments'])
             ->orderBy('id')
             ->get();
     }

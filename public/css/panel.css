@@ -1540,3 +1540,6 @@ a.ap-visit:hover { background: var(--gray-50); }
 .visit-plan-options { margin-top: .25rem; padding: .6rem .75rem; border-radius: .5rem; background: var(--gray-50); font-size: .8125rem; color: var(--gray-700); }
 .visit-plan-options ul { margin-top: .2rem; padding-left: 1.1rem; list-style: disc; display: grid; gap: .15rem; }
 .dark .visit-plan-options { background: rgb(255 255 255 / .04); color: var(--gray-300); }
+.visit-plan-options.is-pending { background: var(--warning-50); color: var(--warning-800); }
+.visit-plan-options.is-pending strong { display: block; margin-bottom: .15rem; }
+.dark .visit-plan-options.is-pending { background: rgb(245 158 11 / .1); color: var(--warning-300); }
