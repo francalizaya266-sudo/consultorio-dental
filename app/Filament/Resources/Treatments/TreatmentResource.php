@@ -232,11 +232,12 @@ class TreatmentResource extends Resource
                 TextColumn::make('name')
                     ->label('Tratamiento')
                     ->searchable()
-                    ->description(fn (Treatment $record) => $record->sessionsText()),
+                    ->description(fn (Treatment $record) => $record->sessionsText())
+                    ->wrap(),
                 TextColumn::make('duration_minutes')
                     ->label('Duración')
                     ->suffix(' min')
-                    ->description(fn (Treatment $record) => '+'.$record->bufferMinutes().' de esterilización'),
+                    ->description(fn (Treatment $record) => '+'.$record->bufferMinutes().' de limpieza'),
                 TextColumn::make('price_from')
                     ->label('Desde')
                     ->money('PEN', locale: 'es_PE')
@@ -276,7 +277,7 @@ class TreatmentResource extends Resource
                 ->withExists(['doctors as has_web_doctor' => fn (Builder $doctors) => $doctors->active()->where('accepts_online_booking', true)]))
             ->recordActions([
                 TreatmentRecipeAction::make(),
-                EditAction::make(),
+                EditAction::make()->iconButton()->tooltip('Editar'),
                 // Borrar va en el menú para que la fila entre entera. Con citas o cobros no se borra: avisa que se apaga "Activo".
                 ActionGroup::make([
                     DeleteAction::make()

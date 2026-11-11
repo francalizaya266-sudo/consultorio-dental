@@ -8,6 +8,7 @@ use App\Models\Doctor;
 use App\Models\Payment;
 use Carbon\CarbonImmutable;
 use Filament\Actions\Action;
+use Filament\Actions\ActionGroup;
 use Filament\Forms\Components\DatePicker;
 use Filament\Forms\Components\Textarea;
 use Filament\Notifications\Notification;
@@ -26,6 +27,8 @@ class PaymentsTable
 {
     public static function configure(Table $table): Table
     {
+        $severalDoctors = Doctor::severalActive();
+
         return $table
             ->stackedOnMobile()
             ->columns([
@@ -40,8 +43,10 @@ class PaymentsTable
                 TextColumn::make('treatment.name')
                     ->label('Concepto')
                     ->state(fn (Payment $record) => (float) $record->amount < 0 ? 'Devolución' : $record->treatment?->name)
-                    ->description(fn (Payment $record) => (float) $record->amount < 0 ? $record->notes : $record->doctor?->name)
-                    ->placeholder('—'),
+                    // El doctor solo dice algo cuando hay más de uno.
+                    ->description(fn (Payment $record) => (float) $record->amount < 0 ? $record->notes : ($severalDoctors ? $record->doctor?->name : null))
+                    ->placeholder('—')
+                    ->wrap(),
                 TextColumn::make('method')
                     ->label('Medio')
                     ->badge()
@@ -103,7 +108,10 @@ class PaymentsTable
             ->filtersFormColumns(3)
             ->recordActions([
                 self::receiptAction(),
-                self::voidAction(),
+                // Anular va en el menú: con los dos botones la fila no entraba en una laptop.
+                ActionGroup::make([
+                    self::voidAction(),
+                ]),
             ])
             ->emptyStateHeading('No hay pagos en estas fechas')
             ->emptyStateDescription('Usa "Cobrar" cuando el paciente pague en el consultorio, o mira los pagos de otros días.')

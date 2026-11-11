@@ -56,6 +56,8 @@ class WhatsappMessagesTable
                 TextColumn::make('status')
                     ->label('Estado')
                     ->badge()
+                    // En "Por enviar" y "Promociones" todos dicen lo mismo, y la columna sacaba el botón de la pantalla.
+                    ->hidden(fn ($livewire) => in_array($livewire->activeTab ?? 'due', ['due', 'promotions'], true))
                     ->description(fn (WhatsappMessage $record) => match (true) {
                         $record->status === MessageStatus::Sent => trim(($record->sentBy?->name ?? 'Automático').' · '.$record->sent_at?->format('d/m H:i')),
                         $record->status === MessageStatus::Pending && $record->due_at?->isFuture() => 'Sale el '.$record->due_at->translatedFormat('d/m \a \l\a\s H:i'),

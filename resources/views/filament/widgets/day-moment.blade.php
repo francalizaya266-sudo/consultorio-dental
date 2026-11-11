@@ -14,7 +14,9 @@
                                 <small>{{ $row['detail'] }}</small>
                             </span>
                             <span class="cc-row-actions">
-                                {{ ($this->confirmAction)(['appointment' => $row['id']]) }}
+                                @if (($confirm = ($this->confirmAction)(['appointment' => $row['id']]))->isVisible())
+                                    {{ $confirm }}
+                                @endif
                                 <x-filament::link :href="$row['url']" size="sm" color="gray">Ver</x-filament::link>
                             </span>
                         </li>
@@ -59,8 +61,12 @@
                                 <small>{{ $row['detail'] }}</small>
                             </span>
                             <span class="cc-row-actions">
-                                {{ ($this->completeAction)(['appointment' => $row['id']]) }}
-                                {{ ($this->missedAction)(['appointment' => $row['id']]) }}
+                                {{-- Una acción oculta se pinta apagada: solo va la que aplica a esa cita. --}}
+                                @foreach ([$this->completeAction, $this->missedAction] as $action)
+                                    @if (($action = $action(['appointment' => $row['id']]))->isVisible())
+                                        {{ $action }}
+                                    @endif
+                                @endforeach
                                 <x-filament::link :href="$row['url']" size="sm" color="gray">Ver</x-filament::link>
                             </span>
                         </li>

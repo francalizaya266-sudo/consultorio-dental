@@ -99,7 +99,8 @@ class TextSnippetResource extends Resource
                     ->formatStateUsing(fn (TextSnippet $record) => ($note = self::ownershipNote($record))
                         ? new HtmlString(e($record->label).' <span class="snip-note">'.e($note).'</span>')
                         : $record->label)
-                    ->description(fn (TextSnippet $record) => str($record->body)->limit(90)),
+                    ->description(fn (TextSnippet $record) => str($record->body)->limit(90))
+                    ->wrap(),
                 TextColumn::make('shortcut')
                     ->label('Atajo')
                     ->prefix('/')

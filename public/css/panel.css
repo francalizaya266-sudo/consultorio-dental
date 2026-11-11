@@ -1477,3 +1477,9 @@ a.ap-visit:hover { background: var(--gray-50); }
     .stock-count > .fi-sc:last-child { flex-wrap: nowrap; }
     .stock-count > .fi-sc:last-child .fi-ac > .fi-btn:not(:first-child) { display: none; }
 }
+
+/* Laptops chicas (hasta 1400 px): el menú más angosto y menos margen, para que las tablas entren sin barra. */
+@media (min-width: 64rem) and (max-width: 87.5rem) {
+    html:root { --sidebar-width: 17rem; }
+    .fi-main { padding-inline: 1.25rem; }
+}

@@ -66,6 +66,7 @@ class StockMovementResource extends Resource
                     ->url(fn (StockMovement $record) => SupplyResource::getUrl('view', ['record' => $record->supply_id]))
                     ->searchable()
                     ->weight('bold')
+                    ->wrap()
                     ->hidden(fn ($livewire) => $livewire instanceof RelationManager),
                 TextColumn::make('type')
                     ->label('Qué fue')

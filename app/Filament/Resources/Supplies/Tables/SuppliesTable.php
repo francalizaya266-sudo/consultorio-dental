@@ -79,7 +79,7 @@ class SuppliesTable
             ->recordActions([
                 SupplyActions::receive(),
                 ViewAction::make()->label('Ver lotes')->color('gray'),
-                EditAction::make()->color('gray'),
+                EditAction::make()->color('gray')->iconButton()->tooltip('Editar'),
             ])
             ->emptyStateHeading('Todavía no hay materiales')
             ->emptyStateDescription('Empieza con la lista sugerida (anestesia, guantes, resinas…) y ajústala, o agrega tus materiales uno por uno.');
