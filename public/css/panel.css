@@ -1369,6 +1369,7 @@ a.ap-visit:hover { background: var(--gray-50); }
 .cc-ok { margin: 0; font-size: .875rem; color: var(--gray-600); }
 .cc-status { display: flex; align-items: center; gap: .75rem; margin-top: 1rem; padding: .65rem .75rem; border-radius: .75rem; background: var(--primary-50); box-shadow: inset 0 0 0 1px var(--primary-200); }
 .cc-status.is-closed { background: var(--gray-50); box-shadow: inset 0 0 0 1px var(--gray-200); }
+.cc-status:first-child { margin-top: 0; }
 .cc-status-icon { width: 1.25rem; height: 1.25rem; flex: none; color: var(--primary-600); }
 .cc-status.is-closed .cc-status-icon { color: var(--gray-500); }
 .dark .cc-figures div, .dark .cc-status.is-closed { background: rgb(255 255 255 / .03); box-shadow: inset 0 0 0 1px rgb(255 255 255 / .1); }
@@ -1562,3 +1563,226 @@ a.ap-visit:hover { background: var(--gray-50); }
 .visit-plan-options.is-pending { background: var(--warning-50); color: var(--warning-800); }
 .visit-plan-options.is-pending strong { display: block; margin-bottom: .15rem; }
 .dark .visit-plan-options.is-pending { background: rgb(245 158 11 / .1); color: var(--warning-300); }
+
+/* ---------- Cita: en qué va, sus cuentas y su historial ---------- */
+
+/* El camino de la cita: cinco pasos unidos por una línea. Lo hecho va en verde; el paso de ahora, en el azul de la marca. */
+.ap-details { display: grid; gap: 1.25rem; }
+.ap-steps { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); margin: 0; padding: 0; list-style: none; }
+.ap-step { position: relative; display: grid; justify-items: center; gap: .3rem; text-align: center; }
+.ap-step::before { content: ""; position: absolute; top: .8125rem; right: 50%; width: 100%; height: 2px; background: var(--gray-200); }
+.ap-step:first-child::before { display: none; }
+.ap-step.is-done::before, .ap-step.is-current::before, .ap-step.is-skipped::before { background: var(--success-500); }
+.ap-step-dot { position: relative; z-index: 1; display: grid; place-items: center; width: 1.75rem; height: 1.75rem; border-radius: 999px; background: #fff; box-shadow: inset 0 0 0 2px var(--gray-300); color: #fff; }
+.ap-step-check { width: 1rem; height: 1rem; }
+.ap-step.is-done .ap-step-dot { background: var(--success-600); box-shadow: none; }
+.ap-step.is-skipped .ap-step-dot { background: #fff; box-shadow: inset 0 0 0 2px var(--success-500); }
+.ap-step.is-current .ap-step-dot { background: var(--primary-600); box-shadow: 0 0 0 4px color-mix(in oklab, var(--primary-500) 22%, transparent); }
+.ap-step.is-current .ap-step-dot::after { content: ""; width: .5rem; height: .5rem; border-radius: 999px; background: #fff; }
+.ap-step-label { font-size: .8125rem; font-weight: 600; line-height: 1.2; color: var(--gray-500); }
+.ap-step.is-done .ap-step-label, .ap-step.is-skipped .ap-step-label { color: var(--gray-800); }
+.ap-step.is-current .ap-step-label { color: var(--primary-700); }
+.ap-step-at { min-height: 1rem; font-size: .75rem; line-height: 1rem; color: var(--gray-500); font-variant-numeric: tabular-nums; }
+.dark .ap-step::before { background: rgb(255 255 255 / .12); }
+.dark .ap-step.is-done::before, .dark .ap-step.is-current::before, .dark .ap-step.is-skipped::before { background: var(--success-500); }
+.dark .ap-step-dot { background: var(--gray-900); box-shadow: inset 0 0 0 2px rgb(255 255 255 / .2); }
+.dark .ap-step.is-done .ap-step-dot { background: var(--success-500); box-shadow: none; }
+.dark .ap-step.is-skipped .ap-step-dot { background: var(--gray-900); box-shadow: inset 0 0 0 2px var(--success-500); }
+.dark .ap-step.is-current .ap-step-dot { background: var(--primary-500); }
+.dark .ap-step-label { color: var(--gray-400); }
+.dark .ap-step.is-done .ap-step-label, .dark .ap-step.is-skipped .ap-step-label { color: var(--gray-100); }
+.dark .ap-step.is-current .ap-step-label { color: var(--primary-300); }
+.dark .ap-step-at { color: var(--gray-400); }
+@media (max-width: 30rem) {
+    .ap-step-label { font-size: .6875rem; }
+    .ap-step-at { font-size: .6875rem; }
+}
+
+/* Cómo terminó una cita que no se dio, o el aviso de que falta llamar. */
+.ap-closed { display: grid; gap: .1rem; margin: 0; padding: .65rem .9rem; border-radius: .7rem; font-size: .875rem; background: var(--gray-100); color: var(--gray-700); }
+.ap-closed strong { font-weight: 600; }
+.ap-closed.is-danger { background: var(--danger-50); color: var(--danger-700); box-shadow: inset 0 0 0 1px var(--danger-200); }
+.ap-closed.is-warning { background: var(--warning-50); color: var(--warning-800); box-shadow: inset 0 0 0 1px var(--warning-200); }
+.dark .ap-closed { background: rgb(255 255 255 / .06); color: var(--gray-300); }
+.dark .ap-closed.is-danger { background: rgb(239 68 68 / .1); color: var(--danger-300); box-shadow: inset 0 0 0 1px rgb(239 68 68 / .3); }
+.dark .ap-closed.is-warning { background: rgb(245 158 11 / .1); color: var(--warning-300); box-shadow: inset 0 0 0 1px rgb(245 158 11 / .3); }
+
+/* Los datos de la cita: un ícono en su cuadrito, la etiqueta chica y el dato en negrita. */
+.ap-facts { display: grid; grid-template-columns: repeat(auto-fill, minmax(15rem, 1fr)); gap: 1rem 1.5rem; margin: 0; }
+.ap-fact { display: flex; gap: .75rem; align-items: flex-start; min-width: 0; }
+.ap-fact-icon { display: grid; place-items: center; flex: none; width: 2.25rem; height: 2.25rem; border-radius: .7rem; background: var(--primary-50); color: var(--primary-600); }
+.ap-fact-icon svg { width: 1.2rem; height: 1.2rem; }
+.ap-fact-text { display: grid; min-width: 0; }
+.ap-fact dt { font-size: .75rem; font-weight: 500; color: var(--gray-500); }
+.ap-fact dd { margin: 0; font-size: .9375rem; font-weight: 600; line-height: 1.35; color: var(--gray-950); overflow-wrap: anywhere; }
+.ap-fact small { font-size: .78rem; line-height: 1.35; color: var(--gray-500); }
+.dark .ap-fact-icon { background: color-mix(in oklab, var(--primary-400) 16%, transparent); color: var(--primary-300); }
+.dark .ap-fact dt, .dark .ap-fact small { color: var(--gray-400); }
+.dark .ap-fact dd { color: #fff; }
+.ap-note { padding: .7rem .9rem; border-radius: .7rem; background: var(--gray-50); box-shadow: inset 3px 0 0 var(--gray-300); }
+.ap-note span { font-size: .75rem; font-weight: 600; color: var(--gray-500); }
+.ap-note p { margin: .1rem 0 0; font-size: .875rem; color: var(--gray-800); white-space: pre-line; }
+.dark .ap-note { background: rgb(255 255 255 / .04); box-shadow: inset 3px 0 0 rgb(255 255 255 / .2); }
+.dark .ap-note span { color: var(--gray-400); }
+.dark .ap-note p { color: var(--gray-200); }
+
+/* Las cuentas de la cita en tres casillas (se cargó, pagó, falta) y, aparte y bien separado, el saldo de toda la vida. */
+.ap-billing { display: grid; gap: 1rem; }
+.ap-money { display: grid; grid-template-columns: repeat(auto-fit, minmax(12.5rem, 1fr)); gap: .75rem; }
+.ap-money-tile { display: grid; align-content: start; gap: .2rem; padding: .9rem 1rem; border-radius: .8rem; background: var(--gray-50); box-shadow: inset 0 0 0 1px var(--gray-200); }
+.ap-money-label { font-size: .78rem; font-weight: 500; color: var(--gray-600); }
+.ap-money-value { font-size: 1.375rem; line-height: 1.2; font-weight: 700; letter-spacing: -.01em; font-variant-numeric: tabular-nums; color: var(--gray-950); }
+.ap-money-lines { display: grid; gap: .15rem; margin: .35rem 0 0; padding: 0; list-style: none; font-size: .8125rem; color: var(--gray-600); }
+.ap-money-lines li { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 0 .75rem; }
+.ap-money-lines small { color: var(--gray-500); }
+.ap-money-lines a { color: var(--primary-600); font-weight: 500; white-space: nowrap; }
+.ap-money-lines a:hover { text-decoration: underline; text-underline-offset: 2px; }
+.ap-money-tile.is-due { background: var(--danger-50); box-shadow: inset 0 0 0 1px var(--danger-200); }
+.ap-money-tile.is-due .ap-money-label, .ap-money-tile.is-due .ap-money-value { color: var(--danger-700); }
+.ap-money-tile.is-paid { background: var(--success-50); box-shadow: inset 0 0 0 1px var(--success-200); }
+.ap-money-tile.is-paid .ap-money-label, .ap-money-tile.is-paid .ap-money-value { color: var(--success-700); }
+.ap-money-bar { height: .375rem; margin-top: .5rem; overflow: hidden; border-radius: 999px; background: rgb(3 7 18 / .08); }
+.ap-money-bar i { display: block; height: 100%; border-radius: inherit; background: var(--success-600); }
+.ap-money-hint { font-size: .75rem; color: var(--gray-600); }
+.dark .ap-money-tile { background: rgb(255 255 255 / .04); box-shadow: inset 0 0 0 1px rgb(255 255 255 / .08); }
+.dark .ap-money-label, .dark .ap-money-lines, .dark .ap-money-hint { color: var(--gray-400); }
+.dark .ap-money-value { color: #fff; }
+.dark .ap-money-lines a { color: var(--primary-300); }
+.dark .ap-money-tile.is-due { background: rgb(239 68 68 / .1); box-shadow: inset 0 0 0 1px rgb(239 68 68 / .3); }
+.dark .ap-money-tile.is-due .ap-money-label, .dark .ap-money-tile.is-due .ap-money-value { color: var(--danger-300); }
+.dark .ap-money-tile.is-paid { background: rgb(16 185 129 / .1); box-shadow: inset 0 0 0 1px rgb(16 185 129 / .3); }
+.dark .ap-money-tile.is-paid .ap-money-label, .dark .ap-money-tile.is-paid .ap-money-value { color: var(--success-300); }
+.dark .ap-money-bar { background: rgb(255 255 255 / .12); }
+.dark .ap-money-bar i { background: var(--success-400); }
+.ap-balance { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: .5rem 1rem; margin: 0; padding-top: 1rem; border-top: 1px dashed var(--gray-300); font-size: .875rem; }
+.ap-balance > span { display: grid; }
+.ap-balance strong { font-weight: 600; color: var(--gray-950); }
+.ap-balance.is-owing strong { color: var(--danger-600); }
+.ap-balance.is-clear strong { color: var(--success-700); }
+.ap-balance small { font-size: .78rem; color: var(--gray-500); }
+.dark .ap-balance { border-top-color: rgb(255 255 255 / .15); }
+.dark .ap-balance strong { color: #fff; }
+.dark .ap-balance.is-owing strong { color: var(--danger-400); }
+.dark .ap-balance.is-clear strong { color: var(--success-400); }
+.dark .ap-balance small { color: var(--gray-400); }
+
+/* El historial: un punto por cada cosa que pasó, del color de su estado, unidos por una línea. */
+.ap-history { display: grid; margin: 0; padding: 0; list-style: none; }
+.ap-history-row { --dot: var(--gray-400); position: relative; display: flex; gap: .75rem; padding-bottom: 1rem; }
+.ap-history-row:last-child { padding-bottom: 0; }
+.ap-history-row::before { content: ""; position: absolute; left: .3125rem; top: 1rem; bottom: -.2rem; width: 2px; margin-left: -1px; background: var(--gray-200); }
+.ap-history-row:last-child::before { display: none; }
+.ap-history-dot { position: relative; flex: none; width: .625rem; height: .625rem; margin-top: .3rem; border-radius: 999px; background: var(--dot); box-shadow: 0 0 0 3px color-mix(in oklab, var(--dot) 20%, transparent); }
+.ap-history-row.is-success { --dot: var(--success-500); }
+.ap-history-row.is-info { --dot: var(--info-500); }
+.ap-history-row.is-primary { --dot: var(--primary-500); }
+.ap-history-row.is-warning { --dot: var(--warning-500); }
+.ap-history-row.is-danger { --dot: var(--danger-500); }
+.ap-history-text { display: grid; min-width: 0; }
+.ap-history-text b { font-size: .875rem; font-weight: 600; line-height: 1.3; color: var(--gray-950); }
+.ap-history-text small { font-size: .78rem; color: var(--gray-500); overflow-wrap: anywhere; }
+.dark .ap-history-row::before { background: rgb(255 255 255 / .12); }
+.dark .ap-history-text b { color: #fff; }
+.dark .ap-history-text small { color: var(--gray-400); }
+
+/* ---------- Identidad visual: el azul de la marca en todo el panel ---------- */
+
+/*
+ * El panel era blanco sobre blanco (y en oscuro, negro sobre negro). Aquí toma cuerpo sin tocar pantalla por pantalla:
+ * un fondo gris azulado para que las tarjetas resalten, el menú en el azul marino de la marca, el ícono de cada
+ * tarjeta en un cuadrito de color, cabeceras de tabla con tono y un inicio de sesión con la marca. Los colores que
+ * avisan algo (ámbar, rojo, verde) siguen reservados para eso: lo nuevo es azul y gris.
+ */
+.fi-body {
+    --app-bg: color-mix(in oklab, var(--primary-100) 34%, var(--gray-100));
+    --app-card-shadow: 0 1px 2px rgb(15 23 42 / .05), 0 8px 24px -12px rgb(15 23 42 / .16), 0 0 0 1px rgb(15 23 42 / .05);
+    --menu-from: var(--primary-800);
+    --menu-to: var(--primary-950);
+    --menu-accent: #8fc7ff;
+    background: var(--app-bg);
+}
+.dark .fi-body, .fi-body:where(.dark, .dark *) {
+    --app-bg: color-mix(in oklab, var(--gray-950) 62%, var(--gray-900));
+    --app-card-shadow: 0 1px 2px rgb(0 0 0 / .3), 0 0 0 1px rgb(255 255 255 / .08);
+    --menu-from: color-mix(in oklab, var(--primary-950) 78%, var(--gray-900));
+    --menu-to: color-mix(in oklab, var(--primary-950) 55%, var(--gray-950));
+}
+
+/* La marca: el diente en su cuadrito azul, como en la página web. */
+.fi-logo:has(.brand-mark) { align-items: center; gap: .65rem; }
+.brand-mark { display: grid; place-items: center; flex: none; width: 2.125rem; height: 2.125rem; border-radius: .7rem; background: linear-gradient(135deg, var(--primary-500), var(--primary-700)); color: #fff; box-shadow: 0 2px 6px rgb(30 79 145 / .35); }
+.brand-mark svg { width: 1.35rem; height: 1.35rem; stroke-width: 1.9; }
+.brand-name { font-size: 1.125rem; line-height: 1.15; letter-spacing: -.02em; }
+
+/* El menú: azul marino de arriba abajo, letras claras y la sección abierta marcada con una barra celeste. */
+.fi-main-sidebar { background: linear-gradient(180deg, var(--menu-from), var(--menu-to)); }
+.dark .fi-main-sidebar { box-shadow: inset -1px 0 0 rgb(255 255 255 / .06); }
+.fi-main-sidebar .fi-sidebar-nav { padding-block: 1.5rem; scrollbar-color: rgb(255 255 255 / .25) transparent; }
+.fi-main-sidebar .fi-sidebar-item-label { color: rgb(255 255 255 / .84); }
+.fi-main-sidebar .fi-sidebar-item-btn > .fi-icon { color: rgb(255 255 255 / .58); }
+.fi-main-sidebar .fi-sidebar-item-btn { transition: background-color 150ms ease; }
+.fi-main-sidebar .fi-sidebar-item.fi-sidebar-item-has-url > .fi-sidebar-item-btn:is(:hover, :focus-visible) { background: rgb(255 255 255 / .09); }
+.fi-main-sidebar .fi-sidebar-item.fi-sidebar-item-has-url > .fi-sidebar-item-btn:focus-visible { outline: 2px solid var(--menu-accent); outline-offset: -2px; }
+.fi-main-sidebar .fi-sidebar-item.fi-active > .fi-sidebar-item-btn { background: rgb(255 255 255 / .15); box-shadow: inset 3px 0 0 var(--menu-accent); }
+.fi-main-sidebar .fi-sidebar-item.fi-active > .fi-sidebar-item-btn > .fi-sidebar-item-label { color: #fff; font-weight: 600; }
+.fi-main-sidebar .fi-sidebar-item:is(.fi-active, .fi-sidebar-item-has-active-child-items) > .fi-sidebar-item-btn > .fi-icon { color: var(--menu-accent); }
+.fi-main-sidebar .fi-sidebar-item-has-active-child-items > .fi-sidebar-item-btn > .fi-sidebar-item-label { color: #fff; }
+.fi-main-sidebar .fi-sidebar-item-grouped-border-part { background: rgb(255 255 255 / .4); }
+.fi-main-sidebar .fi-sidebar-item-grouped-border-part-not-first,
+.fi-main-sidebar .fi-sidebar-item-grouped-border-part-not-last { background: rgb(255 255 255 / .18); }
+.fi-main-sidebar .fi-sidebar-item.fi-active > .fi-sidebar-item-btn .fi-sidebar-item-grouped-border-part { background: var(--menu-accent); }
+/* En el celular el menú se abre encima de la página: su cabecera también va en azul, con la marca en blanco. */
+.fi-body-has-topbar .fi-main-sidebar .fi-sidebar-header { background: transparent; box-shadow: inset 0 -1px 0 rgb(255 255 255 / .1); }
+.fi-main-sidebar .fi-sidebar-header .fi-logo { color: #fff; }
+
+/* La barra de arriba: blanca, con una línea fina en vez de sombra. */
+.fi-topbar { box-shadow: 0 1px 0 rgb(15 23 42 / .07); }
+.dark .fi-topbar { background: color-mix(in oklab, var(--gray-900) 80%, var(--gray-950)); box-shadow: 0 1px 0 rgb(255 255 255 / .07); }
+
+/* Las tarjetas: esquinas más redondas y una sombra suave que las despega del fondo. */
+.fi-section:not(.fi-section-not-contained, .fi-aside),
+.fi-ta-ctn,
+.fi-wi-stats-overview-stat,
+.fi-tabs:not(.fi-contained),
+.dash-kpi { border-radius: 1rem; box-shadow: var(--app-card-shadow); }
+.fi-ta-ctn .fi-ta-content-ctn:not(.fi-ta-ctn-with-footer .fi-ta-content-ctn) { border-end-start-radius: 1rem; border-end-end-radius: 1rem; }
+
+/* El ícono del título de cada tarjeta, en un cuadrito del azul de la marca. */
+.fi-section > .fi-section-header > .fi-icon:not(.fi-color) { box-sizing: content-box; width: 1.2rem; height: 1.2rem; margin-top: -.15rem; padding: .4rem; border-radius: .65rem; background: var(--primary-50); color: var(--primary-600); }
+.dark .fi-section > .fi-section-header > .fi-icon:not(.fi-color) { background: color-mix(in oklab, var(--primary-400) 16%, transparent); color: var(--primary-300); }
+.fi-section > .fi-section-header:has(> .fi-icon):not(:has(.fi-section-header-description)) { align-items: center; }
+
+/* Los números del día en "Hoy": el ícono de cada uno en su cuadrito (azul; ámbar si espera a alguien). */
+.dash-kpi-icon { box-sizing: content-box; padding: .35rem; border-radius: .6rem; background: var(--primary-50); color: var(--primary-600); }
+.dash-kpi.is-warning .dash-kpi-icon { background: var(--warning-100); color: var(--warning-700); }
+.dark .dash-kpi-icon { background: color-mix(in oklab, var(--primary-400) 16%, transparent); color: var(--primary-300); }
+.dark .dash-kpi.is-warning .dash-kpi-icon { background: rgb(245 158 11 / .16); color: var(--warning-300); }
+
+/* Las listas: la fila de títulos con un tono suave y, al pasar el mouse, la fila se tiñe del azul de la marca. */
+.fi-ta-table > thead > tr { background: color-mix(in oklab, var(--primary-50) 55%, var(--gray-50)); }
+.fi-ta-header-cell { font-size: .8125rem; color: var(--gray-600); }
+.dark .fi-ta-table > thead > tr { background: rgb(255 255 255 / .03); }
+.dark .fi-ta-header-cell { color: var(--gray-400); }
+@media (hover: hover) and (pointer: fine) {
+    .fi-ta-table > tbody > .fi-ta-row:not(.fi-ta-group-header-row):hover { background: color-mix(in oklab, var(--primary-50) 60%, transparent); }
+    .dark .fi-ta-table > tbody > .fi-ta-row:not(.fi-ta-group-header-row):hover { background: rgb(255 255 255 / .035); }
+}
+
+/* Las pestañas de cada lista: la elegida, en el azul de la marca. */
+.fi-tabs-item.fi-active { background: var(--primary-50); }
+.dark .fi-tabs-item.fi-active { background: color-mix(in oklab, var(--primary-400) 16%, transparent); }
+
+/* Una lista vacía: el ícono en el azul de la marca en vez de una equis gris. */
+.fi-ta-empty-state-icon-bg { background: var(--primary-50); }
+.fi-ta-empty-state-icon-bg .fi-icon { color: var(--primary-500); }
+.dark .fi-ta-empty-state-icon-bg { background: color-mix(in oklab, var(--primary-400) 16%, transparent); }
+.dark .fi-ta-empty-state-icon-bg .fi-icon { color: var(--primary-300); }
+
+/* El botón principal de cada pantalla, con una sombra del mismo azul: se ve que es el que toca. */
+.fi-btn.fi-color-primary:not(.fi-outlined) { box-shadow: 0 1px 2px rgb(15 23 42 / .15), 0 4px 10px -4px color-mix(in oklab, var(--primary-600) 60%, transparent); }
+
+/* El inicio de sesión: la tarjeta sobre un fondo con el azul de la marca, en vez de blanco sobre blanco. */
+.fi-simple-layout { background: radial-gradient(60rem 36rem at 12% -10%, color-mix(in oklab, var(--primary-400) 32%, transparent), transparent 70%), radial-gradient(48rem 32rem at 100% 110%, color-mix(in oklab, var(--primary-600) 28%, transparent), transparent 70%), var(--app-bg); }
+.fi-simple-main { border-radius: 1.25rem; box-shadow: 0 24px 60px -24px rgb(15 23 42 / .35), 0 0 0 1px rgb(15 23 42 / .06); }
+.fi-simple-main .fi-logo:has(.brand-mark) { justify-content: center; }
+.dark .fi-simple-main { box-shadow: 0 24px 60px -24px rgb(0 0 0 / .7), 0 0 0 1px rgb(255 255 255 / .1); }
