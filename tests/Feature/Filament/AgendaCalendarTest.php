@@ -299,6 +299,27 @@ class AgendaCalendarTest extends TestCase
         $this->assertSame('2026-11-03 16:00', $patient->appointments()->sole()->starts_at->format('Y-m-d H:i'));
     }
 
+    public function test_how_they_found_us_is_asked_only_the_first_time(): void
+    {
+        $this->freezeMonday();
+        $treatment = Treatment::factory()->create(['duration_minutes' => 30]);
+        $doctor = $this->doctorOffering($treatment);
+        $regular = Patient::factory()->create(['first_visit_at' => now()->subYear(), 'origin' => null]);
+        $registeredButNeverCame = Patient::factory()->create(['first_visit_at' => null, 'origin' => null]);
+
+        $this->actingAs(User::factory()->reception()->create());
+
+        Livewire::test(Agenda::class)
+            ->mountAction('createAppointment', ['doctor' => $doctor->id, 'date' => '2026-11-03', 'time' => '16:00'])
+            ->assertFormFieldHidden('origin')
+            ->setActionData(['patient_id' => $regular->id])
+            ->assertFormFieldHidden('origin')
+            ->setActionData(['patient_id' => $registeredButNeverCame->id])
+            ->assertFormFieldVisible('origin')
+            ->setActionData(['patient_id' => null, 'new_patient' => true])
+            ->assertFormFieldVisible('origin');
+    }
+
     public function test_a_new_patient_is_not_left_behind_when_the_time_was_taken(): void
     {
         $this->freezeMonday();

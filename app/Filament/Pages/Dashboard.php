@@ -6,6 +6,7 @@ use App\Filament\Actions\CreateAppointmentAction;
 use App\Filament\Actions\RegisterPaymentAction;
 use App\Filament\Resources\Appointments\AppointmentResource;
 use App\Filament\Resources\WaitlistEntries\WaitlistEntryResource;
+use App\Filament\Widgets\DayMomentCard;
 use App\Filament\Widgets\FollowUpsToday;
 use App\Filament\Widgets\MonthOverview;
 use App\Filament\Widgets\NextPatient;
@@ -22,7 +23,8 @@ use Filament\Schemas\Schema;
 use Filament\Support\Icons\Heroicon;
 
 /**
- * El inicio como dashboard: todo lo del día en la primera pantalla. Arriba, los números del día;
+ * El inicio como dashboard: todo lo del día en la primera pantalla. Arriba, los números del día y lo que toca
+ * según la hora (antes de abrir, confirmar; al terminar, cerrar el día);
  * al centro, la agenda de hoy (y, para el doctor, su próximo paciente); al costado, la sala de espera,
  * lo que hay que hacer y los huecos de la semana; y al final, cómo va el mes. En el celular va en ese
  * mismo orden: primero lo del día, lo del mes al último. Cada tarjeta decide si se muestra con el
@@ -32,7 +34,7 @@ use Filament\Support\Icons\Heroicon;
 class Dashboard extends BaseDashboard
 {
     /** @var list<class-string> Arriba, a todo el ancho. */
-    private const TOP = [SystemHealth::class, TodayStats::class];
+    private const TOP = [SystemHealth::class, TodayStats::class, DayMomentCard::class];
 
     /** @var list<class-string> La columna ancha: lo de hoy. */
     private const MAIN = [NextPatient::class, TodayAppointments::class];

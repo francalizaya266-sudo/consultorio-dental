@@ -11,6 +11,8 @@ class NewVsReturningChart extends ReportChart
 
     protected array $noun = ['paciente', 'pacientes'];
 
+    protected bool $lastIsInProgress = true;
+
     protected function chartData(): array
     {
         $months = $this->activity()->newVsReturning(6);
@@ -29,6 +31,6 @@ class NewVsReturningChart extends ReportChart
         $new = $this->values(0);
         $returning = $this->values(1);
 
-        return 'Este mes: '.end($new).' '.(end($new) === 1 ? 'nuevo' : 'nuevos').' y '.end($returning).' '.(end($returning) === 1 ? 'recurrente' : 'recurrentes');
+        return 'Este mes, hasta hoy: '.end($new).' '.(end($new) === 1 ? 'nuevo' : 'nuevos').' y '.end($returning).' '.(end($returning) === 1 ? 'recurrente' : 'recurrentes');
     }
 }

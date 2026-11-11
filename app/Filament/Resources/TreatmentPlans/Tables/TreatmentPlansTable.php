@@ -99,15 +99,13 @@ class TreatmentPlansTable
                         'plan_item' => self::openItems($record)->first()?->getKey(),
                     ])),
                 ActionGroup::make([
-                    Action::make('view')
-                        ->label(fn (TreatmentPlan $record) => $user->can('view', $record) ? 'Ver el plan' : 'Ver paciente')
-                        ->icon(Heroicon::OutlinedEye)
-                        ->url(fn (TreatmentPlan $record) => $user->can('view', $record)
-                            ? PatientResource::getUrl('clinical', ['record' => $record->patient_id, 'relation' => '1'])
-                            : PatientResource::getUrl('view', ['record' => $record->patient_id])),
                     self::declineAction(),
                 ]),
             ])
+            // Tocar la fila abre el plan (o el paciente, para quien no ve lo clínico).
+            ->recordUrl(fn (TreatmentPlan $record) => $user->can('view', $record)
+                ? PatientResource::getUrl('clinical', ['record' => $record->patient_id, 'relation' => '1'])
+                : PatientResource::getUrl('view', ['record' => $record->patient_id]))
             ->emptyStateHeading('No hay presupuestos aquí')
             ->emptyStateDescription('Los presupuestos se arman en la historia clínica del paciente, al terminar su evaluación.');
     }

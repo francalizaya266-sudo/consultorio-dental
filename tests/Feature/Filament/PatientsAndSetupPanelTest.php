@@ -395,6 +395,32 @@ class PatientsAndSetupPanelTest extends TestCase
         $this->assertSame(2, $doctor->schedules()->where('weekday', 1)->count());
     }
 
+    public function test_a_day_of_the_schedule_is_copied_to_other_days_in_one_step(): void
+    {
+        $doctor = Doctor::factory()->create();
+        [$mondayMorning] = $doctor->schedules()->createMany([
+            ['weekday' => 1, 'starts_at' => '09:00', 'ends_at' => '13:00'],
+            ['weekday' => 1, 'starts_at' => '15:00', 'ends_at' => '19:00'],
+            ['weekday' => 3, 'starts_at' => '10:00', 'ends_at' => '12:00'],
+            ['weekday' => 6, 'starts_at' => '09:00', 'ends_at' => '13:00'],
+        ]);
+        $this->actingAs(User::factory()->admin()->create());
+
+        Livewire::test(EditDoctor::class, ['record' => $doctor->getKey()])
+            ->callAction(TestAction::make('copyDay')->schemaComponent('schedules')->arguments(['item' => 'record-'.$mondayMorning->id]), data: ['days' => [2, 3]])
+            ->assertNotified('Listo: martes y miércoles quedan como el lunes.')
+            ->call('save')
+            ->assertHasNoFormErrors();
+
+        // Martes y miércoles, como el lunes (lo del miércoles se reemplazó); el sábado, igual que antes.
+        $this->assertSame(
+            ['1 09:00–13:00', '1 15:00–19:00', '2 09:00–13:00', '2 15:00–19:00', '3 09:00–13:00', '3 15:00–19:00', '6 09:00–13:00'],
+            $doctor->schedules()->orderBy('weekday')->orderBy('starts_at')->get()
+                ->map(fn ($schedule) => $schedule->weekday.' '.substr($schedule->starts_at, 0, 5).'–'.substr($schedule->ends_at, 0, 5))
+                ->all(),
+        );
+    }
+
     public function test_a_doctor_is_registered_with_their_access_in_one_step(): void
     {
         $this->actingAs(User::factory()->admin()->create());

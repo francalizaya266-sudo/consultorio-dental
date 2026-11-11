@@ -2,8 +2,8 @@
     @if ($stale)
         <x-filament::section icon="heroicon-o-exclamation-triangle" icon-color="danger">
             <x-slot name="heading">No hay una copia de las últimas horas</x-slot>
-            Las copias se crean solas cada madrugada con el cron del hosting. Si no aparecen, revisa que el cron esté activo
-            (ver "Publicación en hosting compartido" en el README) y mientras tanto usa "Crear copia ahora".
+            Las copias se crean solas cada madrugada y hoy no se creó. Por ahora toca "Crear copia ahora", y avisa a quien
+            te ayuda con el hosting: la tarea automática del servidor no está corriendo.
         </x-filament::section>
     @endif
 
@@ -31,8 +31,8 @@
         <div class="backup-help">
             <p>Una copia que queda en el mismo hosting no sirve si el hosting falla. Una vez por semana, descarga la más reciente y guárdala en otro lugar seguro (por ejemplo, la cuenta de Google Drive del consultorio).</p>
             <p>Tiene datos clínicos de los pacientes: no la compartas ni la envíes por WhatsApp.</p>
-            <p>Esta copia es de la base de datos. Las radiografías, fotos y firmas están en la carpeta <code>storage/app/private/clinica</code> y las fotos de la web en <code>public/media</code>: inclúyelas en la copia de archivos del hosting.</p>
-            <p>Para restaurar, quien administre el hosting importa el archivo en phpMyAdmin o ejecuta <code>php artisan respaldo:restaurar</code>.</p>
+            <p>Guarda los datos: pacientes, citas, historias y pagos. Las radiografías, fotos y firmas son archivos aparte: pide a quien te ayuda con el hosting que también los copie.</p>
+            <p>Si alguna vez hay que recuperar los datos, esa persona lo hace con este archivo.</p>
         </div>
     </x-filament::section>
 </x-filament-panels::page>

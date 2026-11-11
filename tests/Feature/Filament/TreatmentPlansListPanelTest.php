@@ -6,6 +6,7 @@ use App\Enums\MessageStatus;
 use App\Enums\MessageTemplateKey;
 use App\Enums\TreatmentPlanStatus;
 use App\Filament\Resources\Appointments\AppointmentResource;
+use App\Filament\Resources\Patients\PatientResource;
 use App\Filament\Resources\TreatmentPlans\Pages\ListTreatmentPlans;
 use App\Filament\Resources\TreatmentPlans\TreatmentPlanResource;
 use App\Models\Appointment;
@@ -49,11 +50,16 @@ class TreatmentPlansListPanelTest extends TestCase
             ->assertCanSeeTableRecords([$mine, $theirs])
             // Recepción ve el procedimiento, no la pieza.
             ->assertSee(['Corona', 'Dra. Ana Torres'])
-            ->assertDontSee('pieza 46');
+            ->assertDontSee('pieza 46')
+            // Al tocar la fila, recepción va a la ficha del paciente.
+            ->assertSeeHtml('href="'.e(PatientResource::getUrl('view', ['record' => $mine->patient_id])).'"');
 
         $this->actingAs($this->torres->user);
+        Appointment::factory()->for($mine->patient)->for($this->torres)->at('2026-11-05 10:00')->create();
 
         Livewire::test(ListTreatmentPlans::class)
+            // La doctora que la atiende va directo al plan.
+            ->assertSeeHtml('href="'.e(PatientResource::getUrl('clinical', ['record' => $mine->patient_id, 'relation' => '1'])).'"')
             ->assertCanSeeTableRecords([$mine])
             ->assertCanNotSeeTableRecords([$theirs])
             ->assertSee('Corona · pieza 46');

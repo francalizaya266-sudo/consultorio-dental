@@ -30,6 +30,10 @@
                     </div>
                     <p><strong>{{ $appointment->patient->first_name }}</strong> · {{ $appointment->treatment->name }} · {{ $appointment->doctor->name }}</p>
 
+                    @if (in_array($appointment->id, $askHealth, true))
+                        @include('site.partials.health-ask', ['patient' => $appointment->patient])
+                    @endif
+
                     @if ($policy->canChange($appointment))
                         <div class="actions">
                             @if ($status === AppointmentStatus::Pending)

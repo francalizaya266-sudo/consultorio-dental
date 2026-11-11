@@ -36,6 +36,8 @@ class BackupsPanelTest extends TestCase
 
         Livewire::test(Backups::class)
             ->assertSee('No hay una copia de las últimas horas')
+            // Escrito para el consultorio, no para el programador.
+            ->assertDontSee(['cron', 'README', 'phpMyAdmin', 'artisan'])
             ->assertSee('Aún no hay copias.')
             ->callAction('create')
             ->assertNotified('Copia creada')

@@ -58,6 +58,12 @@ abstract class ReportChart extends ChartWidget
     /** 'nearest' muestra el valor más cercano; 'index', todas las series del mismo punto (para comparar). */
     protected string $hoverMode = 'nearest';
 
+    /**
+     * La última barra es el mes en curso: va más clara y el globo dice "en curso", para que no se lea
+     * como una caída al compararla con meses completos.
+     */
+    protected bool $lastIsInProgress = false;
+
     /** Antes de la etiqueta en el título del globo: "Día " convierte "5" en "Día 5". */
     protected string $tooltipTitlePrefix = '';
 
@@ -152,6 +158,7 @@ abstract class ReportChart extends ChartWidget
             'hoverMode' => $this->hoverMode,
             'muted' => $this->mutedLabels,
             'titlePrefix' => $this->tooltipTitlePrefix,
+            'inProgress' => $this->lastIsInProgress,
         ]);
 
         // Sin comillas dobles: el resultado va dentro de un atributo HTML.
@@ -161,7 +168,9 @@ abstract class ReportChart extends ChartWidget
                 const dark = () => document.documentElement.classList.contains('dark');
                 const color = (i) => c.colors[i % c.colors.length][dark() ? 1 : 0];
                 const muted = (ctx) => c.muted.includes(ctx.chart.data.labels[ctx.dataIndex]);
-                const barColor = (ctx) => muted(ctx) ? (dark() ? '#52525b' : '#d4d4d8') : color(ctx.datasetIndex);
+                const isLast = (chart, index) => index === chart.data.labels.length - 1;
+                const inProgress = (ctx) => c.inProgress && isLast(ctx.chart, ctx.dataIndex);
+                const barColor = (ctx) => muted(ctx) ? (dark() ? '#52525b' : '#d4d4d8') : color(ctx.datasetIndex) + (inProgress(ctx) ? '66' : '');
                 const whole = new Intl.NumberFormat('es-PE', { maximumFractionDigits: 0 });
                 const decimal = new Intl.NumberFormat('es-PE', { maximumFractionDigits: 1 });
                 const money = new Intl.NumberFormat('es-PE', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -179,7 +188,9 @@ abstract class ReportChart extends ChartWidget
                         legend: { display: c.legend },
                         tooltip: {
                             callbacks: {
-                                title: (items) => items.length ? c.titlePrefix + items[0].label : '',
+                                title: (items) => items.length
+                                    ? c.titlePrefix + items[0].label + (c.inProgress && isLast(items[0].chart, items[0].dataIndex) ? ' · en curso' : '')
+                                    : '',
                                 label: (ctx) => {
                                     const v = ctx.parsed[c.valueAxis];
                                     return (c.legend ? ctx.dataset.label + ': ' : ' ') + full(v);

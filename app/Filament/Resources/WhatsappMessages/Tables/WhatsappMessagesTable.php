@@ -6,14 +6,19 @@ use App\Enums\MessageStatus;
 use App\Enums\MessageTemplateKey;
 use App\Filament\Actions\SendWhatsAppAction;
 use App\Models\WhatsappMessage;
+use App\Services\WhatsApp\WhatsAppOutbox;
 use App\Support\Phone;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Filters\SelectFilter;
 use Filament\Tables\Table;
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Support\Str;
 
 class WhatsappMessagesTable
 {
+    /** Pestañas de lo que falta enviar: van por la cita más próxima, no por el último preparado. */
+    private const TO_SEND = ['due', 'scheduled', 'promotions'];
+
     public static function configure(Table $table): Table
     {
         return $table
@@ -28,6 +33,13 @@ class WhatsappMessagesTable
                     ->label('Aviso')
                     ->badge()
                     ->color('gray'),
+                // El mensaje a la vista, para saber qué se manda sin abrirlo.
+                TextColumn::make('preview')
+                    ->label('Mensaje')
+                    ->state(fn (WhatsappMessage $record) => Str::limit(Str::squish(str_replace('{enlace}', '(su enlace)', app(WhatsAppOutbox::class)->draft($record))), 140))
+                    ->color('gray')
+                    ->size('sm')
+                    ->wrap(),
                 TextColumn::make('phone')
                     ->label('Para')
                     ->formatStateUsing(fn (WhatsappMessage $record) => $record->patient?->full_name ?? Phone::display($record->phone))
@@ -50,7 +62,11 @@ class WhatsappMessagesTable
                         default => null,
                     }),
             ])
-            ->defaultSort('created_at', 'desc')
+            // Por enviar: primero lo de la cita más próxima (lo que no es de una cita, por cuándo se preparó).
+            // En Enviados y Todos, el último arriba.
+            ->defaultSort(fn (Builder $query, $livewire) => in_array($livewire->activeTab ?? null, self::TO_SEND, true)
+                ? $query->orderByRaw('coalesce((select a.starts_at from appointments a where a.id = whatsapp_messages.appointment_id), whatsapp_messages.created_at)')->orderBy('id')
+                : $query->orderByDesc('created_at')->orderByDesc('id'))
             ->filters([
                 SelectFilter::make('template_key')
                     ->label('Aviso')

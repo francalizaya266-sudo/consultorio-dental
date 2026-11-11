@@ -105,7 +105,8 @@ class CampaignForm
                             ->rows(4)
                             ->columnSpanFull(),
                         Textarea::make('whatsapp_text')
-                            ->label('Mensaje para difundir por WhatsApp')
+                            ->label('Mensaje con el que pregunta el paciente')
+                            ->helperText('Llega escrito cuando tocan "Preguntar por WhatsApp" en la página de la promoción. Para avisarla a tus pacientes, usa "Avisar por WhatsApp" arriba.')
                             ->rows(3)
                             ->columnSpanFull(),
                         Toggle::make('show_on_home')

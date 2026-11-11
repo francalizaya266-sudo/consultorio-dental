@@ -84,6 +84,8 @@ final class EditMedicalBackgroundAction
                     ...$data,
                     'pregnancy_weeks' => ($data['is_pregnant'] ?? false) ? ($data['pregnancy_weeks'] ?? null) : null,
                     'updated_by_user_id' => auth()->id(),
+                    // Guardados por el equipo, ya están confirmados aunque los haya llenado el paciente.
+                    'filled_by_patient_at' => null,
                 ]);
                 $patient->unsetRelation('medicalBackground');
 

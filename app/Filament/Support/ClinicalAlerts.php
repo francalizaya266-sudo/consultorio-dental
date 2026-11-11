@@ -81,21 +81,34 @@ final class ClinicalAlerts
                 ->actions($link);
         }
 
+        $filledByPatient = self::filledByPatient($patient);
+
         if ($alerts === []) {
             return Callout::make('Sin alergias ni enfermedades registradas')
+                ->description($filledByPatient)
                 ->icon(Heroicon::OutlinedShieldCheck)
                 ->success()
                 ->actions($link);
         }
 
         $callout = Callout::make('Atención: '.implode(' · ', $alerts))
+            ->description($filledByPatient)
             ->icon(Heroicon::OutlinedExclamationTriangle)
             ->actions($link);
 
         return self::isSevere($patient) ? $callout->danger() : $callout->warning();
     }
 
-    /** "Ninguna", "no", "niega" no cuentan como alerta. */
+    /** Si los antecedentes los llenó el paciente desde la web y nadie del equipo los confirmó todavía. */
+    public static function filledByPatient(Patient $patient): ?string
+    {
+        $filledAt = $patient->medicalBackground?->filled_by_patient_at;
+
+        return $filledAt
+            ? 'Los llenó el paciente desde la web el '.$filledAt->format('d/m/Y').'. Confírmalos en la consulta y guárdalos.'
+            : null;
+    }
+
     /** Lo escrito dice algo: "Ninguna", "No refiere" o "-" no cuentan. */
     public static function meaningful(?string $text): bool
     {

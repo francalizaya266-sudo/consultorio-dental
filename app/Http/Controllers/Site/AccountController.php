@@ -4,12 +4,14 @@ namespace App\Http\Controllers\Site;
 
 use App\Enums\AppointmentStatus;
 use App\Enums\PatientRelationship;
+use App\Enums\Sex;
 use App\Enums\TreatmentPlanStatus;
 use App\Exceptions\BookingException;
 use App\Filament\Resources\Patients\PatientResource;
 use App\Http\Controllers\Controller;
 use App\Models\Account;
 use App\Models\Appointment;
+use App\Models\MedicalBackground;
 use App\Models\Patient;
 use App\Models\RememberedDevice;
 use App\Models\TreatmentPlan;
@@ -27,6 +29,7 @@ use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\RateLimiter;
+use Illuminate\Validation\Rule;
 use Illuminate\View\View;
 
 /**
@@ -58,15 +61,24 @@ class AccountController extends Controller
         $appointments = fn () => Appointment::query()
             ->whereHas('patient', fn ($query) => $query->whereBelongsTo($account))
             ->with(['patient', 'doctor', 'treatment']);
+        $upcoming = $appointments()
+            ->with('patient.medicalBackground')
+            ->where('starts_at', '>=', now()->startOfDay())
+            ->whereIn('status', [AppointmentStatus::Pending, AppointmentStatus::Confirmed, AppointmentStatus::CheckedIn, AppointmentStatus::InProgress])
+            ->oldest('starts_at')
+            ->get();
 
         return view('site.account.home', [
             'account' => $account,
             'patients' => $patients,
-            'upcoming' => $appointments()
-                ->where('starts_at', '>=', now()->startOfDay())
-                ->whereIn('status', [AppointmentStatus::Pending, AppointmentStatus::Confirmed, AppointmentStatus::CheckedIn, AppointmentStatus::InProgress])
-                ->oldest('starts_at')
-                ->get(),
+            'upcoming' => $upcoming,
+            // "Antes de tu cita": en la primera cita de quien todavía no tiene antecedentes.
+            'askHealth' => $upcoming
+                ->filter(fn (Appointment $appointment) => $appointment->patient->medicalBackground === null
+                    && in_array($appointment->status, AppointmentStatus::changeable(), true))
+                ->unique('patient_id')
+                ->pluck('id')
+                ->all(),
             'past' => $elevated ? $appointments()->where('starts_at', '<', now())->latest('starts_at')->limit(20)->get() : null,
             'plans' => $elevated ? $this->plansOf($account) : null,
             'balances' => $elevated ? $patients->mapWithKeys(fn ($patient) => [$patient->full_name => $patient->balance()])->reject(fn (float $balance) => $balance === 0.0) : null,
@@ -158,6 +170,65 @@ class AccountController extends Controller
         return back()->with('status', 'Listo: recepción ya sabe que '.($patient->relationship === PatientRelationship::Self ? 'quieres tu' : "{$patient->first_name} quiere su").' próxima sesión. Te escribiremos por WhatsApp con el horario.');
     }
 
+    /**
+     * "Antes de tu cita": el paciente cuenta su salud desde el celular recordado, para que el doctor lo sepa
+     * antes de empezar. Solo mientras no haya antecedentes: lo ya registrado no se muestra ni se cambia desde aquí.
+     */
+    public function health(Request $request, Patient $patient): View|RedirectResponse
+    {
+        $this->authorizePatient($request, $patient);
+
+        if ($patient->medicalBackground()->exists()) {
+            return $this->healthAlreadyKnown($patient);
+        }
+
+        return view('site.account.health', [
+            'patient' => $patient,
+            'conditions' => MedicalBackground::CONDITIONS,
+            'asksPregnancy' => self::asksPregnancy($patient),
+            'asksSmoking' => ! self::isChild($patient),
+        ]);
+    }
+
+    public function storeHealth(Request $request, Patient $patient): RedirectResponse
+    {
+        $this->authorizePatient($request, $patient);
+
+        if ($patient->medicalBackground()->exists()) {
+            return $this->healthAlreadyKnown($patient);
+        }
+
+        $data = $request->validate([
+            'has_allergies' => ['required', 'in:no,yes'],
+            'allergies' => ['nullable', 'required_if:has_allergies,yes', 'string', 'max:300'],
+            'takes_medications' => ['required', 'in:no,yes'],
+            'medications' => ['nullable', 'required_if:takes_medications,yes', 'string', 'max:300'],
+            'conditions' => ['nullable', 'array'],
+            'conditions.*' => [Rule::in(array_keys(MedicalBackground::CONDITIONS))],
+            'notes' => ['nullable', 'string', 'max:500'],
+        ], [
+            'has_allergies.required' => 'Elige No o Sí.',
+            'allergies.required_if' => 'Escribe a qué.',
+            'takes_medications.required' => 'Elige No o Sí.',
+            'medications.required_if' => 'Escribe cuáles.',
+        ]);
+
+        $asksPregnancy = self::asksPregnancy($patient);
+
+        $patient->medicalBackground()->create([
+            'allergies' => $data['has_allergies'] === 'yes' ? trim($data['allergies']) : 'Ninguna',
+            'medications' => $data['takes_medications'] === 'yes' ? trim($data['medications']) : 'Ninguna',
+            'conditions' => array_values($data['conditions'] ?? []),
+            'is_pregnant' => $asksPregnancy && $request->boolean('is_pregnant'),
+            'is_breastfeeding' => $asksPregnancy && $request->boolean('is_breastfeeding'),
+            'smoker' => self::isChild($patient) ? null : $request->boolean('smoker'),
+            'notes' => filled($data['notes'] ?? null) ? trim($data['notes']) : null,
+            'filled_by_patient_at' => now(),
+        ]);
+
+        return to_route('site.account')->with('status', 'Gracias. El doctor lo tendrá a la vista y lo repasará '.($patient->relationship === PatientRelationship::Self ? 'contigo' : "con {$patient->first_name}").' en la cita.');
+    }
+
     public function change(Request $request, Appointment $appointment): View
     {
         $this->authorizeAppointment($request, $appointment);
@@ -200,6 +271,27 @@ class AccountController extends Controller
     private function device(Request $request): RememberedDevice
     {
         return $this->access->device($request) ?? abort(403);
+    }
+
+    private function authorizePatient(Request $request, Patient $patient): void
+    {
+        abort_unless($this->device($request)->account_id === $patient->account_id, 403);
+    }
+
+    private function healthAlreadyKnown(Patient $patient): RedirectResponse
+    {
+        return to_route('site.account')->with('status', 'El consultorio ya tiene los antecedentes de '.$patient->first_name.'. Si algo cambió, cuéntaselo al doctor en la cita.');
+    }
+
+    /** Embarazo y lactancia se preguntan salvo a hombres y a niños. */
+    private static function asksPregnancy(Patient $patient): bool
+    {
+        return $patient->sex !== Sex::Male && ! self::isChild($patient);
+    }
+
+    private static function isChild(Patient $patient): bool
+    {
+        return $patient->age !== null && $patient->age < 12;
     }
 
     private function authorizeAppointment(Request $request, Appointment $appointment): void
