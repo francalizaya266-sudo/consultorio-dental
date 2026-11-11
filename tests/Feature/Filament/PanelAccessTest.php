@@ -193,6 +193,19 @@ class PanelAccessTest extends TestCase
         $this->actingAs($user)->get(Dashboard::getUrl())->assertForbidden();
     }
 
+    public function test_the_panel_always_says_who_is_signed_in_and_with_which_role(): void
+    {
+        $this->actingAs(User::factory()->reception()->create(['name' => 'María Torres', 'email' => 'maria@consultorio.test']));
+
+        $this->get(Filament::getProfileUrl())
+            ->assertOk()
+            ->assertSeeInOrder(['user-badge', 'María Torres', 'Recepción', 'Sesión iniciada como', 'María Torres', 'Recepción', 'maria@consultorio.test']);
+
+        $this->actingAs(User::factory()->doctor()->create(['name' => 'Elena Ríos']));
+
+        $this->get(Filament::getProfileUrl())->assertSeeInOrder(['Sesión iniciada como', 'Elena Ríos', 'Doctor']);
+    }
+
     public function test_each_person_changes_their_own_password_from_my_profile(): void
     {
         $reception = User::factory()->reception()->create();

@@ -166,7 +166,9 @@ class AgendaPanelTest extends TestCase
         $widget->callAction(TestAction::make('arrived')->table($appointment));
         $this->assertSame(AppointmentStatus::CheckedIn, $appointment->fresh()->status);
 
-        $widget->callAction(TestAction::make('complete')->table($appointment));
+        // Con el paciente en sala, cerrarla le toca a su doctor: para recepción es la excepción, en "Más".
+        $widget->assertActionHidden(TestAction::make('complete')->table($appointment))
+            ->callAction(TestAction::make('closeWithoutDoctor')->table($appointment));
         $this->assertSame(AppointmentStatus::Completed, $appointment->fresh()->status);
 
         Livewire::test(TodayStats::class)->assertSee('1 atendida')->assertDontSee('1 atendidas');

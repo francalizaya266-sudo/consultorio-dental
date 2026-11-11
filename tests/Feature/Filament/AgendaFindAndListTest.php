@@ -146,7 +146,7 @@ class AgendaFindAndListTest extends TestCase
         Livewire::test(Agenda::class)
             ->set('mode', 'list')
             ->assertSee(['3 citas · 1 en sala', 'Libre 09:40 – 11:00', $torres->name, $ramos->name])
-            ->assertSeeHtmlInOrder(['Ahora · 08:00', 'Lucía', 'Llegó', 'Bruno', 'Llamar', 'Confirmar', 'Carla', 'Atender'])
+            ->assertSeeHtmlInOrder(['Ahora · 08:00', 'Lucía', 'Llegó', 'Bruno', 'Llamar', 'Confirmar', 'Carla', 'Pasó a consulta'])
             ->callAction(TestAction::make('listArrived')->arguments(['id' => $lucia->id]))
             ->assertNotified('Paciente en sala');
 
