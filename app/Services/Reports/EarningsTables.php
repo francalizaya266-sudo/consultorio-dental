@@ -39,6 +39,40 @@ final class EarningsTables
             'total' => ['Total', self::sum($periods, 'collected'), self::sum($periods, 'produced'), array_sum(array_column($periods, 'payments'))],
         ];
 
+        // Los gastos y los materiales son del consultorio: lo que queda solo se calcula con todos los doctores.
+        if ($report->doctorId === null) {
+            $tables[] = [
+                'key' => 'profit',
+                'title' => 'Lo que queda',
+                'columns' => [
+                    ['label' => 'Concepto', 'type' => self::TEXT],
+                    ['label' => 'Monto', 'type' => self::MONEY],
+                ],
+                'rows' => [
+                    ['Cobrado', $report->collected()],
+                    ['Menos gastos anotados en Caja', $report->spent()],
+                    ['Menos materiales usados', $report->materialsCost()],
+                ],
+                'total' => ['Queda', $report->profit()],
+            ];
+
+            $expenses = $report->expensesByCategory();
+
+            if ($expenses !== []) {
+                $tables[] = [
+                    'key' => 'expenses',
+                    'title' => 'Gastos por tipo',
+                    'columns' => [
+                        ['label' => 'Tipo de gasto', 'type' => self::TEXT],
+                        ['label' => 'Gastos', 'type' => self::COUNT],
+                        ['label' => 'Monto', 'type' => self::MONEY],
+                    ],
+                    'rows' => array_map(fn (array $row) => [$row['label'], $row['count'], $row['amount']], $expenses),
+                    'total' => ['Total', array_sum(array_column($expenses, 'count')), self::sum($expenses, 'amount')],
+                ];
+            }
+        }
+
         // Con un doctor elegido, o uno solo en el consultorio, la tabla por doctor no dice nada nuevo.
         if ($report->doctorId === null && ReportAccess::severalDoctors()) {
             $doctors = $report->byDoctor();

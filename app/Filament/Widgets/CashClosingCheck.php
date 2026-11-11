@@ -103,7 +103,8 @@ class CashClosingCheck extends Widget implements HasActions, HasSchemas
                     ->minValue(0)
                     ->required()
                     ->live(onBlur: true),
-                Text::make(fn (Get $get) => 'Debe haber '.Money::format((float) $get('opening_cash') + $this->closing()->cash()).': el fondo más '.Money::format($this->closing()->cash()).' cobrados en efectivo.'),
+                Text::make(fn (Get $get) => 'Debe haber '.Money::format((float) $get('opening_cash') + $this->closing()->cashInDrawer()).': el fondo más '.Money::format($this->closing()->cash()).' cobrados en efectivo'
+                    .($this->closing()->cashExpenses() > 0 ? ', menos '.Money::format($this->closing()->cashExpenses()).' de gastos pagados en efectivo.' : '.')),
                 TextInput::make('counted_cash')
                     ->label('Efectivo contado')
                     ->prefix('S/')
@@ -180,7 +181,7 @@ class CashClosingCheck extends Widget implements HasActions, HasSchemas
             return null;
         }
 
-        return round((float) $get('counted_cash') - ((float) $get('opening_cash') + $this->closing()->cash()), 2);
+        return round((float) $get('counted_cash') - ((float) $get('opening_cash') + $this->closing()->cashInDrawer()), 2);
     }
 
     /** Lo que sigue pendiente al cerrar: no impide cerrar, pero conviene verlo antes. */

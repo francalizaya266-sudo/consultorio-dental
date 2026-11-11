@@ -6,6 +6,7 @@ use App\Enums\AppointmentStatus;
 use App\Enums\PaymentMethod;
 use App\Models\Appointment;
 use App\Models\DailyClosing;
+use App\Models\Expense;
 use App\Models\Patient;
 use App\Models\Payment;
 use App\Models\User;
@@ -15,8 +16,8 @@ use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Collection;
 
 /**
- * El cierre de caja de un día: lo que entró por cada medio de pago y lo que recibió cada persona,
- * para cuadrar el efectivo al final del turno. Lo anulado se lista aparte y no suma. Las tablas
+ * El cierre de caja de un día: lo que entró por cada medio de pago, lo que recibió cada persona y lo que
+ * salió en gastos, para cuadrar el efectivo al final del turno. Lo anulado se lista aparte y no suma. Las tablas
  * tienen la forma de las de Ingresos: el panel y la hoja para imprimir las muestran igual.
  */
 final class CashClosing
@@ -28,6 +29,9 @@ final class CashClosing
 
     /** @var Collection<int, array{patient: Patient, due: float, concepts: string}>|null */
     private ?Collection $pending = null;
+
+    /** @var Collection<int, Expense>|null */
+    private ?Collection $expenses = null;
 
     public function __construct(
         public readonly CarbonImmutable $date,
@@ -81,10 +85,34 @@ final class CashClosing
         return round((float) $this->payments()->sum('amount'), 2);
     }
 
-    /** Lo que debería haber en efectivo. */
+    /** Lo cobrado en efectivo. */
     public function cash(): float
     {
         return $this->totalFor(PaymentMethod::Cash);
+    }
+
+    /** @return Collection<int, Expense> Los gastos válidos del día (los de esa persona, si se eligió una), en orden. */
+    public function expenses(): Collection
+    {
+        return $this->expenses ??= Expense::query()
+            ->valid()
+            ->with('paidBy')
+            ->whereDate('spent_at', $this->date)
+            ->when($this->receivedBy, fn (Builder $query, int $id) => $query->where('paid_by_user_id', $id))
+            ->orderBy('spent_at')
+            ->get();
+    }
+
+    /** Lo que salió de la caja en efectivo para pagar gastos. */
+    public function cashExpenses(): float
+    {
+        return round((float) $this->expenses()->where('method', PaymentMethod::Cash)->sum('amount'), 2);
+    }
+
+    /** Lo que debería haber en efectivo, sin el fondo: lo cobrado en efectivo menos los gastos pagados con él. */
+    public function cashInDrawer(): float
+    {
+        return round($this->cash() - $this->cashExpenses(), 2);
     }
 
     public function totalFor(PaymentMethod $method): float
@@ -168,7 +196,7 @@ final class CashClosing
         return DailyClosing::create([
             'date' => $this->date->toDateString(),
             'opening_cash' => round($openingCash, 2),
-            'expected_cash' => round($openingCash + $this->cash(), 2),
+            'expected_cash' => round($openingCash + $this->cashInDrawer(), 2),
             'counted_cash' => round($countedCash, 2),
             'collected' => $this->total(),
             'pending' => $this->pendingTotal(),
@@ -263,6 +291,30 @@ final class CashClosing
             ])->all(),
             'total' => $payments->isEmpty() ? null : ['Total', '', '', '', '', '', $this->total()],
         ];
+
+        $expenses = $this->expenses();
+
+        if ($expenses->isNotEmpty()) {
+            $tables[] = [
+                'key' => 'expenses',
+                'title' => 'Gastos del día',
+                'columns' => [
+                    ['label' => 'Hora', 'type' => EarningsTables::TEXT],
+                    ['label' => 'Gasto', 'type' => EarningsTables::TEXT],
+                    ['label' => 'Se pagó con', 'type' => EarningsTables::TEXT],
+                    ['label' => 'Anotó', 'type' => EarningsTables::TEXT],
+                    ['label' => 'Monto', 'type' => EarningsTables::MONEY],
+                ],
+                'rows' => $expenses->map(fn (Expense $expense) => [
+                    $expense->spent_at->format('H:i'),
+                    $expense->description,
+                    $expense->method->getLabel(),
+                    $expense->paidBy?->name ?? self::NOT_RECORDED,
+                    (float) $expense->amount,
+                ])->all(),
+                'total' => ['Total', '', '', '', round((float) $expenses->sum('amount'), 2)],
+            ];
+        }
 
         $voided = $this->voided();
 

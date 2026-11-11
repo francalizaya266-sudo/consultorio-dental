@@ -31,7 +31,7 @@
     <div class="totals">
         <div><span>Cobrado</span><strong>{{ Money::format($closing->total()) }}</strong></div>
         <div><span>Pagos</span><strong>{{ number_format($closing->payments()->count()) }}</strong></div>
-        <div><span>Efectivo en caja</span><strong>{{ Money::format($closing->cash()) }}</strong></div>
+        <div><span>Efectivo en caja</span><strong>{{ Money::format($closing->cashInDrawer()) }}</strong></div>
         <div><span>Otros medios</span><strong>{{ Money::format($closing->total() - $closing->cash()) }}</strong></div>
     </div>
 
@@ -72,7 +72,7 @@
                 <div><span>Contado</span><strong>{{ Money::format($record->counted_cash) }}</strong></div>
             @else
                 <div><span>Fondo</span><span class="line"></span></div>
-                <div><span>Según el sistema (sin el fondo)</span><strong>{{ Money::format($closing->cash()) }}</strong></div>
+                <div><span>Según el sistema (sin el fondo)</span><strong>{{ Money::format($closing->cashInDrawer()) }}</strong></div>
                 <div><span>Contado</span><span class="line"></span></div>
             @endif
         </div>
