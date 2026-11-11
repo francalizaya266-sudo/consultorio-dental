@@ -170,6 +170,9 @@ class AdminPanelProvider extends PanelProvider
                     ->visible(fn () => self::firstUrl(self::WEB) !== null),
             ])
             ->renderHook(PanelsRenderHook::HEAD_END, fn () => view('filament.panel-styles'))
+            // Quién está conectado y con qué rol: junto a la foto y al abrir su menú.
+            ->renderHook(PanelsRenderHook::USER_MENU_BEFORE, fn () => auth()->check() ? view('filament.user-badge', ['user' => auth()->user()]) : '')
+            ->renderHook(PanelsRenderHook::USER_MENU_PROFILE_BEFORE, fn () => auth()->check() ? view('filament.user-menu-header', ['user' => auth()->user()]) : '')
             ->renderHook(PanelsRenderHook::BODY_END, fn () => auth()->check() ? view('filament.mobile-bar', ['items' => MobileBar::items()]) : '')
             ->discoverResources(in: app_path('Filament/Resources'), for: 'App\Filament\Resources')
             ->discoverPages(in: app_path('Filament/Pages'), for: 'App\Filament\Pages')

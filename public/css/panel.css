@@ -1496,3 +1496,20 @@ a.ap-visit:hover { background: var(--gray-50); }
     html:root { --sidebar-width: 17rem; }
     .fi-main { padding-inline: 1.25rem; }
 }
+
+/* Quién está conectado: nombre y rol junto a la foto (en pantallas anchas) y al abrir el menú del usuario. */
+.user-badge { display: none; }
+@media (min-width: 64rem) {
+    .user-badge { display: grid; gap: .05rem; margin-inline-end: -.25rem; text-align: right; line-height: 1.15; }
+    .user-badge strong { max-width: 12rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: .8125rem; font-weight: 600; color: var(--gray-950); }
+    .user-badge small { font-size: .6875rem; color: var(--gray-500); }
+    .dark .user-badge strong { color: #fff; }
+    .dark .user-badge small { color: var(--gray-400); }
+}
+.user-menu-who { display: grid; gap: .1rem; padding: .5rem .75rem .6rem; border-bottom: 1px solid var(--gray-100); margin-bottom: .25rem; }
+.user-menu-who small { font-size: .6875rem; color: var(--gray-500); }
+.user-menu-who strong { font-size: .875rem; font-weight: 600; color: var(--gray-950); overflow-wrap: anywhere; }
+.user-menu-who span { font-size: .75rem; color: var(--gray-600); overflow-wrap: anywhere; }
+.dark .user-menu-who { border-color: rgb(255 255 255 / .08); }
+.dark .user-menu-who strong { color: #fff; }
+.dark .user-menu-who :is(small, span) { color: var(--gray-400); }
