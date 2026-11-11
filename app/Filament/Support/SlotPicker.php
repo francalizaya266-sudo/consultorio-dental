@@ -10,9 +10,11 @@ use App\Models\Patient;
 use App\Models\Treatment;
 use App\Models\User;
 use App\Services\Agenda\AvailabilityService;
+use App\Services\Agenda\GapFinder;
 use App\Services\Agenda\Slot;
 use App\Services\Patients\PatientInsights;
 use Carbon\CarbonImmutable;
+use Filament\Actions\Action;
 use Filament\Forms\Components\DatePicker;
 use Filament\Forms\Components\Field;
 use Filament\Forms\Components\Hidden;
@@ -72,11 +74,20 @@ final class SlotPicker
             // Todos los horarios a la vista, un toque cada uno (antes era una lista desplegable).
             ToggleButtons::make('slot')
                 ->label('Horario libre')
-                ->helperText(fn (Get $get) => match (true) {
-                    self::slotOptions($get, $moving) === [] => 'Elige tratamiento, doctor y día para ver los horarios libres.',
-                    ($usual = self::usualVisit($get)) !== null && $usual['period'] !== null => $usual['label'].': esos horarios van primero. ★ = pegado a otra cita (no deja huecos).',
-                    default => '★ = pegado a otra cita (no deja huecos).',
-                })
+                ->helperText(fn (Get $get) => self::slotsHint($get, $moving))
+                // Día lleno: un toque lleva al siguiente con lugar (antes había que probar día por día).
+                ->hintAction(Action::make('nextDayWithSlots')
+                    ->label(fn (Get $get) => 'Ir al '.self::nextDayWithSlots($get, $moving)?->translatedFormat('l j'))
+                    ->link()
+                    ->visible(fn (Get $get) => self::slotOptions($get, $moving) === [] && self::nextDayWithSlots($get, $moving) !== null)
+                    ->action(function (Get $get, Set $set) use ($moving): void {
+                        $next = self::nextDayWithSlots($get, $moving);
+
+                        if ($next) {
+                            $set('date', $next->toDateString());
+                            $set('slot', self::suggestedSlot($get, $moving));
+                        }
+                    }))
                 ->options(fn (Get $get) => self::slotOptions($get, $moving))
                 ->inline()
                 ->extraAttributes(['class' => 'slot-buttons'])
@@ -234,6 +245,64 @@ final class SlotPicker
         return preg_match('/^\d{4}-\d{2}-\d{2}$/', $date) && CarbonImmutable::parse($date)->gte(today())
             ? CarbonImmutable::parse($date)
             : null;
+    }
+
+    /** Bajo los horarios: qué significa la estrella o, si no hay ninguno, por qué y qué hacer. */
+    private static function slotsHint(Get $get, ?Appointment $moving): string
+    {
+        if (self::slotOptions($get, $moving) !== []) {
+            $usual = self::usualVisit($get);
+
+            return ($usual !== null && $usual['period'] !== null ? $usual['label'].': esos horarios van primero. ' : '').'★ = pegado a otra cita (no deja huecos).';
+        }
+
+        if (! self::canSearch($get, $moving)) {
+            return 'Elige tratamiento, doctor y día para ver los horarios libres.';
+        }
+
+        $next = self::nextDayWithSlots($get, $moving);
+
+        return $next
+            ? 'Ese día no hay horario libre. El siguiente con lugar es el '.$next->translatedFormat('l j \\d\\e F').'.'
+            : 'Ni ese día ni en las '.intdiv(GapFinder::SEARCH_DAYS, 7).' semanas siguientes hay horario libre. Usa "Otra hora" o apúntalo en la lista de espera.';
+    }
+
+    /** ¿Ya se eligió tratamiento, doctor y día? (entonces, si no hay horarios, es que el día está lleno). */
+    private static function canSearch(Get $get, ?Appointment $moving): bool
+    {
+        return filled($get('doctor_id')) && filled($moving?->treatment_id ?? $get('treatment_id')) && filled($get('date'));
+    }
+
+    /** El primer día después del elegido en que el doctor tiene un horario libre para el tratamiento. */
+    private static function nextDayWithSlots(Get $get, ?Appointment $moving): ?CarbonImmutable
+    {
+        $doctor = Doctor::find($get('doctor_id'));
+        $treatment = Treatment::find($moving?->treatment_id ?? $get('treatment_id'));
+
+        if (! $doctor || ! $treatment || blank($get('date'))) {
+            return null;
+        }
+
+        $from = CarbonImmutable::parse($get('date'))->startOfDay();
+        $patientId = $moving?->patient_id ?? (filled($get('patient_id')) ? (int) $get('patient_id') : null);
+
+        // Lo piden el texto y el botón en el mismo pedido: se busca una sola vez.
+        $memo = 'slot-picker.next-day.'.implode('|', [$doctor->getKey(), $treatment->getKey(), $from->toDateString(), $patientId, $moving?->getKey()]);
+
+        if (! request()->attributes->has($memo)) {
+            $availability = app(AvailabilityService::class)->forPatient($patientId);
+            $found = null;
+
+            for ($day = $from->addDay(); $found === null && $day->lte($from->addDays(GapFinder::SEARCH_DAYS)); $day = $day->addDay()) {
+                if ($availability->slotsFor($doctor, $treatment, $day, ignoreAppointmentId: $moving?->getKey())->isNotEmpty()) {
+                    $found = $day;
+                }
+            }
+
+            request()->attributes->set($memo, $found);
+        }
+
+        return request()->attributes->get($memo);
     }
 
     /** @return array<string, string> */

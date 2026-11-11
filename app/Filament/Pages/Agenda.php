@@ -3,6 +3,7 @@
 namespace App\Filament\Pages;
 
 use App\Enums\AppointmentStatus;
+use App\Enums\DayPeriod;
 use App\Filament\Actions\AppointmentActions;
 use App\Filament\Actions\CheckoutAction;
 use App\Filament\Actions\CreateAppointmentAction;
@@ -16,6 +17,7 @@ use App\Filament\Support\VisitFlags;
 use App\Models\Appointment;
 use App\Models\Charge;
 use App\Models\Doctor;
+use App\Models\DoctorSchedule;
 use App\Models\ScheduleBlock;
 use App\Models\Treatment;
 use App\Models\User;
@@ -72,11 +74,28 @@ class Agenda extends Page
     /** Tratamiento elegido en "Buscar hueco". */
     public ?int $findTreatment = null;
 
+    /** En "Buscar hueco", la parte del día que le acomoda al paciente (DayPeriod). */
+    public string $findPeriod = DayPeriod::Any->value;
+
+    /** En "Buscar hueco", el día de la semana que pidió (1 = lunes … 7 = domingo); null, cualquiera. */
+    public ?int $findWeekday = null;
+
+    /** En "Buscar hueco", cuántos días con lugar se muestran: "Ver más días" suma de tres en tres. */
+    public int $findDays = self::FIND_DAYS;
+
     /** Mes del mini calendario (Y-m) cuando se mira otro que el del día; vacío, el del día. */
     public string $month = '';
 
     /** La vista se eligió sola (no la pidió el usuario): en un celular se cambia a la lista del día. */
     protected bool $modeByDefault = false;
+
+    /** Días de la semana (1 = lunes), para "Buscar hueco". */
+    private const WEEKDAYS = [1 => 'Lunes', 2 => 'Martes', 3 => 'Miércoles', 4 => 'Jueves', 5 => 'Viernes', 6 => 'Sábado', 7 => 'Domingo'];
+
+    /** Días con lugar que muestra "Buscar hueco" de entrada, y hasta cuántos con "Ver más días". */
+    private const FIND_DAYS = 3;
+
+    private const FIND_DAYS_MAX = 12;
 
     /**
      * Lo que toca hacer con la cita según su estado, en orden: en la lista va el primer botón que la persona puede usar
@@ -138,6 +157,36 @@ class Agenda extends Page
     {
         $treatment = is_numeric($treatment) ? (int) $treatment : null;
         $this->findTreatment = $toggle && $treatment === $this->findTreatment ? null : $treatment;
+        $this->findDays = self::FIND_DAYS;
+    }
+
+    /** "Buscar hueco": el paciente pidió en la mañana o en la tarde (otro toque en lo mismo vuelve a cualquier hora). */
+    public function findWhen(string $period): void
+    {
+        $period = DayPeriod::tryFrom($period) ?? DayPeriod::Any;
+        $this->findPeriod = ($period->value === $this->findPeriod ? DayPeriod::Any : $period)->value;
+        $this->findDays = self::FIND_DAYS;
+    }
+
+    /** "Buscar hueco": el paciente pidió un día de la semana ("solo puedo los sábados"). */
+    public function findOn(int|string|null $weekday): void
+    {
+        $this->findWeekday = is_numeric($weekday) && (int) $weekday >= 1 && (int) $weekday <= 7 ? (int) $weekday : null;
+        $this->findDays = self::FIND_DAYS;
+    }
+
+    /** "Buscar hueco": quita "en la tarde" y "los sábados" cuando así no hay lugar. */
+    public function findAnytime(): void
+    {
+        $this->findPeriod = DayPeriod::Any->value;
+        $this->findWeekday = null;
+        $this->findDays = self::FIND_DAYS;
+    }
+
+    /** "Buscar hueco": tres días más con lugar. */
+    public function findMore(): void
+    {
+        $this->findDays = min(self::FIND_DAYS_MAX, $this->findDays + self::FIND_DAYS);
     }
 
     public function updatedDoctor(): void
@@ -400,6 +449,8 @@ class Agenda extends Page
 
         [$quick, $others] = $this->findableTreatments($doctors);
         $treatment = $this->findTreatment ? $quick->concat($others)->firstWhere('id', $this->findTreatment) : null;
+        $period = DayPeriod::tryFrom($this->findPeriod) ?? DayPeriod::Any;
+        $found = $treatment ? $finder->nextSlots($treatment, $doctors, $this->day(), $this->findDays, period: $period, weekday: $this->findWeekday) : [];
 
         /** @var User $user */
         $user = auth()->user();
@@ -411,7 +462,11 @@ class Agenda extends Page
             'others' => $others,
             'treatment' => $treatment,
             'slots' => $treatment ? array_map(fn (array $day) => [
-                'label' => $day['date']->isToday() ? 'Hoy' : ($day['date']->isTomorrow() ? 'Mañana' : ucfirst($day['date']->translatedFormat('l j'))),
+                'label' => match (true) {
+                    $day['date']->isToday() => 'Hoy',
+                    $day['date']->isTomorrow() => 'Mañana',
+                    default => ucfirst($day['date']->translatedFormat($day['date']->isSameMonth(today()) ? 'l j' : 'l j \\d\\e F')),
+                },
                 'date' => $day['date']->toDateString(),
                 'slots' => array_map(fn (array $slot) => [
                     'time' => $slot['time'],
@@ -421,7 +476,20 @@ class Agenda extends Page
                     'initials' => self::initials($slot['doctor']->name),
                     'color' => $slot['doctor']->agenda_color ?: '#1e4f91',
                 ], $day['slots']),
-            ], $finder->nextSlots($treatment, $doctors, $this->day())) : null,
+            ], $found) : null,
+            'period' => $period,
+            'weekdays' => $treatment ? $this->findableWeekdays($doctors) : [],
+            'duration' => $treatment ? self::durationText($treatment, $doctors) : null,
+            'canFindMore' => count($found) === $this->findDays && $this->findDays < self::FIND_DAYS_MAX,
+            'notFound' => $treatment ? 'No hay horas libres para '.mb_strtolower($treatment->name)
+                .match ($period) {
+                    DayPeriod::Morning => ' en la mañana',
+                    DayPeriod::Afternoon => ' en la tarde',
+                    DayPeriod::Any => '',
+                }
+                .($this->findWeekday ? ' los '.self::weekdayPlural($this->findWeekday) : '')
+                .' en las próximas '.intdiv(GapFinder::searchDays($this->findWeekday), 7).' semanas.' : null,
+            'filtered' => $period !== DayPeriod::Any || $this->findWeekday !== null,
             'severalDoctors' => $doctors->count() > 1,
             'waitlist' => $user->can('viewAny', WaitlistEntry::class) ? $finder->waitlistFits($doctors, $this->day()) : [],
             'waitlistUrl' => $user->can('viewAny', WaitlistEntry::class) ? WaitlistEntryResource::getUrl() : null,
@@ -435,6 +503,55 @@ class Agenda extends Page
     private function railDoctors(): Collection
     {
         return $this->mode === 'week' ? $this->doctors()->where('id', $this->doctor)->values() : $this->doctors();
+    }
+
+    /**
+     * Para "Buscar hueco": los días de la semana en que atiende alguno de los doctores que se miran, para
+     * contestar "solo puedo los sábados".
+     *
+     * @param  Collection<int, Doctor>  $doctors
+     * @return array<int, string> Día (1 = lunes) => "Lunes"
+     */
+    private function findableWeekdays(Collection $doctors): array
+    {
+        return DoctorSchedule::query()
+            ->whereIn('doctor_id', $doctors->modelKeys())
+            ->where(fn (Builder $query) => $query->whereNull('valid_until')->orWhere('valid_until', '>=', today()))
+            ->distinct()
+            ->orderBy('weekday')
+            ->pluck('weekday')
+            ->mapWithKeys(fn (int $weekday) => [$weekday => self::WEEKDAYS[$weekday] ?? null])
+            ->filter()
+            ->all();
+    }
+
+    /** Como lo pide el paciente: "lunes", "sábados". */
+    private static function weekdayPlural(int $weekday): string
+    {
+        $name = mb_strtolower(self::WEEKDAYS[$weekday]);
+
+        return str_ends_with($name, 's') ? $name : $name.'s';
+    }
+
+    /**
+     * Cuánto dura el tratamiento con quienes lo hacen: "45 min", o "30 a 45 min" si no todos tardan lo mismo.
+     *
+     * @param  Collection<int, Doctor>  $doctors
+     */
+    private static function durationText(Treatment $treatment, Collection $doctors): ?string
+    {
+        $minutes = $doctors
+            ->filter(fn (Doctor $doctor) => $doctor->treatments->contains($treatment->getKey()))
+            ->map(fn (Doctor $doctor) => $doctor->durationFor($treatment))
+            ->unique()
+            ->sort()
+            ->values();
+
+        return match (true) {
+            $minutes->isEmpty() => null,
+            $minutes->count() === 1 => $minutes->first().' min',
+            default => $minutes->first().' a '.$minutes->last().' min',
+        };
     }
 
     /**

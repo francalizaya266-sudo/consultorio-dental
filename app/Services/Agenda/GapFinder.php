@@ -97,19 +97,27 @@ final class GapFinder
     /**
      * Las próximas horas libres para el tratamiento desde ese día: hasta $days días con lugar y unas pocas
      * horas por día, una de la mañana y una de la tarde primero, y las que no dejan huecos antes que las demás.
+     * Con lo que pidió el paciente ("en la tarde", "un sábado"), solo esas horas y esos días.
      *
      * @param  Collection<int, Doctor>  $doctors  Con sus tratamientos cargados.
+     * @param  int|null  $weekday  Día de la semana que le acomoda (1 = lunes … 7 = domingo); null, cualquiera.
      * @return list<array{date: CarbonImmutable, slots: list<array{time: string, doctor: Doctor, recommended: bool}>}>
      */
-    public function nextSlots(Treatment $treatment, Collection $doctors, CarbonImmutable $from, int $days = 3, int $perDay = 4): array
+    public function nextSlots(Treatment $treatment, Collection $doctors, CarbonImmutable $from, int $days = 3, int $perDay = 4, DayPeriod $period = DayPeriod::Any, ?int $weekday = null): array
     {
         $doctors = $doctors->filter(fn (Doctor $doctor) => $doctor->treatments->contains($treatment->getKey()))->values();
         $date = $from->max(CarbonImmutable::today())->startOfDay();
+        $until = $date->addDays(self::searchDays($weekday));
         $found = [];
 
-        for ($checked = 0; $checked < self::SEARCH_DAYS && count($found) < $days && $doctors->isNotEmpty(); $checked++, $date = $date->addDay()) {
+        for (; $date->lt($until) && count($found) < $days && $doctors->isNotEmpty(); $date = $date->addDay()) {
+            if ($weekday !== null && $date->dayOfWeekIso !== $weekday) {
+                continue;
+            }
+
             $candidates = $doctors->flatMap(fn (Doctor $doctor) => $this->availability
                 ->slotsFor($doctor, $treatment, $date, earliest: $date->isToday() ? now() : null)
+                ->filter(fn (Slot $slot) => $period->includes($slot->startsAt))
                 ->map(fn (Slot $slot) => ['slot' => $slot, 'doctor' => $doctor]));
 
             $picked = $this->spread($candidates, $perDay);
@@ -120,6 +128,12 @@ final class GapFinder
         }
 
         return $found;
+    }
+
+    /** Hasta cuántos días adelante se busca: tres semanas, o nueve si se pide un día de la semana (son nueve de esos días). */
+    public static function searchDays(?int $weekday = null): int
+    {
+        return self::SEARCH_DAYS * ($weekday === null ? 1 : 3);
     }
 
     /**
