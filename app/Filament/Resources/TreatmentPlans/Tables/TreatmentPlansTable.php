@@ -13,6 +13,7 @@ use App\Models\Doctor;
 use App\Models\TreatmentPlan;
 use App\Models\TreatmentPlanItem;
 use App\Models\User;
+use App\Services\Billing\BillingService;
 use App\Services\Clinical\TreatmentPlanService;
 use App\Services\Dashboard\FollowUps;
 use App\Support\Money;
@@ -30,9 +31,10 @@ use Filament\Tables\Filters\SelectFilter;
 use Filament\Tables\Table;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Collection;
+use Illuminate\Support\HtmlString;
 use Illuminate\Support\Str;
 
-/** Cada presupuesto con su paciente, lo que incluye, su estado, cuánto suma y en qué va el seguimiento. */
+/** Cada presupuesto con su paciente, lo que incluye, su estado, cuánto suma, cuánto pagó y debe, y en qué va el seguimiento. */
 class TreatmentPlansTable
 {
     public static function configure(Table $table): Table
@@ -76,6 +78,7 @@ class TreatmentPlansTable
                 TextColumn::make('total_amount')
                     ->label('Monto')
                     ->formatStateUsing(fn ($state) => Money::format((float) $state))
+                    ->description(fn (TreatmentPlan $record) => self::paymentSummary($record))
                     ->sortable()
                     ->alignEnd()
                     ->summarize(Sum::make()->label('Total')->formatStateUsing(fn ($state) => Money::format((float) $state))),
@@ -163,6 +166,42 @@ class TreatmentPlansTable
             self::waitsForAppointment($plan) && in_array($plan->status, TreatmentPlan::ACCEPTED_STATUSES, true) => MessageTemplateKey::PlanNextSession,
             default => null,
         };
+    }
+
+    /**
+     * Bajo el monto, cómo va el pago de lo que aceptó: lo que pagó y, si debe, cuánto (lo ya hecho o ya vencido
+     * que no pagó); si no debe, lo que le falta pagar del plan. El presupuesto sin aceptar y el plan que va
+     * incluido en un 2x1 no llevan pagos.
+     */
+    private static function paymentSummary(TreatmentPlan $plan): ?HtmlString
+    {
+        if ($plan->accepted_at === null || $plan->included_in_plan_id !== null) {
+            return null;
+        }
+
+        $progress = app(BillingService::class)->planProgress($plan);
+        $cancelled = $plan->status === TreatmentPlanStatus::Cancelled;
+
+        if ($progress['total'] <= 0 || ($cancelled && $progress['paid'] <= 0 && $progress['owed'] <= 0)) {
+            return null;
+        }
+
+        $lines = match (true) {
+            $progress['owed'] <= 0 && $progress['remaining'] <= 0 => [['Pagado', 'is-paid']],
+            default => array_filter([
+                [$progress['paid'] > 0 ? 'Pagó '.Money::format($progress['paid']) : 'Sin pagos', ''],
+                match (true) {
+                    $progress['owed'] > 0 => ['Debe '.Money::format($progress['owed']), $progress['late'] ? 'is-late' : 'is-due'],
+                    // Sin pagos todavía, lo que falta es el monto de arriba: no se repite.
+                    $progress['remaining'] > 0 && $progress['paid'] > 0 && ! $cancelled => ['Falta '.Money::format($progress['remaining']), ''],
+                    default => null,
+                },
+            ]),
+        };
+
+        return new HtmlString(collect($lines)
+            ->map(fn (array $line) => '<span class="plan-pay '.$line[1].'">'.e($line[0]).'</span>')
+            ->implode(''));
     }
 
     /** La cita nueva llega con la próxima sesión del plan, su tratamiento y su doctor: solo falta elegir el horario. */
