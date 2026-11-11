@@ -4,7 +4,10 @@ namespace App\Filament\Widgets\Reports;
 
 use App\Support\Money;
 
-/** Cobrado en cada uno de los últimos 12 meses (no depende del período elegido). */
+/**
+ * Cobrado en cada uno de los últimos 12 meses (no depende del período elegido). El mes en curso va aparte:
+ * más claro y fuera del promedio, para no compararlo con meses completos.
+ */
 class IncomeByMonthChart extends ReportChart
 {
     protected ?string $heading = 'Ingresos por mes · últimos 12 meses';
@@ -16,6 +19,8 @@ class IncomeByMonthChart extends ReportChart
     protected int|string|array $columnSpan = 'full';
 
     protected ?string $maxHeight = '240px';
+
+    protected bool $lastIsInProgress = true;
 
     protected function chartData(): array
     {
@@ -30,9 +35,12 @@ class IncomeByMonthChart extends ReportChart
     protected function finding(): ?string
     {
         $values = $this->values();
-        $withIncome = array_filter($values, fn ($v) => $v > 0);
-        $average = $withIncome === [] ? 0 : array_sum($withIncome) / count($withIncome);
+        $today = today();
+        $current = ucfirst($today->translatedFormat('F')).' va en '.Money::format(end($values))." (día {$today->day} de {$today->daysInMonth})";
+        $complete = array_filter(array_slice($values, 0, -1), fn ($v) => $v > 0);
 
-        return 'Este mes: '.Money::format(end($values)).' · promedio por mes: '.Money::format($average);
+        return $complete === []
+            ? $current
+            : $current.' · promedio de los meses completos: '.Money::format(array_sum($complete) / count($complete));
     }
 }

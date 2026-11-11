@@ -53,10 +53,12 @@ class AppointmentForm
                             ->schema(self::newPatientFields()),
                         self::planItemSelect(),
                         self::planAcceptedCheckbox(),
-                        // Junto al paciente, donde recepción lo pregunta (antes quedaba al final, en Detalles).
+                        // Junto al paciente, donde recepción lo pregunta. Solo a quien viene por primera vez: a los
+                        // demás ya se les preguntó (los reportes usan el origen del paciente).
                         Select::make('origin')
                             ->label('¿Cómo nos encontró?')
-                            ->options(AppointmentOrigin::class),
+                            ->options(AppointmentOrigin::class)
+                            ->visible(fn (Get $get) => self::isFirstTime($get)),
                     ]),
                 Section::make('Horario')
                     ->columns(2)
@@ -74,6 +76,17 @@ class AppointmentForm
                             ->columnSpanFull(),
                     ]),
             ]);
+    }
+
+    /** Paciente nuevo, o uno registrado que nunca vino y del que no se sabe cómo llegó. */
+    private static function isFirstTime(Get $get): bool
+    {
+        if ($get('new_patient')) {
+            return true;
+        }
+
+        return filled($get('patient_id'))
+            && Patient::query()->whereKey($get('patient_id'))->whereNull('first_visit_at')->whereNull('origin')->exists();
     }
 
     /** Si el paciente tiene un plan de tratamiento, la cita puede ser una de sus sesiones: al atenderla se marca sola. */

@@ -84,15 +84,28 @@ class ReportsPanelTest extends TestCase
         Livewire::test(SummaryStats::class, $filters)
             ->assertSee(['Citas atendidas', 'Pacientes nuevos', 'Cobrado', 'Inasistencias', 'Sin citas en 1–23 sep.'])
             ->assertSeeHtml(e(Earnings::getUrl(['filters' => ['period' => 'month']])));
-        Livewire::test(IncomeByMonthChart::class, $filters)->assertSee('Este mes: S/ 570.00');
+        // El mes en curso no se compara con los completos: dice hasta qué día va.
+        Livewire::test(IncomeByMonthChart::class, $filters)->assertSee('Octubre va en S/ 570.00 (día 23 de 31)')->assertDontSee('promedio');
         Livewire::test(IncomeByTreatmentChart::class, $filters)->assertSee('Lo que más dejó: Limpieza dental (S/ 570.00)');
         Livewire::test(BusiestHoursChart::class, $filters)->assertSee('La hora más pedida');
-        Livewire::test(NewVsReturningChart::class, $filters)->assertSee('Este mes: 1 nuevo y 0 recurrentes');
+        Livewire::test(NewVsReturningChart::class, $filters)->assertSee('Este mes, hasta hoy: 1 nuevo y 0 recurrentes');
         Livewire::test(OriginsChart::class, $filters)->assertSee('Llegan más por Google: 100 % de las citas');
         // Lunes 5: el Dr. Ramos tuvo 30 minutos reservados de 8 horas; la Dra. Torres, nada.
         Livewire::test(OccupancyChart::class, ['pageFilters' => ['period' => 'custom', 'from' => '2026-10-05', 'to' => '2026-10-05']])
             ->assertSee('En promedio, 3 % del horario reservado');
         Livewire::test(NoShowsChart::class, $filters)->assertSee('Este mes: 0 %');
+    }
+
+    public function test_the_month_in_progress_is_not_averaged_with_complete_months(): void
+    {
+        $this->actingAs(User::factory()->admin()->create());
+        $patient = Patient::factory()->create();
+        Payment::factory()->for($patient)->create(['amount' => 300, 'paid_at' => '2026-08-10 10:00']);
+        Payment::factory()->for($patient)->create(['amount' => 500, 'paid_at' => '2026-09-10 10:00']);
+
+        // Agosto y septiembre (S/ 400 en promedio); octubre, con S/ 570 a los 23 días, va aparte.
+        Livewire::test(IncomeByMonthChart::class, ['pageFilters' => ['period' => 'month']])
+            ->assertSee('Octubre va en S/ 570.00 (día 23 de 31) · promedio de los meses completos: S/ 400.00');
     }
 
     public function test_charts_without_data_say_so(): void
