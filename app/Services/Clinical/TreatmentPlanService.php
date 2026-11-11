@@ -452,10 +452,40 @@ final class TreatmentPlanService
         }
     }
 
-    /** Aceptado sin firma (por ejemplo, al agendar una de sus sesiones): se paga por sesión y el precio queda fijo. */
+    /**
+     * Las formas en que se puede firmar el plan. Uno armado con un paquete que se paga en un solo pago o en cuotas
+     * se firma solo con esas: con paquete no se cobra por cita (en ortodoncia se paga por mes, vaya cada 15 días
+     * o cada mes).
+     *
+     * @return list<PlanPaymentMode>
+     */
+    public static function paymentModes(TreatmentPlan $plan): array
+    {
+        $package = $plan->accepted_at === null ? $plan->offeredPackage() : null;
+
+        if (! $package || ! ($package->allows_upfront || $package->allows_installments)) {
+            return PlanPaymentMode::cases();
+        }
+
+        return array_values(array_filter([
+            $package->allows_upfront ? PlanPaymentMode::Upfront : null,
+            $package->allows_installments ? PlanPaymentMode::Installments : null,
+        ]));
+    }
+
+    /**
+     * Aceptado sin firma (por ejemplo, al agendar una de sus sesiones): se paga por sesión y el precio queda fijo.
+     * Un paquete que no se paga por sesión se acepta firmando, para elegir cómo; aquí solo queda presentado.
+     */
     public function accept(TreatmentPlan $plan): void
     {
         if (! in_array($plan->status, [TreatmentPlanStatus::Draft, TreatmentPlanStatus::Proposed], true)) {
+            return;
+        }
+
+        if (! in_array(PlanPaymentMode::PerSession, self::paymentModes($plan), true)) {
+            $this->markProposed($plan);
+
             return;
         }
 
@@ -491,6 +521,10 @@ final class TreatmentPlanService
 
         $mode = $terms['payment_mode'] ?? null;
         $mode = $firstTime ? ($mode instanceof PlanPaymentMode ? $mode : PlanPaymentMode::tryFrom((string) $mode) ?? PlanPaymentMode::PerSession) : null;
+
+        if ($mode && ! in_array($mode, self::paymentModes($plan), true)) {
+            throw ClinicalException::packageNotPerSession();
+        }
         $total = round($items->sum(fn (TreatmentPlanItem $item) => $item->subtotal()), 2);
         // Con un paquete, el cronograma es el del paquete; lo demás se paga en cada sesión.
         $scheduled = $mode?->hasSchedule() ? self::scheduledItems($plan, $items) : collect();

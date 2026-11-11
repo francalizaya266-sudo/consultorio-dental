@@ -5,6 +5,7 @@ namespace App\Filament\Resources\Appointments\Schemas;
 use App\Enums\AppointmentOrigin;
 use App\Enums\DocumentType;
 use App\Enums\PatientRelationship;
+use App\Enums\PlanPaymentMode;
 use App\Filament\Resources\Patients\Schemas\PatientForm;
 use App\Filament\Support\SlotPicker;
 use App\Models\Patient;
@@ -136,8 +137,11 @@ class AppointmentForm
         return Checkbox::make('plan_accepted')
             ->label('El paciente ya aceptó el plan')
             ->helperText('Sin firmar, paga por sesión y el precio queda fijo. Si no lo marcas, el plan sigue esperando su firma.')
+            // Un paquete que se paga en un solo pago o en cuotas se acepta firmando, para elegir cómo.
             ->visible(fn (Get $get) => filled($get('treatment_plan_item_id'))
-                && TreatmentPlanItem::with('plan')->find($get('treatment_plan_item_id'))?->plan->accepted_at === null);
+                && ($plan = TreatmentPlanItem::with('plan')->find($get('treatment_plan_item_id'))?->plan) !== null
+                && $plan->accepted_at === null
+                && in_array(PlanPaymentMode::PerSession, TreatmentPlanService::paymentModes($plan), true));
     }
 
     /**

@@ -2,8 +2,11 @@
 
 namespace Tests\Feature\Filament;
 
+use App\Enums\PatientRelationship;
 use App\Enums\PlanPaymentMode;
 use App\Enums\ToothState;
+use App\Enums\TreatmentPlanStatus;
+use App\Exceptions\ClinicalException;
 use App\Filament\Resources\Consultations\Pages\EditConsultation;
 use App\Filament\Resources\Consultations\Pages\ViewConsultation;
 use App\Filament\Resources\Patients\RelationManagers\TreatmentPlansRelationManager;
@@ -164,6 +167,33 @@ class PackageAtTheVisitTest extends TestCase
         $this->assertSame(1000.0, $plan->total());
         $this->assertSame('Ortodoncia', $plan->title);
         $this->assertSame(['Pago único de S/ 800.00 (con S/ 200.00 de descuento por pagar todo junto).', 'En cuotas: inicial de S/ 500.00 y 5 cuotas mensuales de S/ 100.00.'], app(TreatmentPlanService::class)->paymentOptions($plan));
+    }
+
+    public function test_a_package_is_paid_at_once_or_in_installments_not_per_visit(): void
+    {
+        $this->actingAs($this->doctor->user);
+        $plans = app(TreatmentPlanService::class);
+        [$plan] = $plans->addPackageToDraft($this->evaluation, $this->doctor->user, $this->orthodontics);
+        app(ConsultationService::class)->close($this->evaluation, $this->doctor->user);
+
+        $this->assertSame([PlanPaymentMode::Upfront, PlanPaymentMode::Installments], TreatmentPlanService::paymentModes($plan->fresh()));
+
+        Livewire::test(ViewConsultation::class, ['record' => $this->evaluation->getRouteKey()])
+            ->mountAction('acceptPlan')
+            ->assertMountedActionModalSee(['Pago único', 'En cuotas', 'Es un paquete: se paga en un solo pago o en cuotas, no por cita.'])
+            ->assertMountedActionModalDontSee(PlanPaymentMode::PerSession->getDescription());
+
+        try {
+            $plans->sign($plan->fresh(), ['payment_mode' => PlanPaymentMode::PerSession], ['signer_name' => 'Ana', 'signer_relationship' => PatientRelationship::Self], $this->signature(), $this->doctor->user);
+            $this->fail('Un paquete no se firma por sesión.');
+        } catch (ClinicalException $e) {
+            $this->assertSame('Es un paquete: se paga en un solo pago o en cuotas, no por cita.', $e->getMessage());
+        }
+
+        // Al agendar su primera sesión, "ya lo aceptó" no lo deja por sesión: queda presentado, esperando su firma.
+        $plans->accept($plan->fresh());
+        $this->assertNull($plan->fresh()->accepted_at);
+        $this->assertSame(TreatmentPlanStatus::Proposed, $plan->fresh()->status);
     }
 
     private function signature(): string
