@@ -14,6 +14,7 @@ use App\Models\User;
 use App\Models\WhatsappMessage;
 use App\Services\Access\MagicLinkService;
 use App\Support\CampaignText;
+use App\Support\Dates;
 use App\Support\Phone;
 use Carbon\CarbonInterface;
 
@@ -109,6 +110,12 @@ class WhatsAppOutbox
 
         // Un aviso preparado antes de que el recordatorio llevara {indicaciones} no las trae: va sin ellas.
         $params = ($message->params ?? []) + ['indicaciones' => ''];
+
+        // "de mañana lunes 16 de noviembre" se arma al enviarlo: un recordatorio que sale el sábado dice "del lunes 16".
+        if (str_contains($body, '{cuando}')) {
+            $startsAt = $message->loadMissing('appointment')->appointment?->starts_at;
+            $params['cuando'] = $startsAt ? Dates::ofDay($startsAt, withDate: true) : 'del '.($params['fecha'] ?? '');
+        }
 
         if ($issueLink && str_contains($body, '{enlace}') && ($link = $this->linkFor($message, $by))) {
             $params['enlace'] = $link;

@@ -39,6 +39,22 @@ final class Dates
         return $withDate ? $relative.', '.mb_strtolower(self::day($date)) : $relative;
     }
 
+    /**
+     * El día dentro de una frase: "de hoy", "de mañana" o "del lunes 16" ("tu cita de mañana", "2 citas del lunes 16").
+     * Con $withDate, "de mañana lunes 16 de noviembre".
+     */
+    public static function ofDay(CarbonInterface|string $date, bool $withDate = false): string
+    {
+        $date = CarbonImmutable::parse($date);
+        $day = $date->translatedFormat($withDate ? 'l j \d\e F' : 'l j');
+
+        return match (true) {
+            $date->isToday() => $withDate ? "de hoy {$day}" : 'de hoy',
+            $date->isTomorrow() => $withDate ? "de mañana {$day}" : 'de mañana',
+            default => "del {$day}",
+        };
+    }
+
     /** "lunes 9 de noviembre a las 10:30", para el panel (hora de 24). */
     public static function dayAndTime(CarbonInterface|string $date): string
     {

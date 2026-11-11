@@ -35,7 +35,7 @@ enum MessageTemplateKey: string implements HasLabel
         return match ($this) {
             self::BookingConfirmation => 'Confirmación de reserva web',
             self::AppointmentScheduled => 'Cita programada por el consultorio',
-            self::Reminder => 'Recordatorio del día anterior',
+            self::Reminder => 'Recordatorio de la cita',
             self::Rescheduled => 'Cambio de horario',
             self::Cancelled => 'Cita cancelada por el consultorio',
             self::RescheduleApproved => 'Solicitud de cambio aprobada',
@@ -64,7 +64,7 @@ enum MessageTemplateKey: string implements HasLabel
         return match ($this) {
             self::BookingConfirmation => "Hola {nombre} 👋, te escribimos de {consultorio}.\nTu cita de {tratamiento} quedó reservada para el {fecha} a las {hora} con {doctor}.\n{precio}\n\nConfirma tu asistencia, cambia el horario o cancela aquí:\n{enlace}",
             self::AppointmentScheduled => "Hola {nombre}, te escribimos de {consultorio}.\nTu próxima cita de {tratamiento} es el {fecha} a las {hora} con {doctor}.\n\nPuedes confirmarla aquí:\n{enlace}",
-            self::Reminder => "Hola {nombre}, te recordamos tu cita de mañana {fecha} a las {hora} con {doctor} en {consultorio}.\n{indicaciones}\n\nConfirma tu asistencia aquí:\n{enlace}",
+            self::Reminder => "Hola {nombre}, te recordamos tu cita {cuando} a las {hora} con {doctor} en {consultorio}.\n{indicaciones}\n\nConfirma tu asistencia aquí:\n{enlace}",
             self::Rescheduled => "Hola {nombre}, tu cita de {tratamiento} cambió al {fecha} a las {hora} con {doctor}.\n\nConfirma el nuevo horario aquí:\n{enlace}",
             self::Cancelled => 'Hola {nombre}, lamentamos avisarte que tu cita del {fecha} a las {hora} fue cancelada. Escríbenos y te ayudamos a elegir otro horario.',
             self::RescheduleApproved => "Hola {nombre}, aprobamos tu cambio. Tu cita de {tratamiento} ahora es el {fecha} a las {hora} con {doctor}.\n\nDetalles aquí:\n{enlace}",

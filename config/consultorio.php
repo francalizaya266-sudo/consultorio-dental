@@ -65,7 +65,7 @@ return [
 
         // Horas fijas del cron (se leen al arrancar, por eso vienen del .env y no del panel).
         'reminders' => [
-            // A qué hora del día anterior se preparan los recordatorios.
+            // Desde qué hora del día anterior (el último en que se atiende antes de la cita) queda listo el recordatorio.
             'day_before_at' => env('REMINDERS_AT', '09:00'),
             // A qué hora del día anterior una cita sin confirmar pasa a "llamar".
             'flag_unconfirmed_at' => env('FLAG_UNCONFIRMED_AT', '16:00'),

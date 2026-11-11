@@ -4,6 +4,7 @@ namespace App\Services\Access;
 
 use App\Enums\MessageStatus;
 use App\Enums\MessageTemplateKey;
+use App\Filament\Resources\WhatsappMessages\WhatsappMessageResource;
 use App\Models\Account;
 use App\Models\Appointment;
 use App\Models\MagicLink;
@@ -84,6 +85,10 @@ class PatientAccess
         $this->outbox->queueForAccount($account, MessageTemplateKey::AccessLink, patientId: $account->holder?->getKey());
 
         $name = $account->holder?->full_name ?? Phone::display($account->phone);
-        $this->alerts->toReception('Pidió su enlace de Mi cuenta', "{$name} quiere entrar a Mi cuenta. El enlace está listo en Avisos.");
+        $this->alerts->toReception(
+            'Pidió su enlace de Mi cuenta',
+            "{$name} quiere entrar a Mi cuenta. El enlace está listo en Avisos.",
+            link: ['label' => 'Enviar el enlace', 'url' => WhatsappMessageResource::getUrl()],
+        );
     }
 }

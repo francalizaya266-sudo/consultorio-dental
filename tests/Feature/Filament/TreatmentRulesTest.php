@@ -78,12 +78,14 @@ class TreatmentRulesTest extends TestCase
 
     public function test_the_reminder_says_what_the_treatment_asks_before_coming(): void
     {
-        $this->freezeMonday();
+        $this->travelTo('2026-10-26 10:00');
         $extraction = Treatment::factory()->create(['name' => 'Extracción simple', 'before_instructions' => 'Ven habiendo comido algo ligero.']);
         $cleaning = Treatment::factory()->create(['name' => 'Limpieza dental']);
         $extractionVisit = Appointment::factory()->for($extraction)->at('2026-11-03 10:00')->create();
         $cleaningVisit = Appointment::factory()->for($cleaning)->at('2026-11-03 11:00')->create();
 
+        // El día anterior a la cita, desde las 9:00.
+        $this->travelTo('2026-11-02 09:30');
         $this->artisan('citas:preparar-recordatorios')->assertSuccessful();
 
         $reminderFor = fn (Appointment $appointment) => app(WhatsAppOutbox::class)->render(WhatsappMessage::query()->whereBelongsTo($appointment)->sole());

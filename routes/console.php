@@ -7,12 +7,14 @@ use Illuminate\Support\Facades\Schedule;
 | * * * * * php /ruta/al/proyecto/artisan schedule:run >> /dev/null 2>&1
 */
 
+// Cada pasada prepara lo que ya toca (desde REMINDERS_AT del día anterior a la cita): si una se pierde, la siguiente lo pone al día.
 Schedule::command('citas:preparar-recordatorios')
-    ->dailyAt(config('consultorio.defaults.reminders.day_before_at', '09:00'))
+    ->everyFifteenMinutes()
     ->withoutOverlapping();
 
+// Igual con las citas que a la tarde (FLAG_UNCONFIRMED_AT) del día anterior siguen sin confirmar.
 Schedule::command('citas:marcar-sin-confirmar')
-    ->dailyAt(config('consultorio.defaults.reminders.flag_unconfirmed_at', '16:00'))
+    ->everyFifteenMinutes()
     ->withoutOverlapping();
 
 // Las cuotas de los planes entran al saldo el día que vencen.
