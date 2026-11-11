@@ -13,6 +13,7 @@ use App\Models\Treatment;
 use App\Models\TreatmentPlan;
 use App\Models\TreatmentPlanItem;
 use App\Services\Clinical\PrescriptionService;
+use App\Services\Clinical\TreatmentPlanService;
 use App\Services\Inventory\InventoryService;
 use Filament\Infolists\Components\RepeatableEntry;
 use Filament\Infolists\Components\TextEntry;
@@ -124,7 +125,8 @@ class ConsultationInfolist
                         ->schema([
                             View::make('filament.consultations.plans')
                                 ->viewData(fn (Consultation $record) => [
-                                    'plans' => self::plans($record),
+                                    'plans' => $plans = self::plans($record),
+                                    'paymentOptions' => $plans->mapWithKeys(fn (TreatmentPlan $plan) => [$plan->getKey() => app(TreatmentPlanService::class)->paymentOptions($plan)])->all(),
                                     'url' => PatientResource::getUrl('clinical', ['record' => $record->patient_id, 'relation' => '1']),
                                 ]),
                         ])

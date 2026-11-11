@@ -75,45 +75,128 @@ final class TreatmentPlanService
      */
     public function itemsFromPackage(TreatmentPackage $package): array
     {
-        $package->loadMissing('items.treatment');
-        $items = $package->items->values();
+        return $this->packageWith($package, collect())['new'];
+    }
 
-        if ($items->isEmpty()) {
-            return [];
+    /**
+     * El paquete con lo que el doctor mete en él del borrador (lo del diagnóstico). Lo que el paquete ya trae
+     * (su curación, su extracción) toma la pieza del diagnóstico en vez de repetirse sin pieza; lo demás entra
+     * al precio del paquete. Ese precio se reparte entre todo, así que el total sigue siendo el del paquete.
+     *
+     * @param  Collection<int, TreatmentPlanItem>  $included
+     * @return array{new: list<array<string, mixed>>, included: array<int, array{treatment_package_id: int, unit_price: float, discount: float}>}
+     */
+    public function packageWith(TreatmentPackage $package, Collection $included): array
+    {
+        $package->loadMissing('items.treatment');
+        $remaining = $package->items->mapWithKeys(fn (TreatmentPackageItem $item) => [$item->getKey() => (int) $item->quantity])->all();
+        $lines = [];
+
+        foreach ($included as $planItem) {
+            $match = $package->items->first(fn (TreatmentPackageItem $item) => $item->treatment_id !== null
+                && $item->treatment_id === $planItem->treatment_id
+                && $remaining[$item->getKey()] >= (int) $planItem->quantity);
+
+            if ($match) {
+                $remaining[$match->getKey()] -= (int) $planItem->quantity;
+            }
+
+            $lines[] = ['planItem' => $planItem, 'quantity' => (int) $planItem->quantity, 'price' => $match ? (float) $match->treatment->price_from : (float) $planItem->unit_price];
         }
 
-        $price = (float) $package->price;
-        $weights = $items->map(fn (TreatmentPackageItem $item) => $item->normalPrice());
+        foreach ($package->items as $item) {
+            if ($remaining[$item->getKey()] > 0) {
+                $lines[] = ['packageItem' => $item, 'quantity' => $remaining[$item->getKey()], 'price' => (float) $item->treatment->price_from];
+            }
+        }
+
+        if ($lines === []) {
+            return ['new' => [], 'included' => []];
+        }
+
+        $total = (float) $package->price;
+        $weights = array_map(fn (array $line) => round($line['quantity'] * $line['price'], 2), $lines);
 
         // Sin precios en el catálogo, se reparte según la cantidad.
-        if ($weights->sum() <= 0) {
-            $weights = $items->map(fn (TreatmentPackageItem $item) => (float) $item->quantity);
+        if (array_sum($weights) <= 0) {
+            $weights = array_map(fn (array $line) => (float) $line['quantity'], $lines);
         }
 
-        $shares = $weights->map(fn (float $weight) => round($price * $weight / $weights->sum(), 2))->all();
+        $shares = array_map(fn (float $weight) => round($total * $weight / array_sum($weights), 2), $weights);
         // Los céntimos del redondeo van al de mayor precio.
         $largest = array_search(max($shares), $shares, true);
-        $shares[$largest] = round($price - (array_sum($shares) - $shares[$largest]), 2);
+        $shares[$largest] = round($total - (array_sum($shares) - $shares[$largest]), 2);
 
-        return $items->map(function (TreatmentPackageItem $item, int $index) use ($package, $shares) {
+        $result = ['new' => [], 'included' => []];
+
+        foreach ($lines as $index => $line) {
             $share = $shares[$index];
-            // Si el paquete cuesta más que el catálogo, el precio sube lo justo para cubrir su parte.
-            $unitPrice = $share <= $item->normalPrice()
-                ? (float) $item->treatment->price_from
-                : ceil(round($share / $item->quantity * 100, 6)) / 100;
+            // Si al paquete le toca más que el catálogo, el precio sube lo justo para cubrir su parte.
+            $unitPrice = $share <= round($line['quantity'] * $line['price'], 2)
+                ? $line['price']
+                : ceil(round($share / $line['quantity'] * 100, 6)) / 100;
+            $discount = round($line['quantity'] * $unitPrice - $share, 2);
 
-            return [
+            if (isset($line['planItem'])) {
+                $result['included'][$line['planItem']->getKey()] = ['treatment_package_id' => $package->getKey(), 'unit_price' => $unitPrice, 'discount' => $discount];
+
+                continue;
+            }
+
+            $item = $line['packageItem'];
+            $result['new'][] = [
                 'treatment_id' => $item->treatment_id,
                 'treatment_package_id' => $package->getKey(),
                 'description' => $item->description ?: $item->treatment->name,
                 'tooth' => null,
                 'surfaces' => null,
-                'quantity' => $item->quantity,
+                'quantity' => $line['quantity'],
                 'unit_price' => $unitPrice,
-                'discount' => round($item->quantity * $unitPrice - $share, 2),
+                'discount' => $discount,
                 'sessions_planned' => $item->sessions_planned,
             ];
-        })->all();
+        }
+
+        return $result;
+    }
+
+    /**
+     * Lo del borrador que el paquete ya trae: lo que conviene meter en él para no cobrarlo dos veces
+     * (la curación del diagnóstico cuando el paquete incluye una curación).
+     *
+     * @param  Collection<int, TreatmentPlanItem>  $candidates
+     * @return list<int>
+     */
+    public function coveredByPackage(TreatmentPackage $package, Collection $candidates): array
+    {
+        $package->loadMissing('items');
+        $remaining = $package->items->groupBy('treatment_id')->map(fn (Collection $items) => (int) $items->sum('quantity'))->all();
+        $covered = [];
+
+        foreach ($candidates as $item) {
+            if ($item->treatment_id !== null && ($remaining[$item->treatment_id] ?? 0) >= (int) $item->quantity) {
+                $remaining[$item->treatment_id] -= (int) $item->quantity;
+                $covered[] = $item->getKey();
+            }
+        }
+
+        return $covered;
+    }
+
+    /**
+     * Lo del borrador del doctor que se puede meter en un paquete: lo pendiente y sin precio aceptado que
+     * no es ya de otro paquete.
+     *
+     * @return Collection<int, TreatmentPlanItem>
+     */
+    public function includableInPackage(Consultation $consultation): Collection
+    {
+        return $this->currentPlan($consultation, [TreatmentPlanStatus::Draft])?->items()
+            ->whereNull('treatment_package_id')
+            ->whereNull('accepted_at')
+            ->where('status', PlanItemStatus::Pending)
+            ->orderBy('sort_order')
+            ->get() ?? collect();
     }
 
     /**
@@ -121,24 +204,43 @@ final class TreatmentPlanService
      *
      * @return list<string>
      */
-    public static function packagePaymentOptions(TreatmentPackage $package): array
+    public static function packagePaymentOptions(TreatmentPackage $package, ?float $total = null): array
     {
-        $price = (float) $package->price;
+        $price = $total ?? (float) $package->price;
+        $terms = $package->terms();
         $options = [];
 
+        // La cuota del paquete vale si se paga solo el paquete; si se le sumó algo, el resto se reparte en las cuotas.
+        if (round($price, 2) !== round((float) $package->price, 2)) {
+            $terms['monthly_amount'] = null;
+        }
+
         if ($package->allows_upfront) {
-            $options[] = self::scheduleText(PlanPaymentMode::Upfront, self::schedule($price, PlanPaymentMode::Upfront, $package->terms(), today()), false);
+            $options[] = self::scheduleText(PlanPaymentMode::Upfront, self::schedule($price, PlanPaymentMode::Upfront, $terms, today()), false);
         }
 
         if ($package->allows_installments) {
             try {
-                $options[] = 'En cuotas: '.Str::lcfirst(self::scheduleText(PlanPaymentMode::Installments, self::schedule($price, PlanPaymentMode::Installments, $package->terms(), today()), false));
+                $options[] = 'En cuotas: '.Str::lcfirst(self::scheduleText(PlanPaymentMode::Installments, self::schedule($price, PlanPaymentMode::Installments, $terms, today()), false));
             } catch (ClinicalException $e) {
                 $options[] = 'En cuotas: '.Str::lcfirst($e->getMessage());
             }
         }
 
         return $options ?: ['Por sesión: paga lo de cada sesión al terminarla.'];
+    }
+
+    /**
+     * Cómo puede pagar un presupuesto con paquete que todavía no acepta: las formas del paquete, con el total
+     * del plan. Vacío si ya lo aceptó o no trae paquete (entonces paga por sesión). Se elige al firmar.
+     *
+     * @return list<string>
+     */
+    public function paymentOptions(TreatmentPlan $plan): array
+    {
+        $package = $plan->accepted_at === null ? $plan->offeredPackage() : null;
+
+        return $package ? self::packagePaymentOptions($package, $plan->total()) : [];
     }
 
     /**
@@ -175,13 +277,24 @@ final class TreatmentPlanService
 
     /**
      * Desde la atención: suma el paquete al borrador del plan y, si es 2x1, arma el plan de la otra persona.
+     * Lo del borrador que el doctor mete en el paquete ($includedItemIds) queda dentro de su precio.
      *
+     * @param  list<int|string>  $includedItemIds
      * @return array{0: TreatmentPlan|null, 1: TreatmentPlan|null} El plan y el de la otra persona del 2x1.
      */
-    public function addPackageToDraft(Consultation $consultation, User $by, TreatmentPackage $package, ?Patient $companion = null): array
+    public function addPackageToDraft(Consultation $consultation, User $by, TreatmentPackage $package, ?Patient $companion = null, array $includedItemIds = []): array
     {
-        return DB::transaction(function () use ($consultation, $by, $package, $companion) {
-            [$plan] = $this->addToDraft($consultation, $by, $this->itemsFromPackage($package));
+        return DB::transaction(function () use ($consultation, $by, $package, $companion, $includedItemIds) {
+            $included = $this->includableInPackage($consultation)->whereIn('id', array_map('intval', $includedItemIds))->values();
+            ['new' => $items, 'included' => $prices] = $this->packageWith($package, $included);
+            [$plan] = $this->addToDraft($consultation, $by, $items);
+
+            foreach ($included as $item) {
+                $item->update($prices[$item->getKey()]);
+            }
+
+            $plan ??= $included->first()?->plan;
+            $plan?->unsetRelation('items');
 
             if ($plan && $plan->title === 'Plan de tratamiento' && $plan->items()->whereNull('treatment_package_id')->doesntExist()) {
                 $plan->update(['title' => $package->name]);
@@ -603,7 +716,7 @@ final class TreatmentPlanService
             'nombre' => $plan->patient->first_name,
             'paciente' => $plan->patient->full_name,
             'doctor' => $plan->doctor->name,
-            'plan' => $this->text($plan),
+            'plan' => $this->text($plan).(($options = $this->paymentOptions($plan)) !== [] ? "\n\nFormas de pago:\n".collect($options)->map(fn (string $option) => '• '.$option)->implode("\n") : ''),
             'total' => Money::format($plan->total()),
             'vigencia' => ($until = $plan->validUntil()) ? ' (vale hasta el '.$until->translatedFormat('j \d\e F').')' : '',
         ], $plan->patient_id);

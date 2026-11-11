@@ -28,6 +28,16 @@
                     </li>
                 @endforeach
             </ul>
+            @if (($options = $paymentOptions[$plan->getKey()] ?? []) !== [])
+                <div class="visit-plan-options">
+                    <span>Formas de pago, se elige al firmar:</span>
+                    <ul>
+                        @foreach ($options as $option)
+                            <li>{{ $option }}</li>
+                        @endforeach
+                    </ul>
+                </div>
+            @endif
             <div class="visit-plan-foot">
                 <span>Total <strong>{{ Money::format($plan->total()) }}</strong> · {{ $done }} de {{ $items->count() }} hechos</span>
                 @if ($url)

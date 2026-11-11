@@ -130,7 +130,7 @@ class PrintController extends Controller
             'paymentText' => $plan->accepted_at ? $plans->paymentText($plan) : null,
             'packages' => $plan->packageSummaries(),
             // Antes de firmar, las formas de pago que ofrece el paquete.
-            'packageOptions' => $package ? TreatmentPlanService::packagePaymentOptions($package) : [],
+            'packageOptions' => $package ? TreatmentPlanService::packagePaymentOptions($package, $plan->total()) : [],
             // 2x1: a quién más se atiende con este plan, o quién paga el de este paciente.
             'companions' => $plan->companionNames(),
             'payer' => $plan->includedIn?->patient?->full_name,

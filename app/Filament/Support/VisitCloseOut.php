@@ -24,7 +24,7 @@ use Illuminate\Support\Facades\Cache;
 final class VisitCloseOut
 {
     /**
-     * @return array{plan: array{label: string, detail: string, button: string|null, action: string|null, done: bool, links: list<array{label: string, url?: string, action?: string}>}|null, payment: array{label: string, detail: string, button: string|null, action: string|null, done: bool}, next: array{label: string, detail: string, url: string|null, done: bool}}|null
+     * @return array{plan: array{label: string, detail: string, button: string|null, action: string|null, done: bool, links: list<array{label: string, url?: string, action?: string}>, options: list<string>}|null, payment: array{label: string, detail: string, button: string|null, action: string|null, done: bool}, next: array{label: string, detail: string, url: string|null, done: bool}}|null
      */
     public static function viewData(Consultation $consultation, User $user): ?array
     {
@@ -67,7 +67,7 @@ final class VisitCloseOut
         Cache::put(self::notifiedKey($consultation), true, now()->endOfDay());
     }
 
-    /** @return array{label: string, detail: string, button: string|null, action: string|null, done: bool, links: list<array{label: string, url?: string, action?: string}>}|null */
+    /** @return array{label: string, detail: string, button: string|null, action: string|null, done: bool, links: list<array{label: string, url?: string, action?: string}>, options: list<string>}|null */
     private static function plan(Consultation $consultation, User $user): ?array
     {
         $plan = self::planToAccept($consultation);
@@ -82,6 +82,7 @@ final class VisitCloseOut
                 'action' => null,
                 'done' => true,
                 'links' => [],
+                'options' => [],
             ] : null;
         }
 
@@ -95,6 +96,7 @@ final class VisitCloseOut
         return [
             'label' => ($first ? 'Presupuesto por aceptar: ' : 'Lo agregado a su plan, por aceptar: ').Money::format($items->sum(fn (TreatmentPlanItem $item) => $item->subtotal())),
             'detail' => $names.($until ? ' · vale hasta el '.$until->format('d/m/Y') : ''),
+            'options' => $first ? app(TreatmentPlanService::class)->paymentOptions($plan) : [],
             'button' => $canSign ? ($first ? 'Acepta y firma' : 'Firma lo agregado') : null,
             'action' => $canSign ? 'acceptPlan' : null,
             'done' => false,

@@ -13,6 +13,7 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\SoftDeletes;
+use Illuminate\Support\Collection;
 
 /**
  * Paquete que arma el doctor: varios tratamientos a un precio y cómo se puede pagar
@@ -68,12 +69,15 @@ class TreatmentPackage extends Model
         return max(0, round($this->normalPrice() - (float) $this->price, 2));
     }
 
-    /** Lo que incluye en una línea: "Colocación de brackets · Control de ortodoncia × 18". */
+    /** Lo que incluye en una línea: "Colocación de brackets · Control de ortodoncia × 18". Lo repetido va junto. */
     public function contents(): string
     {
         $this->loadMissing('items.treatment');
 
-        return $this->items->map(fn (TreatmentPackageItem $item) => $item->label())->implode(' · ');
+        return $this->items
+            ->groupBy(fn (TreatmentPackageItem $item) => $item->description ?: $item->treatment->name)
+            ->map(fn (Collection $items, string $name) => $name.(($quantity = (int) $items->sum('quantity')) > 1 ? ' × '.$quantity : ''))
+            ->implode(' · ');
     }
 
     /** La forma de pago con que llega el plan a la firma: en cuotas si el paquete las ofrece. */
