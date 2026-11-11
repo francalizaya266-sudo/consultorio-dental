@@ -1204,6 +1204,19 @@ a.dash-name:hover { color: var(--primary-600); }
 .dark .dash-done { color: var(--success-400) !important; }
 .dash-done-icon { width: .9rem; height: .9rem; }
 .dash-row-actions { flex: none; display: flex; align-items: center; gap: .9rem; margin-left: auto; }
+/* Pendientes anotados a mano, arriba de "Por hacer hoy": lo hecho hoy queda tachado para el turno que sigue. */
+.dash-notes { margin: 0 0 .35rem; }
+.dash-notes li:first-child { border-top: 0; padding-top: 0; }
+.dash-notes li.is-done .dash-name { font-weight: 500; color: var(--gray-500); text-decoration: line-through; }
+.dark .dash-notes li.is-done .dash-name { color: var(--gray-400); }
+.dash-late { color: var(--danger-600) !important; font-weight: 600; }
+.dark .dash-late { color: var(--danger-400) !important; }
+.dash-note-patient { color: var(--primary-600); text-decoration: none; }
+.dash-note-patient:hover { text-decoration: underline; }
+.dark .dash-note-patient { color: var(--primary-400); }
+.dash-notes + :is(.dash-task, .dash-group, .dash-empty) { border-top: 1px solid var(--gray-100); }
+.dark .dash-notes + :is(.dash-task, .dash-group, .dash-empty) { border-color: rgb(255 255 255 / .06); }
+.dash-empty.has-notes { padding-top: .75rem; }
 @media (pointer: coarse) {
     .dash-row-actions { gap: .5rem; }
     .dash-row-actions .fi-link { min-height: 2.75rem; padding: 0 .4rem; }

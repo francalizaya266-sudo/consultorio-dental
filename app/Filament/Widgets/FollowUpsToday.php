@@ -8,6 +8,7 @@ use App\Enums\RescheduleRequestStatus;
 use App\Filament\Actions\SendWhatsAppAction;
 use App\Filament\Pages\TomorrowTray;
 use App\Filament\Resources\Appointments\AppointmentResource;
+use App\Filament\Resources\Appointments\Schemas\AppointmentForm;
 use App\Filament\Resources\Installments\InstallmentResource;
 use App\Filament\Resources\LabOrders\LabOrderResource;
 use App\Filament\Resources\Patients\PatientResource;
@@ -15,6 +16,7 @@ use App\Filament\Resources\RescheduleRequests\RescheduleRequestResource;
 use App\Filament\Resources\Supplies\SupplyResource;
 use App\Filament\Resources\WhatsappMessages\WhatsappMessageResource;
 use App\Models\Appointment;
+use App\Models\DeskNote;
 use App\Models\LabOrder;
 use App\Models\Patient;
 use App\Models\Supply;
@@ -30,9 +32,14 @@ use Carbon\CarbonImmutable;
 use Filament\Actions\Action;
 use Filament\Actions\Concerns\InteractsWithActions;
 use Filament\Actions\Contracts\HasActions;
+use Filament\Forms\Components\DatePicker;
+use Filament\Forms\Components\Textarea;
+use Filament\Notifications\Notification;
 use Filament\Schemas\Concerns\InteractsWithSchemas;
 use Filament\Schemas\Contracts\HasSchemas;
 use Filament\Support\Enums\Size;
+use Filament\Support\Enums\Width;
+use Filament\Support\Icons\Heroicon;
 use Filament\Widgets\Widget;
 use Illuminate\Support\Collection;
 
@@ -41,6 +48,8 @@ use Illuminate\Support\Collection;
  * enviar, solicitudes de cambio) y después a quién escribirle o llamar, con el WhatsApp ya redactado
  * y "Nueva cita" a un toque. Cada grupo se abre y se cierra, con su número a la vista, y lleva a su
  * lista completa. Quien ya recibió el aviso hace poco queda marcado, para no escribirle dos veces.
+ * Arriba van los pendientes que recepción anota a mano: salen el día que tocan y se quedan hasta marcarlos
+ * como hechos, para que el turno que sigue sepa qué quedó.
  */
 class FollowUpsToday extends Widget implements HasActions, HasSchemas
 {
@@ -76,14 +85,114 @@ class FollowUpsToday extends Widget implements HasActions, HasSchemas
             ->size(Size::Small);
     }
 
+    /** Anota un pendiente para hoy u otro día, con el paciente del que trata si hace falta. */
+    public function addNoteAction(): Action
+    {
+        return Action::make('addNote')
+            ->label('Anotar pendiente')
+            ->icon(Heroicon::OutlinedPlus)
+            ->link()
+            ->size(Size::Small)
+            ->authorize(fn () => auth()->user()->can('create', DeskNote::class))
+            ->modalHeading('Anotar pendiente')
+            ->modalDescription('Sale aquí el día que toca y se queda hasta que alguien lo marque como hecho.')
+            ->modalWidth(Width::Large)
+            ->modalSubmitActionLabel('Anotar')
+            ->schema([
+                Textarea::make('body')
+                    ->label('¿Qué hay que hacer?')
+                    ->placeholder('Por ejemplo: llamar al laboratorio por la corona de Rosa')
+                    ->rows(2)
+                    ->maxLength(300)
+                    ->required()
+                    ->autofocus(),
+                DatePicker::make('due_on')
+                    ->label('¿Para cuándo?')
+                    ->native(false)
+                    ->displayFormat('D d/m/Y')
+                    ->firstDayOfWeek(1)
+                    ->closeOnDateSelection()
+                    ->default(fn () => today())
+                    ->minDate(today())
+                    ->required(),
+                AppointmentForm::patientSelect()
+                    ->label('¿De qué paciente? (opcional)')
+                    ->default(null)
+                    ->required(false),
+            ])
+            ->action(function (array $data) {
+                DeskNote::create([...$data, 'created_by_user_id' => auth()->id()]);
+
+                Notification::make()->success()->title('Pendiente anotado')->send();
+            });
+    }
+
+    /** Marca un pendiente como hecho: queda tachado el resto del día, con quién lo hizo y a qué hora. */
+    public function noteDoneAction(): Action
+    {
+        return Action::make('noteDone')
+            ->label('Hecho')
+            ->icon(Heroicon::Check)
+            ->link()
+            ->size(Size::Small)
+            ->action(fn (array $arguments) => $this->settleNote($arguments, done: true));
+    }
+
+    /** Por si se marcó sin querer. */
+    public function noteUndoAction(): Action
+    {
+        return Action::make('noteUndo')
+            ->label('Deshacer')
+            ->color('gray')
+            ->link()
+            ->size(Size::Small)
+            ->action(fn (array $arguments) => $this->settleNote($arguments, done: false));
+    }
+
+    /** @param  array<string, mixed>  $arguments */
+    private function settleNote(array $arguments, bool $done): void
+    {
+        $note = DeskNote::query()->find($arguments['note'] ?? null);
+
+        if ($note && auth()->user()->can('update', $note)) {
+            $note->update(['done_at' => $done ? now() : null, 'done_by_user_id' => $done ? auth()->id() : null]);
+        }
+    }
+
     /**
-     * @return array{sections: list<array{key: string, title: string, hint: string, count: int, url: string|null, summary: string|null, template: string|null, rows: list<array{patient_id: int, name: string, detail: string, contacted: string|null, can_message: bool, url: string, new_appointment_url: string|null}>}>}
+     * Los pendientes de hoy: primero lo que falta (lo más viejo arriba) y al final lo que ya se hizo hoy.
+     *
+     * @return list<array{id: int, body: string, status: string, done: bool, late: bool, patient: string|null, patient_url: string|null}>
+     */
+    private function notes(): array
+    {
+        return DeskNote::query()
+            ->forToday()
+            ->with(['patient', 'doneBy'])
+            ->orderByRaw('done_at is not null')
+            ->orderBy('due_on')
+            ->orderBy('id')
+            ->get()
+            ->map(fn (DeskNote $note) => [
+                'id' => $note->getKey(),
+                'body' => $note->body,
+                'status' => $note->status(),
+                'done' => $note->isDone(),
+                'late' => ! $note->isDone() && $note->due_on->lt(today()),
+                'patient' => $note->patient?->full_name,
+                'patient_url' => $note->patient ? PatientResource::getUrl('view', ['record' => $note->patient]) : null,
+            ])
+            ->all();
+    }
+
+    /**
+     * @return array{notes: list<array{id: int, body: string, status: string, done: bool, late: bool, patient: string|null, patient_url: string|null}>, sections: list<array{key: string, title: string, hint: string, count: int, url: string|null, summary: string|null, template: string|null, rows: list<array{patient_id: int, name: string, detail: string, contacted: string|null, can_message: bool, url: string, new_appointment_url: string|null}>}>}
      */
     protected function getViewData(): array
     {
         $followUps = app(FollowUps::class);
 
-        return ['sections' => array_values(array_filter([
+        return ['notes' => $this->notes(), 'sections' => array_values(array_filter([
             $this->leftOpenAppointments(),
             $this->dueMessages(),
             $this->pendingRequests(),
