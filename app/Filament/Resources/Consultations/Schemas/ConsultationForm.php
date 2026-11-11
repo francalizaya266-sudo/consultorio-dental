@@ -9,6 +9,7 @@ use App\Enums\SnippetStatus;
 use App\Enums\TreatmentKind;
 use App\Enums\VisitType;
 use App\Exceptions\ClinicalException;
+use App\Filament\Actions\IncludeInPackageAction;
 use App\Filament\Actions\SendWhatsAppAction;
 use App\Filament\Actions\UploadClinicalFilesAction;
 use App\Filament\Forms\QuickTextarea;
@@ -28,6 +29,7 @@ use App\Models\Prescription;
 use App\Models\TextSnippet;
 use App\Models\Treatment;
 use App\Models\TreatmentPackage;
+use App\Models\TreatmentPlan;
 use App\Models\TreatmentPlanItem;
 use App\Models\User;
 use App\Services\Billing\BillingService;
@@ -946,7 +948,7 @@ class ConsultationForm
                         ->extraFieldWrapperAttributes(['class' => 'consult-charge-price'])
                         ->grow(false)
                     : Text::make(match (true) {
-                        $line['amount'] === null => 'En su forma de pago',
+                        $line['amount'] === null => $line['note'] ?? 'En su forma de pago',
                         $line['amount'] > 0 => Money::format($line['amount']),
                         default => 'Sin costo',
                     })->grow(false),
@@ -960,6 +962,12 @@ class ConsultationForm
             Text::make(new HtmlString('<strong>Total</strong>'.(abs($total - $suggested) >= 0.005 ? '<small class="consult-charge-suggested">Sugerido '.e(Money::format($suggested)).'</small>' : ''))),
             Text::make(Money::format($total))->weight(FontWeight::Bold)->grow(false),
         ])->verticallyAlignCenter()->extraAttributes(['class' => 'consult-charge-line consult-charge-total']);
+
+        // Se empezó un paquete sin que el paciente firme cómo lo pagará: si se va sin firmar, eso queda sin cobrar.
+        if (collect($lines)->contains(fn (array $line) => $line['awaitsSignature'] ?? false)) {
+            $rows[] = Text::make('Falta que firme el paquete. Lo hecho del paquete no se cobra por partes: se paga con su pago único o sus cuotas, que elige al firmar. Que firme antes de irse.')
+                ->color('warning');
+        }
 
         return $rows;
     }
@@ -1055,7 +1063,7 @@ class ConsultationForm
             ->modalDescription(fn (Consultation $record) => self::addToPlanHint($record))
             ->modalWidth(Width::TwoExtraLarge)
             ->modalSubmitActionLabel('Agregar al plan')
-            ->schema([
+            ->schema(fn (Consultation $record) => [
                 Select::make('treatment_id')
                     ->label('Tratamiento')
                     ->options(fn () => Treatment::query()->active()->orderBy('sort_order')->orderBy('name')->get()
@@ -1083,6 +1091,13 @@ class ConsultationForm
                         ->default(1)
                         ->required(),
                 ]),
+                // A criterio del doctor, lo nuevo puede ir dentro del paquete que ya tiene: no se le cobra aparte.
+                Toggle::make('in_package')
+                    ->label(fn () => 'Entra en su paquete '.self::currentPackage($record)?->name.', sin costo')
+                    ->helperText(fn (Get $get) => 'El precio del paquete no cambia y no se le cobra aparte'
+                        .((float) $get('unit_price') > 0 ? ': se deja de cobrar '.Money::format((float) $get('unit_price')).'.' : '.'))
+                    ->live()
+                    ->visible(fn () => self::currentPackage($record) !== null),
             ])
             ->action(function (Consultation $record, array $data) {
                 /** @var User $user */
@@ -1098,6 +1113,13 @@ class ConsultationForm
                     [$plan] = app(TreatmentPlanService::class)->addToPlan($record, $user, [$item]);
                 } catch (ClinicalException $e) {
                     Notification::make()->danger()->title($e->getMessage())->send();
+
+                    return;
+                }
+
+                if (($data['in_package'] ?? false) && $plan->offeredPackage() !== null) {
+                    $added = $plan->items()->reorder()->latest('id')->first();
+                    IncludeInPackageAction::notify($plan, app(TreatmentPlanService::class)->includeInPackage($plan, [$added->getKey()]));
 
                     return;
                 }
@@ -1124,6 +1146,20 @@ class ConsultationForm
         };
     }
 
+    /** El paquete del plan al que se suma lo que se agrega, si tiene uno. */
+    private static function currentPackage(Consultation $consultation): ?TreatmentPackage
+    {
+        return app(TreatmentPlanService::class)->currentPlan($consultation)?->offeredPackage();
+    }
+
+    /** El plan vigente del paciente con el doctor que ya tiene el paquete elegido: no se repite, se le mete lo marcado. */
+    private static function planWithChosenPackage(Consultation $consultation, mixed $packageId): ?TreatmentPlan
+    {
+        $package = filled($packageId) ? TreatmentPackage::query()->active()->find($packageId) : null;
+
+        return $package ? app(TreatmentPlanService::class)->planWithPackage($consultation->patient_id, $package, $consultation->doctor_id) : null;
+    }
+
     /** Suma un paquete al plan del paciente. Si vino por una campaña que ofrece un paquete, ya viene elegido. */
     private static function addPackageAction(): Action
     {
@@ -1144,7 +1180,7 @@ class ConsultationForm
 
                 return [
                     'package_id' => $package?->getKey(),
-                    'included' => $package ? self::coveredByPackage($record, $package) : [],
+                    'included' => $package && ! self::planWithChosenPackage($record, $package->getKey()) ? self::coveredByPackage($record, $package) : [],
                     'control_every' => $package ? TreatmentPlanService::controlEvery($package) : null,
                 ];
             })
@@ -1157,7 +1193,7 @@ class ConsultationForm
                     ->live()
                     ->afterStateUpdated(function (?string $state, Set $set) use ($record) {
                         $package = TreatmentPackage::query()->active()->find($state);
-                        $set('included', $package ? self::coveredByPackage($record, $package) : []);
+                        $set('included', $package && ! self::planWithChosenPackage($record, $state) ? self::coveredByPackage($record, $package) : []);
                         $set('control_every', $package ? TreatmentPlanService::controlEvery($package) : null);
                     }),
                 Text::make(function (Get $get) {
@@ -1169,13 +1205,18 @@ class ConsultationForm
                         'Precio normal '.Money::format($package->normalPrice()).', en el paquete '.Money::format($package->price).($package->savings() > 0 ? ' (ahorra '.Money::format($package->savings()).')' : '').'.',
                     ])->filter()->implode(' ') : '';
                 })
-                    ->visible(fn (Get $get) => filled($get('package_id'))),
+                    ->visible(fn (Get $get) => filled($get('package_id')) && ! self::planWithChosenPackage($record, $get('package_id'))),
+                // Ya lo tiene: agregarlo otra vez lo cobraría dos veces. Lo marcado entra en el que tiene.
+                Text::make(fn (Get $get) => 'Su plan ya tiene este paquete: no se agrega otra vez. Lo que marques abajo entra en él sin costo; el precio del paquete no cambia.'
+                    .(($existing = self::planWithChosenPackage($record, $get('package_id'))) && IncludeInPackageAction::options($existing) === [] ? ' Ahora no tiene nada aparte por meter.' : ''))
+                    ->color('warning')
+                    ->visible(fn (Get $get) => self::planWithChosenPackage($record, $get('package_id')) !== null),
                 Text::make(function (Get $get) {
                     $package = TreatmentPackage::query()->active()->find($get('package_id'));
 
                     return $package ? new HtmlString('<p>Formas de pago, se elige al aceptar y firmar:</p>'.self::bulletList(TreatmentPlanService::packagePaymentOptions($package))->toHtml()) : '';
                 })
-                    ->visible(fn (Get $get) => filled($get('package_id'))),
+                    ->visible(fn (Get $get) => filled($get('package_id')) && ! self::planWithChosenPackage($record, $get('package_id'))),
                 Select::make('control_every')
                     ->label('Control cada')
                     ->options(fn (Get $get) => TreatmentPlanItem::frequencyOptions(($package = TreatmentPackage::query()->active()->find($get('package_id'))) ? TreatmentPlanService::controlEvery($package) : null))
@@ -1188,21 +1229,43 @@ class ConsultationForm
                             ? 'Según sus brackets. Serán '.TreatmentPlanService::controlsFor($package, (int) $get('control_every')).' controles; el precio del paquete no cambia.'
                             : null;
                     })
-                    ->visible(fn (Get $get) => ($package = TreatmentPackage::query()->active()->find($get('package_id'))) !== null && TreatmentPlanService::controlEvery($package) !== null),
+                    ->visible(fn (Get $get) => ($package = TreatmentPackage::query()->active()->find($get('package_id'))) !== null
+                        && TreatmentPlanService::controlEvery($package) !== null
+                        && ! self::planWithChosenPackage($record, $get('package_id'))),
                 CheckboxList::make('included')
-                    ->label('Lo del diagnóstico que entra al paquete')
-                    ->helperText('Lo que marques queda dentro del precio del paquete; lo que el paquete ya trae toma la pieza del diagnóstico. Lo que no marques se cobra aparte, a su precio.')
-                    ->options(fn () => app(TreatmentPlanService::class)->includableInPackage($record)
-                        ->mapWithKeys(fn (TreatmentPlanItem $item) => [$item->getKey() => $item->label().' · '.Money::format($item->subtotal())])
-                        ->all())
-                    ->visible(fn (Get $get) => filled($get('package_id')) && app(TreatmentPlanService::class)->includableInPackage($record)->isNotEmpty()),
+                    ->label(fn (Get $get) => self::planWithChosenPackage($record, $get('package_id')) ? 'Lo que entra al paquete, sin costo' : 'Lo del diagnóstico que entra al paquete')
+                    ->helperText(fn (Get $get) => self::planWithChosenPackage($record, $get('package_id'))
+                        ? 'Lo que no marques se cobra aparte, a su precio.'
+                        : 'Lo que marques queda dentro del precio del paquete; lo que el paquete ya trae toma la pieza del diagnóstico. Lo que no marques se cobra aparte, a su precio.')
+                    ->options(fn (Get $get) => ($existing = self::planWithChosenPackage($record, $get('package_id')))
+                        ? IncludeInPackageAction::options($existing)
+                        : app(TreatmentPlanService::class)->includableInPackage($record)
+                            ->mapWithKeys(fn (TreatmentPlanItem $item) => [$item->getKey() => $item->label().' · '.Money::format($item->subtotal())])
+                            ->all())
+                    ->required(fn (Get $get) => self::planWithChosenPackage($record, $get('package_id')) !== null)
+                    ->validationMessages(['required' => 'Marca lo que entra al paquete.'])
+                    ->live()
+                    ->visible(fn (Get $get, CheckboxList $component) => filled($get('package_id')) && $component->getOptions() !== []),
+                // Lo marcado que el paquete no trae entra sin costo: es dinero que se deja de cobrar.
+                Text::make(fn (Get $get) => self::packageGiftText($record, $get('package_id'), (array) $get('included')))
+                    ->color('warning')
+                    ->visible(fn (Get $get) => self::packageGiftText($record, $get('package_id'), (array) $get('included')) !== ''),
                 TreatmentPlanForm::companionSelect($record->patient)
-                    ->visible(fn (Get $get) => (bool) TreatmentPackage::query()->active()->find($get('package_id'))?->for_two),
+                    ->visible(fn (Get $get) => (bool) TreatmentPackage::query()->active()->find($get('package_id'))?->for_two
+                        && ! self::planWithChosenPackage($record, $get('package_id'))),
             ])
             ->action(function (Consultation $record, array $data) {
                 /** @var User $user */
                 $user = auth()->user();
                 $plans = app(TreatmentPlanService::class);
+
+                // Ya tiene el paquete: no se repite (se cobraría dos veces), se le mete lo marcado.
+                if ($existing = self::planWithChosenPackage($record, $data['package_id'])) {
+                    IncludeInPackageAction::notify($existing, $plans->includeInPackage($existing, $data['included'] ?? []));
+
+                    return;
+                }
+
                 $package = TreatmentPackage::query()->active()->findOrFail($data['package_id']);
                 $companion = filled($data['companion_patient_id'] ?? null) ? Patient::find($data['companion_patient_id']) : null;
 
@@ -1226,6 +1289,33 @@ class ConsultationForm
                     ])->filter()->implode(' '))
                     ->send();
             });
+    }
+
+    /**
+     * Lo que se deja de cobrar con lo marcado para el paquete: si ya lo tiene, todo lo marcado; si es nuevo, lo que
+     * el paquete no trae (una curación que el paquete ya incluye no se regala: es la del paquete).
+     *
+     * @param  array<int|string>  $marked
+     */
+    private static function packageGiftText(Consultation $consultation, mixed $packageId, array $marked): string
+    {
+        $package = filled($packageId) ? TreatmentPackage::query()->active()->find($packageId) : null;
+
+        if (! $package || $marked === []) {
+            return '';
+        }
+
+        $plans = app(TreatmentPlanService::class);
+        $ids = array_map('intval', $marked);
+
+        if ($existing = self::planWithChosenPackage($consultation, $packageId)) {
+            return IncludeInPackageAction::giftText($plans->movableIntoPackage($existing)->whereIn('id', $ids));
+        }
+
+        $items = $plans->includableInPackage($consultation)->whereIn('id', $ids);
+        $covered = $plans->coveredByPackage($package, $items);
+
+        return IncludeInPackageAction::giftText($items->whereNotIn('id', $covered));
     }
 
     /**

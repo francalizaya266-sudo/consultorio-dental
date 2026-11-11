@@ -153,28 +153,11 @@ final class TreatmentPlanService
             return ['new' => [], 'included' => []];
         }
 
-        $total = (float) $package->price;
-        $weights = array_map(fn (array $line) => round($line['quantity'] * $line['price'], 2), $lines);
-
-        // Sin precios en el catálogo, se reparte según la cantidad.
-        if (array_sum($weights) <= 0) {
-            $weights = array_map(fn (array $line) => (float) $line['quantity'], $lines);
-        }
-
-        $shares = array_map(fn (float $weight) => round($total * $weight / array_sum($weights), 2), $weights);
-        // Los céntimos del redondeo van al de mayor precio.
-        $largest = array_search(max($shares), $shares, true);
-        $shares[$largest] = round($total - (array_sum($shares) - $shares[$largest]), 2);
-
+        $prices = self::spreadPrice((float) $package->price, $lines);
         $result = ['new' => [], 'included' => []];
 
         foreach ($lines as $index => $line) {
-            $share = $shares[$index];
-            // Si al paquete le toca más que el catálogo, el precio sube lo justo para cubrir su parte.
-            $unitPrice = $share <= round($line['quantity'] * $line['price'], 2)
-                ? $line['price']
-                : ceil(round($share / $line['quantity'] * 100, 6)) / 100;
-            $discount = round($line['quantity'] * $unitPrice - $share, 2);
+            ['unit_price' => $unitPrice, 'discount' => $discount] = $prices[$index];
 
             if (isset($line['planItem'])) {
                 $result['included'][$line['planItem']->getKey()] = ['treatment_package_id' => $package->getKey(), 'unit_price' => $unitPrice, 'discount' => $discount];
@@ -198,6 +181,48 @@ final class TreatmentPlanService
         }
 
         return $result;
+    }
+
+    /**
+     * Reparte el precio de un paquete entre lo que incluye, según el precio normal de cada cosa: cada una queda con
+     * su precio y el descuento que le toca, y el total es exactamente $total. Ese reparto no se le muestra al
+     * paciente (ve el paquete en una línea); sirve para saber cuánto vale lo hecho si deja el tratamiento a medias.
+     *
+     * @param  array<int, array{quantity: int|string, price: float|string}>  $rows
+     * @return array<int, array{unit_price: float, discount: float}> Con las mismas claves que $rows.
+     */
+    public static function spreadPrice(float $total, array $rows): array
+    {
+        if ($rows === []) {
+            return [];
+        }
+
+        $total = round(max(0, $total), 2);
+        $weights = array_map(fn (array $row) => round((int) $row['quantity'] * (float) $row['price'], 2), $rows);
+
+        // Sin precios en el catálogo, se reparte según la cantidad.
+        if (array_sum($weights) <= 0) {
+            $weights = array_map(fn (array $row) => (float) max(1, (int) $row['quantity']), $rows);
+        }
+
+        $sum = array_sum($weights);
+        $shares = array_map(fn (float $weight) => round($total * $weight / $sum, 2), $weights);
+        // Los céntimos del redondeo van al de mayor precio.
+        $largest = array_search(max($shares), $shares, true);
+        $shares[$largest] = round($total - (array_sum($shares) - $shares[$largest]), 2);
+
+        $prices = [];
+
+        foreach ($rows as $key => $row) {
+            $share = $shares[$key];
+            $quantity = max(1, (int) $row['quantity']);
+            $price = (float) $row['price'];
+            // Si le toca más que su precio normal, el precio sube lo justo para cubrir su parte.
+            $unitPrice = $share <= round($quantity * $price, 2) ? $price : ceil(round($share / $quantity * 100, 6)) / 100;
+            $prices[$key] = ['unit_price' => $unitPrice, 'discount' => round($quantity * $unitPrice - $share, 2)];
+        }
+
+        return $prices;
     }
 
     /**
@@ -515,6 +540,112 @@ final class TreatmentPlanService
     }
 
     /**
+     * El plan se armó con un paquete que se paga en un solo pago o en cuotas y todavía no se firma: lo del paquete
+     * no se cobra por partes (aunque ya se empiece), se paga como el paciente elija al firmar.
+     */
+    public static function awaitsPackageSignature(TreatmentPlan $plan): bool
+    {
+        return $plan->accepted_at === null && ! in_array(PlanPaymentMode::PerSession, self::paymentModes($plan), true);
+    }
+
+    /** Lo del paquete de un plan que todavía no se firma: se paga con el paquete, no en cada sesión. */
+    public static function paidWithPackage(TreatmentPlanItem $item): bool
+    {
+        if ($item->treatment_package_id === null || $item->status === PlanItemStatus::Cancelled) {
+            return false;
+        }
+
+        $item->loadMissing('plan');
+
+        return $item->plan !== null && self::awaitsPackageSignature($item->plan);
+    }
+
+    /** El plan vigente del paciente que ya tiene ese paquete: lo nuevo se mete en él en vez de repetir el paquete. */
+    public function planWithPackage(int $patientId, TreatmentPackage $package, ?int $doctorId = null): ?TreatmentPlan
+    {
+        return TreatmentPlan::query()
+            ->open()
+            ->where('patient_id', $patientId)
+            ->when($doctorId !== null, fn ($plans) => $plans->where('doctor_id', $doctorId))
+            ->whereNull('included_in_plan_id')
+            ->whereHas('items', fn ($items) => $items->where('treatment_package_id', $package->getKey())->whereNot('status', PlanItemStatus::Cancelled))
+            ->latest('id')
+            ->first();
+    }
+
+    /**
+     * Lo que el doctor puede meter en el paquete del plan: lo del paciente con el mismo doctor que no es de un
+     * paquete y todavía no se empieza, en este plan o en otro vigente (el borrador de una evaluación nueva).
+     *
+     * @return Collection<int, TreatmentPlanItem>
+     */
+    public function movableIntoPackage(TreatmentPlan $plan): Collection
+    {
+        if (! $plan->isOpen() || $plan->offeredPackage() === null) {
+            return collect();
+        }
+
+        return TreatmentPlanItem::query()
+            ->whereHas('plan', fn ($plans) => $plans->open()
+                ->where('patient_id', $plan->patient_id)
+                ->where('doctor_id', $plan->doctor_id)
+                ->whereNull('included_in_plan_id'))
+            ->whereNull('treatment_package_id')
+            ->where('status', PlanItemStatus::Pending)
+            ->where('sessions_done', 0)
+            ->with('plan')
+            ->get()
+            ->sortBy(fn (TreatmentPlanItem $item) => [$item->treatment_plan_id !== $plan->getKey(), $item->treatment_plan_id, $item->sort_order, $item->getKey()])
+            ->values();
+    }
+
+    /**
+     * El doctor mete en el paquete lo que iba aparte: entra sin costo y el precio del paquete no cambia. Si estaba
+     * en otro plan (el borrador de una evaluación nueva), pasa a este. Si el plan ya se firmó, queda dentro de lo
+     * que cubren sus pagos: el paciente paga lo mismo, así que no hay nada nuevo que firmar.
+     *
+     * @param  list<int|string>  $itemIds
+     * @return Collection<int, TreatmentPlanItem> Lo que entró.
+     */
+    public function includeInPackage(TreatmentPlan $plan, array $itemIds): Collection
+    {
+        $package = $plan->offeredPackage();
+        $items = $this->movableIntoPackage($plan)->whereIn('id', array_map('intval', $itemIds))->values();
+
+        if (! $package || $items->isEmpty()) {
+            return collect();
+        }
+
+        DB::transaction(function () use ($plan, $package, $items) {
+            $next = (int) $plan->items()->max('sort_order');
+            $signed = $plan->accepted_at !== null;
+            $sources = $items->pluck('plan')->reject(fn (TreatmentPlan $source) => $source->is($plan))->unique('id');
+
+            foreach ($items as $item) {
+                // Lo firmado no cambia de precio, salvo aquí: pasa a no costar nada, a favor del paciente.
+                $item->fill([
+                    'treatment_plan_id' => $plan->getKey(),
+                    'sort_order' => $item->treatment_plan_id === $plan->getKey() ? $item->sort_order : ++$next,
+                    'treatment_package_id' => $package->getKey(),
+                    'discount' => round($item->quantity * (float) $item->unit_price, 2),
+                    'accepted_at' => $signed ? ($item->accepted_at ?? now()) : null,
+                    'in_payment_schedule' => $signed && $plan->hasSchedule(),
+                ]);
+                $item->getOriginal('accepted_at') !== null ? $item->saveQuietly() : $item->save();
+            }
+
+            // El borrador del que salió todo ya no tiene nada que presentar.
+            $sources
+                ->filter(fn (TreatmentPlan $source) => $source->status === TreatmentPlanStatus::Draft && $source->items()->doesntExist())
+                ->each(fn (TreatmentPlan $source) => $source->delete());
+        });
+
+        $plan->unsetRelation('items');
+
+        return $items;
+    }
+
+    /**
      * Aceptado sin firma (por ejemplo, al agendar una de sus sesiones): se paga por sesión y el precio queda fijo.
      * Un paquete que no se paga por sesión se acepta firmando, para elegir cómo; aquí solo queda presentado.
      */
@@ -604,6 +735,8 @@ final class TreatmentPlanService
             ]);
         });
 
+        // Si ya se había empezado (o terminado) antes de firmar, el plan queda en el estado que le toca.
+        $this->syncPlan($plan->refresh());
         $this->billing->chargeDueInstallments($plan->patient, $by);
 
         return $signed;
@@ -939,6 +1072,18 @@ final class TreatmentPlanService
         }
 
         $items = $plan->items()->whereNot('status', PlanItemStatus::Cancelled)->get();
+        $plan->unsetRelation('items');
+
+        // Un paquete en un solo pago o en cuotas no queda aceptado por sesión porque se empezó: se espera su firma.
+        if (self::awaitsPackageSignature($plan)) {
+            if ($items->contains(fn (TreatmentPlanItem $item) => $item->sessions_done > 0)) {
+                $plan->update(['status' => TreatmentPlanStatus::InProgress, 'completed_at' => null]);
+            } elseif ($plan->status === TreatmentPlanStatus::InProgress) {
+                $plan->update(['status' => $plan->proposed_at ? TreatmentPlanStatus::Proposed : TreatmentPlanStatus::Draft]);
+            }
+
+            return;
+        }
 
         if ($items->isNotEmpty() && $items->every(fn (TreatmentPlanItem $item) => $item->status === PlanItemStatus::Done)) {
             $plan->update(['status' => TreatmentPlanStatus::Completed, 'completed_at' => $plan->completed_at ?? now(), 'accepted_at' => $plan->accepted_at ?? now()]);

@@ -15,6 +15,7 @@ use App\Models\TreatmentPlan;
 use App\Models\TreatmentPlanInstallment;
 use App\Models\TreatmentPlanItem;
 use App\Models\User;
+use App\Services\Clinical\TreatmentPlanService;
 use App\Support\Money;
 use Carbon\CarbonInterface;
 use Illuminate\Support\Collection;
@@ -82,7 +83,7 @@ final class BillingService
      * @param  list<int|string>  $treatmentIds
      * @param  list<int|string>  $planItemIds
      * @param  array<string, mixed>  $prices  El precio que puso el dentista, por línea ("item-12", "treatment-5").
-     * @return list<array{key: string, label: string, amount: float|null, suggested: float|null, editable: bool}> Sin monto: ya se paga con la forma de pago del plan.
+     * @return list<array{key: string, label: string, amount: float|null, suggested: float|null, editable: bool, note?: string, awaitsSignature?: bool}> Sin monto: ya se paga con la forma de pago del plan, o con el paquete que falta firmar.
      */
     public function previewConsultation(Consultation $consultation, array $treatmentIds, array $planItemIds, array $prices = []): array
     {
@@ -104,11 +105,37 @@ final class BillingService
         $campaign = $consultation->appointment?->campaign;
         $lines = [];
 
-        $items = TreatmentPlanItem::query()->with('plan')->whereKey($planItemIds)->orderBy('treatment_plan_id')->orderBy('sort_order')->get();
+        $items = TreatmentPlanItem::query()->with(['plan', 'package'])->whereKey($planItemIds)->orderBy('treatment_plan_id')->orderBy('sort_order')->get();
+        $packages = [];
 
         foreach ($items as $item) {
             if ($line = $charged->get('item-'.$item->getKey())) {
                 $lines[] = $line;
+
+                continue;
+            }
+
+            // Lo del paquete va en una sola línea, sin su parte del precio: se paga con el paquete.
+            $awaitsSignature = TreatmentPlanService::paidWithPackage($item);
+
+            if ($item->package !== null && ($item->in_payment_schedule || $awaitsSignature)) {
+                $key = 'package-'.$item->treatment_plan_id.'-'.$item->treatment_package_id;
+
+                if (! isset($packages[$key])) {
+                    $packages[$key] = count($lines);
+                    $lines[] = [
+                        'key' => $key,
+                        'label' => 'Paquete '.$item->package->name,
+                        'amount' => null,
+                        'suggested' => null,
+                        'editable' => false,
+                        'note' => $awaitsSignature ? 'Con el paquete, al firmar' : 'En su forma de pago',
+                        'awaitsSignature' => $awaitsSignature,
+                        'contents' => [],
+                    ];
+                }
+
+                $lines[$packages[$key]]['contents'][] = $item->label();
 
                 continue;
             }
@@ -148,6 +175,13 @@ final class BillingService
             ];
         }
 
+        foreach ($packages as $index) {
+            $lines[$index]['label'] .= ': '.collect(array_count_values($lines[$index]['contents']))
+                ->map(fn (int $times, string $label) => $label.($times > 1 ? ' × '.$times : ''))
+                ->implode(', ');
+            unset($lines[$index]['contents']);
+        }
+
         return $lines;
     }
 
@@ -174,8 +208,8 @@ final class BillingService
      */
     public function chargePlanSession(TreatmentPlanItem $item, User $by, ?Appointment $appointment = null, ?Consultation $consultation = null, ?float $price = null): ?Charge
     {
-        // Ya se paga con el cronograma del plan.
-        if ($item->in_payment_schedule) {
+        // Ya se paga con el cronograma del plan, o con el paquete que el paciente todavía tiene que firmar.
+        if ($item->in_payment_schedule || TreatmentPlanService::paidWithPackage($item)) {
             return null;
         }
 

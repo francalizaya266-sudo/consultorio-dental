@@ -236,26 +236,27 @@ class TreatmentPlan extends Model
      * incluye (su precio no se reparte a la vista), y lo demás, cada procedimiento con el suyo.
      *
      * @param  Collection<int, TreatmentPlanItem>  $items
+     * @param  bool  $withTooth  Recepción ve el procedimiento, no la pieza.
      * @return Collection<int, array{label: string, price: float, package: bool, contents: list<string>, items: Collection<int, TreatmentPlanItem>}>
      */
-    public static function lines(Collection $items): Collection
+    public static function lines(Collection $items, bool $withTooth = true): Collection
     {
         EloquentCollection::make($items->all())->loadMissing('package');
 
         return $items
             ->groupBy(fn (TreatmentPlanItem $item) => $item->treatment_package_id !== null ? 'package-'.$item->treatment_package_id : 'item-'.$item->getKey())
-            ->map(function (Collection $group) {
+            ->map(function (Collection $group) use ($withTooth) {
                 $first = $group->first();
                 $package = $first->treatment_package_id !== null;
 
                 return [
                     'label' => $package
                         ? 'Paquete '.$first->package->name.(($duration = $first->package->durationText()) ? " ({$duration})" : '')
-                        : $first->label().($first->quantity > 1 ? ' × '.$first->quantity : ''),
+                        : $first->label($withTooth).($first->quantity > 1 ? ' × '.$first->quantity : ''),
                     'price' => round($group->sum(fn (TreatmentPlanItem $item) => $item->subtotal()), 2),
                     'package' => $package,
                     'contents' => $package
-                        ? $group->groupBy(fn (TreatmentPlanItem $item) => $item->label())
+                        ? $group->groupBy(fn (TreatmentPlanItem $item) => $item->label($withTooth))
                             ->map(fn (Collection $same, string $label) => $label.(($quantity = $same->sum('quantity')) > 1 ? ' × '.$quantity : '')
                                 .(($every = $same->first()->session_interval_days) ? ', '.TreatmentPlanItem::everyText($every) : ''))
                             ->values()

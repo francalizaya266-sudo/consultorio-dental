@@ -94,6 +94,10 @@
                 @if ($historyUrl)
                     <x-filament::button size="xs" color="gray" icon="heroicon-o-folder-open" tooltip="Historia clínica (se abre en otra pestaña)" tag="a" :href="$historyUrl" aria-label="Historia clínica" target="_blank"><span class="cb-tool-label">Historia</span></x-filament::button>
                 @endif
+                @can('create', \App\Models\LabOrder::class)
+                    <x-filament::icon-button size="sm" color="gray" icon="heroicon-o-beaker" tooltip="Mandar al laboratorio" label="Mandar al laboratorio" wire:click="mountAction('sendToLab')" />
+                @endcan
+                <x-filament::icon-button size="sm" color="gray" icon="heroicon-o-trash" tooltip="Descartar: se abrió por error" label="Descartar atención" wire:click="mountAction('discard')" />
             </div>
 
             <x-filament::dropdown placement="bottom-end" class="cb-menu">
@@ -107,6 +111,10 @@
                     @if ($historyUrl)
                         <x-filament::dropdown.list.item icon="heroicon-o-folder-open" tag="a" :href="$historyUrl" target="_blank">Historia clínica</x-filament::dropdown.list.item>
                     @endif
+                    @can('create', \App\Models\LabOrder::class)
+                        <x-filament::dropdown.list.item icon="heroicon-o-beaker" wire:click="mountAction('sendToLab')">Mandar al laboratorio</x-filament::dropdown.list.item>
+                    @endcan
+                    <x-filament::dropdown.list.item icon="heroicon-o-trash" color="danger" wire:click="mountAction('discard')">Descartar atención</x-filament::dropdown.list.item>
                 </x-filament::dropdown.list>
             </x-filament::dropdown>
 

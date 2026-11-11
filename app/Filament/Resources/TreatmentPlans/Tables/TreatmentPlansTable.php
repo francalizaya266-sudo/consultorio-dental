@@ -30,6 +30,7 @@ use Filament\Tables\Filters\SelectFilter;
 use Filament\Tables\Table;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Collection;
+use Illuminate\Support\Str;
 
 /** Cada presupuesto con su paciente, lo que incluye, su estado, cuánto suma y en qué va el seguimiento. */
 class TreatmentPlansTable
@@ -49,7 +50,10 @@ class TreatmentPlansTable
                     ->state(fn (TreatmentPlan $record) => $record->patient->full_name)
                     ->description(fn (TreatmentPlan $record) => $record->patient->account ? Phone::display($record->patient->account->phone) : 'Sin celular')
                     ->searchable(query: fn (Builder $query, string $search) => $query->whereHas('patient', fn (Builder $patient) => $patient->search($search)))
-                    ->weight('bold'),
+                    ->weight('bold')
+                    // Un nombre largo se parte en dos renglones (no en tres) y le deja sitio a lo que incluye el plan.
+                    ->extraCellAttributes(['style' => 'min-width: 11rem'])
+                    ->wrap(),
                 TextColumn::make('items')
                     ->label('Incluye')
                     // Recepción ve el procedimiento, no la pieza (Ley 29733).
@@ -57,8 +61,8 @@ class TreatmentPlansTable
                     ->description(fn (TreatmentPlan $record) => collect([
                         $record->included_in_plan_id !== null ? 'En el 2x1 de '.$record->includedIn?->patient?->full_name : null,
                         $clinical ? $record->title : null,
-                        // El doctor ya sabe que son suyos.
-                        $user->managesAllAgendas() ? $record->doctor?->name : null,
+                        // El doctor ya sabe que son suyos; con un solo doctor, no hace falta decirlo.
+                        $user->managesAllAgendas() && Doctor::severalActive() ? $record->doctor?->name : null,
                     ])->filter()->implode(' · ') ?: null)
                     ->wrap(),
                 TextColumn::make('status')
@@ -66,7 +70,7 @@ class TreatmentPlansTable
                     ->badge()
                     ->description(fn (TreatmentPlan $record) => collect([
                         self::since($record),
-                        $record->last_contacted_at ? 'le escribiste '.CarbonImmutable::parse($record->last_contacted_at)->diffForHumans() : null,
+                        $record->last_contacted_at && $record->isOpen() ? 'le escribiste '.CarbonImmutable::parse($record->last_contacted_at)->diffForHumans() : null,
                     ])->filter()->implode(' · ') ?: null)
                     ->wrap(),
                 TextColumn::make('total_amount')
@@ -91,14 +95,11 @@ class TreatmentPlansTable
             ->recordActions([
                 self::whatsappAction(),
                 Action::make('book')
-                    ->label('Nueva cita')
+                    ->label('Agendar')
                     ->icon(Heroicon::OutlinedCalendarDays)
                     ->color('gray')
                     ->visible(fn (TreatmentPlan $record) => self::waitsForAppointment($record) && AppointmentResource::canCreate())
-                    ->url(fn (TreatmentPlan $record) => AppointmentResource::getUrl('create', [
-                        'patient' => $record->patient_id,
-                        'plan_item' => self::openItems($record)->first()?->getKey(),
-                    ])),
+                    ->url(fn (TreatmentPlan $record) => self::bookUrl($record)),
                 ActionGroup::make([
                     // Quien no ve la historia imprime solo el presupuesto, sin pieza ni diagnóstico.
                     Action::make('print')
@@ -164,6 +165,19 @@ class TreatmentPlansTable
         };
     }
 
+    /** La cita nueva llega con la próxima sesión del plan, su tratamiento y su doctor: solo falta elegir el horario. */
+    private static function bookUrl(TreatmentPlan $plan): string
+    {
+        $item = self::openItems($plan)->first();
+
+        return AppointmentResource::getUrl('create', array_filter([
+            'patient' => $plan->patient_id,
+            'doctor' => $plan->doctor_id,
+            'treatment' => $item?->treatment_id,
+            'plan_item' => $item?->getKey(),
+        ]));
+    }
+
     /** Vigente, con procedimientos por hacer y sin ninguna cita de hoy en adelante. */
     private static function waitsForAppointment(TreatmentPlan $plan): bool
     {
@@ -178,12 +192,11 @@ class TreatmentPlansTable
         return $plan->items->filter(fn (TreatmentPlanItem $item) => $item->isOpen())->values();
     }
 
-    /** "Corona, Endodoncia y 2 más". */
+    /** "Corona, Endodoncia y 2 más". Un paquete va como uno: "Paquete Ortodoncia (18 meses), Corona". */
     private static function summary(TreatmentPlan $plan, bool $withTooth): string
     {
-        $labels = $plan->items
-            ->reject(fn (TreatmentPlanItem $item) => $item->status === PlanItemStatus::Cancelled)
-            ->map(fn (TreatmentPlanItem $item) => $item->label($withTooth))
+        $labels = TreatmentPlan::lines($plan->items->reject(fn (TreatmentPlanItem $item) => $item->status === PlanItemStatus::Cancelled)->values(), $withTooth)
+            ->pluck('label')
             ->unique()
             ->values();
 
@@ -199,11 +212,24 @@ class TreatmentPlansTable
     {
         return match ($plan->status) {
             TreatmentPlanStatus::Draft => 'Sin presentar',
-            TreatmentPlanStatus::Proposed => $plan->proposed_at ? self::waiting($plan->proposed_at) : null,
-            TreatmentPlanStatus::Accepted, TreatmentPlanStatus::InProgress => $plan->accepted_at ? 'Desde el '.$plan->accepted_at->format('d/m/Y') : null,
+            TreatmentPlanStatus::Proposed => collect([
+                $plan->proposed_at ? self::waiting($plan->proposed_at) : null,
+                ($until = $plan->validUntil()) && $until->copy()->endOfDay()->isPast() ? 'su precio venció el '.$until->format('d/m/Y') : null,
+            ])->filter()->implode(' · ') ?: null,
+            // Se empezó un paquete que se paga en un solo pago o en cuotas, y todavía no firma cómo lo pagará.
+            TreatmentPlanStatus::Accepted, TreatmentPlanStatus::InProgress => $plan->accepted_at ? 'Desde el '.$plan->accepted_at->format('d/m/Y') : 'Ya empezó y falta que firme',
             TreatmentPlanStatus::Completed => $plan->completed_at ? 'El '.$plan->completed_at->format('d/m/Y') : null,
-            TreatmentPlanStatus::Cancelled => 'El '.$plan->updated_at->format('d/m/Y'),
+            TreatmentPlanStatus::Cancelled => collect(['El '.$plan->updated_at->format('d/m/Y'), self::cancelReason($plan)])->filter()->implode(' · '),
         };
+    }
+
+    /** Por qué se canceló: "el paciente no lo aceptó (el precio)". Lo anota quien lo cierra. */
+    private static function cancelReason(TreatmentPlan $plan): ?string
+    {
+        $reason = collect(preg_split('/\R/', (string) $plan->notes))
+            ->last(fn (string $line) => str_starts_with($line, 'Cancelado: '));
+
+        return $reason ? Str::limit(Str::after($reason, 'Cancelado: '), 80) : null;
     }
 
     /** "Presentado hoy", "Hace 1 día sin respuesta", "Hace 9 días sin respuesta". */

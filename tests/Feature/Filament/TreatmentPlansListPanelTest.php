@@ -16,6 +16,7 @@ use App\Models\Treatment;
 use App\Models\TreatmentPlan;
 use App\Models\User;
 use App\Models\WhatsappMessage;
+use App\Services\Clinical\TreatmentPlanService;
 use Illuminate\Foundation\Testing\LazilyRefreshDatabase;
 use Livewire\Livewire;
 use Tests\Concerns\CreatesAgenda;
@@ -119,7 +120,7 @@ class TreatmentPlansListPanelTest extends TestCase
 
         Livewire::test(ListTreatmentPlans::class)
             ->assertTableActionVisible('book', $plan)
-            ->assertTableActionHasUrl('book', AppointmentResource::getUrl('create', ['patient' => $plan->patient_id, 'plan_item' => $plan->items()->first()->id]), $plan)
+            ->assertTableActionHasUrl('book', AppointmentResource::getUrl('create', ['patient' => $plan->patient_id, 'doctor' => $plan->doctor_id, 'treatment' => $plan->items()->first()->treatment_id, 'plan_item' => $plan->items()->first()->id]), $plan)
             ->mountTableAction('whatsapp', $plan)
             ->assertSet('mountedActions.0.data.body', fn (string $body) => str_contains($body, 'queda pendiente: Corona.'));
     }
@@ -139,6 +140,29 @@ class TreatmentPlansListPanelTest extends TestCase
 
         $this->assertSame(TreatmentPlanStatus::Cancelled, $plan->fresh()->status);
         $this->assertStringContainsString('Cancelado: el paciente no lo aceptó (el precio)', $plan->fresh()->notes);
+    }
+
+    public function test_the_state_says_what_each_budget_is_waiting_for(): void
+    {
+        $expired = $this->plan($this->patient('Rosa', 'Quispe'), $this->torres, TreatmentPlanStatus::Proposed, [['Ortodoncia', null, 450]], proposedDaysAgo: 40);
+        $unsigned = $this->plan($this->patient('Ana', 'Flores'), $this->torres, TreatmentPlanStatus::InProgress, [['Corona', '46', 800]]);
+        $unsigned->update(['accepted_at' => null]);
+        $declined = $this->plan($this->patient('Luis', 'Paredes'), $this->torres, TreatmentPlanStatus::Proposed, [['Implante', '36', 3500]]);
+        app(TreatmentPlanService::class)->cancel($declined, 'el paciente no lo aceptó (el precio)');
+
+        $this->actingAs(User::factory()->reception()->create());
+
+        // El precio ya venció, o se empezó un paquete sin firmar cómo se paga.
+        Livewire::test(ListTreatmentPlans::class)
+            ->assertSee('Hace 40 días sin respuesta · su precio venció el '.$expired->validUntil()->format('d/m/Y'))
+            ->assertSee('Ya empezó y falta que firme')
+            ->assertDontSee('Dra. Ana Torres · ');
+
+        // En los cancelados queda por qué se perdió.
+        Livewire::test(ListTreatmentPlans::class)
+            ->set('activeTab', 'cancelled')
+            ->assertCanSeeTableRecords([$declined])
+            ->assertSee('El 02/11/2026 · el paciente no lo aceptó (el precio)');
     }
 
     private function patient(string $firstName, string $lastName): Patient

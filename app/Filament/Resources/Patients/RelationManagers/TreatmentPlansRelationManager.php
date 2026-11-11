@@ -5,6 +5,7 @@ namespace App\Filament\Resources\Patients\RelationManagers;
 use App\Enums\PlanItemStatus;
 use App\Enums\TreatmentPlanStatus;
 use App\Exceptions\ClinicalException;
+use App\Filament\Actions\IncludeInPackageAction;
 use App\Filament\Actions\SendWhatsAppAction;
 use App\Filament\Actions\SignPlanAction;
 use App\Filament\Resources\Appointments\AppointmentResource;
@@ -145,6 +146,7 @@ class TreatmentPlansRelationManager extends RelationManager
                 ActionGroup::make([
                     $this->bookAction(),
                     $this->scheduleAction(),
+                    IncludeInPackageAction::make(),
                     Action::make('print')
                         ->label('Imprimir presupuesto')
                         ->icon(Heroicon::OutlinedPrinter)
@@ -219,7 +221,15 @@ class TreatmentPlansRelationManager extends RelationManager
         }
 
         if ($plan->accepted_at === null) {
-            return ['state' => 'Por aceptar', 'detail' => $twoForOne, 'color' => 'gray'];
+            // Con paquete, cómo se puede pagar: así se ve que también es en cuotas.
+            $options = collect(app(TreatmentPlanService::class)->paymentOptions($plan))->map(fn (string $option) => rtrim($option, '.'));
+            $started = $plan->status === TreatmentPlanStatus::InProgress && TreatmentPlanService::awaitsPackageSignature($plan);
+
+            return [
+                'state' => $started ? 'Falta que firme: ya empezó' : 'Por aceptar',
+                'detail' => collect([$options->implode(' · '), $twoForOne])->filter()->implode(' · ') ?: null,
+                'color' => $started ? 'warning' : 'gray',
+            ];
         }
 
         if (! $plan->hasSchedule()) {

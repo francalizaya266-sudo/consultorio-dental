@@ -69,7 +69,7 @@ class TreatmentPlanResource extends Resource
         $user = auth()->user();
 
         return parent::getEloquentQuery()
-            ->with(['patient.account', 'doctor', 'items', 'includedIn.patient'])
+            ->with(['patient.account', 'doctor', 'items.package', 'includedIn.patient'])
             ->whereHas('patient')
             ->when(! $user->managesAllAgendas(), fn (Builder $mine) => $mine->where('doctor_id', $user->doctorId() ?? 0))
             ->addSelect([

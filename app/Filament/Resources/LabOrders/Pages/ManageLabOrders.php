@@ -5,7 +5,6 @@ namespace App\Filament\Resources\LabOrders\Pages;
 use App\Filament\Resources\LabOrders\LabOrderResource;
 use App\Models\LabOrder;
 use Filament\Actions\CreateAction;
-use Filament\Notifications\Notification;
 use Filament\Resources\Pages\ManageRecords;
 use Filament\Schemas\Components\Tabs\Tab;
 use Illuminate\Database\Eloquent\Builder;
@@ -27,9 +26,7 @@ class ManageLabOrders extends ManageRecords
                 ->modalHeading('Trabajo enviado al laboratorio')
                 ->createAnother(false)
                 ->mutateDataUsing(fn (array $data) => [...$data, 'created_by_user_id' => auth()->id()])
-                ->successNotification(fn (LabOrder $record) => ($alert = $record->alert()) === null
-                    ? Notification::make()->success()->title('Trabajo anotado')
-                    : Notification::make()->warning()->title('Trabajo anotado')->body($alert.'.')->persistent()),
+                ->successNotification(fn (LabOrder $record) => LabOrderResource::createdNotification($record)),
         ];
     }
 
