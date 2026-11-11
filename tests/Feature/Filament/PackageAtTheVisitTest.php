@@ -2,8 +2,12 @@
 
 namespace Tests\Feature\Filament;
 
+use App\Enums\PatientRelationship;
+use App\Enums\PlanItemStatus;
 use App\Enums\PlanPaymentMode;
 use App\Enums\ToothState;
+use App\Enums\TreatmentPlanStatus;
+use App\Exceptions\ClinicalException;
 use App\Filament\Resources\Consultations\Pages\EditConsultation;
 use App\Filament\Resources\Consultations\Pages\ViewConsultation;
 use App\Filament\Resources\Patients\RelationManagers\TreatmentPlansRelationManager;
@@ -20,6 +24,7 @@ use App\Services\Clinical\ConsultationService;
 use App\Services\Clinical\OdontogramService;
 use App\Services\Clinical\OdontogramSuggestions;
 use App\Services\Clinical\TreatmentPlanService;
+use App\Services\Patients\PatientInsights;
 use App\Services\WhatsApp\WhatsAppOutbox;
 use Database\Seeders\CatalogSeeder;
 use Filament\Actions\Testing\TestAction;
@@ -110,7 +115,7 @@ class PackageAtTheVisitTest extends TestCase
         // Al paciente el paquete le llega en un renglón, con su precio y lo que incluye: su precio no se reparte a la vista.
         $whatsapp = app(WhatsAppOutbox::class)->draft(app(TreatmentPlanService::class)->whatsappDraft($plan));
         $this->assertStringContainsString("1. Paquete Ortodoncia: S/ 1,000.00. Incluye:\n   - Curación con resina en el ", $whatsapp);
-        $this->assertStringContainsString("   - Control de ortodoncia × 2\n   - Colocación de brackets\n2. Curación con resina en el ", $whatsapp);
+        $this->assertStringContainsString("   - Control de ortodoncia × 2, cada mes\n   - Colocación de brackets\n2. Curación con resina en el ", $whatsapp);
         $this->assertStringContainsString("Formas de pago:\n• ".implode("\n• ", $options), $whatsapp);
 
         app(ConsultationService::class)->close($this->evaluation, $this->doctor->user);
@@ -126,7 +131,7 @@ class PackageAtTheVisitTest extends TestCase
             ->mountAction('acceptPlan')
             ->assertMountedActionModalSee([
                 'Paquete Ortodoncia: S/ 1,000.00',
-                'Incluye: Curación con resina · pieza 16 (O) · Control de ortodoncia × 2 · Colocación de brackets',
+                'Incluye: Curación con resina · pieza 16 (O) · Control de ortodoncia × 2, cada mes · Colocación de brackets',
                 'Curación con resina · pieza 26 (O): S/ 150.00',
                 'Total: S/ 1,150.00',
                 'Lo que no es del paquete (S/ 150.00) no entra en el pago único ni en las cuotas: se paga en cada sesión.',
@@ -164,6 +169,67 @@ class PackageAtTheVisitTest extends TestCase
         $this->assertSame(1000.0, $plan->total());
         $this->assertSame('Ortodoncia', $plan->title);
         $this->assertSame(['Pago único de S/ 800.00 (con S/ 200.00 de descuento por pagar todo junto).', 'En cuotas: inicial de S/ 500.00 y 5 cuotas mensuales de S/ 100.00.'], app(TreatmentPlanService::class)->paymentOptions($plan));
+    }
+
+    public function test_a_package_is_paid_at_once_or_in_installments_not_per_visit(): void
+    {
+        $this->actingAs($this->doctor->user);
+        $plans = app(TreatmentPlanService::class);
+        [$plan] = $plans->addPackageToDraft($this->evaluation, $this->doctor->user, $this->orthodontics);
+        app(ConsultationService::class)->close($this->evaluation, $this->doctor->user);
+
+        $this->assertSame([PlanPaymentMode::Upfront, PlanPaymentMode::Installments], TreatmentPlanService::paymentModes($plan->fresh()));
+
+        Livewire::test(ViewConsultation::class, ['record' => $this->evaluation->getRouteKey()])
+            ->mountAction('acceptPlan')
+            ->assertMountedActionModalSee(['Pago único', 'En cuotas', 'Es un paquete: se paga en un solo pago o en cuotas, no por cita.'])
+            ->assertMountedActionModalDontSee(PlanPaymentMode::PerSession->getDescription());
+
+        try {
+            $plans->sign($plan->fresh(), ['payment_mode' => PlanPaymentMode::PerSession], ['signer_name' => 'Ana', 'signer_relationship' => PatientRelationship::Self], $this->signature(), $this->doctor->user);
+            $this->fail('Un paquete no se firma por sesión.');
+        } catch (ClinicalException $e) {
+            $this->assertSame('Es un paquete: se paga en un solo pago o en cuotas, no por cita.', $e->getMessage());
+        }
+
+        // Al agendar su primera sesión, "ya lo aceptó" no lo deja por sesión: queda presentado, esperando su firma.
+        $plans->accept($plan->fresh());
+        $this->assertNull($plan->fresh()->accepted_at);
+        $this->assertSame(TreatmentPlanStatus::Proposed, $plan->fresh()->status);
+    }
+
+    public function test_the_controls_follow_the_patients_brackets_and_the_package_says_how_long_it_lasts(): void
+    {
+        $package = TreatmentPackage::factory()->inInstallments(500, 18)->create(['name' => 'Ortodoncia', 'price' => 2000, 'duration_months' => 18]);
+        $package->items()->create(['treatment_id' => Treatment::where('slug', 'colocacion-de-brackets')->value('id'), 'quantity' => 1, 'sessions_planned' => 1, 'sort_order' => 0]);
+        $package->items()->create(['treatment_id' => Treatment::where('slug', 'control-de-ortodoncia')->value('id'), 'quantity' => 18, 'sessions_planned' => 18, 'sort_order' => 1]);
+        $patient = Patient::factory()->create();
+        $visit = app(ConsultationService::class)->startWithoutAppointment($patient, $this->doctor->user);
+        $this->actingAs($this->doctor->user);
+
+        // Sus brackets van a control cada 15 días: son 36 controles en vez de 18, al mismo precio.
+        Livewire::test(EditConsultation::class, ['record' => $visit->getRouteKey()])
+            ->mountAction(TestAction::make('addPackage')->schemaComponent('plan'))
+            ->fillForm(['package_id' => $package->id])
+            ->assertSchemaStateSet(['control_every' => 30], 'mountedActionSchema0')
+            ->assertMountedActionModalSee(['Dura 18 meses.', 'Serán 18 controles; el precio del paquete no cambia.'])
+            ->fillForm(['control_every' => 15])
+            ->assertMountedActionModalSee('Serán 36 controles; el precio del paquete no cambia.')
+            ->callMountedAction()
+            ->assertHasNoActionErrors();
+
+        $plan = TreatmentPlan::where('patient_id', $patient->id)->sole()->load('items');
+        $controls = $plan->items->firstWhere('description', 'Control de ortodoncia');
+        $this->assertSame([36, 36, 15], [(int) $controls->quantity, (int) $controls->sessions_planned, $controls->session_interval_days]);
+        $this->assertSame(2000.0, $plan->total());
+        $this->assertSame(['label' => 'Paquete Ortodoncia (18 meses)', 'contents' => ['Colocación de brackets', 'Control de ortodoncia × 36, cada 15 días']], collect(TreatmentPlan::lines($plan->items)->sole())->only(['label', 'contents'])->all());
+
+        // Con los brackets puestos, el próximo control se sugiere a los 15 días.
+        $plan->items->firstWhere('description', 'Colocación de brackets')->update(['status' => PlanItemStatus::Done, 'sessions_done' => 1]);
+        $next = app(PatientInsights::class)->suggestedNextVisit($patient, evenIfNotAccepted: true);
+        $this->assertTrue($next['item']->is($controls));
+        $this->assertSame(today()->addDays(15)->toDateString(), $next['on']->toDateString());
+        $this->assertSame('A los 15 días', $next['why']);
     }
 
     private function signature(): string

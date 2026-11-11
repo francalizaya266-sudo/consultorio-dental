@@ -19,7 +19,7 @@ use Illuminate\Support\Collection;
  * Paquete que arma el doctor: varios tratamientos a un precio y cómo se puede pagar
  * (todo junto, con un descuento, o una inicial y cuotas mensuales).
  */
-#[Fillable(['name', 'description', 'price', 'for_two', 'allows_upfront', 'upfront_discount', 'allows_installments', 'down_payment', 'installments', 'monthly_amount', 'is_active', 'created_by_user_id'])]
+#[Fillable(['name', 'description', 'price', 'duration_months', 'for_two', 'allows_upfront', 'upfront_discount', 'allows_installments', 'down_payment', 'installments', 'monthly_amount', 'is_active', 'created_by_user_id'])]
 class TreatmentPackage extends Model
 {
     /** @use HasFactory<TreatmentPackageFactory> */
@@ -29,6 +29,7 @@ class TreatmentPackage extends Model
     {
         return [
             'price' => 'decimal:2',
+            'duration_months' => 'integer',
             'for_two' => 'boolean',
             'allows_upfront' => 'boolean',
             'upfront_discount' => 'decimal:2',
@@ -78,6 +79,12 @@ class TreatmentPackage extends Model
             ->groupBy(fn (TreatmentPackageItem $item) => $item->description ?: $item->treatment->name)
             ->map(fn (Collection $items, string $name) => $name.(($quantity = (int) $items->sum('quantity')) > 1 ? ' × '.$quantity : ''))
             ->implode(' · ');
+    }
+
+    /** Cuánto dura su tratamiento: "18 meses". Null si el paquete no lo dice. */
+    public function durationText(): ?string
+    {
+        return $this->duration_months ? $this->duration_months.' '.($this->duration_months === 1 ? 'mes' : 'meses') : null;
     }
 
     /** La forma de pago con que llega el plan a la firma: en cuotas si el paquete las ofrece. */

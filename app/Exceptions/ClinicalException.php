@@ -86,4 +86,9 @@ class ClinicalException extends RuntimeException
     {
         return new self('Revisa la forma de pago: la inicial debe ser menor que el total y las cuotas, entre 1 y 24.');
     }
+
+    public static function packageNotPerSession(): self
+    {
+        return new self('Es un paquete: se paga en un solo pago o en cuotas, no por cita.');
+    }
 }

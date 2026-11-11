@@ -87,7 +87,10 @@ final class SignPlanAction
                         Radio::make('payment_mode')
                             ->label('Forma de pago')
                             ->hiddenLabel()
-                            ->options(PlanPaymentMode::class)
+                            ->enum(PlanPaymentMode::class)
+                            // Con paquete, solo las formas del paquete: no se cobra por cita.
+                            ->options(fn () => collect(TreatmentPlanService::paymentModes($record))->mapWithKeys(fn (PlanPaymentMode $mode) => [$mode->value => $mode->getLabel()])->all())
+                            ->helperText(fn () => in_array(PlanPaymentMode::PerSession, TreatmentPlanService::paymentModes($record), true) ? null : 'Es un paquete: se paga en un solo pago o en cuotas, no por cita.')
                             ->required()
                             ->live(),
                         Grid::make(['default' => 2, 'lg' => 4])

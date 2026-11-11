@@ -7,6 +7,7 @@ use App\Enums\MessageTemplateKey;
 use App\Enums\PatientRelationship;
 use App\Enums\PlanItemStatus;
 use App\Enums\PlanPaymentMode;
+use App\Enums\TreatmentKind;
 use App\Enums\TreatmentPlanStatus;
 use App\Exceptions\ClinicalException;
 use App\Models\Appointment;
@@ -73,9 +74,38 @@ final class TreatmentPlanService
      *
      * @return list<array<string, mixed>>
      */
-    public function itemsFromPackage(TreatmentPackage $package): array
+    public function itemsFromPackage(TreatmentPackage $package, ?int $controlEveryDays = null): array
     {
-        return $this->packageWith($package, collect())['new'];
+        return $this->packageWith($package, collect(), $controlEveryDays)['new'];
+    }
+
+    /** Cada cuántos días va a control con este paquete, si trae controles (ortodoncia: cada mes). Null si no trae. */
+    public static function controlEvery(TreatmentPackage $package): ?int
+    {
+        $package->loadMissing('items.treatment');
+
+        return $package->items->first(fn (TreatmentPackageItem $item) => TreatmentKind::isControl($item->treatment))?->treatment->nextSessionDays();
+    }
+
+    /**
+     * Cuántos controles trae el paquete si va a control cada $days días: los del paquete son a su frecuencia
+     * de siempre (18 controles al mes); cada 15 días son el doble. El precio del paquete no cambia.
+     */
+    public static function controlsFor(TreatmentPackage $package, int $days): int
+    {
+        $package->loadMissing('items.treatment');
+
+        return (int) $package->items
+            ->filter(fn (TreatmentPackageItem $item) => TreatmentKind::isControl($item->treatment))
+            ->sum(fn (TreatmentPackageItem $item) => self::scaledToEvery((int) $item->quantity, $item, $days));
+    }
+
+    /** Las veces de un control del paquete a otra frecuencia: 18 al mes son 36 cada 15 días. */
+    private static function scaledToEvery(int $count, TreatmentPackageItem $item, ?int $days): int
+    {
+        return $days && TreatmentKind::isControl($item->treatment)
+            ? max(1, (int) ceil(round($count * $item->treatment->nextSessionDays() / $days, 6)))
+            : $count;
     }
 
     /**
@@ -83,10 +113,13 @@ final class TreatmentPlanService
      * (su curación, su extracción) toma la pieza del diagnóstico en vez de repetirse sin pieza; lo demás entra
      * al precio del paquete. Ese precio se reparte entre todo, así que el total sigue siendo el del paquete.
      *
+     * Con $controlEveryDays, sus controles van a esa frecuencia (según los brackets del paciente): cada 15 días
+     * son el doble de controles, al mismo precio del paquete.
+     *
      * @param  Collection<int, TreatmentPlanItem>  $included
      * @return array{new: list<array<string, mixed>>, included: array<int, array{treatment_package_id: int, unit_price: float, discount: float}>}
      */
-    public function packageWith(TreatmentPackage $package, Collection $included): array
+    public function packageWith(TreatmentPackage $package, Collection $included, ?int $controlEveryDays = null): array
     {
         $package->loadMissing('items.treatment');
         $remaining = $package->items->mapWithKeys(fn (TreatmentPackageItem $item) => [$item->getKey() => (int) $item->quantity])->all();
@@ -106,7 +139,13 @@ final class TreatmentPlanService
 
         foreach ($package->items as $item) {
             if ($remaining[$item->getKey()] > 0) {
-                $lines[] = ['packageItem' => $item, 'quantity' => $remaining[$item->getKey()], 'price' => (float) $item->treatment->price_from];
+                $lines[] = [
+                    'packageItem' => $item,
+                    'quantity' => self::scaledToEvery($remaining[$item->getKey()], $item, $controlEveryDays),
+                    'sessions' => self::scaledToEvery((int) $item->sessions_planned, $item, $controlEveryDays),
+                    'every' => $controlEveryDays && TreatmentKind::isControl($item->treatment) ? $controlEveryDays : null,
+                    'price' => (float) $item->treatment->price_from,
+                ];
             }
         }
 
@@ -153,7 +192,8 @@ final class TreatmentPlanService
                 'quantity' => $line['quantity'],
                 'unit_price' => $unitPrice,
                 'discount' => $discount,
-                'sessions_planned' => $item->sessions_planned,
+                'sessions_planned' => $line['sessions'],
+                'session_interval_days' => $line['every'],
             ];
         }
 
@@ -303,16 +343,17 @@ final class TreatmentPlanService
 
     /**
      * Desde la atención: suma el paquete al borrador del plan y, si es 2x1, arma el plan de la otra persona.
-     * Lo del borrador que el doctor mete en el paquete ($includedItemIds) queda dentro de su precio.
+     * Lo del borrador que el doctor mete en el paquete ($includedItemIds) queda dentro de su precio, y sus
+     * controles van cada $controlEveryDays días si el doctor eligió otra frecuencia.
      *
      * @param  list<int|string>  $includedItemIds
      * @return array{0: TreatmentPlan|null, 1: TreatmentPlan|null} El plan y el de la otra persona del 2x1.
      */
-    public function addPackageToDraft(Consultation $consultation, User $by, TreatmentPackage $package, ?Patient $companion = null, array $includedItemIds = []): array
+    public function addPackageToDraft(Consultation $consultation, User $by, TreatmentPackage $package, ?Patient $companion = null, array $includedItemIds = [], ?int $controlEveryDays = null): array
     {
-        return DB::transaction(function () use ($consultation, $by, $package, $companion, $includedItemIds) {
+        return DB::transaction(function () use ($consultation, $by, $package, $companion, $includedItemIds, $controlEveryDays) {
             $included = $this->includableInPackage($consultation)->whereIn('id', array_map('intval', $includedItemIds))->values();
-            ['new' => $items, 'included' => $prices] = $this->packageWith($package, $included);
+            ['new' => $items, 'included' => $prices] = $this->packageWith($package, $included, $controlEveryDays);
             [$plan] = $this->addToDraft($consultation, $by, $items);
 
             foreach ($included as $item) {
@@ -452,10 +493,40 @@ final class TreatmentPlanService
         }
     }
 
-    /** Aceptado sin firma (por ejemplo, al agendar una de sus sesiones): se paga por sesión y el precio queda fijo. */
+    /**
+     * Las formas en que se puede firmar el plan. Uno armado con un paquete que se paga en un solo pago o en cuotas
+     * se firma solo con esas: con paquete no se cobra por cita (en ortodoncia se paga por mes, vaya cada 15 días
+     * o cada mes).
+     *
+     * @return list<PlanPaymentMode>
+     */
+    public static function paymentModes(TreatmentPlan $plan): array
+    {
+        $package = $plan->accepted_at === null ? $plan->offeredPackage() : null;
+
+        if (! $package || ! ($package->allows_upfront || $package->allows_installments)) {
+            return PlanPaymentMode::cases();
+        }
+
+        return array_values(array_filter([
+            $package->allows_upfront ? PlanPaymentMode::Upfront : null,
+            $package->allows_installments ? PlanPaymentMode::Installments : null,
+        ]));
+    }
+
+    /**
+     * Aceptado sin firma (por ejemplo, al agendar una de sus sesiones): se paga por sesión y el precio queda fijo.
+     * Un paquete que no se paga por sesión se acepta firmando, para elegir cómo; aquí solo queda presentado.
+     */
     public function accept(TreatmentPlan $plan): void
     {
         if (! in_array($plan->status, [TreatmentPlanStatus::Draft, TreatmentPlanStatus::Proposed], true)) {
+            return;
+        }
+
+        if (! in_array(PlanPaymentMode::PerSession, self::paymentModes($plan), true)) {
+            $this->markProposed($plan);
+
             return;
         }
 
@@ -491,6 +562,10 @@ final class TreatmentPlanService
 
         $mode = $terms['payment_mode'] ?? null;
         $mode = $firstTime ? ($mode instanceof PlanPaymentMode ? $mode : PlanPaymentMode::tryFrom((string) $mode) ?? PlanPaymentMode::PerSession) : null;
+
+        if ($mode && ! in_array($mode, self::paymentModes($plan), true)) {
+            throw ClinicalException::packageNotPerSession();
+        }
         $total = round($items->sum(fn (TreatmentPlanItem $item) => $item->subtotal()), 2);
         // Con un paquete, el cronograma es el del paquete; lo demás se paga en cada sesión.
         $scheduled = $mode?->hasSchedule() ? self::scheduledItems($plan, $items) : collect();
@@ -732,7 +807,8 @@ final class TreatmentPlanService
 
             return $item->description.($quantity > 1 ? " × {$quantity}" : '').$where
                 .($why !== [] ? ', por '.mb_strtolower(Arr::join($why, ', ', ' y ')) : '')
-                .($item->sessions_planned > 1 ? " · {$item->sessions_planned} sesiones" : '');
+                .($item->sessions_planned > 1 ? " · {$item->sessions_planned} sesiones" : '')
+                .($item->session_interval_days ? ', '.TreatmentPlanItem::everyText($item->session_interval_days) : '');
         };
 
         return TreatmentPlan::lines($plan->items->reject(fn (TreatmentPlanItem $item) => $item->status === PlanItemStatus::Cancelled)->values())
