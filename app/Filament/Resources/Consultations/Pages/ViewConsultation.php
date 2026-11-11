@@ -4,6 +4,7 @@ namespace App\Filament\Resources\Consultations\Pages;
 
 use App\Exceptions\ClinicalException;
 use App\Filament\Actions\RegisterPaymentAction;
+use App\Filament\Actions\SendToLabAction;
 use App\Filament\Actions\SendWhatsAppAction;
 use App\Filament\Actions\SignPlanAction;
 use App\Filament\Resources\Appointments\AppointmentResource;
@@ -86,6 +87,7 @@ class ViewConsultation extends ViewRecord
                 ->color('gray')
                 ->visible(fn () => auth()->user()->can('create', Appointment::class))
                 ->url(fn () => AppointmentResource::nextVisitUrl($this->getConsultation()->patient, $this->getConsultation()->doctor_id)),
+            SendToLabAction::make(fn () => $this->getConsultation()->patient, fn () => $this->getConsultation()->doctor_id),
             Action::make('clinicalRecord')
                 ->label('Historia clínica')
                 ->icon(Heroicon::OutlinedFolderOpen)

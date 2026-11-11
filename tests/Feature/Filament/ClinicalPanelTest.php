@@ -295,17 +295,65 @@ class ClinicalPanelTest extends TestCase
             ->callAction('withoutAppointment', data: ['patient_id' => $stranger->id])
             ->assertNotified('No atiendes a este paciente. Pide a recepción que le agende una cita contigo.');
 
+        // Es una urgencia aparte de su cita de hoy: se desmarca y queda sin cita.
         Livewire::test(ListConsultations::class)
-            ->callAction('withoutAppointment', data: ['patient_id' => $appointment->patient_id])
+            ->callAction('withoutAppointment', data: ['patient_id' => $appointment->patient_id, 'use_appointment' => false])
             ->assertRedirect(ConsultationResource::getUrl('edit', ['record' => Consultation::sole()]));
 
-        $this->assertNull(Consultation::sole()->appointment_id);
+        $walkIn = Consultation::sole();
+        $this->assertNull($walkIn->appointment_id);
+        $this->assertSame(AppointmentStatus::Confirmed, $appointment->fresh()->status);
 
         // Si la dejó sin terminar y vuelve a empezar una, se retoma la misma: no quedan dos abiertas.
         Livewire::test(ListConsultations::class)
-            ->callAction('withoutAppointment', data: ['patient_id' => $appointment->patient_id])
+            ->callAction('withoutAppointment', data: ['patient_id' => $appointment->patient_id, 'use_appointment' => false])
             ->assertNotified('Ya tenía una atención sin terminar: se retoma esa')
+            ->assertRedirect(ConsultationResource::getUrl('edit', ['record' => $walkIn]));
+    }
+
+    public function test_attending_without_appointment_someone_who_has_one_today_attends_that_appointment(): void
+    {
+        [$doctor, $appointment] = $this->appointmentToday();
+        $this->actingAs($doctor->user);
+
+        // Lo normal: su cita queda atendida (no como falta) y lo de su plan avanza.
+        Livewire::test(ListConsultations::class)
+            ->mountAction('withoutAppointment')
+            ->fillForm(['patient_id' => $appointment->patient_id])
+            ->assertSchemaComponentVisible('use_appointment')
+            ->assertSchemaStateSet(['use_appointment' => true])
+            ->callMountedAction()
+            ->assertNotified('Se atiende su cita de hoy de las 10:00')
             ->assertRedirect(ConsultationResource::getUrl('edit', ['record' => Consultation::sole()]));
+
+        $this->assertSame($appointment->id, Consultation::sole()->appointment_id);
+        $this->assertSame(AppointmentStatus::InProgress, $appointment->fresh()->status);
+
+        // Quien no tiene cita hoy no ve la opción.
+        $other = Appointment::factory()->for($doctor)->for($appointment->treatment)->for(Patient::factory()->create())->at('2026-11-05 10:00')->confirmed()->create();
+
+        Livewire::test(ListConsultations::class)
+            ->mountAction('withoutAppointment')
+            ->fillForm(['patient_id' => $other->patient_id])
+            ->assertSchemaComponentHidden('use_appointment')
+            ->callMountedAction()
+            ->assertNotified('Atención iniciada');
+
+        $this->assertNull(Consultation::query()->where('patient_id', $other->patient_id)->sole()->appointment_id);
+    }
+
+    public function test_a_visit_left_open_from_another_day_is_flagged_in_the_list(): void
+    {
+        [$doctor, $appointment] = $this->appointmentToday();
+        $this->actingAs($doctor->user);
+        app(ConsultationService::class)->startFromAppointment($appointment, $doctor->user);
+
+        Livewire::test(ListConsultations::class)->assertSee('Sin terminar')->assertDontSee('Quedó abierta');
+
+        // Tres días después sigue abierta: no se cobró ni avanzó su plan.
+        $this->travelTo('2026-11-05 09:00');
+
+        Livewire::test(ListConsultations::class)->assertSee('Quedó abierta hace 3 días: termínala o descártala');
     }
 
     public function test_a_visit_opened_by_mistake_is_discarded_and_the_appointment_waits_again(): void

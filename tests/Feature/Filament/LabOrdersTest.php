@@ -8,6 +8,8 @@ use App\Enums\LabOrderStatus;
 use App\Enums\PaymentMethod;
 use App\Filament\Resources\Appointments\AppointmentResource;
 use App\Filament\Resources\Appointments\Pages\CreateAppointment;
+use App\Filament\Resources\Consultations\Pages\EditConsultation;
+use App\Filament\Resources\Consultations\Pages\ViewConsultation;
 use App\Filament\Resources\LabOrders\LabOrderResource;
 use App\Filament\Resources\LabOrders\Pages\ManageLabOrders;
 use App\Filament\Resources\Patients\PatientResource;
@@ -19,6 +21,7 @@ use App\Models\LabOrder;
 use App\Models\Patient;
 use App\Models\Treatment;
 use App\Models\User;
+use App\Services\Clinical\ConsultationService;
 use Filament\Actions\Testing\TestAction;
 use Illuminate\Foundation\Testing\LazilyRefreshDatabase;
 use Livewire\Livewire;
@@ -163,6 +166,46 @@ class LabOrdersTest extends TestCase
             ->assertNotified('Trabajo recibido');
         $this->assertSame(LabOrderStatus::Received, $mine->fresh()->status());
         $this->assertFalse($this->doctor->user->can('update', $other));
+    }
+
+    public function test_the_doctor_sends_a_work_to_the_lab_without_leaving_the_visit(): void
+    {
+        $this->actingAs($this->doctor->user);
+        $consultation = app(ConsultationService::class)->startFromAppointment($this->visit($this->rosa, '2026-11-02 10:00'), $this->doctor->user);
+
+        Livewire::test(EditConsultation::class, ['record' => $consultation->getRouteKey()])
+            ->callAction('sendToLab', ['description' => 'Corona de zirconio', 'laboratory' => 'DentalArt', 'due_on' => '2026-11-09', 'cost' => 180])
+            ->assertHasNoActionErrors()
+            ->assertNotified('Trabajo anotado');
+
+        $order = LabOrder::sole();
+        $this->assertSame([$this->rosa->id, $this->doctor->id, $this->doctor->user->id, '2026-11-02', '2026-11-09'], [$order->patient_id, $order->doctor_id, $order->created_by_user_id, $order->sent_on->toDateString(), $order->due_on->toDateString()]);
+
+        // Terminada la atención, también se anota desde ahí.
+        $consultation->update(['closed_at' => now()]);
+        Livewire::test(ViewConsultation::class, ['record' => $consultation->getRouteKey()])
+            ->assertActionVisible('sendToLab');
+    }
+
+    public function test_a_late_work_says_when_the_patient_comes_and_a_paid_one_keeps_its_cost(): void
+    {
+        $order = LabOrder::factory()->for($this->rosa)->for($this->doctor)->create(['sent_on' => '2026-10-20', 'due_on' => '2026-10-30', 'cost' => 150]);
+        $this->visit($this->rosa, '2026-11-03 10:00');
+
+        // Atrasado y con el paciente citado: se dice la cita, que es lo que apura.
+        $this->assertSame('Debía llegar hace 3 días y tiene cita el mar. 3 nov.', $order->fresh()->alert());
+
+        $this->actingAs(User::factory()->reception()->create());
+
+        // No pudo llegar antes de salir; y una vez pagado, su costo es el del gasto.
+        Livewire::test(ManageLabOrders::class)
+            ->callAction(TestAction::make('receive')->table($order), ['received_on' => '2026-10-10'])
+            ->assertHasActionErrors(['received_on'])
+            ->unmountAction()
+            ->callAction(TestAction::make('pay')->table($order), ['amount' => 150, 'method' => PaymentMethod::Cash->value, 'spent_at' => now()])
+            ->assertHasNoActionErrors()
+            ->mountAction(TestAction::make('edit')->table($order))
+            ->assertFormFieldDisabled('cost');
     }
 
     private function visit(Patient $patient, string $when): Appointment

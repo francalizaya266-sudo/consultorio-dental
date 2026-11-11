@@ -29,6 +29,7 @@ use Filament\Forms\Components\Textarea;
 use Filament\Forms\Components\TextInput;
 use Filament\Notifications\Notification;
 use Filament\Resources\Resource;
+use Filament\Schemas\Components\Component;
 use Filament\Schemas\Components\Utilities\Get;
 use Filament\Schemas\Schema;
 use Filament\Support\Enums\Width;
@@ -36,6 +37,7 @@ use Filament\Support\Icons\Heroicon;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Table;
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Str;
 
 /**
@@ -65,15 +67,28 @@ class LabOrderResource extends Resource
 
     public static function form(Schema $schema): Schema
     {
-        /** @var User $user */
-        $user = auth()->user();
-        $ownDoctorId = $user->managesAllAgendas() ? null : $user->doctorId();
-
         return $schema->columns(2)->components([
             AppointmentForm::patientSelect()
                 ->disabledOn('edit')
                 ->live()
                 ->columnSpanFull(),
+            ...self::workFields(),
+        ]);
+    }
+
+    /**
+     * Lo que se anota de un trabajo: qué es, a qué laboratorio va, quién lo pidió, cuándo sale y llega, y cuánto
+     * cuesta. Desde la atención el paciente ya se sabe: se pasa, con el doctor que lo atiende.
+     *
+     * @return list<Component>
+     */
+    public static function workFields(?int $patientId = null, ?int $doctorId = null): array
+    {
+        /** @var User $user */
+        $user = auth()->user();
+        $ownDoctorId = $user->managesAllAgendas() ? null : $user->doctorId();
+
+        return [
             TextInput::make('description')
                 ->label('Trabajo')
                 ->placeholder('Por ejemplo: corona de zirconio, prótesis parcial, férula')
@@ -89,7 +104,7 @@ class LabOrderResource extends Resource
             Select::make('doctor_id')
                 ->label('Lo pidió')
                 ->options(fn () => Doctor::query()->active()->orderBy('sort_order')->pluck('name', 'id'))
-                ->default(fn () => $ownDoctorId ?? self::onlyActiveDoctorId())
+                ->default(fn () => $ownDoctorId ?? $doctorId ?? self::onlyActiveDoctorId())
                 ->disabled($ownDoctorId !== null)
                 ->dehydrated()
                 ->required(),
@@ -111,20 +126,32 @@ class LabOrderResource extends Resource
                 ->afterOrEqual('sent_on')
                 ->required()
                 ->live()
-                ->helperText(fn (Get $get) => self::visitBeforeDelivery($get('patient_id'), $get('due_on'))),
+                ->helperText(fn (Get $get) => self::visitBeforeDelivery($patientId ?? $get('patient_id'), $get('due_on'))),
             TextInput::make('cost')
                 ->label('Costo')
                 ->prefix('S/')
                 ->numeric()
                 ->minValue(0)
                 ->maxValue(999999)
-                ->helperText('Lo que cobra el laboratorio. Al pagarlo queda en los gastos de Caja.'),
+                // Lo pagado ya está en Gastos con ese monto: para cambiarlo se anula el gasto en Caja.
+                ->disabled(fn (?Model $record) => $record instanceof LabOrder && $record->isPaid())
+                ->helperText(fn (?Model $record) => $record instanceof LabOrder && $record->isPaid()
+                    ? 'Ya se pagó: para cambiar el monto, anula el gasto en Caja.'
+                    : 'Lo que cobra el laboratorio. Al pagarlo queda en los gastos de Caja.'),
             Textarea::make('notes')
                 ->label('Nota')
                 ->placeholder('Por ejemplo: color A2, lo recoge el mensajero el viernes')
                 ->rows(2)
                 ->maxLength(500),
-        ]);
+        ];
+    }
+
+    /** Al anotarlo se dice si algo pide atención: la cita del paciente quedó antes de la entrega. */
+    public static function createdNotification(LabOrder $order): Notification
+    {
+        return ($alert = $order->alert()) === null
+            ? Notification::make()->success()->title('Trabajo anotado')
+            : Notification::make()->warning()->title('Trabajo anotado')->body($alert.'.')->persistent();
     }
 
     public static function table(Table $table): Table
@@ -264,6 +291,7 @@ class LabOrderResource extends Resource
                     ->firstDayOfWeek(1)
                     ->closeOnDateSelection()
                     ->default(today())
+                    ->minDate(fn (LabOrder $record) => $record->sent_on)
                     ->maxDate(today())
                     ->required(),
             ])

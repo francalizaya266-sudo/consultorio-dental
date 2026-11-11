@@ -42,7 +42,7 @@ final class MoneyWaiting
                 'plan' => $plan,
                 'total' => $plan->total(),
                 'waiting_days' => (int) ($plan->proposed_at ?? $plan->created_at)->copy()->startOfDay()->diffInDays(today()),
-                'expired' => (bool) $plan->validUntil()?->isPast(),
+                'expired' => (bool) $plan->validUntil()?->copy()->endOfDay()->isPast(),
             ])
             ->filter(fn (array $row) => $row['total'] > 0)
             ->sortByDesc('total')

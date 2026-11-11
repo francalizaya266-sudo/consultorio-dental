@@ -90,7 +90,7 @@ class LabOrder extends Model
 
     /**
      * Lo que hay que resolver con este trabajo, si hay algo: "Su cita del jue. 12 nov. es antes de la entrega",
-     * "Debía llegar hace 3 días" o "Ya llegó y no tiene cita para colocarlo".
+     * "Debía llegar hace 3 días" (y si ya tiene cita, cuándo) o "Ya llegó y no tiene cita para colocarlo".
      */
     public function alert(): ?string
     {
@@ -101,7 +101,9 @@ class LabOrder extends Model
                 ? 'Ya llegó y no tiene cita para colocarlo'
                 : null,
             $next !== null && $next->startOfDay()->lt($this->due_on) => 'Su cita del '.$next->translatedFormat('D j M').' es antes de la entrega',
-            $this->due_on->isBefore(today()) => 'Debía llegar '.$this->due_on->diffForHumans(today(), ['syntax' => CarbonInterface::DIFF_RELATIVE_TO_NOW, 'parts' => 1]),
+            // Atrasado y con el paciente citado: es lo primero que hay que reclamar.
+            $this->due_on->isBefore(today()) => 'Debía llegar '.$this->due_on->diffForHumans(today(), ['syntax' => CarbonInterface::DIFF_RELATIVE_TO_NOW, 'parts' => 1])
+                .($next !== null ? ' y tiene cita el '.$next->translatedFormat('D j M') : ''),
             $this->due_on->isToday() => 'Llega hoy: confirma que lo trajeron',
             default => null,
         };

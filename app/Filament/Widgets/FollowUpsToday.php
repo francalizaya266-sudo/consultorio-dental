@@ -317,7 +317,12 @@ class FollowUpsToday extends Widget implements HasActions, HasSchemas
                     $patient,
                     'Falta: '.$labels->take(2)->implode(', ').($labels->count() > 2 ? ' y '.($labels->count() - 2).' más' : ''),
                     $contacted,
-                    AppointmentResource::getUrl('create', ['patient' => $patient->getKey(), 'plan_item' => $items->first()?->getKey()]),
+                    AppointmentResource::getUrl('create', array_filter([
+                        'patient' => $patient->getKey(),
+                        'doctor' => $patient->treatmentPlans->first()?->doctor_id,
+                        'treatment' => $items->first()?->treatment_id,
+                        'plan_item' => $items->first()?->getKey(),
+                    ])),
                 );
             })->all(),
         ];

@@ -6,6 +6,7 @@ use App\Enums\DiagnosisType;
 use App\Enums\VisitType;
 use App\Exceptions\ClinicalException;
 use App\Filament\Actions\EditMedicalBackgroundAction;
+use App\Filament\Actions\SendToLabAction;
 use App\Filament\Actions\SignConsentAction;
 use App\Filament\Resources\Consultations\ConsultationResource;
 use App\Filament\Resources\Consultations\Schemas\ConsultationForm;
@@ -102,6 +103,12 @@ class EditConsultation extends EditRecord
     {
         return SignConsentAction::make(fn () => $this->getConsultation()->patient, fn () => $this->getConsultation()->appointment?->treatment)
             ->label('Consentimiento');
+    }
+
+    /** Lo que sale al laboratorio en esta atención (la corona, la prótesis): se anota sin salir de ella. */
+    public function sendToLabAction(): Action
+    {
+        return SendToLabAction::make(fn () => $this->getConsultation()->patient, fn () => $this->getConsultation()->doctor_id);
     }
 
     public function editBackgroundAction(): Action

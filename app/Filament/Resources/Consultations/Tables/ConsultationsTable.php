@@ -5,7 +5,9 @@ namespace App\Filament\Resources\Consultations\Tables;
 use App\Filament\Resources\Consultations\ConsultationResource;
 use App\Models\Consultation;
 use App\Models\ConsultationDiagnosis;
+use App\Models\Doctor;
 use App\Models\User;
+use Carbon\CarbonInterface;
 use Filament\Actions\Action;
 use Filament\Support\Icons\Heroicon;
 use Filament\Tables\Columns\TextColumn;
@@ -47,6 +49,12 @@ class ConsultationsTable
             ->emptyStateDescription('Se crean al tocar "Atender" en una cita.');
     }
 
+    /** Se abrió otro día y nadie la terminó: mientras siga abierta no se cobra ni avanza el plan. */
+    private static function leftOpen(Consultation $consultation): bool
+    {
+        return $consultation->closed_at === null && $consultation->attended_at->isBefore(today());
+    }
+
     /** @return list<TextColumn> */
     public static function columns(bool $showPatient = true): array
     {
@@ -59,8 +67,9 @@ class ConsultationsTable
                 ->label('Paciente')
                 ->formatStateUsing(fn (Consultation $record) => $record->patient->full_name)
                 ->searchable(query: fn (Builder $query, string $search) => $query->whereHas('patient', fn (Builder $patient) => $patient->search($search))) : null,
-            TextColumn::make('doctor.name')
-                ->label('Doctor'),
+            // Con un solo doctor en el consultorio, la columna no dice nada.
+            Doctor::severalActive() ? TextColumn::make('doctor.name')
+                ->label('Doctor') : null,
             TextColumn::make('chief_complaint')
                 ->label('Motivo')
                 ->limit(50)
@@ -75,7 +84,15 @@ class ConsultationsTable
                 ->label('Estado')
                 ->state(fn (Consultation $record) => $record->closed_at ? 'Terminada' : 'Sin terminar')
                 ->badge()
-                ->color(fn (Consultation $record) => $record->closed_at ? 'success' : 'warning'),
+                ->color(fn (Consultation $record) => match (true) {
+                    $record->closed_at !== null => 'success',
+                    self::leftOpen($record) => 'danger',
+                    default => 'warning',
+                })
+                ->description(fn (Consultation $record) => self::leftOpen($record)
+                    ? 'Quedó abierta '.$record->attended_at->copy()->startOfDay()->diffForHumans(today(), ['syntax' => CarbonInterface::DIFF_RELATIVE_TO_NOW, 'parts' => 1]).': termínala o descártala'
+                    : null)
+                ->wrap(),
         ]));
     }
 }
