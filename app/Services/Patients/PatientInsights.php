@@ -362,12 +362,13 @@ class PatientInsights
      * La sesión que sigue de su plan y cuándo agendarla: ortodoncia al mes, lo demás a la semana, corrida al día
      * en que suele venir. Null si su plan no tiene nada pendiente por agendar.
      * Sin $withTooth, el nombre va sin la pieza: recepción ve el procedimiento, no la pieza (Ley 29733).
+     * Con $evenIfNotAccepted, si no hay nada aceptado, propone la primera sesión del presupuesto que aún no acepta.
      *
      * @return array{item: TreatmentPlanItem, label: string, on: CarbonImmutable, why: string}|null
      */
-    public function suggestedNextVisit(Patient $patient, bool $withTooth = true): ?array
+    public function suggestedNextVisit(Patient $patient, bool $withTooth = true, bool $evenIfNotAccepted = false): ?array
     {
-        $item = $this->plans->nextToSchedule($patient);
+        $item = $this->plans->nextToSchedule($patient) ?? ($evenIfNotAccepted ? $this->plans->nextToSchedule($patient, evenIfNotAccepted: true) : null);
 
         if (! $item) {
             return null;

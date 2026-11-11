@@ -153,7 +153,7 @@ final class OdontogramSuggestions
             ->map(fn (array $row) => $this->planItem($row))
             ->values()
             ->all();
-        [$plan, $added] = $this->plans->addToDraft($consultation, $by, $items);
+        [$plan, $added] = $this->plans->addToPlan($consultation, $by, $items);
 
         $diagnoses = $rows
             ->reject(fn (array $row) => $row['diagnosed'])

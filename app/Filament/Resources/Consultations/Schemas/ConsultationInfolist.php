@@ -10,6 +10,7 @@ use App\Models\Consultation;
 use App\Models\ConsultationDiagnosis;
 use App\Models\PrescriptionItem;
 use App\Models\Treatment;
+use App\Models\TreatmentPlan;
 use App\Models\TreatmentPlanItem;
 use App\Services\Clinical\PrescriptionService;
 use App\Services\Inventory\InventoryService;
@@ -20,6 +21,7 @@ use Filament\Schemas\Components\Livewire;
 use Filament\Schemas\Components\Section;
 use Filament\Schemas\Components\View;
 use Filament\Schemas\Schema;
+use Illuminate\Support\Collection;
 
 /** Atención en modo lectura (cerrada o de otro doctor). */
 class ConsultationInfolist
@@ -98,24 +100,37 @@ class ConsultationInfolist
                             ->columnSpanFull(),
                     ]),
 
-                Section::make('Datos')
-                    ->columnSpan(1)
-                    ->schema([
-                        TextEntry::make('patient.first_name')
-                            ->label('Paciente')
-                            ->state(fn (Consultation $record) => $record->patient->full_name)
-                            ->url(fn (Consultation $record) => PatientResource::getUrl('clinical', ['record' => $record->patient]))
-                            ->color('primary')
-                            ->weight('bold'),
-                        TextEntry::make('attended_at')->label('Fecha')->dateTime('l d/m/Y · H:i'),
-                        TextEntry::make('doctor.name')->label('Doctor'),
-                        TextEntry::make('appointment.treatment.name')->label('Programado en la cita')->placeholder('Sin cita'),
-                        TextEntry::make('closed_at')
-                            ->label('Estado')
-                            ->state(fn (Consultation $record) => $record->closed_at ? 'Terminada el '.$record->closed_at->format('d/m/Y H:i') : 'Sin terminar')
-                            ->badge()
-                            ->color(fn (Consultation $record) => $record->closed_at ? 'success' : 'warning'),
-                    ]),
+                Group::make([
+                    Section::make('Datos')
+                        ->schema([
+                            TextEntry::make('patient.first_name')
+                                ->label('Paciente')
+                                ->state(fn (Consultation $record) => $record->patient->full_name)
+                                ->url(fn (Consultation $record) => PatientResource::getUrl('clinical', ['record' => $record->patient]))
+                                ->color('primary')
+                                ->weight('bold'),
+                            TextEntry::make('attended_at')->label('Fecha')->dateTime('l d/m/Y · H:i'),
+                            TextEntry::make('doctor.name')->label('Doctor'),
+                            TextEntry::make('appointment.treatment.name')->label('Programado en la cita')->placeholder('Sin cita'),
+                            TextEntry::make('closed_at')
+                                ->label('Estado')
+                                ->state(fn (Consultation $record) => $record->closed_at ? 'Terminada el '.$record->closed_at->format('d/m/Y H:i') : 'Sin terminar')
+                                ->badge()
+                                ->color(fn (Consultation $record) => $record->closed_at ? 'success' : 'warning'),
+                        ]),
+
+                    Section::make('Plan de tratamiento')
+                        ->description('Cómo va su plan hoy: cada procedimiento con su precio.')
+                        ->schema([
+                            View::make('filament.consultations.plans')
+                                ->viewData(fn (Consultation $record) => [
+                                    'plans' => self::plans($record),
+                                    'url' => PatientResource::getUrl('clinical', ['record' => $record->patient_id, 'relation' => '1']),
+                                ]),
+                        ])
+                        ->visible(fn (Consultation $record) => self::plans($record)->isNotEmpty()),
+                ])
+                    ->columnSpan(1),
 
                 Section::make('Odontograma de esta atención')
                     ->columnSpanFull()
@@ -124,5 +139,20 @@ class ConsultationInfolist
                         Livewire::make(OdontogramChart::class)->key('odontogram'),
                     ]),
             ]);
+    }
+
+    /**
+     * Su plan como está hoy: los vigentes y el que se armó en esta atención, aunque ya se haya terminado.
+     *
+     * @return Collection<int, TreatmentPlan>
+     */
+    public static function plans(Consultation $consultation): Collection
+    {
+        return TreatmentPlan::query()
+            ->where('patient_id', $consultation->patient_id)
+            ->where(fn ($query) => $query->open()->orWhere('consultation_id', $consultation->getKey()))
+            ->with('items')
+            ->orderBy('id')
+            ->get();
     }
 }
