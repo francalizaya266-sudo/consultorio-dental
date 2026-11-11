@@ -5,4 +5,11 @@ return [
 
     'confirmation' => '¿Seguro que quieres hacer esto?',
 
+    // El botón de abajo de una ventana guarda lo que se escribió ahí: "Guardar", no "Enviar" (no se envía nada a nadie).
+    'actions' => [
+        'submit' => [
+            'label' => 'Guardar',
+        ],
+    ],
+
 ];

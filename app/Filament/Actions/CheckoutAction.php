@@ -21,8 +21,7 @@ use Filament\Notifications\Notification;
 use Filament\Schemas\Components\Text;
 use Filament\Schemas\Components\Utilities\Get;
 use Filament\Schemas\Components\Utilities\Set;
-use Filament\Support\Enums\FontWeight;
-use Filament\Support\Enums\TextSize;
+use Filament\Schemas\Components\View;
 use Filament\Support\Icons\Heroicon;
 use Illuminate\Support\Facades\DB;
 
@@ -68,6 +67,7 @@ final class CheckoutAction
                         'discount' => (float) $c->discount,
                     ])->all(),
                     'previous' => $previous,
+                    'paid_here' => round((float) $record->payments()->whereNull('voided_at')->sum('amount'), 2),
                     'amount' => $balance > 0 ? $balance : null,
                     'method' => $record->patient->usualPaymentMethod()->value,
                     'upcoming' => self::upcomingInstallment($record),
@@ -77,6 +77,7 @@ final class CheckoutAction
             ->schema([
                 Hidden::make('previous'),
                 Hidden::make('previous_items'),
+                Hidden::make('paid_here'),
                 Hidden::make('upcoming'),
                 Repeater::make('lines')
                     ->label('Lo de esta cita')
@@ -118,9 +119,8 @@ final class CheckoutAction
                     ->defaultItems(0)
                     ->live()
                     ->afterStateUpdated(fn (Get $get, Set $set) => self::refreshAmount($get, $set)),
-                Text::make(fn (Get $get) => self::summary($get))
-                    ->size(TextSize::Large)
-                    ->weight(FontWeight::Bold),
+                View::make('filament.forms.total-to-pay')
+                    ->viewData(fn (Get $get) => self::totalToPay($get)),
                 Text::make(fn (Get $get) => $get('upcoming'))
                     ->color('warning')
                     ->visible(fn (Get $get) => filled($get('upcoming'))),
@@ -171,16 +171,28 @@ final class CheckoutAction
         $set($path.'amount', $total > 0 ? $total : null);
     }
 
-    private static function summary(Get $get): string
+    /**
+     * Lo que se le cobra hoy, y de dónde sale cuando no es solo lo de esta cita: lo que ya pagó por ella y lo que
+     * debía (o tenía a favor) de antes. Lo ya pagado por la cita no se cuenta como saldo a favor.
+     *
+     * @return array{total: string, note: string|null}
+     */
+    private static function totalToPay(Get $get): array
     {
-        $previous = (float) $get('previous');
-        $total = self::total($get);
+        $paidHere = (float) $get('paid_here');
+        $before = round((float) $get('previous') + $paidHere, 2);
 
-        return match (true) {
-            $previous > 0 => 'Saldo anterior '.Money::format($previous).(filled($get('previous_items')) ? ' ('.$get('previous_items').')' : '').' · Total a pagar '.Money::format(max(0, $total)),
-            $previous < 0 => 'Tenía a favor '.Money::format(-$previous).' · Total a pagar '.Money::format(max(0, $total)),
-            default => 'Total a pagar '.Money::format(max(0, $total)),
-        };
+        return [
+            'total' => Money::format(max(0, self::total($get))),
+            'note' => collect([
+                $paidHere > 0 ? 'Ya pagó '.Money::format($paidHere).' en esta cita' : null,
+                match (true) {
+                    $before > 0 => 'Incluye el saldo anterior de '.Money::format($before).(filled($get('previous_items')) ? ' ('.$get('previous_items').')' : ''),
+                    $before < 0 => 'Ya descuenta los '.Money::format(-$before).' que tenía a favor',
+                    default => null,
+                },
+            ])->filter()->implode(' · ') ?: null,
+        ];
     }
 
     /** Si una cuota de su plan vence en los próximos días: puede aprovechar y pagarla hoy. */

@@ -12,6 +12,7 @@ use App\Models\Patient;
 use App\Services\Patients\PatientRegistrar;
 use App\Support\Phone;
 use Carbon\Carbon;
+use Carbon\Exceptions\InvalidFormatException;
 use Closure;
 use Filament\Forms\Components\DatePicker;
 use Filament\Forms\Components\Radio;
@@ -59,10 +60,7 @@ class PatientForm
                         self::documentNumberInput()
                             ->unique(ignoreRecord: true, modifyRuleUsing: fn (Unique $rule, Get $get) => $rule->where('document_type', $get('document_type') instanceof DocumentType ? $get('document_type')->value : $get('document_type')))
                             ->validationMessages(['unique' => 'Ya hay un paciente con este documento.']),
-                        DatePicker::make('birth_date')
-                            ->label('Fecha de nacimiento')
-                            ->maxDate(today())
-                            ->live(),
+                        self::birthDateInput(),
                         // hiddenOn y no visibleOn: este campo ya decide cuándo se ve según lo que se encontró.
                         self::duplicatesCheck()
                             ->hiddenOn('edit'),
@@ -161,6 +159,41 @@ class PatientForm
                     $fail('Este celular ya es de '.$holder->full_name.': elige el parentesco con esa persona.');
                 }
             });
+    }
+
+    /**
+     * Fecha de nacimiento, con la fecha en palabras y la edad debajo. El navegador la muestra como día/mes o
+     * mes/día según su idioma: así se ve al instante si se escribió al revés.
+     */
+    public static function birthDateInput(): DatePicker
+    {
+        return DatePicker::make('birth_date')
+            ->label('Fecha de nacimiento')
+            ->maxDate(today())
+            ->live()
+            ->helperText(fn (mixed $state) => self::birthDateInWords($state));
+    }
+
+    /** "12 de abril de 1985 · 41 años"; nada si aún no hay fecha o no es una fecha que ya pasó. */
+    public static function birthDateInWords(mixed $state): ?string
+    {
+        try {
+            $date = filled($state) ? Carbon::parse($state) : null;
+        } catch (InvalidFormatException) {
+            $date = null;
+        }
+
+        if ($date === null || $date->isFuture()) {
+            return null;
+        }
+
+        $age = $date->age;
+
+        return $date->translatedFormat('j \d\e F \d\e Y').' · '.match (true) {
+            $age >= 2 => $age.' años',
+            $age === 1 => '1 año',
+            default => 'menos de un año',
+        };
     }
 
     /** Número de documento: se guarda sin espacios ni guiones y se revisa según el tipo (el DNI tiene 8 dígitos). */

@@ -1786,3 +1786,27 @@ a.ap-visit:hover { background: var(--gray-50); }
 .fi-simple-main { border-radius: 1.25rem; box-shadow: 0 24px 60px -24px rgb(15 23 42 / .35), 0 0 0 1px rgb(15 23 42 / .06); }
 .fi-simple-main .fi-logo:has(.brand-mark) { justify-content: center; }
 .dark .fi-simple-main { box-shadow: 0 24px 60px -24px rgb(0 0 0 / .7), 0 0 0 1px rgb(255 255 255 / .1); }
+
+/* ---------- Cobrar: el total, en grande ---------- */
+
+/* Es el número que recepción le dice al paciente: antes salía en gris, del tamaño de una nota. */
+.pay-total { display: grid; grid-template-columns: 1fr auto; align-items: baseline; gap: .15rem 1rem; padding: .85rem 1rem; border-radius: .85rem; background: var(--primary-50); box-shadow: inset 0 0 0 1px var(--primary-200); }
+.pay-total-label { font-size: .9375rem; font-weight: 600; color: var(--primary-800); }
+.pay-total-value { font-size: 1.75rem; line-height: 1.1; font-weight: 700; letter-spacing: -.02em; color: var(--gray-950); font-variant-numeric: tabular-nums; }
+.pay-total-note { grid-column: 1 / -1; font-size: .8125rem; line-height: 1.35; color: var(--gray-600); }
+.dark .pay-total { background: color-mix(in oklab, var(--primary-400) 12%, transparent); box-shadow: inset 0 0 0 1px color-mix(in oklab, var(--primary-400) 30%, transparent); }
+.dark .pay-total-label { color: var(--primary-200); }
+.dark .pay-total-value { color: #fff; }
+.dark .pay-total-note { color: var(--gray-400); }
+
+/* ---------- Avisos de "guardado": abajo, sin tapar nada ---------- */
+
+/*
+ * Salían arriba a la derecha, encima de la campanita, del menú del usuario y de la equis de la ventana abierta.
+ * En pantallas anchas van abajo a la derecha, donde no hay botones; en el celular siguen arriba, porque abajo
+ * está la barra con "Nueva cita".
+ */
+@media (min-width: 64rem) {
+    .fi-no.fi-vertical-align-start { flex-direction: column; justify-content: flex-end; }
+}
+

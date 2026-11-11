@@ -25,9 +25,10 @@ class Summary extends BaseDashboard
 
     protected static string $routePath = 'resumen';
 
-    protected static ?string $title = 'Resumen';
+    /** El mismo nombre que en el menú; lo que muestra va en la línea de abajo. */
+    protected static ?string $title = 'Reportes';
 
-    protected static ?string $navigationLabel = 'Reportes';
+    protected ?string $subheading = 'Resumen del período: cómo va el consultorio, en números y gráficos.';
 
     protected static ?int $navigationSort = 6;
 

@@ -4,10 +4,10 @@ namespace App\Filament\Resources\Accounts\RelationManagers;
 
 use App\Enums\PatientRelationship;
 use App\Filament\Resources\Patients\PatientResource;
+use App\Filament\Resources\Patients\Schemas\PatientForm;
 use App\Models\Patient;
 use App\Services\Patients\PatientRegistrar;
 use Filament\Actions\CreateAction;
-use Filament\Forms\Components\DatePicker;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\TextInput;
 use Filament\Resources\RelationManagers\RelationManager;
@@ -43,7 +43,7 @@ class PatientsRelationManager extends RelationManager
                         ->options(PatientRelationship::class)
                         ->default(PatientRelationship::Child->value)
                         ->required(),
-                    DatePicker::make('birth_date')->label('Fecha de nacimiento')->maxDate(today()),
+                    PatientForm::birthDateInput(),
                     TextInput::make('document_number')->label('DNI')->maxLength(20),
                 ]),
             ]);

@@ -102,6 +102,35 @@ class BillingPanelTest extends TestCase
         $this->assertSame('0.00', Charge::sole()->discount);
     }
 
+    public function test_collecting_the_rest_of_a_visit_says_what_was_already_paid_instead_of_calling_it_credit(): void
+    {
+        $this->freezeMonday();
+        $appointment = $this->completedCleaning();
+        Payment::factory()->for($appointment->patient)->create(['appointment_id' => $appointment->id, 'amount' => 50]);
+        $this->actingAs(User::factory()->reception()->create());
+
+        Livewire::test(TodayAppointments::class)
+            ->mountAction(TestAction::make('checkout')->table($appointment))
+            ->assertSchemaStateSet(['previous' => -50.0, 'paid_here' => 50.0, 'amount' => 70.0])
+            ->assertMountedActionModalSee(['Total a pagar', 'S/ 70.00', 'Ya pagó S/ 50.00 en esta cita'])
+            ->assertMountedActionModalDontSee('a favor');
+    }
+
+    public function test_money_left_in_advance_comes_off_the_total_as_credit(): void
+    {
+        $this->freezeMonday();
+        $appointment = $this->completedCleaning();
+        // La semana pasada dejó un adelanto en caja, sin cita.
+        Payment::factory()->for($appointment->patient)->create(['amount' => 30, 'paid_at' => '2026-10-26 10:00']);
+        $this->actingAs(User::factory()->reception()->create());
+
+        Livewire::test(TodayAppointments::class)
+            ->mountAction(TestAction::make('checkout')->table($appointment))
+            ->assertSchemaStateSet(['previous' => -30.0, 'paid_here' => 0.0, 'amount' => 90.0])
+            ->assertMountedActionModalSee(['Total a pagar', 'S/ 90.00', 'Ya descuenta los S/ 30.00 que tenía a favor'])
+            ->assertMountedActionModalDontSee('Ya pagó');
+    }
+
     public function test_doctors_do_not_handle_money(): void
     {
         $this->freezeMonday();
@@ -253,7 +282,7 @@ class BillingPanelTest extends TestCase
         Livewire::test(TodayAppointments::class)
             ->mountAction(TestAction::make('checkout')->table($appointment))
             ->assertSchemaStateSet(['lines' => [], 'previous' => 500.0, 'amount' => 500.0])
-            ->assertMountedActionModalSee('Saldo anterior S/ 500.00 (Ortodoncia · cuota 1 de 3 S/ 500.00) · Total a pagar S/ 500.00')
+            ->assertMountedActionModalSee(['Total a pagar', 'S/ 500.00', 'Incluye el saldo anterior de S/ 500.00 (Ortodoncia · cuota 1 de 3 S/ 500.00)'])
             ->callMountedAction()
             ->assertHasNoFormErrors()
             ->assertNotified('Pago registrado');

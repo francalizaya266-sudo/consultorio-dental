@@ -3,6 +3,7 @@
 namespace App\Filament\Resources\Consultations\Pages;
 
 use App\Enums\AppointmentStatus;
+use App\Filament\Concerns\HasNoBreadcrumbs;
 use App\Filament\Resources\Consultations\ConsultationResource;
 use App\Filament\Resources\Patients\PatientResource;
 use App\Filament\Support\Notify;
@@ -20,6 +21,8 @@ use Filament\Support\Icons\Heroicon;
 
 class ListConsultations extends ListRecords
 {
+    use HasNoBreadcrumbs;
+
     protected static string $resource = ConsultationResource::class;
 
     protected ?string $subheading = 'Lo normal es abrir la atención con "Atender" en la cita. Aquí puedes atender a alguien sin cita.';
