@@ -59,11 +59,23 @@ class WhatsappMessage extends Model
         return $query->where('status', MessageStatus::Pending);
     }
 
-    /** Avisos que ya toca enviar (los recordatorios esperan a su día). */
+    /**
+     * Avisos que ya toca enviar (los recordatorios esperan a su día). Las promociones van aparte: no compiten con
+     * lo de las citas ni inflan el contador, y la API de WhatsApp no las envía sola.
+     */
     #[Scope]
     protected function due(Builder $query): Builder
     {
-        return $query->pending()->where(fn (Builder $q) => $q->whereNull('due_at')->orWhere('due_at', '<=', now()));
+        return $query->pending()
+            ->where('template_key', '!=', MessageTemplateKey::CampaignAnnouncement)
+            ->where(fn (Builder $q) => $q->whereNull('due_at')->orWhere('due_at', '<=', now()));
+    }
+
+    /** Promociones listas para enviar a quien aceptó recibirlas. */
+    #[Scope]
+    protected function promotions(Builder $query): Builder
+    {
+        return $query->pending()->where('template_key', MessageTemplateKey::CampaignAnnouncement);
     }
 
     /** Avisos que la API de WhatsApp no pudo enviar en los últimos días. */

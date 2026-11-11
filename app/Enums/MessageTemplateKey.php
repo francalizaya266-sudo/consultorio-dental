@@ -26,6 +26,7 @@ enum MessageTemplateKey: string implements HasLabel
     case Birthday = 'birthday';
     case PaymentReceipt = 'payment_receipt';
     case ReviewRequest = 'review_request';
+    case CampaignAnnouncement = 'campaign_announcement';
 
     public function getLabel(): string
     {
@@ -49,6 +50,7 @@ enum MessageTemplateKey: string implements HasLabel
             self::Birthday => 'Saludo de cumpleaños',
             self::PaymentReceipt => 'Constancia de pago',
             self::ReviewRequest => 'Pedido de opinión en Google',
+            self::CampaignAnnouncement => 'Promoción a quien acepta recibirlas',
         };
     }
 
@@ -75,6 +77,7 @@ enum MessageTemplateKey: string implements HasLabel
             self::Birthday => '¡Feliz cumpleaños, {nombre}! 🎂 Todo el equipo de {consultorio} te desea un gran día.',
             self::PaymentReceipt => "Hola {nombre}, te escribimos de {consultorio}.\nRecibimos tu pago de {monto} ({medio}) el {fecha}. Constancia {numero}:\n{detalle}\n\nSaldo: {saldo}. ¡Gracias!",
             self::ReviewRequest => "Hola {nombre}, gracias por confiar en {consultorio}. Si te sentiste bien atendido, ¿nos dejas tu opinión en Google? Toma un minuto y ayuda a otras personas a encontrarnos:\n{opinion}",
+            self::CampaignAnnouncement => "Hola {nombre}, te escribimos de {consultorio}.\n{promocion}\nVale hasta el {hasta}.\n\nMira los detalles y reserva aquí:\n{pagina}\n\nSi prefieres no recibir promociones, respóndenos «no» y no te escribimos más.",
         };
     }
 }

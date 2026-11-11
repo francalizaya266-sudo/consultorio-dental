@@ -17,7 +17,7 @@ use Illuminate\Support\Str;
 class WhatsappMessagesTable
 {
     /** Pestañas de lo que falta enviar: van por la cita más próxima, no por el último preparado. */
-    private const TO_SEND = ['due', 'scheduled'];
+    private const TO_SEND = ['due', 'scheduled', 'promotions'];
 
     public static function configure(Table $table): Table
     {
