@@ -8,6 +8,7 @@ use App\Enums\MessageTemplateKey;
 use App\Enums\RequestedBy;
 use App\Enums\RescheduleRequestStatus;
 use App\Exceptions\BookingException;
+use App\Filament\Resources\RescheduleRequests\RescheduleRequestResource;
 use App\Models\Appointment;
 use App\Models\Doctor;
 use App\Models\RescheduleRequest;
@@ -93,7 +94,8 @@ class RescheduleRequestService
 
             $this->alerts->toReception(
                 'Solicitud de cambio de horario',
-                "{$appointment->patient->full_name} propone ".count($proposedStarts).' horario(s) para su cita. Apruébala con un clic.',
+                "{$appointment->patient->full_name} propone ".(count($proposedStarts) === 1 ? 'un horario' : count($proposedStarts).' horarios').' para su cita. Apruébala con un clic.',
+                link: ['label' => 'Ver la solicitud', 'url' => RescheduleRequestResource::getUrl()],
             );
 
             if ($doctorUser = $appointment->doctor->user) {

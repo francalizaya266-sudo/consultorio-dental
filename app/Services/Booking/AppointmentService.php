@@ -10,6 +10,7 @@ use App\Enums\ConfirmationChannel;
 use App\Enums\MessageTemplateKey;
 use App\Enums\PatientRelationship;
 use App\Exceptions\BookingException;
+use App\Filament\Resources\WhatsappMessages\WhatsappMessageResource;
 use App\Models\Account;
 use App\Models\Appointment;
 use App\Models\Campaign;
@@ -133,6 +134,7 @@ class AppointmentService
             $this->alerts->toReception(
                 'Nueva cita web',
                 "{$patient->full_name} · {$treatment->name} · {$this->when($appointment)} con {$doctor->name}. Envíale la confirmación por WhatsApp.",
+                link: ['label' => 'Enviar la confirmación', 'url' => WhatsappMessageResource::getUrl()],
             );
 
             return $appointment;

@@ -24,6 +24,7 @@ use App\Http\Controllers\Clinical\ClinicalFileController;
 use App\Http\Controllers\Clinical\PrintController;
 use App\Http\Controllers\Reports\CashClosingController;
 use App\Http\Controllers\Reports\EarningsExportController;
+use App\Http\Middleware\KeepRemindersUpToDate;
 use App\Models\Setting;
 use App\Services\Web\ClinicInfo;
 use Filament\Actions\CreateAction;
@@ -193,6 +194,7 @@ class AdminPanelProvider extends PanelProvider
             ])
             ->authMiddleware([
                 Authenticate::class,
+                KeepRemindersUpToDate::class,
             ])
             ->authenticatedRoutes(function () {
                 Route::get('imprimir/receta/{prescription}', [PrintController::class, 'prescription'])->name('print.prescription');

@@ -26,8 +26,11 @@ class ListWhatsappMessages extends ListRecords
                 ->badge(fn () => WhatsappMessageResource::getEloquentQuery()->due()->count() ?: null)
                 ->badgeColor('warning')
                 ->modifyQueryUsing(fn (Builder $query) => $query->due()),
-            'scheduled' => Tab::make('Programados')
-                ->modifyQueryUsing(fn (Builder $query) => $query->pending()->where('due_at', '>', now())),
+            // Avisos con fecha de salida. Aparece cuando hay alguno.
+            'scheduled' => WhatsappMessageResource::getEloquentQuery()->pending()->where('due_at', '>', now())->exists()
+                ? Tab::make('Programados')
+                    ->modifyQueryUsing(fn (Builder $query) => $query->pending()->where('due_at', '>', now()))
+                : null,
             // Las promociones, aparte de lo de las citas. Aparece cuando hay alguna por enviar.
             'promotions' => WhatsappMessageResource::getEloquentQuery()->promotions()->exists()
                 ? Tab::make('Promociones')

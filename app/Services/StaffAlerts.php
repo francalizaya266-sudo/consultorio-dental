@@ -25,11 +25,10 @@ class StaffAlerts
             return;
         }
 
-        Notification::make()
+        $this->deliver($recipients, Notification::make()
             ->title($title)
             ->body($body)
-            ->actions($link ? [Action::make('open')->label($link['label'])->url($link['url'])->markAsRead()] : [])
-            ->sendToDatabase($recipients);
+            ->actions($link ? [Action::make('open')->label($link['label'])->url($link['url'])->markAsRead()] : []));
     }
 
     public function toUser(?User $user, string $title, ?string $body = null): void
@@ -38,6 +37,19 @@ class StaffAlerts
             return;
         }
 
-        Notification::make()->title($title)->body($body)->sendToDatabase($user);
+        $this->deliver([$user], Notification::make()->title($title)->body($body));
+    }
+
+    /**
+     * Queda en la campana al instante. Antes se encolaba y solo aparecía cuando la tarea programada del hosting
+     * procesaba la cola: si esa tarea no corría, la alerta no llegaba nunca.
+     *
+     * @param  iterable<User>  $recipients
+     */
+    private function deliver(iterable $recipients, Notification $notification): void
+    {
+        foreach ($recipients as $recipient) {
+            $recipient->notifyNow($notification->toDatabase());
+        }
     }
 }
