@@ -1142,7 +1142,11 @@ class ConsultationForm
             ->fillForm(function (Consultation $record) {
                 $package = self::campaignWithPackage($record)?->package;
 
-                return ['package_id' => $package?->getKey(), 'included' => $package ? self::coveredByPackage($record, $package) : []];
+                return [
+                    'package_id' => $package?->getKey(),
+                    'included' => $package ? self::coveredByPackage($record, $package) : [],
+                    'control_every' => $package ? TreatmentPlanService::controlEvery($package) : null,
+                ];
             })
             ->schema(fn (Consultation $record) => [
                 Select::make('package_id')
@@ -1154,14 +1158,16 @@ class ConsultationForm
                     ->afterStateUpdated(function (?string $state, Set $set) use ($record) {
                         $package = TreatmentPackage::query()->active()->find($state);
                         $set('included', $package ? self::coveredByPackage($record, $package) : []);
+                        $set('control_every', $package ? TreatmentPlanService::controlEvery($package) : null);
                     }),
                 Text::make(function (Get $get) {
                     $package = TreatmentPackage::query()->active()->find($get('package_id'));
 
                     return $package ? collect([
                         'Incluye: '.$package->contents().'.',
+                        ($duration = $package->durationText()) ? 'Dura '.$duration.'.' : null,
                         'Precio normal '.Money::format($package->normalPrice()).', en el paquete '.Money::format($package->price).($package->savings() > 0 ? ' (ahorra '.Money::format($package->savings()).')' : '').'.',
-                    ])->implode(' ') : '';
+                    ])->filter()->implode(' ') : '';
                 })
                     ->visible(fn (Get $get) => filled($get('package_id'))),
                 Text::make(function (Get $get) {
@@ -1170,6 +1176,19 @@ class ConsultationForm
                     return $package ? new HtmlString('<p>Formas de pago, se elige al aceptar y firmar:</p>'.self::bulletList(TreatmentPlanService::packagePaymentOptions($package))->toHtml()) : '';
                 })
                     ->visible(fn (Get $get) => filled($get('package_id'))),
+                Select::make('control_every')
+                    ->label('Control cada')
+                    ->options(fn (Get $get) => TreatmentPlanItem::frequencyOptions(($package = TreatmentPackage::query()->active()->find($get('package_id'))) ? TreatmentPlanService::controlEvery($package) : null))
+                    ->selectablePlaceholder(false)
+                    ->live()
+                    ->helperText(function (Get $get) {
+                        $package = TreatmentPackage::query()->active()->find($get('package_id'));
+
+                        return $package && filled($get('control_every'))
+                            ? 'Según sus brackets. Serán '.TreatmentPlanService::controlsFor($package, (int) $get('control_every')).' controles; el precio del paquete no cambia.'
+                            : null;
+                    })
+                    ->visible(fn (Get $get) => ($package = TreatmentPackage::query()->active()->find($get('package_id'))) !== null && TreatmentPlanService::controlEvery($package) !== null),
                 CheckboxList::make('included')
                     ->label('Lo del diagnóstico que entra al paquete')
                     ->helperText('Lo que marques queda dentro del precio del paquete; lo que el paquete ya trae toma la pieza del diagnóstico. Lo que no marques se cobra aparte, a su precio.')
@@ -1188,7 +1207,7 @@ class ConsultationForm
                 $companion = filled($data['companion_patient_id'] ?? null) ? Patient::find($data['companion_patient_id']) : null;
 
                 try {
-                    [$plan, $companionPlan] = $plans->addPackageToDraft($record, $user, $package, $companion, $data['included'] ?? []);
+                    [$plan, $companionPlan] = $plans->addPackageToDraft($record, $user, $package, $companion, $data['included'] ?? [], filled($data['control_every'] ?? null) ? (int) $data['control_every'] : null);
                 } catch (ClinicalException $e) {
                     Notification::make()->danger()->title($e->getMessage())->send();
 

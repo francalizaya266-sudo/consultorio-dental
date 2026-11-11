@@ -359,8 +359,8 @@ class PatientInsights
     }
 
     /**
-     * La sesión que sigue de su plan y cuándo agendarla: ortodoncia al mes, lo demás a la semana, corrida al día
-     * en que suele venir. Null si su plan no tiene nada pendiente por agendar.
+     * La sesión que sigue de su plan y cuándo agendarla: a la frecuencia que se le puso en el plan o, si no, ortodoncia
+     * al mes y lo demás a la semana, corrida al día en que suele venir. Null si su plan no tiene nada pendiente por agendar.
      * Sin $withTooth, el nombre va sin la pieza: recepción ve el procedimiento, no la pieza (Ley 29733).
      * Con $evenIfNotAccepted, si no hay nada aceptado, propone la primera sesión del presupuesto que aún no acepta.
      *
@@ -375,7 +375,8 @@ class PatientInsights
         }
 
         $item->loadMissing('treatment');
-        $days = $item->treatment?->nextSessionDays() ?? TreatmentKind::Other->nextSessionDays();
+        // Su frecuencia en este plan (ortodoncia cada 15 días, según sus brackets) o la del tratamiento.
+        $days = $item->session_interval_days ?: ($item->treatment?->nextSessionDays() ?? TreatmentKind::Other->nextSessionDays());
         $on = CarbonImmutable::today()->addDays($days);
         $usual = $this->usualVisit($patient);
 

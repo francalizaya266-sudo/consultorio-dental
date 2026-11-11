@@ -3,10 +3,12 @@
 namespace App\Filament\Resources\Patients\Schemas;
 
 use App\Enums\PlanItemStatus;
+use App\Enums\TreatmentKind;
 use App\Models\Patient;
 use App\Models\Treatment;
 use App\Models\TreatmentPackage;
 use App\Models\TreatmentPlan;
+use App\Models\TreatmentPlanItem;
 use App\Services\Clinical\TreatmentPlanService;
 use App\Support\Money;
 use Closure;
@@ -144,6 +146,13 @@ class TreatmentPlanForm
                             ->maxValue(50)
                             ->default(1)
                             ->required()
+                            ->columnSpan(['default' => 6, 'lg' => 2]),
+                        // Los controles van a la frecuencia de sus brackets: de ella sale la fecha que se le sugiere.
+                        Select::make('session_interval_days')
+                            ->label('Control cada')
+                            ->options(fn (Get $get) => TreatmentPlanItem::frequencyOptions(Treatment::find($get('treatment_id'))?->nextSessionDays()))
+                            ->placeholder(fn (Get $get) => ($days = Treatment::find($get('treatment_id'))?->nextSessionDays()) ? ucfirst(TreatmentPlanItem::everyText($days)) : null)
+                            ->visible(fn (Get $get) => TreatmentKind::isControl(Treatment::find($get('treatment_id'))))
                             ->columnSpan(['default' => 6, 'lg' => 2]),
                         Select::make('status')
                             ->label('Estado')

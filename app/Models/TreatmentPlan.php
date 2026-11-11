@@ -249,12 +249,15 @@ class TreatmentPlan extends Model
                 $package = $first->treatment_package_id !== null;
 
                 return [
-                    'label' => $package ? 'Paquete '.$first->package->name : $first->label().($first->quantity > 1 ? ' × '.$first->quantity : ''),
+                    'label' => $package
+                        ? 'Paquete '.$first->package->name.(($duration = $first->package->durationText()) ? " ({$duration})" : '')
+                        : $first->label().($first->quantity > 1 ? ' × '.$first->quantity : ''),
                     'price' => round($group->sum(fn (TreatmentPlanItem $item) => $item->subtotal()), 2),
                     'package' => $package,
                     'contents' => $package
                         ? $group->groupBy(fn (TreatmentPlanItem $item) => $item->label())
-                            ->map(fn (Collection $same, string $label) => $label.(($quantity = $same->sum('quantity')) > 1 ? ' × '.$quantity : ''))
+                            ->map(fn (Collection $same, string $label) => $label.(($quantity = $same->sum('quantity')) > 1 ? ' × '.$quantity : '')
+                                .(($every = $same->first()->session_interval_days) ? ', '.TreatmentPlanItem::everyText($every) : ''))
                             ->values()
                             ->all()
                         : [],

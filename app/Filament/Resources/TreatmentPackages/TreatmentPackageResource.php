@@ -68,6 +68,13 @@ class TreatmentPackageResource extends Resource
                         ->label('Se ofrece')
                         ->helperText('Desactívalo cuando ya no se ofrezca; los planes que lo usan no cambian.')
                         ->default(true),
+                    TextInput::make('duration_months')
+                        ->label('Duración')
+                        ->suffix('meses')
+                        ->integer()
+                        ->minValue(1)
+                        ->maxValue(60)
+                        ->helperText('Cuánto dura el tratamiento (ortodoncia: 18). Sale en el presupuesto.'),
                 ]),
                 Repeater::make('items')
                     ->label('Qué incluye')
@@ -173,7 +180,7 @@ class TreatmentPackageResource extends Resource
                     ->label('Paquete')
                     ->searchable()
                     ->weight(FontWeight::Medium)
-                    ->description(fn (TreatmentPackage $record) => $record->contents())
+                    ->description(fn (TreatmentPackage $record) => $record->contents().(($duration = $record->durationText()) ? ' · dura '.$duration : ''))
                     ->wrap(),
                 TextColumn::make('normal_price')
                     ->label('Precio normal')

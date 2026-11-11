@@ -83,8 +83,8 @@
                                         @if ($why = $diagnoses[(string) $item->tooth] ?? [])
                                             <span class="why">· por {{ \Illuminate\Support\Arr::join($why, ', ', ' y ') }}</span>
                                         @endif
-                                        @if ($item->sessions_planned > 1)
-                                            <span class="muted">· {{ $item->sessions_planned }} sesiones</span>
+                                        @if ($item->sessions_planned > 1 || $item->session_interval_days)
+                                            <span class="muted">· {{ collect([$item->sessions_planned > 1 ? $item->sessions_planned.' sesiones' : null, $item->session_interval_days ? \App\Models\TreatmentPlanItem::everyText($item->session_interval_days) : null])->filter()->implode(', ') }}</span>
                                         @endif
                                         @if ($plan->accepted_at && ! $item->accepted_at)
                                             <span class="tag">· agregado, falta la firma</span>
