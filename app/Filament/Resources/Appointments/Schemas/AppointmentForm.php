@@ -184,8 +184,8 @@ class AppointmentForm
                 ->helperText('Si es un familiar a cargo, usa el celular del titular.')
                 ->live(onBlur: true)
                 ->rule(fn () => function (string $attribute, $value, $fail) {
-                    if (filled($value) && ! Phone::isValid($value)) {
-                        $fail('Escribe un celular válido de 9 dígitos.');
+                    if (filled($value) && ($problem = Phone::problem((string) $value)) !== null) {
+                        $fail($problem);
                     }
                 }),
             PatientForm::relationshipSelect()

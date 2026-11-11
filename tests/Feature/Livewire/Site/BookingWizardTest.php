@@ -52,7 +52,7 @@ class BookingWizardTest extends TestCase
             ->assertSee('Para reservar, acepta la política de privacidad.')
             ->set('phone', '98765')
             ->call('book')
-            ->assertSee('Escribe tu celular de 9 dígitos, por ejemplo 987 654 321.')
+            ->assertSee('El celular tiene 9 dígitos y escribiste 5.')
             ->set('phone', '987 654 321')
             ->set('firstName', 'María')
             ->set('lastName', 'Quispe Rojas')

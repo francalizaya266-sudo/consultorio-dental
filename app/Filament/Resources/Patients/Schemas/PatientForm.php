@@ -250,8 +250,8 @@ class PatientForm
             ->placeholder('987 654 321')
             ->helperText('Si es un familiar a cargo, usa el celular del titular: quedan agrupados como familia.')
             ->rule(fn () => function (string $attribute, $value, $fail) {
-                if (filled($value) && ! Phone::isValid($value)) {
-                    $fail('Escribe un celular válido de 9 dígitos.');
+                if (filled($value) && ($problem = Phone::problem((string) $value)) !== null) {
+                    $fail($problem);
                 }
             });
     }

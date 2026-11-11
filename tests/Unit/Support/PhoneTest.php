@@ -43,6 +43,20 @@ class PhoneTest extends TestCase
         $this->assertFalse(Phone::isValid('014567890'));
     }
 
+    public function test_ten_digits_are_not_a_mobile_and_the_message_says_what_is_wrong(): void
+    {
+        $this->assertNull(Phone::problem('987 654 321'));
+        $this->assertNull(Phone::problem('51987654321'));
+        $this->assertNull(Phone::problem('+51 987 654 321'));
+        $this->assertNull(Phone::problem('+1 555 123 4567'));
+
+        $this->assertSame('El celular tiene 9 dígitos y escribiste 10.', Phone::problem('9876543210'));
+        $this->assertSame('El celular tiene 9 dígitos y escribiste 10.', Phone::problem('098 765 4321'));
+        $this->assertSame('El celular tiene 9 dígitos y escribiste 8.', Phone::problem('98765432'));
+        $this->assertSame('El celular empieza con 9, por ejemplo 987 654 321.', Phone::problem('123456789'));
+        $this->assertFalse(Phone::isValid('1234567890'));
+    }
+
     public function test_formats_for_display_and_for_whatsapp_links(): void
     {
         $this->assertSame('987 654 321', Phone::display('+51987654321'));
