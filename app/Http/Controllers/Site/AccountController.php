@@ -92,8 +92,8 @@ class AccountController extends Controller
     {
         $data = $request->validate(['phone' => ['required', 'string', 'max:20']], attributes: ['phone' => 'Celular']);
 
-        if (! Phone::isValid($data['phone'])) {
-            return back()->withInput()->withErrors(['phone' => 'Escribe tu celular de 9 dígitos, por ejemplo 987 654 321.']);
+        if (($problem = Phone::problem($data['phone'])) !== null) {
+            return back()->withInput()->withErrors(['phone' => $problem]);
         }
 
         if (! $this->throttle('acceso:'.$request->ip(), 5) || ! $this->throttle('acceso:'.Phone::normalize($data['phone']), 2)) {

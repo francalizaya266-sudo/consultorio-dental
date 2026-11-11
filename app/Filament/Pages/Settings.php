@@ -88,8 +88,8 @@ class Settings extends Page
                                             ->tel()
                                             ->required()
                                             ->rule(fn () => function (string $attribute, $value, $fail) {
-                                                if (! Phone::isValid((string) $value)) {
-                                                    $fail('Escribe un celular válido.');
+                                                if (($problem = Phone::problem((string) $value)) !== null) {
+                                                    $fail($problem);
                                                 }
                                             }),
                                         TextInput::make('clinic.phone')

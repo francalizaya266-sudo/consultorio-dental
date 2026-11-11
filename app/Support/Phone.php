@@ -32,14 +32,29 @@ final class Phone
 
     public static function isValid(string $phone): bool
     {
-        try {
-            $normalized = self::normalize($phone);
-        } catch (InvalidArgumentException) {
-            return false;
+        return self::problem($phone) === null;
+    }
+
+    /**
+     * Qué le falta al número para ser un celular, o null si está bien. Sin "+" se toma como peruano:
+     * 9 dígitos que empiezan con 9 (con o sin el 51 delante). Un número de otro país se escribe con "+".
+     */
+    public static function problem(string $phone): ?string
+    {
+        $hasPlus = str_starts_with(trim($phone), '+');
+        $digits = (string) preg_replace('/\D+/', '', $phone);
+
+        if ($hasPlus && ! str_starts_with($digits, '51')) {
+            return strlen($digits) >= 10 && strlen($digits) <= 15 ? null : 'Revisa el número: con el código de país tiene de 10 a 15 dígitos.';
         }
 
-        // Celulares peruanos: 9 dígitos que empiezan con 9.
-        return ! str_starts_with($normalized, '+51') || preg_match('/^\+519\d{8}$/', $normalized) === 1;
+        $local = $hasPlus || (strlen($digits) === 11 && str_starts_with($digits, '51')) ? substr($digits, 2) : $digits;
+
+        return match (true) {
+            strlen($local) !== 9 => 'El celular tiene 9 dígitos y escribiste '.strlen($local).'.',
+            ! str_starts_with($local, '9') => 'El celular empieza con 9, por ejemplo 987 654 321.',
+            default => null,
+        };
     }
 
     /** Número para enlaces wa.me (solo dígitos). */

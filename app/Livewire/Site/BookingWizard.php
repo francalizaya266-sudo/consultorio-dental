@@ -328,8 +328,8 @@ class BookingWizard extends Component
 
         return [
             'phone' => [Rule::requiredIf($this->device === null), 'nullable', 'string', 'max:20', function (string $attribute, mixed $value, \Closure $fail) {
-                if ($this->device === null && ! Phone::isValid((string) $value)) {
-                    $fail('Escribe tu celular de 9 dígitos, por ejemplo 987 654 321.');
+                if ($this->device === null && ($problem = Phone::problem((string) $value)) !== null) {
+                    $fail($problem);
                 }
             }],
             'firstName' => [Rule::requiredIf($newPerson), 'nullable', 'string', 'max:80'],

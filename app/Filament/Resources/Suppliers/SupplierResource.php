@@ -80,8 +80,8 @@ class SupplierResource extends Resource
                 ->placeholder('987 654 321')
                 ->maxLength(20)
                 ->rule(fn () => function (string $attribute, mixed $value, Closure $fail) {
-                    if (filled($value) && ! Phone::isValid((string) $value)) {
-                        $fail('Escribe un celular válido, por ejemplo 987 654 321.');
+                    if (filled($value) && ($problem = Phone::problem((string) $value)) !== null) {
+                        $fail($problem);
                     }
                 })
                 ->dehydrateStateUsing(fn (?string $state) => filled($state) && Phone::isValid($state) ? Phone::normalize($state) : $state),
