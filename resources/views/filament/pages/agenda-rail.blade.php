@@ -74,10 +74,38 @@
             </x-filament::input.wrapper>
         @endif
 
+        @if ($rail['treatment'])
+            <p class="agenda-find-what"><b>{{ $rail['treatment']->name }}</b>@if ($rail['duration']) · <span>dura {{ $rail['duration'] }}</span>@endif</p>
+
+            {{-- Lo que el paciente pide al llamar: "en la tarde", "solo los sábados". --}}
+            <div class="agenda-find-when" role="group" aria-label="Cuándo le acomoda">
+                @foreach ([\App\Enums\DayPeriod::Morning, \App\Enums\DayPeriod::Afternoon] as $period)
+                    <button type="button" class="agenda-chip is-small" aria-pressed="{{ $rail['period'] === $period ? 'true' : 'false' }}" wire:click="findWhen('{{ $period->value }}')">{{ $period === \App\Enums\DayPeriod::Morning ? 'Mañana' : 'Tarde' }}</button>
+                @endforeach
+
+                @if (count($rail['weekdays']) > 1)
+                    <select class="agenda-chip is-small is-select" x-on:change="$wire.findOn($event.target.value)" aria-label="Día de la semana" @if ($findWeekday) data-active @endif>
+                        <option value="">Cualquier día</option>
+                        @foreach ($rail['weekdays'] as $number => $name)
+                            <option value="{{ $number }}" @selected($findWeekday === $number)>{{ $name }}</option>
+                        @endforeach
+                    </select>
+                @endif
+
+            </div>
+        @endif
+
         @if ($rail['slots'] === null)
             <p class="agenda-card-hint">Elige un tratamiento para ver cuándo entra.</p>
         @elseif ($rail['slots'] === [])
-            <p class="agenda-card-hint">No hay horas libres para {{ mb_strtolower($rail['treatment']->name) }} en las próximas {{ intdiv($rail['searchDays'], 7) }} semanas.</p>
+            <p class="agenda-card-hint">
+                {{ $rail['notFound'] }}
+                @if ($rail['filtered'])
+                    <button type="button" class="agenda-card-link" wire:click="findAnytime">Ver a cualquier hora y día</button>
+                @elseif ($rail['waitlistUrl'])
+                    <a href="{{ $rail['waitlistUrl'] }}" class="agenda-card-link">Apuntar en la lista de espera</a>
+                @endif
+            </p>
         @else
             <div class="agenda-find">
                 @foreach ($rail['slots'] as $found)
@@ -104,6 +132,10 @@
                         </div>
                     </div>
                 @endforeach
+
+                @if ($rail['canFindMore'])
+                    <button type="button" class="agenda-card-link" wire:click="findMore" wire:loading.attr="disabled">Ver más días</button>
+                @endif
 
                 @if (collect($rail['slots'])->flatMap(fn (array $found) => $found['slots'])->contains('recommended', true))
                     <p class="agenda-card-hint">★ = pegada a otra cita, no deja huecos.</p>

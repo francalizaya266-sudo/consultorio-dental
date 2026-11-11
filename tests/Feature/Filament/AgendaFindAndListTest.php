@@ -15,6 +15,7 @@ use App\Services\Agenda\GapFinder;
 use Carbon\CarbonImmutable;
 use Database\Seeders\CatalogSeeder;
 use Filament\Actions\Testing\TestAction;
+use Filament\Forms\Components\ToggleButtons;
 use Illuminate\Foundation\Testing\LazilyRefreshDatabase;
 use Livewire\Livewire;
 use Tests\Concerns\CreatesAgenda;
@@ -90,6 +91,80 @@ class AgendaFindAndListTest extends TestCase
             ->assertHasNoActionErrors();
 
         $this->assertSame('2026-11-03 15:00', $patient->appointments()->sole()->starts_at->format('Y-m-d H:i'));
+    }
+
+    public function test_find_a_gap_answers_in_the_afternoon_and_only_on_saturdays(): void
+    {
+        $treatment = Treatment::factory()->create(['name' => 'Limpieza', 'duration_minutes' => 30, 'buffer_minutes' => 10]);
+        $doctor = $this->doctorOffering($treatment);
+        $doctors = $doctor->newCollection([$doctor->load('treatments')]);
+        $finder = app(GapFinder::class);
+
+        $afternoons = $finder->nextSlots($treatment, $doctors, CarbonImmutable::parse('2026-11-02'), period: DayPeriod::Afternoon);
+        $saturdays = $finder->nextSlots($treatment, $doctors, CarbonImmutable::parse('2026-11-02'), weekday: 6);
+
+        $this->assertSame(['15:00', '16:00', '17:00', '18:00'], array_column($afternoons[0]['slots'], 'time'));
+        $this->assertSame(['2026-11-07', '2026-11-14', '2026-11-21'], array_map(fn (array $day) => $day['date']->toDateString(), $saturdays));
+
+        $this->actingAs(User::factory()->reception()->create());
+
+        Livewire::test(Agenda::class)
+            ->call('findFor', $treatment->id)
+            ->assertSeeHtmlInOrder(['Limpieza', 'dura 30 min', 'Mañana', 'Tarde', 'Cualquier día', 'Sábado', 'Hoy', '09:00'])
+            ->call('findWhen', 'afternoon')
+            ->assertSet('findPeriod', 'afternoon')
+            ->assertSeeHtmlInOrder(['Hoy', '15:00', '16:00', '17:00', '18:00'])
+            ->call('findOn', '6')
+            ->assertSet('findWeekday', 6)
+            ->assertSeeHtmlInOrder(['Sábado 7', '15:00', 'Sábado 14', 'Sábado 21', 'Ver más días'])
+            ->call('findMore')
+            ->assertSet('findDays', 6)
+            ->assertSeeHtmlInOrder(['Sábado 28', 'Sábado 5 de diciembre', 'Sábado 12 de diciembre'])
+            ->call('findWhen', 'afternoon')
+            ->assertSet('findPeriod', 'any')
+            ->assertSet('findDays', 3)
+            ->assertSeeHtmlInOrder(['Sábado 7', '09:00']);
+    }
+
+    public function test_find_a_gap_says_what_was_asked_when_there_is_no_room_and_lets_you_drop_it(): void
+    {
+        $treatment = Treatment::factory()->create(['name' => 'Limpieza']);
+        $this->doctorOffering($treatment);
+
+        $this->actingAs(User::factory()->reception()->create());
+
+        Livewire::test(Agenda::class)
+            ->call('findFor', $treatment->id)
+            ->call('findWhen', 'morning')
+            ->call('findOn', 7)
+            ->assertSee('No hay horas libres para limpieza en la mañana los domingos en las próximas 9 semanas.')
+            ->assertSee('Ver a cualquier hora y día')
+            ->call('findAnytime')
+            ->assertSet('findPeriod', 'any')
+            ->assertSet('findWeekday', null)
+            ->assertSeeHtmlInOrder(['Buscar hueco', 'Hoy', '09:00'])
+            ->assertDontSee('No hay horas libres');
+    }
+
+    public function test_a_full_day_in_the_new_appointment_says_so_and_jumps_to_the_next_day_with_room(): void
+    {
+        $treatment = Treatment::factory()->create(['duration_minutes' => 30, 'buffer_minutes' => 10]);
+        $doctor = $this->doctorOffering($treatment);
+
+        $this->actingAs(User::factory()->reception()->create());
+
+        // El domingo no atiende: el siguiente día con lugar es el lunes.
+        Livewire::test(Agenda::class)
+            ->mountAction('createAppointment', ['doctor' => $doctor->id, 'date' => '2026-11-08', 'treatment' => $treatment->id])
+            ->assertActionDataSet(['date' => '2026-11-08'])
+            ->assertSchemaComponentExists('slot', checkComponentUsing: fn (ToggleButtons $slot) => str_contains(
+                $slot->getChildSchema($slot::BELOW_CONTENT_SCHEMA_KEY)->toHtml(),
+                'Ese día no hay horario libre. El siguiente con lugar es el lunes 9 de noviembre.',
+            ))
+            ->callAction(TestAction::make('nextDayWithSlots')->schemaComponent('slot'))
+            ->assertActionDataSet(['date' => '2026-11-09'])
+            ->assertSchemaComponentExists('slot', checkComponentUsing: fn (ToggleButtons $slot) => $slot->getOptions() !== []
+                && ! str_contains($slot->getChildSchema($slot::BELOW_CONTENT_SCHEMA_KEY)->toHtml(), 'no hay horario libre'));
     }
 
     public function test_a_second_tap_on_the_same_treatment_clears_the_search(): void
