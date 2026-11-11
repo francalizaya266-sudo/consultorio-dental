@@ -14,6 +14,7 @@ use App\Filament\Resources\Appointments\Pages\ListAppointments;
 use App\Filament\Resources\Appointments\Pages\ViewAppointment;
 use App\Filament\Resources\Consultations\ConsultationResource;
 use App\Filament\Resources\Patients\Pages\ListPatients;
+use App\Filament\Widgets\DayMomentCard;
 use App\Filament\Widgets\FollowUpsToday;
 use App\Filament\Widgets\MonthOverview;
 use App\Filament\Widgets\NextPatient;
@@ -91,6 +92,40 @@ class DashboardPanelTest extends TestCase
         Setting::set('reports.doctors_see_own', true);
         $this->assertSame([TodayStats::class, NextPatient::class, TodayAppointments::class, MonthOverview::class], $this->visibleWidgets());
         $this->get(Dashboard::getUrl())->assertOk();
+    }
+
+    public function test_home_shows_what_to_confirm_before_opening_and_what_is_left_when_closing(): void
+    {
+        $treatment = Treatment::factory()->create(['name' => 'Limpieza dental']);
+        $doctor = $this->doctorOffering($treatment);
+        $rosa = Patient::factory()->create(['first_name' => 'Rosa', 'last_name' => 'Quispe']);
+        $pedro = Patient::factory()->create(['first_name' => 'Pedro', 'last_name' => 'Huamán']);
+        $rosasVisit = Appointment::factory()->for($doctor)->for($treatment)->for($rosa)->at('2026-11-02 10:00')->create();
+        Appointment::factory()->for($doctor)->for($treatment)->for($pedro)->at('2026-11-02 16:00')->confirmed()->create();
+        $this->actingAs(User::factory()->reception()->create());
+
+        // 08:00, antes de abrir: lo que falta confirmar.
+        $this->assertContains(DayMomentCard::class, $this->visibleWidgets());
+        Livewire::test(DayMomentCard::class)
+            ->assertSeeInOrder(['Antes de abrir', '1 cita de hoy sin confirmar', '10:00 · Rosa Quispe', 'Limpieza dental', 'Confirmar'])
+            ->assertDontSee(['Pedro', 'Para cerrar el día']);
+
+        // Durante el día mandan la agenda y la sala.
+        $this->travelTo(CarbonImmutable::parse('2026-11-02 11:00', 'America/Lima'));
+        $this->assertNotContains(DayMomentCard::class, $this->visibleWidgets());
+
+        // 19:30: Rosa se fue debiendo y la cita de Pedro quedó sin cerrar.
+        $rosasVisit->update(['status' => AppointmentStatus::Completed]);
+        Charge::factory()->for($rosa)->create(['amount' => 120, 'description' => 'Limpieza dental', 'charged_at' => '2026-11-02 10:40']);
+        $this->travelTo(CarbonImmutable::parse('2026-11-02 19:30', 'America/Lima'));
+        Livewire::test(DayMomentCard::class)
+            ->assertSeeInOrder(['Para cerrar el día', 'Cobrado hoy', 'S/ 0.00', 'Se fueron debiendo', 'S/ 120.00'])
+            ->assertSeeInOrder(['Se fueron debiendo', 'Rosa Quispe', 'Citas sin cerrar', '16:00 · Pedro Huamán', 'Falta el cierre de caja', 'Cerrar la caja'])
+            ->assertDontSee('Antes de abrir');
+
+        // El doctor no la ve: lo suyo es su próximo paciente.
+        $this->actingAs($doctor->user);
+        $this->assertNotContains(DayMomentCard::class, $this->visibleWidgets());
     }
 
     public function test_only_the_number_that_needs_someone_is_highlighted(): void
