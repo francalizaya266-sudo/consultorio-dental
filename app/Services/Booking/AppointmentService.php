@@ -427,6 +427,8 @@ class AppointmentService
         $this->transition($appointment, $by, AppointmentStatus::CheckedIn, [AppointmentStatus::Pending, AppointmentStatus::Confirmed], [
             'checked_in_at' => now(),
         ]);
+
+        $this->alerts->patientArrived($appointment, $by);
     }
 
     /**
@@ -547,8 +549,14 @@ class AppointmentService
             throw BookingException::notChangeable();
         }
 
+        $wasWaiting = $appointment->status === AppointmentStatus::CheckedIn;
+
         $appointment->update(['status' => $to] + $attributes);
         $appointment->logEvent($to->value, 'staff');
+
+        if ($wasWaiting) {
+            $this->alerts->arrivalAttended($appointment);
+        }
     }
 
     private function cancel(Appointment $appointment, CancelledBy $by, ?string $reason, ?User $user = null): void

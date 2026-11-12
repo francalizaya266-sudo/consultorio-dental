@@ -3,6 +3,7 @@
 namespace App\Services;
 
 use App\Enums\UserRole;
+use App\Models\Appointment;
 use App\Models\User;
 use Filament\Actions\Action;
 use Filament\Notifications\Notification;
@@ -38,6 +39,32 @@ class StaffAlerts
         }
 
         $this->deliver([$user], Notification::make()->title($title)->body($body));
+    }
+
+    /**
+     * Al doctor: su paciente ya está en sala. Si lo marcó él mismo, no hace falta decírselo. El aviso guarda de
+     * qué cita es, para darlo por leído cuando el paciente pasa a consulta.
+     */
+    public function patientArrived(Appointment $appointment, User $by): void
+    {
+        $doctorUser = $appointment->doctor->user;
+
+        if ($doctorUser === null || ! $doctorUser->is_active || $doctorUser->is($by)) {
+            return;
+        }
+
+        $this->deliver([$doctorUser], Notification::make()
+            ->title("Llegó {$appointment->patient->full_name}")
+            ->body("Te espera en sala. Cita de las {$appointment->starts_at->format('H:i')} · {$appointment->treatment->name}.")
+            ->viewData(['arrival' => $appointment->getKey()]));
+    }
+
+    /** El paciente ya no espera (pasó a consulta o la cita se cerró): el aviso de que llegó queda como leído. */
+    public function arrivalAttended(Appointment $appointment): void
+    {
+        $appointment->doctor->user?->unreadNotifications()
+            ->where('data->viewData->arrival', $appointment->getKey())
+            ->update(['read_at' => now()]);
     }
 
     /**

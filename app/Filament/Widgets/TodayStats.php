@@ -4,11 +4,11 @@ namespace App\Filament\Widgets;
 
 use App\Enums\AppointmentStatus;
 use App\Enums\RescheduleRequestStatus;
+use App\Filament\Concerns\RefreshesWithToday;
 use App\Filament\Pages\CashClosing as CashClosingPage;
 use App\Filament\Resources\Appointments\AppointmentResource;
 use App\Filament\Resources\RescheduleRequests\RescheduleRequestResource;
 use App\Filament\Resources\WhatsappMessages\WhatsappMessageResource;
-use App\Filament\Widgets\Concerns\RefreshesWithToday;
 use App\Models\Appointment;
 use App\Models\Payment;
 use App\Models\User;

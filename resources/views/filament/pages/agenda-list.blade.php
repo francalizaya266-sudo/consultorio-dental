@@ -2,7 +2,7 @@
     El día en lista (sobre todo para el celular y la tablet de recepción): tarjetas grandes en orden de hora con el
     botón del paso que sigue (Confirmar, Llegó, Atender, Cobrar…), la línea de ahora y los huecos libres con "Agendar".
 --}}
-<div class="agenda-list" x-data="agendaList">
+<div class="agenda-list" x-data="agendaList" x-on:{{ \App\Filament\Pages\Dashboard::CHANGED }}.window="refresh()">
     <div class="agenda-list-inner" wire:key="list-{{ $date }}" x-init="arrive()">
         @if (count($list['week']) > 1)
             <nav class="agenda-days" aria-label="Días de la semana">

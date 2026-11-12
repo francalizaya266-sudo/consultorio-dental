@@ -2,6 +2,7 @@
 
 namespace App\Providers;
 
+use App\Services\Dashboard\TodayPulse;
 use App\Services\Inventory\SupplyForecast;
 use App\Services\Web\ClinicInfo;
 use Carbon\Carbon;
@@ -36,5 +37,8 @@ class AppServiceProvider extends ServiceProvider
         Model::shouldBeStrict(! $this->app->isProduction());
 
         Event::listen(Login::class, fn (Login $event) => $event->user->forceFill(['last_login_at' => now()])->saveQuietly());
+
+        // Lo que guarda una persona lo ven las demás en pocos segundos, sin recargar.
+        TodayPulse::watch();
     }
 }

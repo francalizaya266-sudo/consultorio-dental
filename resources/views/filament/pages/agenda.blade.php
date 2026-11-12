@@ -101,10 +101,13 @@
                 refresher: null,
 
                 init() {
-                    this.refresher = setInterval(() => {
-                        if (document.hidden || this.$wire.mountedActions?.length) return;
-                        this.$wire.$refresh();
-                    }, 30000);
+                    this.refresher = setInterval(() => document.hidden || this.refresh(), 30000);
+                },
+
+                /** Cada 30 s y apenas otra persona guarda algo (el pulso del panel), salvo con una ventana abierta. */
+                refresh() {
+                    if (this.$wire.mountedActions?.length) return;
+                    this.$wire.$refresh();
                 },
 
                 destroy() {
@@ -143,12 +146,17 @@
                 hover: null,
                 refresher: null,
 
-                // Se refresca sola cada 30 s, salvo mientras alguien arrastra una cita o tiene una ventana abierta.
                 init() {
-                    this.refresher = setInterval(() => {
-                        if (document.hidden || this.press || this.dragging || this.$wire.mountedActions?.length) return;
-                        this.$wire.$refresh();
-                    }, 30000);
+                    this.refresher = setInterval(() => document.hidden || this.refresh(), 30000);
+                },
+
+                /**
+                 * Se refresca sola cada 30 s y apenas otra persona guarda algo (el pulso del panel), salvo
+                 * mientras alguien arrastra una cita o tiene una ventana abierta.
+                 */
+                refresh() {
+                    if (this.press || this.dragging || this.$wire.mountedActions?.length) return;
+                    this.$wire.$refresh();
                 },
 
                 /** Cada vez que se cambia de día o de vista, la grilla va a hoy y a la hora actual. */
@@ -354,6 +362,7 @@
             data-from="{{ $from }}"
             data-scale="{{ $scale }}"
             x-data="agendaGrid"
+            x-on:{{ \App\Filament\Pages\Dashboard::CHANGED }}.window="refresh()"
             x-on:pointermove.window="move($event)"
             x-on:pointerup.window="end()"
             x-on:pointercancel.window="cancel()"
