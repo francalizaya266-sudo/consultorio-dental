@@ -183,6 +183,19 @@ class Appointment extends Model
             ->where('ends_at', '>', now()->subHours(self::WAIT_EXPIRES_HOURS));
     }
 
+    /** Citas que quedaron dentro de un bloqueo de horario, de su doctor o de todo el consultorio. */
+    #[Scope]
+    protected function insideABlock(Builder $query): Builder
+    {
+        return $query->whereExists(fn ($blocks) => $blocks
+            ->from('schedule_blocks')
+            ->where(fn ($owner) => $owner
+                ->whereNull('schedule_blocks.doctor_id')
+                ->orWhereColumn('schedule_blocks.doctor_id', $query->qualifyColumn('doctor_id')))
+            ->whereColumn('schedule_blocks.starts_at', '<', $query->qualifyColumn('ends_at'))
+            ->whereColumn('schedule_blocks.ends_at', '>', $query->qualifyColumn('starts_at')));
+    }
+
     /** Ya pasó su hora y nadie anotó que llegó: o vino y se atendió, o no asistió. */
     public function endedWithoutArriving(): bool
     {

@@ -53,20 +53,31 @@ class AppointmentReminders
     public function __construct(
         private readonly WhatsAppOutbox $outbox,
         private readonly StaffAlerts $alerts,
+        private readonly RescheduleRequestService $rescheduleRequests,
     ) {}
 
     /**
      * Pone al día todo lo que toca a esta hora.
      *
-     * @return array{reminders: int, flagged: int, expired: int}
+     * @return array{reminders: int, flagged: int, expired: int, requests: int}
      */
     public function catchUp(): array
     {
         return [
             'expired' => $this->expireStale(),
+            'requests' => $this->closeStaleRequests(),
             'reminders' => $this->prepareReminders(),
             'flagged' => $this->flagUnconfirmed(),
         ];
+    }
+
+    /**
+     * Cierra las solicitudes de cambio de horario que siguen pendientes de citas que ya pasaron: ya no hay nada
+     * que aprobar. Devuelve cuántas cerró.
+     */
+    public function closeStaleRequests(): int
+    {
+        return $this->rescheduleRequests->expireStale();
     }
 
     /** Deja en Avisos el recordatorio de las citas a las que ya les toca. Devuelve cuántos preparó. */

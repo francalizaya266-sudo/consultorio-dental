@@ -244,4 +244,29 @@ class AgendaFindAndListTest extends TestCase
             ->set('date', '2026-11-08')
             ->assertSee('Nadie atiende este día.');
     }
+
+    public function test_small_screens_get_a_button_that_opens_the_find_a_gap_panel(): void
+    {
+        $this->doctorOffering(Treatment::factory()->create());
+        $this->actingAs(User::factory()->reception()->create());
+
+        // En el celular el panel no va al costado: este botón lo abre debajo de la barra.
+        Livewire::test(Agenda::class)
+            ->assertSeeHtmlInOrder(['class="agenda-find-toggle"', 'aria-controls="agenda-rail"', 'Buscar hueco', 'id="agenda-rail"']);
+    }
+
+    public function test_the_list_and_the_grid_are_each_built_from_scratch_when_switching_views(): void
+    {
+        $this->doctorOffering(Treatment::factory()->create());
+        $this->actingAs(User::factory()->reception()->create());
+
+        // Con llaves distintas, al pasar de "Lista" a "Día" la grilla no hereda la caja de la lista (y sus funciones no se pierden).
+        Livewire::test(Agenda::class)
+            ->set('mode', 'list')
+            ->assertSeeHtml('wire:key="agenda-list"')
+            ->assertDontSeeHtml('wire:key="agenda-frame"')
+            ->set('mode', 'day')
+            ->assertSeeHtml('wire:key="agenda-frame"')
+            ->assertDontSeeHtml('wire:key="agenda-list"');
+    }
 }

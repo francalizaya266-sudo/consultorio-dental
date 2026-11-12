@@ -1,8 +1,9 @@
 {{--
-    Panel al costado de la agenda (solo en pantallas anchas): el mes con lo lleno de cada día para saltar a uno,
-    "Buscar hueco" para contestar "¿tienen hora para…?" con un toque, y quién de la lista de espera cabe ese día.
+    Panel para buscar horas libres: el mes con lo lleno de cada día para saltar a uno, "Buscar hueco" para contestar
+    "¿tienen hora para…?" con un toque, y quién de la lista de espera cabe ese día. En pantallas anchas va al
+    costado de la agenda; en el celular y la tablet se abre con el botón "Buscar hueco", debajo de la barra.
 --}}
-<aside class="agenda-rail" aria-label="Buscar horas libres">
+<aside class="agenda-rail" id="agenda-rail" aria-label="Buscar horas libres">
     <section class="agenda-card">
         <div class="agenda-card-head">
             <h2 class="agenda-card-title">{{ $rail['month'] }}</h2>

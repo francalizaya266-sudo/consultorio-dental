@@ -10,6 +10,7 @@ use App\Models\Appointment;
 use App\Models\Treatment;
 use App\Models\User;
 use App\Models\WhatsappMessage;
+use App\Services\Booking\AppointmentService;
 use App\Services\Booking\PatientChangePolicy;
 use App\Services\Booking\RescheduleMode;
 use App\Services\Booking\RescheduleRequestService;
@@ -134,5 +135,111 @@ class RescheduleRequestServiceTest extends TestCase
         $service->requestByPatient($appointment, [CarbonImmutable::parse('2026-11-05 10:00')]);
 
         $this->assertSame(RescheduleRequestStatus::Withdrawn, $first->fresh()->status);
+    }
+
+    public function test_moving_the_appointment_another_way_closes_the_pending_request_with_the_reason(): void
+    {
+        $this->freezeMonday();
+        $reception = User::factory()->reception()->create();
+        $appointment = $this->appointmentTomorrow();
+        $request = app(RescheduleRequestService::class)->requestByPatient($appointment, [CarbonImmutable::parse('2026-11-04 10:00')]);
+
+        app(AppointmentService::class)->rescheduleByStaff($appointment, CarbonImmutable::parse('2026-11-05 16:00'), $reception, agreed: true);
+
+        $request->refresh();
+        $this->assertSame(RescheduleRequestStatus::Expired, $request->status);
+        $this->assertSame('La cita se movió a otro horario.', $request->response_note);
+        $this->assertTrue($request->resolvedBy->is($reception));
+        $this->assertSame('reschedule_expired', $appointment->events()->latest('id')->first()->type);
+    }
+
+    public function test_cancelling_the_appointment_closes_the_pending_request(): void
+    {
+        $this->freezeMonday();
+        $appointment = $this->appointmentTomorrow();
+        $request = app(RescheduleRequestService::class)->requestByPatient($appointment, [CarbonImmutable::parse('2026-11-04 10:00')]);
+
+        app(AppointmentService::class)->cancelByStaff($appointment, User::factory()->reception()->create(), notifyPatient: false);
+
+        $this->assertSame(RescheduleRequestStatus::Expired, $request->fresh()->status);
+        $this->assertSame('La cita se canceló.', $request->fresh()->response_note);
+    }
+
+    public function test_a_request_is_closed_once_the_patient_shows_up_for_the_original_time(): void
+    {
+        $this->freezeMonday();
+        $appointment = $this->appointmentTomorrow();
+        $request = app(RescheduleRequestService::class)->requestByPatient($appointment, [CarbonImmutable::parse('2026-11-04 10:00')]);
+        $this->travelTo('2026-11-03 09:55');
+
+        app(AppointmentService::class)->markArrived($appointment, User::factory()->reception()->create());
+
+        $this->assertSame(RescheduleRequestStatus::Expired, $request->fresh()->status);
+        $this->assertSame('El paciente vino a la cita.', $request->fresh()->response_note);
+    }
+
+    public function test_requests_of_appointments_that_already_passed_are_closed_on_the_next_catch_up(): void
+    {
+        $this->freezeMonday();
+        $service = app(RescheduleRequestService::class);
+        $passed = $service->requestByPatient($this->appointmentTomorrow(), [CarbonImmutable::parse('2026-11-04 10:00')]);
+        $treatment = Treatment::factory()->create(['duration_minutes' => 30]);
+        $later = Appointment::factory()->for($this->doctorOffering($treatment))->for($treatment)->at('2026-11-06 10:00')->confirmed()->create();
+        $stillOpen = $service->requestByPatient($later, [CarbonImmutable::parse('2026-11-07 10:00')]);
+
+        $this->travelTo('2026-11-03 10:05');
+        $this->artisan('citas:preparar-recordatorios')->assertSuccessful();
+
+        $this->assertSame(RescheduleRequestStatus::Expired, $passed->fresh()->status);
+        $this->assertSame('La cita ya pasó o se cerró.', $passed->fresh()->response_note);
+        $this->assertNull($passed->fresh()->resolved_by_user_id);
+        $this->assertSame(RescheduleRequestStatus::Pending, $stillOpen->fresh()->status);
+    }
+
+    public function test_offering_another_time_moves_the_appointment_and_asks_the_patient_to_confirm(): void
+    {
+        $this->freezeMonday();
+        $reception = User::factory()->reception()->create();
+        $appointment = $this->appointmentTomorrow();
+        $service = app(RescheduleRequestService::class);
+        $request = $service->requestByPatient($appointment, [CarbonImmutable::parse('2026-11-04 10:00')]);
+
+        $moved = $service->offerAnotherTime($request, CarbonImmutable::parse('2026-11-05 16:00'), $reception);
+
+        $this->assertSame('2026-11-05 16:00', $moved->starts_at->format('Y-m-d H:i'));
+        $this->assertSame(AppointmentStatus::Pending, $moved->status);
+        $this->assertSame([MessageTemplateKey::Rescheduled], WhatsappMessage::query()->pending()->get()->pluck('template_key')->all());
+        $request->refresh();
+        $this->assertSame(RescheduleRequestStatus::Approved, $request->status);
+        $this->assertNull($request->approved_option_id);
+        $this->assertSame('Se le dio otro horario: jue. 05/11 16:00.', $request->response_note);
+        $this->assertTrue($request->resolvedBy->is($reception));
+    }
+
+    public function test_another_time_already_agreed_with_the_patient_stays_confirmed_without_a_notice(): void
+    {
+        $this->freezeMonday();
+        $appointment = $this->appointmentTomorrow();
+        $service = app(RescheduleRequestService::class);
+        $request = $service->requestByPatient($appointment, [CarbonImmutable::parse('2026-11-04 10:00')]);
+
+        $moved = $service->offerAnotherTime($request, CarbonImmutable::parse('2026-11-05 16:00'), User::factory()->reception()->create(), agreed: true);
+
+        $this->assertSame(AppointmentStatus::Confirmed, $moved->status);
+        $this->assertSame(0, WhatsappMessage::query()->pending()->count());
+    }
+
+    public function test_another_time_cannot_be_offered_on_a_request_already_resolved(): void
+    {
+        $this->freezeMonday();
+        $reception = User::factory()->reception()->create();
+        $appointment = $this->appointmentTomorrow();
+        $service = app(RescheduleRequestService::class);
+        $request = $service->requestByPatient($appointment, [CarbonImmutable::parse('2026-11-04 10:00')]);
+        $service->reject($request, $reception);
+
+        $this->expectExceptionObject(BookingException::notChangeable());
+
+        $service->offerAnotherTime($request, CarbonImmutable::parse('2026-11-05 16:00'), $reception);
     }
 }

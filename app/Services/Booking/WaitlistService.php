@@ -30,6 +30,9 @@ final class WaitlistService
     /** Horas que el horario ofrecido queda apartado para quien lo recibió (o hasta la cita, si es antes). */
     public const HOLD_HOURS = 2;
 
+    /** Minutos que, como mínimo, tiene para responder cuando el horario ofrecido es muy pronto. */
+    public const HOLD_MIN_MINUTES = 15;
+
     public function __construct(
         private readonly AvailabilityService $availability,
         private readonly WhatsAppOutbox $outbox,
@@ -150,14 +153,17 @@ final class WaitlistService
 
     /**
      * Hasta cuándo queda apartado un horario que se ofrece ahora: unas horas, pero no tan encima de la cita que
-     * ya no dé tiempo a llegar (media hora antes). Si la cita es muy pronto, hasta que empiece.
+     * ya no dé tiempo a llegar (media hora antes). Si la cita es muy pronto, igual se le da un plazo mínimo para
+     * responder (un "te lo guardo 3 minutos" no sirve), sin pasar de la hora en que empieza.
      */
     public function holdEndsAt(CarbonInterface $startsAt): CarbonImmutable
     {
         $startsAt = CarbonImmutable::instance($startsAt);
-        $end = now()->toImmutable()->addHours(self::HOLD_HOURS)->min($startsAt->subMinutes(30));
+        $now = now()->toImmutable();
+        $usual = $now->addHours(self::HOLD_HOURS)->min($startsAt->subMinutes(30));
+        $atLeast = $now->addMinutes(self::HOLD_MIN_MINUTES)->min($startsAt);
 
-        return $end->isAfter(now()) ? $end : $startsAt;
+        return $usual->max($atLeast);
     }
 
     /**

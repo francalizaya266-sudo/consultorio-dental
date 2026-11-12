@@ -15,6 +15,7 @@ use App\Services\Agenda\Slot;
 use App\Services\Patients\PatientInsights;
 use Carbon\CarbonImmutable;
 use Filament\Actions\Action;
+use Filament\Forms\Components\Checkbox;
 use Filament\Forms\Components\DatePicker;
 use Filament\Forms\Components\Field;
 use Filament\Forms\Components\Hidden;
@@ -103,9 +104,29 @@ final class SlotPicker
                 ->label('Hora')
                 ->seconds(false)
                 ->minutesStep(5)
+                ->live()
                 ->visible(fn (Get $get) => (bool) $get('manual'))
                 ->required(fn (Get $get) => (bool) $get('manual')),
+
+            // "Otra hora" deja elegir una que ya pasó (sirve para anotar a quien vino sin cita): antes se pregunta.
+            Checkbox::make('past_time_ok')
+                ->label('Esa hora ya pasó: registrar la cita igual')
+                ->helperText('No se prepara aviso al paciente. Si fue un error, corrige la hora.')
+                ->visible(fn (Get $get) => self::manualTimeIsPast($get))
+                ->accepted(fn (Get $get) => self::manualTimeIsPast($get))
+                ->validationMessages(['accepted' => 'Esa hora ya pasó. Corrígela o marca la casilla para registrar la cita igual.'])
+                ->dehydrated(false),
         ];
+    }
+
+    /** Con "Otra hora", la fecha y hora escritas ya quedaron atrás. */
+    private static function manualTimeIsPast(Get $get): bool
+    {
+        if (! $get('manual') || blank($get('date')) || blank($get('manual_time'))) {
+            return false;
+        }
+
+        return CarbonImmutable::parse($get('date'))->setTimeFromTimeString($get('manual_time'))->isPast();
     }
 
     /** Qué se hace: solo lo que realiza el doctor elegido (si ya hay uno). */

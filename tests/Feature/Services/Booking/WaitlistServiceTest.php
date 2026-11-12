@@ -214,6 +214,33 @@ class WaitlistServiceTest extends TestCase
         $this->assertSame(WaitlistStatus::Booked, $rosa->fresh()->status);
     }
 
+    public function test_a_slot_offered_for_very_soon_is_still_held_long_enough_to_answer(): void
+    {
+        $this->travelTo('2026-11-02 09:00');
+        $heldUntil = fn (string $startsAt) => $this->service()->holdEndsAt(CarbonImmutable::parse($startsAt))->format('H:i');
+
+        // Lo de siempre: dos horas, o hasta media hora antes de la cita.
+        $this->assertSame(['11:00', '10:00', '09:20'], [$heldUntil('2026-11-02 15:00'), $heldUntil('2026-11-02 10:30'), $heldUntil('2026-11-02 09:50')]);
+        // Muy pronto: al menos un cuarto de hora para responder, sin pasar de la hora en que empieza.
+        $this->assertSame(['09:15', '09:15', '09:15', '09:10'], [$heldUntil('2026-11-02 09:40'), $heldUntil('2026-11-02 09:31'), $heldUntil('2026-11-02 09:20'), $heldUntil('2026-11-02 09:10')]);
+    }
+
+    public function test_the_offer_for_a_slot_in_half_an_hour_tells_the_patient_a_time_they_can_still_meet(): void
+    {
+        $treatment = Treatment::factory()->create(['name' => 'Limpieza dental', 'duration_minutes' => 30]);
+        $doctor = $this->doctorOffering($treatment);
+        $rosa = WaitlistEntry::factory()->for(Patient::factory()->state(['first_name' => 'Rosa']))->for($treatment)->create();
+        $this->travelTo('2026-11-02 09:00');
+        $startsAt = CarbonImmutable::parse('2026-11-02 09:35');
+
+        $message = $this->service()->offerDraft($rosa, $doctor, $treatment, $startsAt);
+        $this->service()->markOffered($rosa, $doctor, $treatment, $startsAt);
+
+        // Antes le decía "hasta las 9:05": cinco minutos después el horario ya se ofrecía a otro.
+        $this->assertStringContainsString('Te lo guardamos hasta las 9:15 am', app(WhatsAppOutbox::class)->render($message));
+        $this->assertSame('09:15', $rosa->fresh()->held_until->format('H:i'));
+    }
+
     public function test_an_unanswered_offer_frees_the_slot_and_suggests_the_next_person(): void
     {
         $reception = User::factory()->reception()->create();

@@ -14,10 +14,13 @@ use App\Models\Appointment;
 use App\Models\Consultation;
 use App\Models\Doctor;
 use App\Models\User;
+use App\Models\WhatsappMessage;
 use App\Services\Booking\AppointmentService;
 use App\Services\Clinical\ConsultationService;
 use App\Services\WhatsApp\WhatsAppOutbox;
 use App\Support\Dates;
+use App\Support\Phone;
+use Carbon\CarbonInterface;
 use Filament\Actions\Action;
 use Filament\Actions\ActionGroup;
 use Filament\Actions\BulkAction;
@@ -43,6 +46,7 @@ final class AppointmentActions
             self::continueConsultation(),
             self::complete(),
             CheckoutAction::make(),
+            self::undo(),
             ActionGroup::make([
                 self::patientProfile(),
                 self::viewConsultation(),
@@ -50,6 +54,7 @@ final class AppointmentActions
                 self::move(),
                 self::closeWithoutDoctor(),
                 self::noShow(),
+                self::undoInMenu(),
                 self::cancel(),
             ]),
         ];
@@ -70,6 +75,7 @@ final class AppointmentActions
             self::continueConsultation(),
             self::complete(),
             CheckoutAction::make(),
+            self::undo(),
             // A la vista pero en gris: el botón de color es el paso del día (llegó, atender, cobrar).
             self::whatsapp()->color('gray'),
             ActionGroup::make([
@@ -78,6 +84,7 @@ final class AppointmentActions
                 self::move(),
                 self::closeWithoutDoctor(),
                 self::noShow(),
+                self::undoInMenu(),
                 self::cancel(),
             ])->label('Más')->button()->color('gray')->icon(Heroicon::OutlinedEllipsisHorizontal),
         ];
@@ -293,6 +300,71 @@ final class AppointmentActions
             ));
     }
 
+    /**
+     * Deshacer un paso marcado por error, durante un día. Va a la vista cuando la cita quedó como "No asistió" o
+     * cancelada: ahí ya no queda otro botón, y es el toque equivocado que más cuesta (un paciente que sí vino).
+     */
+    public static function undo(): Action
+    {
+        return self::undoing('undo')
+            ->visible(fn (Appointment $record) => in_array(self::undoableStep($record), AppointmentStatus::missed(), true));
+    }
+
+    /** En "Más": deshacer un "Llegó" o un "Confirmar" marcado por error. La cita sigue en curso y tiene sus botones del día. */
+    public static function undoInMenu(): Action
+    {
+        return self::undoing('undoStep')
+            ->visible(fn (Appointment $record) => in_array(self::undoableStep($record), [AppointmentStatus::Confirmed, AppointmentStatus::CheckedIn], true));
+    }
+
+    private static function undoing(string $name): Action
+    {
+        return Action::make($name)
+            ->label(fn (Appointment $record) => self::undoLabel($record))
+            ->icon(Heroicon::OutlinedArrowUturnLeft)
+            ->color('gray')
+            ->requiresConfirmation()
+            ->modalHeading(fn (Appointment $record) => '¿'.self::undoLabel($record).'?')
+            ->modalDescription(fn (Appointment $record) => self::undoDescription($record))
+            ->modalSubmitActionLabel('Sí, deshacer')
+            ->modalCancelActionLabel('Volver')
+            ->authorize('update')
+            ->action(fn (Appointment $record) => Notify::run(
+                fn () => app(AppointmentService::class)->undoLastStep($record, auth()->user()),
+                'Listo, la cita volvió a como estaba',
+            ));
+    }
+
+    private static function undoableStep(Appointment $record): ?AppointmentStatus
+    {
+        return app(AppointmentService::class)->undoableStep($record);
+    }
+
+    private static function undoLabel(Appointment $record): string
+    {
+        return match (self::undoableStep($record)) {
+            AppointmentStatus::NoShow => 'Deshacer «No asistió»',
+            AppointmentStatus::Cancelled => 'Deshacer cancelación',
+            AppointmentStatus::CheckedIn => 'Deshacer «Llegó»',
+            AppointmentStatus::Confirmed => 'Deshacer confirmación',
+            default => 'Deshacer',
+        };
+    }
+
+    /** Qué pasa al deshacer: a qué estado vuelve la cita y qué conviene revisar. */
+    private static function undoDescription(Appointment $record): string
+    {
+        $before = $record->confirmed_at ? 'confirmada' : 'pendiente';
+
+        return match (self::undoableStep($record)) {
+            AppointmentStatus::NoShow => "La cita deja de contar como inasistencia y vuelve a quedar {$before}.",
+            AppointmentStatus::Cancelled => 'La cita vuelve a la agenda el '.Dates::dayAndTime($record->starts_at).", {$before}, si ese horario sigue libre. Si ya le avisaste al paciente que se canceló, avísale que sigue en pie.",
+            AppointmentStatus::CheckedIn => "El paciente deja de figurar en sala y la cita vuelve a quedar {$before}.",
+            AppointmentStatus::Confirmed => 'La cita vuelve a quedar pendiente: falta que el paciente confirme.',
+            default => 'La cita vuelve a como estaba antes.',
+        };
+    }
+
     /** Para la pestaña "Sin cerrar": marca de una vez a los que no vinieron. Las demás citas no se tocan. */
     public static function noShowBulk(): BulkAction
     {
@@ -353,9 +425,19 @@ final class AppointmentActions
                     Doctor::findOrFail($data['doctor_id']),
                     (bool) ($data['agreed'] ?? false),
                 ),
-                ($data['agreed'] ?? false) ? 'Cita movida y confirmada.' : 'Cita movida. El aviso al paciente está listo en Avisos.',
+                self::movedMessage(SlotPicker::startsAt($data), (bool) ($data['agreed'] ?? false)),
                 $action,
             ));
+    }
+
+    /** Lo que se dice al mover una cita: si quedó confirmada, si hay un aviso por enviar o si se movió a una hora que ya pasó. */
+    public static function movedMessage(CarbonInterface $startsAt, bool $agreed): string
+    {
+        return match (true) {
+            $startsAt->isPast() => 'Cita movida a una hora que ya pasó. No se preparó aviso al paciente.',
+            $agreed => 'Cita movida y confirmada.',
+            default => 'Cita movida. El aviso al paciente está listo en Avisos.',
+        };
     }
 
     public static function cancel(): Action
@@ -395,15 +477,65 @@ final class AppointmentActions
         return $user->canSeeClinical() && $user->doctorId() === $record->doctor_id;
     }
 
-    /** Abre el aviso pendiente de la cita o, si no hay, uno nuevo con sus datos y su enlace. */
+    /**
+     * Escribirle al paciente de la cita. Abre su aviso pendiente si lo tiene; si no, el mensaje que corresponde
+     * a cómo está la cita (ver whatsappDraft), que se guarda recién al enviarlo: abrir la ventana y cerrarla no
+     * deja nada en Avisos. Cuando no hay nada que decirle de esta cita (ya vino, o su hora ya pasó), abre el chat
+     * en blanco: no se le anuncia como "tu próxima cita" una que ya fue.
+     */
     public static function whatsapp(): Action
     {
-        return SendWhatsAppAction::make('whatsapp', function (Appointment $record) {
-            return $record->messages()->pending()->latest('id')->first()
-                ?? app(WhatsAppOutbox::class)->queueForAppointment($record, MessageTemplateKey::AppointmentScheduled);
-        })
+        return SendWhatsAppAction::compose('whatsapp', fn (Appointment $record) => self::whatsappDraft($record))
             ->label('WhatsApp')
+            ->modalHeading(fn (Appointment $record) => 'WhatsApp para '.$record->patient->full_name)
+            ->modalDescription(fn (Appointment $record) => Phone::display($record->patient->account->phone)
+                .'. Revisa el mensaje. Se abrirá WhatsApp con el texto listo: solo presiona Enviar. Si lleva {enlace}, se cambia por su enlace personal al abrirlo.')
+            ->url(
+                fn (Appointment $record) => self::hasNoticeToSend($record) ? null : 'https://wa.me/'.Phone::forWhatsApp($record->patient->account->phone),
+                shouldOpenInNewTab: true,
+            )
             ->visible(fn (Appointment $record) => $record->patient->account_id !== null)
             ->authorize('update');
+    }
+
+    /**
+     * El aviso que toca según la cita: si aún no empieza, sus datos con el enlace para confirmar; si el paciente
+     * faltó o se canceló, la invitación a tomar otro horario; recién atendida, sus cuidados si siguen en Avisos.
+     * Siempre gana el que ya espera en Avisos. Null si no toca ninguno.
+     */
+    private static function whatsappDraft(Appointment $record): ?WhatsappMessage
+    {
+        $template = self::whatsappTemplate($record);
+
+        if ($template === null && ! self::mayHaveAftercareWaiting($record)) {
+            return null;
+        }
+
+        return $record->messages()->pending()->latest('id')->first()
+            ?? ($template ? app(WhatsAppOutbox::class)->draftForAppointment($record, $template) : null);
+    }
+
+    /** Lo mismo que whatsappDraft, sin armar el mensaje: lo pregunta cada fila de una lista para saber qué abre su botón. */
+    private static function hasNoticeToSend(Appointment $record): bool
+    {
+        return self::whatsappTemplate($record) !== null
+            || (self::mayHaveAftercareWaiting($record) && $record->messages()->pending()->exists());
+    }
+
+    private static function whatsappTemplate(Appointment $record): ?MessageTemplateKey
+    {
+        return match (true) {
+            $record->status->isChangeable() && $record->starts_at->isFuture() => MessageTemplateKey::AppointmentScheduled,
+            in_array($record->status, AppointmentStatus::missed(), true) => MessageTemplateKey::MissedVisit,
+            default => null,
+        };
+    }
+
+    /** Atendida hace poco y su tratamiento tiene cuidados: ese aviso puede seguir esperando en Avisos. */
+    private static function mayHaveAftercareWaiting(Appointment $record): bool
+    {
+        return $record->status === AppointmentStatus::Completed
+            && $record->finished_at?->gte(now()->subDays(2))
+            && filled($record->loadMissing('treatment')->treatment->aftercare);
     }
 }

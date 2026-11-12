@@ -10,6 +10,9 @@
         @elseif ($appointment->needsCall())
             <x-filament::badge color="danger" icon="heroicon-m-phone">Por confirmar: llamar</x-filament::badge>
         @endif
+        @if ($block)
+            <x-filament::badge color="danger" icon="heroicon-m-no-symbol">En bloqueo: muévela</x-filament::badge>
+        @endif
         @if ($appointment->is_new_patient)
             <x-filament::badge color="info">Paciente nuevo</x-filament::badge>
         @endif
@@ -17,6 +20,10 @@
             <x-filament::badge color="warning">Debe {{ Money::short($balance) }}</x-filament::badge>
         @endif
     </div>
+
+    @if ($block)
+        <div class="appt-panel-alert is-caution" role="alert">Ese horario quedó bloqueado por "{{ $block->reason ?: $block->type->getLabel() }}" con esta cita ya dada. En "Más" usa "Mover cita": al paciente le queda listo el aviso del cambio.</div>
+    @endif
 
     @if ($alerts)
         <div @class(['appt-panel-alert', 'is-caution' => ! $alertsSevere]) role="alert">{{ $alertsSevere ? '⚠ ' : '' }}{{ implode(' · ', $alerts) }}</div>

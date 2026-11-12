@@ -9,6 +9,8 @@ use App\Models\Doctor;
 use App\Models\ScheduleBlock;
 use App\Models\User;
 use BackedEnum;
+use Carbon\CarbonImmutable;
+use Closure;
 use Filament\Actions\ActionGroup;
 use Filament\Actions\DeleteAction;
 use Filament\Actions\EditAction;
@@ -77,7 +79,13 @@ class ScheduleBlockResource extends Resource
                     ->minutesStep(5)
                     ->required()
                     ->after('starts_at')
-                    ->minDate(fn (Get $get) => $get('starts_at')),
+                    ->minDate(fn (Get $get) => $get('starts_at'))
+                    // Un bloqueo nuevo que ya terminó no bloquea nada: casi siempre es una fecha mal escrita.
+                    ->rule(fn () => function (string $attribute, mixed $value, Closure $fail): void {
+                        if (filled($value) && CarbonImmutable::parse($value)->isPast()) {
+                            $fail('Ese horario ya pasó. Revisa la fecha, porque un bloqueo solo sirve de ahora en adelante.');
+                        }
+                    }, fn (string $operation) => $operation === 'create'),
                 TextInput::make('reason')
                     ->label('Detalle')
                     ->placeholder('Por ejemplo: Congreso de ortodoncia')
@@ -106,6 +114,18 @@ class ScheduleBlockResource extends Resource
                     ->badge()
                     ->color('gray')
                     ->description(fn (ScheduleBlock $record) => $record->reason),
+                // Las citas que siguen dentro del bloqueo: hasta moverlas, esos pacientes vendrían igual.
+                TextColumn::make('appointments_inside')
+                    ->label('Citas dentro')
+                    ->state(fn (ScheduleBlock $record) => match ($count = (int) $record->appointments_inside) {
+                        0 => null,
+                        1 => '1 cita por mover',
+                        default => "{$count} citas por mover",
+                    })
+                    ->badge()
+                    ->color('warning')
+                    ->placeholder('—')
+                    ->url(fn (?string $state) => $state ? ManageScheduleBlocks::appointmentsInsideUrl() : null),
             ])
             ->defaultSort('starts_at')
             ->filters([
@@ -128,7 +148,7 @@ class ScheduleBlockResource extends Resource
             ->emptyStateDescription('Agrega vacaciones, cursos o feriados para que la agenda no ofrezca esas horas.');
     }
 
-    /** Cada doctor ve los bloqueos de su agenda y los de todo el consultorio. */
+    /** Cada doctor ve los bloqueos de su agenda y los de todo el consultorio, con cuántas citas siguen dentro. */
     public static function getEloquentQuery(): Builder
     {
         /** @var User $user */
@@ -136,6 +156,7 @@ class ScheduleBlockResource extends Resource
 
         return parent::getEloquentQuery()
             ->with('doctor')
+            ->addSelect(['appointments_inside' => ManageScheduleBlocks::appointmentsInsideCount()])
             ->when(! $user->managesAllAgendas(), fn (Builder $q) => $q->where(fn (Builder $w) => $w->whereNull('doctor_id')->orWhere('doctor_id', $user->doctorId())));
     }
 

@@ -39,7 +39,7 @@ class CreateAppointment extends CreateRecord
 
     protected function getCreatedNotificationTitle(): ?string
     {
-        return 'Cita creada. El aviso al paciente está listo en Avisos.';
+        return CreateAppointmentAction::createdMessage($this->getRecord()->starts_at);
     }
 
     protected function getRedirectUrl(): string

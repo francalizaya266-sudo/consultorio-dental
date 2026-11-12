@@ -81,6 +81,18 @@ class BookingException extends RuntimeException
         return new self('Esta cita ya no se puede cambiar.');
     }
 
+    /** Para el personal: el paso que quería deshacer ya no es el último, o pasó más de un día. */
+    public static function nothingToUndo(): self
+    {
+        return new self('Ya no hay nada que deshacer en esta cita.');
+    }
+
+    /** Para el personal: quiso devolver a la agenda una cita cancelada y su horario ya lo tomó otra. */
+    public static function slotNoLongerFree(): self
+    {
+        return new self('El horario de esta cita ya se ocupó, así que no puede volver ahí. Agenda una cita nueva en otro horario.');
+    }
+
     public static function tooLateToCancel(int $hours): self
     {
         return new self("Faltan menos de {$hours} horas para tu cita. Para cancelarla, comunícate con el consultorio.");

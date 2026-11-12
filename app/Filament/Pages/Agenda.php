@@ -99,7 +99,8 @@ class Agenda extends Page
 
     /**
      * Lo que toca hacer con la cita según su estado, en orden: en la lista va el primer botón que la persona puede usar
-     * (la recepción y el doctor ven pasos distintos, y en una cita de un día anterior solo se puede cerrar).
+     * (la recepción y el doctor ven pasos distintos, y en una cita de un día anterior solo se puede cerrar). En una
+     * cita sin cerrar van todos, y la que quedó como "No asistió" se puede deshacer durante un día.
      */
     private const NEXT_STEPS = [
         'pending' => ['listConfirm', 'listMissed', 'listArrived', 'listStart', 'listComplete'],
@@ -107,6 +108,7 @@ class Agenda extends Page
         'checked_in' => ['listStart', 'listComplete'],
         'in_progress' => ['listContinue', 'listStart', 'listComplete'],
         'completed' => ['listCheckout'],
+        'no_show' => ['listUndo'],
     ];
 
     /** @var array<int, Appointment|null> Citas abiertas en el panel durante esta petición. */
@@ -222,15 +224,20 @@ class Agenda extends Page
 
     /**
      * Se abre al soltar una cita en otro horario: dice de dónde a dónde pasa, avisa si cae fuera del
-     * horario de atención y pregunta si ya se acordó con el paciente (entonces no se le pide confirmar).
+     * horario de atención o en una hora que ya pasó, y pregunta si ya se acordó con el paciente (entonces
+     * no se le pide confirmar).
      */
     public function moveAction(): Action
     {
         return Action::make('move')
             ->requiresConfirmation()
             ->icon(Heroicon::OutlinedArrowsRightLeft)
-            ->modalHeading(fn (array $arguments) => $this->outsideHours($arguments) ? '¿Mover la cita fuera del horario?' : '¿Mover la cita?')
-            ->modalIconColor(fn (array $arguments) => $this->outsideHours($arguments) ? 'warning' : 'primary')
+            ->modalHeading(fn (array $arguments) => match (true) {
+                $this->targetIsPast($arguments) => '¿Mover la cita a una hora que ya pasó?',
+                $this->outsideHours($arguments) !== null => '¿Mover la cita fuera del horario?',
+                default => '¿Mover la cita?',
+            })
+            ->modalIconColor(fn (array $arguments) => $this->targetIsPast($arguments) || $this->outsideHours($arguments) ? 'warning' : 'primary')
             ->modalDescription(function (array $arguments) {
                 $appointment = Appointment::with(['patient', 'doctor'])->find($arguments['id'] ?? null);
                 [$doctor, $start] = $this->target($arguments);
@@ -243,18 +250,23 @@ class Agenda extends Page
                 $text = "{$appointment->patient->full_name} pasa del ".Dates::dayAndTime($appointment->starts_at)
                     .' al '.Dates::dayAndTime($start).$where.'.';
 
+                if ($this->targetIsPast($arguments)) {
+                    $text .= ' Esa hora ya pasó: no se le prepara aviso al paciente. Si fue sin querer, cancela y suéltala en otra hora.';
+                }
+
                 if ($hours = $this->outsideHours($arguments)) {
                     $text .= " Ese horario está fuera de la atención de {$doctor->name} ({$hours}).";
                 }
 
                 return $text;
             })
-            ->schema([
+            // En una hora que ya pasó no hay nada que acordar ni que confirmar.
+            ->schema(fn (array $arguments) => $this->targetIsPast($arguments) ? [] : [
                 Checkbox::make('agreed')
                     ->label('Ya lo acordé con el paciente')
                     ->helperText('Queda confirmada y no se le pide confirmar. Si no, se prepara el aviso para que confirme.'),
             ])
-            ->modalSubmitActionLabel(fn (array $arguments) => $this->outsideHours($arguments) ? 'Mover igual' : 'Sí, mover')
+            ->modalSubmitActionLabel(fn (array $arguments) => $this->targetIsPast($arguments) || $this->outsideHours($arguments) ? 'Mover igual' : 'Sí, mover')
             ->action(function (array $arguments, array $data) {
                 $appointment = Appointment::find($arguments['id'] ?? null);
                 [$doctor, $start] = $this->target($arguments);
@@ -267,9 +279,15 @@ class Agenda extends Page
 
                 Notify::run(
                     fn () => app(AppointmentService::class)->rescheduleByStaff($appointment, $start, auth()->user(), $doctor, $agreed),
-                    $agreed ? 'Cita movida y confirmada.' : 'Cita movida. El aviso al paciente está listo en Avisos.',
+                    AppointmentActions::movedMessage($start, $agreed),
                 );
             });
+    }
+
+    /** La hora donde se soltó la cita ya pasó. */
+    private function targetIsPast(array $arguments): bool
+    {
+        return (bool) $this->target($arguments)[1]?->isPast();
     }
 
     /**
@@ -369,18 +387,35 @@ class Agenda extends Page
         return $this->forListedAppointment(CheckoutAction::make(), 'listCheckout');
     }
 
-    /** El primer paso que esta persona puede dar con la cita (o ninguno, si ya no queda nada por hacer). */
-    public function nextStep(int $id, string $status): ?Action
+    public function listUndoAction(): Action
     {
+        return $this->forListedAppointment(AppointmentActions::undo(), 'listUndo');
+    }
+
+    /**
+     * Los pasos que esta persona puede dar con la cita: lo normal es uno, el que sigue (o ninguno, si ya no queda
+     * nada por hacer). En una cita sin cerrar van todos juntos, como en su panel: "No asistió" nunca es el único
+     * botón de un paciente que quizá sí vino.
+     *
+     * @return list<Action>
+     */
+    public function nextSteps(int $id, string $status, bool $unclosed = false): array
+    {
+        $steps = [];
+
         foreach (self::NEXT_STEPS[$status] ?? [] as $name) {
             $action = ($this->getAction($name))(['id' => $id]);
 
             if ($action->isVisible()) {
-                return $action;
+                $steps[] = $action;
+
+                if (! $unclosed) {
+                    break;
+                }
             }
         }
 
-        return null;
+        return $steps;
     }
 
     private function forListedAppointment(Action $action, string $name): Action
@@ -766,6 +801,7 @@ class Agenda extends Page
         return $targets->map(function (array $target) {
             /** @var Doctor $doctor */
             [$doctor, $day] = $target;
+            $blocks = ScheduleBlock::query()->affecting($doctor, $day->startOfDay(), $day->endOfDay())->get();
 
             return [
                 'key' => $doctor->getKey().'|'.$day->toDateString(),
@@ -784,9 +820,7 @@ class Agenda extends Page
                     ->map(fn (array $r) => ['start' => $this->minuteOf($r['start']), 'end' => $this->minuteOf($r['end'])])
                     ->all(),
                 'blocks' => [
-                    ...ScheduleBlock::query()
-                        ->affecting($doctor, $day->startOfDay(), $day->endOfDay())
-                        ->get()
+                    ...$blocks
                         ->map(fn (ScheduleBlock $b) => [
                             'start' => $b->starts_at->lt($day) ? 0 : $this->minuteOf($b->starts_at),
                             'end' => $b->ends_at->gt($day->endOfDay()) ? 24 * 60 : $this->minuteOf($b->ends_at),
@@ -803,7 +837,7 @@ class Agenda extends Page
                             'hold' => true,
                         ]),
                 ],
-                'appointments' => $this->appointmentsFor($doctor, $day)->all(),
+                'appointments' => $this->appointmentsFor($doctor, $day, $blocks)->all(),
             ];
         })
             ->reject(fn (array $column) => $this->mode === 'week' && $column['working'] === [] && $column['appointments'] === [])
@@ -823,8 +857,11 @@ class Agenda extends Page
         return mb_strtoupper(mb_substr((string) $words->first(), 0, 1).($words->count() > 1 ? mb_substr((string) $surname, 0, 1) : ''));
     }
 
-    /** @return Collection<int, array<string, mixed>> */
-    private function appointmentsFor(Doctor $doctor, CarbonImmutable $day): Collection
+    /**
+     * @param  Collection<int, ScheduleBlock>  $blocks  Los bloqueos de ese día: la cita que cae en uno se marca para moverla.
+     * @return Collection<int, array<string, mixed>>
+     */
+    private function appointmentsFor(Doctor $doctor, CarbonImmutable $day, Collection $blocks): Collection
     {
         /** @var User $user */
         $user = auth()->user();
@@ -857,6 +894,8 @@ class Agenda extends Page
                 'statusLabel' => $a->status->getLabel(),
                 'unclosed' => $a->isPastAndOpen(),
                 'needsCall' => $a->needsCall() && ! $a->isPastAndOpen(),
+                // Se bloqueó ese horario con la cita ya dada: hasta moverla, el paciente vendría igual.
+                'inBlock' => $a->status->isChangeable() && ! $a->ends_at->isPast() && self::blockOver($a, $blocks) !== null,
                 'isNew' => $a->is_new_patient,
                 'owes' => $seesMoney && (float) $a->patient->balance_due > 0 ? Money::short($a->patient->balance_due) : null,
                 'hasNote' => filled($a->patient_note) || filled($a->internal_notes),
@@ -907,6 +946,16 @@ class Agenda extends Page
         return collect($placed);
     }
 
+    /**
+     * El bloqueo que se cruza con la cita, si hay uno.
+     *
+     * @param  Collection<int, ScheduleBlock>  $blocks
+     */
+    private static function blockOver(Appointment $appointment, Collection $blocks): ?ScheduleBlock
+    {
+        return $blocks->first(fn (ScheduleBlock $block) => $block->starts_at->lt($appointment->ends_at) && $block->ends_at->gt($appointment->starts_at));
+    }
+
     /** La cita del panel, cargada una sola vez por petición. */
     private function panelAppointment(mixed $id): ?Appointment
     {
@@ -947,6 +996,9 @@ class Agenda extends Page
             'alertsSevere' => $user->canSeeClinical() && ClinicalAlerts::isSevere($appointment->patient),
             'patientUrl' => PatientResource::getUrl('view', ['record' => $appointment->patient]),
             'appointmentUrl' => AppointmentResource::getUrl('view', ['record' => $appointment]),
+            'block' => $appointment->status->isChangeable() && ! $appointment->ends_at->isPast()
+                ? self::blockOver($appointment, ScheduleBlock::query()->affecting($appointment->doctor, $appointment->starts_at, $appointment->ends_at)->get())
+                : null,
         ];
     }
 

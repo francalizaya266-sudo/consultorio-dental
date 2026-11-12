@@ -14,10 +14,12 @@ class PrepareReminders extends Command
     public function handle(AppointmentReminders $reminders): int
     {
         $expired = $reminders->expireStale();
+        $closed = $reminders->closeStaleRequests();
         $prepared = $reminders->prepareReminders();
 
         $this->info("Recordatorios preparados: {$prepared}");
         $this->info("Avisos de citas pasadas retirados: {$expired}");
+        $this->info("Solicitudes de cambio de citas pasadas cerradas: {$closed}");
 
         return self::SUCCESS;
     }

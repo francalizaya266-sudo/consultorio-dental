@@ -35,17 +35,34 @@ class WhatsAppOutbox
         ?CarbonInterface $dueAt = null,
         array $extra = [],
     ): ?WhatsappMessage {
-        $appointment->loadMissing('patient.account', 'doctor', 'treatment', 'campaign');
-        $account = $appointment->patient->account;
+        $message = $this->draftForAppointment($appointment, $key, $extra);
 
-        if ($account === null) {
+        if ($message === null) {
             return null; // paciente sin celular registrado
         }
 
         // Un solo aviso pendiente por tipo y cita (si la mueven dos veces, vale el último).
         $this->discardPending($appointment, $key);
 
-        return WhatsappMessage::create([
+        $message->fill(['due_at' => $dueAt])->save();
+
+        return $message;
+    }
+
+    /**
+     * Aviso de una cita armado pero sin guardar: se muestra para retocarlo y se guarda recién al enviarlo, así
+     * no queda en "Por enviar" algo que nadie decidió mandar. Null si el paciente no tiene celular.
+     */
+    public function draftForAppointment(Appointment $appointment, MessageTemplateKey $key, array $extra = []): ?WhatsappMessage
+    {
+        $appointment->loadMissing('patient.account', 'doctor', 'treatment', 'campaign');
+        $account = $appointment->patient->account;
+
+        if ($account === null) {
+            return null;
+        }
+
+        return new WhatsappMessage([
             'account_id' => $account->getKey(),
             'patient_id' => $appointment->patient_id,
             'appointment_id' => $appointment->getKey(),
@@ -54,7 +71,6 @@ class WhatsAppOutbox
             'params' => $this->appointmentParams($appointment) + $extra,
             'status' => MessageStatus::Pending,
             'channel' => $this->channel(),
-            'due_at' => $dueAt,
         ]);
     }
 

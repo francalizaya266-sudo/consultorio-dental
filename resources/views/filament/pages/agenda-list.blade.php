@@ -1,8 +1,9 @@
 {{--
     El día en lista (sobre todo para el celular y la tablet de recepción): tarjetas grandes en orden de hora con el
     botón del paso que sigue (Confirmar, Llegó, Atender, Cobrar…), la línea de ahora y los huecos libres con "Agendar".
+    Una cita sin cerrar muestra juntos "No asistió" y los de "vino" (Llegó, Atendido).
 --}}
-<div class="agenda-list" x-data="agendaList" x-on:{{ \App\Filament\Pages\Dashboard::CHANGED }}.window="refresh()">
+<div class="agenda-list" wire:key="agenda-list" x-data="agendaList" x-on:{{ \App\Filament\Pages\Dashboard::CHANGED }}.window="refresh()">
     <div class="agenda-list-inner" wire:key="list-{{ $date }}" x-init="arrive()">
         @if (count($list['week']) > 1)
             <nav class="agenda-days" aria-label="Días de la semana">
@@ -37,6 +38,7 @@
                                 <div class="agenda-item-title">
                                     <a href="{{ $item['url'] }}" class="agenda-item-name" x-on:click="open($event, {{ $item['id'] }})">{{ $item['patient'] }}</a>
                                     @if ($item['unclosed'])<span class="tag tag-unclosed">Sin cerrar</span>@endif
+                                    @if ($item['inBlock'])<span class="tag tag-block">En bloqueo</span>@endif
                                     @if ($item['flags']['alert'])<span @class(['tag', 'tag-alert', 'is-caution' => ! $item['flags']['alertSevere']]) title="{{ $item['flags']['alert'] }}">Alerta médica</span>@endif
                                     @if ($item['flags']['reschedule'])<span class="tag tag-change">Pidió cambio</span>@endif
                                     @if ($item['flags']['noShows'])<span class="tag tag-missed">{{ $item['flags']['noShows'] }}</span>@endif
@@ -59,9 +61,9 @@
                                                 Llamar
                                             </a>
                                         @endif
-                                        @if ($next = $this->nextStep($item['id'], $item['status']))
-                                            {{ $next->size('sm') }}
-                                        @endif
+                                        @foreach ($this->nextSteps($item['id'], $item['status'], $item['unclosed']) as $step)
+                                            {{ $step->size('sm') }}
+                                        @endforeach
                                     </div>
                                 </div>
                             </div>
