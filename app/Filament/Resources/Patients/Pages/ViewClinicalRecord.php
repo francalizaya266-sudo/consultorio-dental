@@ -21,6 +21,41 @@ class ViewClinicalRecord extends ViewRecord
 {
     protected static string $resource = PatientResource::class;
 
+    /**
+     * Baja hasta las pestañas y se queda ahí mientras termina de cargar lo de arriba (el odontograma llega
+     * después y empuja la página); en cuanto la persona toca algo, deja de moverla.
+     */
+    private const SCROLL_TO_TABS = <<<'JS'
+        (() => {
+            const tabs = document.getElementById('content.relationManagerTabs');
+
+            if (! tabs) {
+                return;
+            }
+
+            const until = Date.now() + 3000;
+            const anchor = () => tabs.scrollIntoView({ block: 'start' });
+            const observer = new ResizeObserver(() => Date.now() < until ? anchor() : observer.disconnect());
+
+            ['wheel', 'touchstart', 'keydown', 'pointerdown'].forEach((name) => window.addEventListener(name, () => observer.disconnect(), { once: true, passive: true }));
+            observer.observe(document.body);
+            anchor();
+        })()
+        JS;
+
+    /**
+     * Quien llega desde un presupuesto o una atención ("Ver en su historia") viene por una pestaña de abajo:
+     * la página baja sola hasta ahí en vez de dejarlo arriba, en los antecedentes.
+     */
+    public function mount(int|string $record): void
+    {
+        parent::mount($record);
+
+        if (request()->query('relation') !== null) {
+            $this->js(self::SCROLL_TO_TABS);
+        }
+    }
+
     public function getTitle(): string|Htmlable
     {
         return 'Historia clínica';

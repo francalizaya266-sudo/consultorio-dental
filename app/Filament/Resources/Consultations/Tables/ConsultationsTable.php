@@ -34,9 +34,11 @@ class ConsultationsTable
                     ->default($user->doctorId() !== null)
                     ->visible($user->doctorId() !== null)
                     ->query(fn (Builder $query) => $query->where('doctor_id', $user->doctorId())),
+                // En la lista de Atenciones esto es una pestaña, con su número; en la historia de un paciente no hay pestañas.
                 Filter::make('open')
                     ->label('Sin terminar')
                     ->toggle()
+                    ->visible(! $showPatient)
                     ->query(fn (Builder $query) => $query->whereNull('closed_at')),
             ])
             ->recordActions([
@@ -55,31 +57,52 @@ class ConsultationsTable
         return $consultation->closed_at === null && $consultation->attended_at->isBefore(today());
     }
 
-    /** @return list<TextColumn> */
+    /**
+     * Quién atendió, solo cuando hace falta decirlo: hay varios doctores y no fue quien mira. Antes era una
+     * columna que repetía el mismo nombre en cada fila y dejaba el estado fuera de la pantalla.
+     */
+    private static function attendedBy(Consultation $consultation): ?string
+    {
+        return Doctor::severalActive() && $consultation->doctor_id !== auth()->user()->doctorId()
+            ? $consultation->doctor?->name
+            : null;
+    }
+
+    /**
+     * Fecha, paciente, motivo, diagnóstico y estado: entran en una laptop sin tener que deslizar. El doctor va
+     * bajo el paciente (o bajo la fecha, en la historia de un paciente, que no lleva esa columna).
+     *
+     * @return list<TextColumn>
+     */
     public static function columns(bool $showPatient = true): array
     {
         return array_values(array_filter([
             TextColumn::make('attended_at')
                 ->label('Fecha')
                 ->dateTime('d/m/Y H:i')
+                ->description(fn (Consultation $record) => $showPatient ? null : self::attendedBy($record))
                 ->sortable(),
             $showPatient ? TextColumn::make('patient.first_name')
                 ->label('Paciente')
                 ->formatStateUsing(fn (Consultation $record) => $record->patient->full_name)
-                ->searchable(query: fn (Builder $query, string $search) => $query->whereHas('patient', fn (Builder $patient) => $patient->search($search))) : null,
-            // Con un solo doctor en el consultorio, la columna no dice nada.
-            Doctor::severalActive() ? TextColumn::make('doctor.name')
-                ->label('Doctor') : null,
+                ->description(fn (Consultation $record) => self::attendedBy($record))
+                ->weight('bold')
+                ->searchable(query: fn (Builder $query, string $search) => $query->whereHas('patient', fn (Builder $patient) => $patient->search($search)))
+                ->extraCellAttributes(['style' => 'min-width: 11rem'])
+                ->wrap() : null,
             TextColumn::make('chief_complaint')
                 ->label('Motivo')
-                ->limit(50)
+                ->limit(90)
                 ->placeholder('—')
+                ->extraCellAttributes(['style' => 'min-width: 14rem'])
                 ->wrap(),
             TextColumn::make('diagnoses')
                 ->label('Diagnóstico')
                 ->state(fn (Consultation $record) => $record->diagnoses->map(fn (ConsultationDiagnosis $d) => trim(($d->icd10Code?->code ?? '').($d->tooth ? " ({$d->tooth})" : '')))->filter()->all())
                 ->badge()
-                ->color('gray'),
+                ->color('gray')
+                // Con muchos diagnósticos se ven los dos primeros y cuántos más hay: el detalle está al abrirla.
+                ->limitList(2),
             TextColumn::make('closed_at')
                 ->label('Estado')
                 ->state(fn (Consultation $record) => $record->closed_at ? 'Terminada' : 'Sin terminar')
@@ -92,6 +115,7 @@ class ConsultationsTable
                 ->description(fn (Consultation $record) => self::leftOpen($record)
                     ? 'Quedó abierta '.$record->attended_at->copy()->startOfDay()->diffForHumans(today(), ['syntax' => CarbonInterface::DIFF_RELATIVE_TO_NOW, 'parts' => 1]).': termínala o descártala'
                     : null)
+                ->extraCellAttributes(['style' => 'min-width: 10rem'])
                 ->wrap(),
         ]));
     }

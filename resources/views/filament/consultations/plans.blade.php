@@ -2,7 +2,12 @@
 @use('App\Enums\TreatmentPlanStatus')
 @use('App\Models\TreatmentPlan')
 @use('App\Support\Money')
-{{-- Su plan de tratamiento, como está hoy: cada procedimiento (o cada paquete, con lo que incluye) con su precio y en qué va. --}}
+{{-- Su plan de tratamiento, como está hoy: cada procedimiento (o cada paquete, con lo que incluye) con su precio y en qué va.
+     En la página del presupuesto va sin encabezado (el estado ya está al costado) y, para quien no ve lo clínico, sin la pieza. --}}
+@php
+    $withTooth ??= true;
+    $showHead ??= true;
+@endphp
 <div class="visit-plans">
     @foreach ($plans as $plan)
         @php
@@ -16,14 +21,16 @@
             ])->filter()->implode(' · ');
         @endphp
         <div class="visit-plan" data-plan="{{ $plan->getKey() }}">
-            <div class="visit-plan-head">
-                @if (filled($plan->title) && $plan->title !== 'Plan de tratamiento')
-                    <strong>{{ $plan->title }}</strong>
-                @endif
-                <x-filament::badge :color="$plan->status->getColor()" size="sm">{{ $plan->status->getLabel() }}</x-filament::badge>
-            </div>
+            @if ($showHead)
+                <div class="visit-plan-head">
+                    @if (filled($plan->title) && $plan->title !== 'Plan de tratamiento')
+                        <strong>{{ $plan->title }}</strong>
+                    @endif
+                    <x-filament::badge :color="$plan->status->getColor()" size="sm">{{ $plan->status->getLabel() }}</x-filament::badge>
+                </div>
+            @endif
             <ul class="visit-plan-items">
-                @foreach (TreatmentPlan::lines($items) as $line)
+                @foreach (TreatmentPlan::lines($items, $withTooth) as $line)
                     @if ($line['package'])
                         <li class="visit-plan-package">
                             <span class="visit-plan-name">{{ $line['label'] }}</span>
@@ -31,7 +38,7 @@
                             <ul class="visit-plan-package-items">
                                 @foreach ($line['items'] as $item)
                                     <li @class(['is-done' => $item->status === PlanItemStatus::Done])>
-                                        <span class="visit-plan-name">{{ $item->label() }}@if ($item->quantity > 1) × {{ $item->quantity }}@endif</span>
+                                        <span class="visit-plan-name">{{ $item->label($withTooth) }}@if ($item->quantity > 1) × {{ $item->quantity }}@endif</span>
                                         <span class="visit-plan-state">{{ $state($item) }}</span>
                                     </li>
                                 @endforeach

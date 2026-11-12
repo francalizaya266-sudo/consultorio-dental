@@ -2,6 +2,7 @@
 
 namespace Tests\Feature\Filament;
 
+use App\Enums\TreatmentPlanStatus;
 use App\Filament\Pages\Agenda;
 use App\Filament\Pages\Backups;
 use App\Filament\Pages\Dashboard;
@@ -29,6 +30,7 @@ use App\Filament\Resources\ScheduleBlocks\ScheduleBlockResource;
 use App\Filament\Resources\SmileCases\SmileCaseResource;
 use App\Filament\Resources\TextSnippets\TextSnippetResource;
 use App\Filament\Resources\TreatmentPackages\TreatmentPackageResource;
+use App\Filament\Resources\TreatmentPlans\TreatmentPlanResource;
 use App\Filament\Resources\Treatments\TreatmentResource;
 use App\Filament\Resources\Users\UserResource;
 use App\Filament\Resources\WhatsappMessages\WhatsappMessageResource;
@@ -38,6 +40,7 @@ use App\Models\Campaign;
 use App\Models\Doctor;
 use App\Models\Patient;
 use App\Models\Treatment;
+use App\Models\TreatmentPlan;
 use App\Models\User;
 use Database\Seeders\CatalogSeeder;
 use Filament\Auth\Pages\EditProfile;
@@ -76,6 +79,8 @@ class PanelAccessTest extends TestCase
             'ficha de paciente' => ['patients.view', [true, true, false]],
             'historia clínica' => ['patients.clinical', [true, false, false]],
             'atenciones' => ['consultations', [true, false, true]],
+            'presupuestos' => ['plans', [true, true, true]],
+            'un presupuesto' => ['plans.view', [true, true, false]],
             'celulares' => ['accounts', [true, true, false]],
             'ficha de celular' => ['accounts.view', [true, true, false]],
             'pagos' => ['payments', [true, true, false]],
@@ -137,6 +142,8 @@ class PanelAccessTest extends TestCase
             'patients.view' => PatientResource::getUrl('view', ['record' => $patient]),
             'patients.clinical' => PatientResource::getUrl('clinical', ['record' => $patient]),
             'consultations' => ConsultationResource::getUrl('index'),
+            'plans' => TreatmentPlanResource::getUrl('index'),
+            'plans.view' => TreatmentPlanResource::getUrl('view', ['record' => TreatmentPlan::create(['patient_id' => $patient->id, 'doctor_id' => $otherDoctor->id, 'status' => TreatmentPlanStatus::Proposed])]),
             'accounts' => AccountResource::getUrl('index'),
             'accounts.view' => AccountResource::getUrl('view', ['record' => Account::sole()]),
             'payments' => PaymentResource::getUrl('index'),

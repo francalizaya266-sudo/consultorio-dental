@@ -496,6 +496,17 @@ class PatientsAndSetupPanelTest extends TestCase
             ->assertCanNotSeeTableRecords([$alreadyBooked, $recent, $neverCame]);
     }
 
+    public function test_the_patients_list_leaves_budget_follow_up_to_budgets_and_plans(): void
+    {
+        $this->actingAs(User::factory()->reception()->create());
+
+        Livewire::test(ListPatients::class)
+            ->assertSee(['Todos', 'Les toca control', 'Faltaron o cancelaron'])
+            ->assertSee('Sus presupuestos se siguen en Presupuestos y planes.')
+            // Eran las mismas personas que "Sin respuesta" y "Sin próxima cita" de Presupuestos, sin sus botones.
+            ->assertDontSee(['Plan sin agendar', 'Presupuesto sin respuesta']);
+    }
+
     public function test_the_patient_file_shows_one_timeline_and_the_medical_alert_only_to_who_attends(): void
     {
         $this->freezeMonday();

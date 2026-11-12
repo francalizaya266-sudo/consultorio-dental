@@ -71,7 +71,7 @@ class NextPatient extends Widget implements HasActions, HasSchemas
             'next' => $next ? $this->nextData($day, $next) : null,
             'othersWaiting' => max(0, $waiting - ($next?->status === AppointmentStatus::CheckedIn ? 1 : 0)),
             'openCount' => $open->count(),
-            'openUrl' => ConsultationResource::getUrl('index', ['filters' => ['open' => ['isActive' => true]]]),
+            'openUrl' => ConsultationResource::getUrl('index', ['tab' => 'open']),
             'open' => $open->take(self::OPEN_SHOWN)->map(function (Consultation $consultation) {
                 $since = $consultation->attended_at ?? $consultation->created_at;
 

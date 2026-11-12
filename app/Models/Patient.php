@@ -280,7 +280,7 @@ class Patient extends Model
 
     /**
      * Para recuperarlos: faltaron o cancelaron una cita en los últimos dos meses y después no vinieron ni tienen
-     * otra cita. Quien dejó un plan a medias no sale aquí: ya está en "Plan sin agendar".
+     * otra cita. Quien dejó un plan a medias no sale aquí: ya está en Presupuestos y planes, "Sin próxima cita".
      */
     #[Scope]
     protected function missedAndNotRebooked(Builder $query): Builder

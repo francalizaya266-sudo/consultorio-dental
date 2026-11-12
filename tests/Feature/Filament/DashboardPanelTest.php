@@ -13,7 +13,8 @@ use App\Filament\Pages\Settings;
 use App\Filament\Resources\Appointments\Pages\ListAppointments;
 use App\Filament\Resources\Appointments\Pages\ViewAppointment;
 use App\Filament\Resources\Consultations\ConsultationResource;
-use App\Filament\Resources\Patients\Pages\ListPatients;
+use App\Filament\Resources\TreatmentPlans\Pages\ListTreatmentPlans;
+use App\Filament\Resources\TreatmentPlans\TreatmentPlanResource;
 use App\Filament\Widgets\DayMomentCard;
 use App\Filament\Widgets\FollowUpsToday;
 use App\Filament\Widgets\MonthOverview;
@@ -37,6 +38,7 @@ use App\Models\User;
 use App\Models\WhatsappMessage;
 use App\Services\Clinical\TreatmentPlanService;
 use App\Services\Dashboard\DoctorDay;
+use App\Services\Dashboard\FollowUps;
 use App\Services\Dashboard\MonthFigures;
 use Carbon\CarbonImmutable;
 use Illuminate\Foundation\Testing\LazilyRefreshDatabase;
@@ -297,14 +299,14 @@ class DashboardPanelTest extends TestCase
 
         // Presentado ayer: aún se le da tiempo para pensarlo.
         $luis = $this->patient('Luis', 'Mamani');
-        TreatmentPlan::create(['patient_id' => $luis->id, 'doctor_id' => $doctor->id, 'status' => TreatmentPlanStatus::Proposed, 'proposed_at' => now()->subDay()]);
+        $recent = TreatmentPlan::create(['patient_id' => $luis->id, 'doctor_id' => $doctor->id, 'status' => TreatmentPlanStatus::Proposed, 'proposed_at' => now()->subDay()]);
 
         $ana = $this->patient('Ana', 'Flores');
-        $this->acceptedPlan($ana, $doctor, 'Corona', '46');
+        $unscheduled = $this->acceptedPlan($ana, $doctor, 'Corona', '46');
 
         // Aceptó y ya tiene su próxima cita: no hay nada que perseguir.
         $pedro = $this->patient('Pedro', 'Huamán');
-        $this->acceptedPlan($pedro, $doctor, 'Endodoncia', '36');
+        $scheduled = $this->acceptedPlan($pedro, $doctor, 'Endodoncia', '36');
         Appointment::factory()->for($pedro)->for($doctor)->for($treatment)->at('2026-11-03 10:00')->create();
 
         $carmen = $this->patient('Carmen', 'Rojas', ['birth_date' => '1990-11-02']);
@@ -317,15 +319,39 @@ class DashboardPanelTest extends TestCase
             ->assertDontSee('Luis Mamani')
             ->assertSee(['Planes sin próxima cita', 'Ana Flores', 'Falta: Corona', 'Nueva cita'])
             ->assertDontSee(['Pedro Huamán', 'pieza 46'])
-            ->assertSee(['Para su control', 'José Condori', 'Cumpleaños de hoy', 'Carmen Rojas', 'Cumple 36 años']);
+            ->assertSee(['Para su control', 'José Condori', 'Cumpleaños de hoy', 'Carmen Rojas', 'Cumple 36 años'])
+            // Cada grupo lleva a su pestaña de Presupuestos y planes, donde se les escribe y se les agenda.
+            ->assertSeeHtml('href="'.e(TreatmentPlanResource::getUrl('index', ['tab' => 'awaiting'])).'"')
+            ->assertSeeHtml('href="'.e(TreatmentPlanResource::getUrl('index', ['tab' => 'unscheduled'])).'"');
 
-        Livewire::test(ListPatients::class)
-            ->set('activeTab', 'proposed')
-            ->assertCanSeeTableRecords([$rosa])
-            ->assertCanNotSeeTableRecords([$luis, $ana, $pedro])
+        Livewire::test(ListTreatmentPlans::class)
+            ->set('activeTab', 'awaiting')
+            ->assertCanSeeTableRecords([$waiting])
+            ->assertCanNotSeeTableRecords([$recent, $unscheduled, $scheduled])
             ->set('activeTab', 'unscheduled')
-            ->assertCanSeeTableRecords([$ana])
-            ->assertCanNotSeeTableRecords([$rosa, $pedro, $jose]);
+            ->assertCanSeeTableRecords([$unscheduled])
+            ->assertCanNotSeeTableRecords([$waiting, $scheduled]);
+    }
+
+    public function test_the_follow_up_numbers_count_budgets_like_the_tabs_they_lead_to(): void
+    {
+        $doctor = Doctor::factory()->withSchedule()->create();
+
+        // Rosa tiene dos presupuestos sin respuesta: se le escribe una vez, pero la pestaña muestra los dos.
+        $rosa = $this->patient('Rosa', 'Quispe');
+        foreach ([8, 20] as $daysAgo) {
+            TreatmentPlan::create(['patient_id' => $rosa->id, 'doctor_id' => $doctor->id, 'status' => TreatmentPlanStatus::Proposed, 'proposed_at' => now()->subDays($daysAgo)])
+                ->items()->create(['description' => 'Ortodoncia', 'unit_price' => 450]);
+        }
+
+        $this->actingAs(User::factory()->reception()->create());
+
+        $this->assertSame(2, app(FollowUps::class)->plansAwaitingAnswer()['count']);
+        $this->assertCount(1, app(FollowUps::class)->plansAwaitingAnswer()['plans']);
+
+        Livewire::test(ListTreatmentPlans::class)
+            ->set('activeTab', 'awaiting')
+            ->assertCountTableRecords(2);
     }
 
     public function test_a_follow_up_message_opens_ready_to_send_and_marks_the_patient_as_contacted(): void
@@ -478,6 +504,18 @@ class DashboardPanelTest extends TestCase
 
         $this->assertSame(AppointmentStatus::InProgress, $waiting->fresh()->status);
         $this->assertNotNull($unfinished->fresh());
+    }
+
+    public function test_more_unfinished_visits_than_fit_on_home_lead_to_their_tab_in_the_list(): void
+    {
+        $doctor = Doctor::factory()->withSchedule()->create();
+        Consultation::factory()->count(4)->for($doctor)->create(['attended_at' => now()->subDay()]);
+
+        $this->actingAs($doctor->user);
+
+        Livewire::test(NextPatient::class)
+            ->assertSee('Ver las 4')
+            ->assertSeeHtml('href="'.e(ConsultationResource::getUrl('index', ['tab' => 'open'])).'"');
     }
 
     public function test_late_in_the_day_home_does_not_offer_a_patient_whose_time_already_passed(): void

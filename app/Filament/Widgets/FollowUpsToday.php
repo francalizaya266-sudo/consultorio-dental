@@ -14,6 +14,7 @@ use App\Filament\Resources\LabOrders\LabOrderResource;
 use App\Filament\Resources\Patients\PatientResource;
 use App\Filament\Resources\RescheduleRequests\RescheduleRequestResource;
 use App\Filament\Resources\Supplies\SupplyResource;
+use App\Filament\Resources\TreatmentPlans\TreatmentPlanResource;
 use App\Filament\Resources\WhatsappMessages\WhatsappMessageResource;
 use App\Models\Appointment;
 use App\Models\DeskNote;
@@ -281,7 +282,7 @@ class FollowUpsToday extends Widget implements HasActions, HasSchemas
             'title' => 'Presupuestos sin respuesta',
             'hint' => 'Presentados hace más de '.TreatmentPlan::ANSWER_WAIT_DAYS.' días',
             'count' => $count,
-            'url' => PatientResource::getUrl('index', ['tab' => 'proposed']),
+            'url' => TreatmentPlanResource::getUrl('index', ['tab' => 'awaiting']),
             'summary' => null,
             'template' => $key->value,
             'rows' => $plans->map(fn (TreatmentPlan $plan) => $this->row(
@@ -304,7 +305,7 @@ class FollowUpsToday extends Widget implements HasActions, HasSchemas
             'title' => 'Planes sin próxima cita',
             'hint' => 'Aceptaron el plan y les falta terminarlo',
             'count' => $count,
-            'url' => PatientResource::getUrl('index', ['tab' => 'unscheduled']),
+            'url' => TreatmentPlanResource::getUrl('index', ['tab' => 'unscheduled']),
             'summary' => null,
             'template' => $key->value,
             'rows' => $patients->map(function (Patient $patient) use ($contacted) {

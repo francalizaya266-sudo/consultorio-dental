@@ -356,6 +356,65 @@ class ClinicalPanelTest extends TestCase
         Livewire::test(ListConsultations::class)->assertSee('Quedó abierta hace 3 días: termínala o descártala');
     }
 
+    public function test_the_unfinished_tab_lists_what_the_doctor_still_has_to_close_and_counts_like_the_menu(): void
+    {
+        [$doctor, $appointment] = $this->appointmentToday();
+        $open = Consultation::factory()->for($doctor)->for($appointment->patient)->create(['attended_at' => '2026-10-30 10:00']);
+        $closed = Consultation::factory()->for($doctor)->for($appointment->patient)->create(['attended_at' => '2026-10-28 10:00', 'closed_at' => '2026-10-28 10:40']);
+        $today = Consultation::factory()->for($doctor)->for($appointment->patient)->create(['attended_at' => '2026-11-02 07:30', 'closed_at' => '2026-11-02 07:55']);
+        // La dejó abierta otro doctor con el mismo paciente: no es de las que a este le toca terminar.
+        Consultation::factory()->for($this->doctorOffering())->for($appointment->patient)->create(['attended_at' => '2026-10-29 10:00']);
+
+        $this->actingAs($doctor->user);
+
+        $list = Livewire::test(ListConsultations::class)
+            ->assertCanSeeTableRecords([$open, $closed, $today])
+            ->set('activeTab', 'open')
+            ->assertCanSeeTableRecords([$open])
+            ->assertCanNotSeeTableRecords([$closed, $today])
+            ->set('activeTab', 'today')
+            ->assertCanSeeTableRecords([$today])
+            ->assertCanNotSeeTableRecords([$open, $closed]);
+
+        $this->assertSame('1', (string) $list->instance()->getTabs()['open']->getBadge());
+        $this->assertSame('1', ConsultationResource::getNavigationBadge());
+    }
+
+    public function test_the_list_names_the_doctor_only_when_someone_else_attended(): void
+    {
+        [$doctor, $appointment] = $this->appointmentToday();
+        $doctor->update(['name' => 'Dra. Ana Torres']);
+        $colleague = $this->doctorOffering();
+        $colleague->update(['name' => 'Dr. Luis Ramos']);
+        Consultation::factory()->for($doctor)->for($appointment->patient)->create(['chief_complaint' => 'Control de ortodoncia']);
+        Consultation::factory()->for($colleague)->for($appointment->patient)->create(['chief_complaint' => 'Urgencia por fractura']);
+
+        $this->actingAs($doctor->user);
+
+        // Las suyas no repiten su nombre en cada fila; al ver las de todos, se dice quién atendió la otra.
+        Livewire::test(ListConsultations::class)
+            ->assertSee('Control de ortodoncia')
+            ->assertDontSee(['Urgencia por fractura', 'Dra. Ana Torres', 'Dr. Luis Ramos'])
+            ->removeTableFilter('mine')
+            ->assertSee(['Urgencia por fractura', 'Dr. Luis Ramos'])
+            ->assertDontSee('Dra. Ana Torres');
+    }
+
+    public function test_arriving_at_the_record_from_a_budget_or_a_visit_takes_the_page_down_to_its_tabs(): void
+    {
+        [$doctor, $appointment] = $this->appointmentToday();
+        $this->actingAs($doctor->user);
+
+        $scripts = fn ($page) => implode(' ', array_column($page->effects['xjs'] ?? [], 'expression'));
+
+        // Quien entra a la historia desde la ficha empieza arriba, por los antecedentes.
+        $browsing = Livewire::test(ViewClinicalRecord::class, ['record' => $appointment->patient_id]);
+        $arriving = Livewire::withQueryParams(['relation' => '1'])->test(ViewClinicalRecord::class, ['record' => $appointment->patient_id]);
+
+        $this->assertStringNotContainsString('content.relationManagerTabs', $scripts($browsing));
+        $this->assertStringContainsString("getElementById('content.relationManagerTabs')", $scripts($arriving));
+    }
+
     public function test_a_visit_opened_by_mistake_is_discarded_and_the_appointment_waits_again(): void
     {
         [$doctor, $appointment] = $this->appointmentToday();

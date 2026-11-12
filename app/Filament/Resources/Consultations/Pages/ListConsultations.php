@@ -16,8 +16,10 @@ use Filament\Actions\Action;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\Toggle;
 use Filament\Resources\Pages\ListRecords;
+use Filament\Schemas\Components\Tabs\Tab;
 use Filament\Schemas\Components\Utilities\Get;
 use Filament\Support\Icons\Heroicon;
+use Illuminate\Database\Eloquent\Builder;
 
 class ListConsultations extends ListRecords
 {
@@ -25,7 +27,34 @@ class ListConsultations extends ListRecords
 
     protected static string $resource = ConsultationResource::class;
 
-    protected ?string $subheading = 'Lo normal es abrir la atención con "Atender" en la cita. Aquí puedes atender a alguien sin cita.';
+    protected ?string $subheading = 'Cada visita atendida, con lo que se le hizo. Lo normal es abrirla con "Atender" en la cita; aquí también atiendes a alguien sin cita.';
+
+    /**
+     * "Sin terminar" cuenta lo mismo que el número del menú: las atenciones propias que siguen abiertas (o
+     * todas, para quien no atiende). Mientras una siga abierta no se cobra ni avanza el plan.
+     */
+    public function getTabs(): array
+    {
+        return [
+            'all' => Tab::make('Todas'),
+            'open' => Tab::make('Sin terminar')
+                ->badge(fn () => self::unfinished(ConsultationResource::getEloquentQuery())->count() ?: null)
+                ->badgeColor('warning')
+                ->modifyQueryUsing(fn (Builder $query) => $query->whereNull('closed_at')),
+            'today' => Tab::make('De hoy')
+                ->modifyQueryUsing(fn (Builder $query) => $query->whereDate('attended_at', today())),
+        ];
+    }
+
+    /** Las que siguen abiertas; para un doctor, las suyas, que son las que le toca terminar. */
+    private static function unfinished(Builder $query): Builder
+    {
+        $doctorId = auth()->user()->doctorId();
+
+        return $query
+            ->whereNull('closed_at')
+            ->when($doctorId !== null, fn (Builder $mine) => $mine->where('doctor_id', $doctorId));
+    }
 
     protected function getHeaderActions(): array
     {

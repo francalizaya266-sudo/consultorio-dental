@@ -22,7 +22,7 @@ use Illuminate\Support\Collection;
 /**
  * Lo que recepción tiene que perseguir hoy: presupuestos sin respuesta, planes sin próxima cita, quien faltó
  * o canceló, cuotas atrasadas, pacientes para control y cumpleaños. Cuenta con las mismas consultas que las
- * pestañas de Pacientes y Cuotas, así el número del inicio y el de la lista coinciden.
+ * pestañas de Pacientes, Presupuestos y Cuotas, así el número del inicio y el de la lista coinciden.
  */
 final class FollowUps
 {
@@ -60,7 +60,8 @@ final class FollowUps
             ->unique('patient_id');
 
         return [
-            'count' => Patient::query()->withPlanAwaitingAnswer()->count(),
+            // Cuenta presupuestos, como la pestaña "Sin respuesta" a la que lleva: el número coincide.
+            'count' => TreatmentPlan::query()->awaitingAnswer()->whereHas('patient')->count(),
             'plans' => $plans->take(self::LIMIT)->values(),
         ];
     }
@@ -81,7 +82,8 @@ final class FollowUps
             ->get();
 
         return [
-            'count' => Patient::query()->withUnscheduledPlan()->count(),
+            // Cuenta planes, como la pestaña "Sin próxima cita" a la que lleva: el número coincide.
+            'count' => TreatmentPlan::query()->unscheduled()->whereHas('patient')->count(),
             'patients' => $patients,
         ];
     }
