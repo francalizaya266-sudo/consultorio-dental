@@ -4,6 +4,7 @@ namespace App\Filament\Widgets;
 
 use App\Filament\Pages\Agenda;
 use App\Filament\Resources\WaitlistEntries\WaitlistEntryResource;
+use App\Filament\Widgets\Concerns\RefreshesWithToday;
 use App\Models\User;
 use App\Services\Dashboard\WeekGaps as WeekGapsService;
 use App\Support\Dates;
@@ -17,6 +18,8 @@ use Filament\Widgets\Widget;
  */
 class WeekGaps extends Widget
 {
+    use RefreshesWithToday;
+
     /** Mientras carga, un recuadro del mismo alto: la página no salta. */
     protected ?string $placeholderHeight = '30rem';
 

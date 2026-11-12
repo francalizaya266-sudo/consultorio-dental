@@ -46,6 +46,7 @@
                                 <small>{{ $row['concepts'] }}</small>
                             </span>
                             <span class="cc-amount">{{ Money::format($row['due']) }}</span>
+                            {{ ($this->collectAction)(['patient' => $row['patient']->getKey()]) }}
                         </li>
                     @endforeach
                 </ul>

@@ -4,15 +4,17 @@ namespace App\Filament\Widgets;
 
 use App\Enums\AppointmentStatus;
 use App\Enums\RescheduleRequestStatus;
-use App\Filament\Pages\CashClosing;
+use App\Filament\Pages\CashClosing as CashClosingPage;
 use App\Filament\Resources\Appointments\AppointmentResource;
 use App\Filament\Resources\RescheduleRequests\RescheduleRequestResource;
 use App\Filament\Resources\WhatsappMessages\WhatsappMessageResource;
+use App\Filament\Widgets\Concerns\RefreshesWithToday;
 use App\Models\Appointment;
-use App\Models\Patient;
 use App\Models\Payment;
 use App\Models\User;
+use App\Services\Billing\CashClosing;
 use App\Support\Money;
+use Carbon\CarbonImmutable;
 use Filament\Widgets\Widget;
 
 /**
@@ -24,6 +26,8 @@ use Filament\Widgets\Widget;
  */
 class TodayStats extends Widget
 {
+    use RefreshesWithToday;
+
     /** Los números del día se ven apenas abre "Hoy", sin un recuadro vacío mientras carga. */
     protected static bool $isLazy = false;
 
@@ -49,13 +53,15 @@ class TodayStats extends Widget
     /** @return array{label: string, value: int, hint: string, color: string, icon: string, url: string} */
     private function appointments(): array
     {
+        // Las mismas que lista "Agenda de hoy", justo debajo: todas menos las canceladas.
         $today = AppointmentResource::getEloquentQuery()
             ->whereDate('starts_at', today())
-            ->whereIn('status', AppointmentStatus::occupying())
+            ->where('status', '!=', AppointmentStatus::Cancelled)
             ->pluck('status');
 
         $done = $today->filter(fn (AppointmentStatus $status) => $status === AppointmentStatus::Completed)->count();
-        $toCome = $today->filter(fn (AppointmentStatus $status) => in_array($status, [AppointmentStatus::Pending, AppointmentStatus::Confirmed], true))->count();
+        $toCome = $today->filter(fn (AppointmentStatus $status) => $status->isChangeable())->count();
+        $missed = $today->filter(fn (AppointmentStatus $status) => $status === AppointmentStatus::NoShow)->count();
 
         return [
             'label' => 'Citas de hoy',
@@ -64,6 +70,11 @@ class TodayStats extends Widget
             'hint' => collect([
                 $done === 1 ? '1 atendida' : "{$done} atendidas",
                 $toCome > 0 ? "{$toCome} por llegar" : null,
+                match ($missed) {
+                    0 => null,
+                    1 => '1 no asistió',
+                    default => "{$missed} no asistieron",
+                },
             ])->filter()->implode(' · '),
             'color' => 'gray',
             'icon' => 'heroicon-o-calendar-days',
@@ -76,7 +87,8 @@ class TodayStats extends Widget
     {
         $count = AppointmentResource::getEloquentQuery()
             ->where('status', AppointmentStatus::Pending)
-            ->whereBetween('starts_at', [now(), today()->addDays(2)])
+            ->where('starts_at', '>=', now())
+            ->todayOrTomorrow()
             ->count();
 
         return [
@@ -85,12 +97,14 @@ class TodayStats extends Widget
             'hint' => $count > 0 ? 'Hoy y mañana · reenvía el aviso o llama' : 'Hoy y mañana, todo confirmado',
             'color' => $count > 0 ? 'warning' : 'gray',
             'icon' => 'heroicon-o-phone',
-            'url' => AppointmentResource::getUrl('index', ['tab' => 'pending']),
+            // La pestaña trae todas las que faltan confirmar; con el filtro quedan las de hoy y mañana, que son las que se cuentan aquí.
+            'url' => AppointmentResource::getUrl('index', ['tab' => 'pending', 'filters' => ['soon' => ['isActive' => true]]]),
         ];
     }
 
     /**
-     * Lo cobrado hoy y quién se fue sin pagar. Lleva al cierre del día si nadie quedó debiendo.
+     * Lo cobrado hoy y lo que falta cobrar de lo de hoy, con las mismas cuentas que el cierre del día: lleva
+     * ahí, donde está cada persona que debe con su "Cobrar", y el número y la lista coinciden.
      *
      * @return array{label: string, value: string, hint: string, color: string, icon: string, url: string}|null
      */
@@ -100,22 +114,22 @@ class TodayStats extends Widget
             return null;
         }
 
-        $collected = Payment::query()->whereNull('voided_at')->whereDate('paid_at', today())->sum('amount');
-        $owing = Patient::query()->owingAfterTodaysVisit()->count();
+        $closing = new CashClosing(CarbonImmutable::today());
+        $owing = $closing->pending()->count();
         $finished = Appointment::query()->whereDate('starts_at', today())->where('status', AppointmentStatus::Completed)->exists();
 
         return [
             'label' => 'Cobrado hoy',
-            'value' => Money::format($collected),
+            'value' => Money::format($closing->total()),
             'hint' => match (true) {
                 $owing === 0 && ! $finished => 'Aún no se terminó ninguna atención',
                 $owing === 0 => 'Nadie se fue debiendo',
-                $owing === 1 => '1 paciente atendido hoy debe',
-                default => "{$owing} pacientes atendidos hoy deben",
+                $owing === 1 => 'Falta cobrar '.Money::format($closing->pendingTotal()).' a 1 paciente',
+                default => 'Falta cobrar '.Money::format($closing->pendingTotal())." a {$owing} pacientes",
             },
             'color' => $owing > 0 ? 'warning' : 'gray',
             'icon' => 'heroicon-o-banknotes',
-            'url' => $owing > 0 ? AppointmentResource::getUrl('index', ['tab' => 'today']) : CashClosing::getUrl(),
+            'url' => CashClosingPage::getUrl(),
         ];
     }
 

@@ -4,6 +4,7 @@ namespace App\Filament\Widgets;
 
 use App\Filament\Resources\Appointments\AppointmentResource;
 use App\Filament\Resources\Appointments\Tables\AppointmentsTable;
+use App\Filament\Widgets\Concerns\RefreshesWithToday;
 use App\Models\Appointment;
 use App\Models\User;
 use App\Support\Dates;
@@ -17,6 +18,8 @@ use Filament\Widgets\Widget;
  */
 class WaitingRoom extends Widget
 {
+    use RefreshesWithToday;
+
     /** La sala de espera se ve apenas abre "Hoy", sin un recuadro vacío mientras carga. */
     protected static bool $isLazy = false;
 

@@ -16,6 +16,7 @@ use App\Filament\Widgets\TodayAppointments;
 use App\Filament\Widgets\TodayStats;
 use App\Filament\Widgets\WaitingRoom;
 use App\Filament\Widgets\WeekGaps;
+use Filament\Actions\Action;
 use Filament\Pages\Dashboard as BaseDashboard;
 use Filament\Schemas\Components\Grid;
 use Filament\Schemas\Components\Group;
@@ -33,6 +34,9 @@ use Filament\Support\Icons\Heroicon;
  */
 class Dashboard extends BaseDashboard
 {
+    /** El aviso con que una tarjeta dice a las demás que algo cambió (RefreshesWithToday). */
+    public const CHANGED = 'today-changed';
+
     /** @var list<class-string> Arriba, a todo el ancho. */
     private const TOP = [SystemHealth::class, TodayStats::class, DayMomentCard::class];
 
@@ -107,5 +111,11 @@ class Dashboard extends BaseDashboard
                 ->color('gray')
                 ->tooltip('Quiere un horario antes o un día que está lleno: te llega la alerta cuando se libere uno que le sirva.'),
         ];
+    }
+
+    /** Una cita nueva, alguien que llegó o un pago cambian la agenda, la sala y los números: se actualizan al momento. */
+    protected function afterActionCalled(Action $action): void
+    {
+        $this->dispatch(self::CHANGED);
     }
 }

@@ -1184,6 +1184,13 @@ button.pt-chip { transition: transform 160ms ease-out; }
     .dash-appt .fi-ta-record-content > .fi-grid-col > .fi-ta-split > .fi-grid-col:last-child .fi-ta-stack { flex-direction: row; flex-wrap: wrap; align-items: center; gap: .35rem .5rem; }
     .dash-appt .fi-ta-record-content > .fi-grid-col > .fi-ta-split > .fi-grid-col:last-child .fi-ta-stack > * { flex: none; width: auto; margin: 0; }
 }
+/* En una laptop la agenda no tiene ancho de sobra: si los botones de la fila son varios (No asistió, Llegó, Atendido),
+   bajan debajo de los datos en vez de apretar el nombre y el tratamiento en tres líneas. Con uno o dos, siguen al lado. */
+@media (min-width: 48rem) {
+    .dash-appt .fi-ta-record-content-ctn { flex-wrap: wrap; }
+    .dash-appt .fi-ta-record-content-ctn > :first-child { flex: 1 1 24rem; min-width: 0; }
+    .dash-appt .fi-ta-actions { margin-inline-start: auto; }
+}
 /* El primer botón de cada cita es el paso que sigue: se ve como botón. Los demás quedan como enlace. */
 .dash-appt .fi-ta-actions > .fi-link:first-child { --text: #fff; color: #fff; background: var(--primary-600); padding: .35rem .75rem; border-radius: .55rem; font-weight: 600; box-shadow: 0 1px 2px rgb(0 0 0 / .1); }
 .dash-appt .fi-ta-actions > .fi-link:first-child:hover { background: var(--primary-500); text-decoration: none; }
@@ -1405,6 +1412,8 @@ a.ap-visit:hover { background: var(--gray-50); }
 .cc-row-text strong { font-size: .875rem; font-weight: 600; color: var(--gray-950); }
 .cc-row-text small { font-size: .8125rem; color: var(--gray-600); }
 .cc-row-actions { display: flex; align-items: center; gap: .875rem; flex: none; }
+/* En modo oscuro el subtítulo se leía gris sobre casi negro. */
+.dark .cc-title { color: var(--gray-300); }
 .cc-title-amount { margin-left: .375rem; font-variant-numeric: tabular-nums; color: var(--danger-600); }
 .dark .cc-title-amount { color: var(--danger-400); }
 .cc-amount { font-weight: 700; font-variant-numeric: tabular-nums; white-space: nowrap; }

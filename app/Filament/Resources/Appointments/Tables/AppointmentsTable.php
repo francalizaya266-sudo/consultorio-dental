@@ -41,6 +41,11 @@ class AppointmentsTable
                     ->label('Solo pacientes nuevos')
                     ->toggle()
                     ->query(fn (Builder $query) => $query->where('is_new_patient', true)),
+                // Con él llega "Por confirmar" de Hoy: la lista muestra las mismas citas que cuenta ese número.
+                Filter::make('soon')
+                    ->label('Solo de hoy y mañana')
+                    ->toggle()
+                    ->query(fn (Builder $query) => $query->todayOrTomorrow()),
             ])
             ->recordActions(AppointmentActions::all())
             ->toolbarActions([AppointmentActions::noShowBulk()])

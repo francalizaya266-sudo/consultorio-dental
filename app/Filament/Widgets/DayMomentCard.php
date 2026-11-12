@@ -4,10 +4,14 @@ namespace App\Filament\Widgets;
 
 use App\Enums\AppointmentStatus;
 use App\Filament\Actions\AppointmentActions;
+use App\Filament\Actions\RegisterPaymentAction;
 use App\Filament\Pages\CashClosing as CashClosingPage;
+use App\Filament\Pages\Dashboard;
 use App\Filament\Resources\Appointments\AppointmentResource;
 use App\Filament\Resources\WhatsappMessages\WhatsappMessageResource;
+use App\Filament\Widgets\Concerns\RefreshesWithToday;
 use App\Models\Appointment;
+use App\Models\Patient;
 use App\Models\User;
 use App\Services\Billing\CashClosing;
 use App\Services\Dashboard\DayMoment;
@@ -23,13 +27,14 @@ use Filament\Widgets\Widget;
 /**
  * Lo que toca según la hora, arriba de "Hoy". Antes de abrir: las citas de hoy que faltan confirmar y los
  * avisos por enviar. Al terminar el día: quién se fue debiendo, las citas sin cerrar y el cierre de caja.
- * Cada cita se resuelve ahí mismo (confirmar, vino, no vino), sin abrirla. Durante el día no aparece: mandan
- * la agenda y la sala. Si no hay nada que hacer, tampoco.
+ * Cada cosa se resuelve ahí mismo (confirmar, vino, no vino, cobrar), sin abrirla. Durante el día no aparece:
+ * mandan la agenda y la sala. Si no hay nada que hacer, tampoco.
  */
 class DayMomentCard extends Widget implements HasActions, HasSchemas
 {
     use InteractsWithActions;
     use InteractsWithSchemas;
+    use RefreshesWithToday;
 
     protected static bool $isLazy = false;
 
@@ -63,6 +68,22 @@ class DayMomentCard extends Widget implements HasActions, HasSchemas
     public function missedAction(): Action
     {
         return self::inline(AppointmentActions::missed())->label('No vino');
+    }
+
+    /** El mismo "Cobrar" del cierre del día, para quien se fue debiendo. */
+    public function collectAction(): Action
+    {
+        return RegisterPaymentAction::make(fn (array $arguments) => Patient::query()->find($arguments['patient'] ?? null))
+            ->name('collect')
+            ->label('Cobrar')
+            ->color('success')
+            ->size(Size::Small);
+    }
+
+    /** Lo que se resuelve aquí (confirmar, vino, no vino, cobrar) cambia la agenda y los números del día. */
+    protected function afterActionCalled(Action $action): void
+    {
+        $this->dispatch(Dashboard::CHANGED);
     }
 
     /** La acción de la agenda como enlace chico en la fila, sobre la cita que llega en los argumentos. */

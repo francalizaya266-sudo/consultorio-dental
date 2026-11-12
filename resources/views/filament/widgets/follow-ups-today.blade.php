@@ -1,8 +1,8 @@
 {{-- Arriba, los pendientes que recepción anota a mano; lo hecho hoy queda tachado para el turno que sigue.
      Cada grupo se abre y se cierra con su número a la vista; el primero con personas va abierto.
-     Solo se pinta el número de lo que no puede esperar: avisos, solicitudes, cuotas vencidas, el laboratorio y el inventario. --}}
+     Solo se pinta el número de lo que no puede esperar: citas sin cerrar, avisos, solicitudes, cuotas vencidas, el laboratorio y el inventario. --}}
 @php($firstWithRows = collect($sections)->search(fn (array $section) => $section['rows'] !== []))
-@php($urgent = ['messages', 'requests', 'installments', 'lab', 'supplies', 'batches'])
+@php($urgent = ['left-open', 'messages', 'requests', 'installments', 'lab', 'supplies', 'batches'])
 <x-filament-widgets::widget>
     <x-filament::section heading="Por hacer hoy" icon="heroicon-o-clipboard-document-check" description="Avisos, respuestas y a quién escribirle hoy.">
         <x-slot name="afterHeader">
