@@ -11,7 +11,10 @@
             's-checked_in' => 'En sala',
             's-in_progress' => 'En atención',
             's-completed' => 'Atendida',
+            's-no_show' => 'No asistió',
             's-block' => 'No se atiende',
+            // En una columna angosta (la semana) las etiquetas no entran: lo que pide algo se ve como un punto.
+            's-dot' => 'Punto rojo: sin cerrar, llamar o en bloqueo',
         ];
     @endphp
 
@@ -96,7 +99,8 @@
             <details class="agenda-help">
                 <summary><span class="agenda-help-long">Cómo usar la agenda</span><span class="agenda-help-short">Ayuda</span></summary>
                 <p>Toca una cita para ver sus datos y botones, o un espacio libre para agendar ahí. Arrastra una cita para cambiarla de horario (en celular, mantenla presionada y luego arrástrala).</p>
-                <p>"Sin cerrar" (en la semana, un punto rojo): ya pasó su hora y falta marcar si vino. Ábrela y usa "Llegó" y "Atendido", o "No asistió".</p>
+                <p>"Sin cerrar": ya pasó su hora y falta marcar si vino. Ábrela y usa "Llegó" y "Atendido", o "No asistió".</p>
+                <p>En la semana no entran las etiquetas: un punto rojo en la cita avisa que está sin cerrar, que toca llamar para confirmarla o que cayó en un bloqueo. Ábrela para ver cuál.</p>
                 <p>"En bloqueo": ese horario se bloqueó con la cita ya dada. Muévela para que el paciente reciba el aviso.</p>
                 <p>¿Marcaste "Llegó", "No asistió", "Confirmar" o "Cancelar" por error? Tienes un día para usar "Deshacer" en la misma cita.</p>
                 <div class="agenda-legend">
@@ -471,7 +475,7 @@
                                 href="{{ $appt['url'] }}"
                                 @class(['agenda-appt', 's-'.$appt['status'], 'is-movable' => $appt['draggable'], 'is-short' => $appt['end'] - $appt['start'] <= 30, 'is-unclosed' => $appt['unclosed'], 'needs-call' => $appt['needsCall'], 'in-block' => $appt['inBlock'], 'in-lane' => $appt['lanes'] > 1])
                                 style="top: {{ ($appt['start'] - $from) * $scale }}px; height: {{ max(($appt['end'] - $appt['start']) * $scale - 2, 18) }}px;@if ($appt['lanes'] > 1) --lane: {{ $appt['lane'] }}; --lanes: {{ $appt['lanes'] }};@endif"
-                                title="{{ $appt['time'] }} · {{ $appt['patient'] }} · {{ $appt['treatment'] }} · {{ $appt['statusLabel'] }}{{ $appt['phone'] ? ' · '.$appt['phone'] : '' }}{{ $appt['unclosed'] ? ' · Sin cerrar: falta marcar si vino' : '' }}{{ $appt['inBlock'] ? ' · Cae en un horario bloqueado: hay que moverla' : '' }}"
+                                title="{{ $appt['time'] }} · {{ $appt['patient'] }} · {{ $appt['treatment'] }} · {{ $appt['statusLabel'] }}{{ $appt['phone'] ? ' · '.$appt['phone'] : '' }}{{ $appt['unclosed'] ? ' · Sin cerrar: '.(in_array($appt['status'], ['pending', 'confirmed'], true) ? 'falta marcar si vino' : 'vino y falta cerrar su atención') : '' }}{{ $appt['inBlock'] ? ' · Cae en un horario bloqueado: hay que moverla' : '' }}"
                                 draggable="false"
                                 x-on:click="open($event, {{ $appt['id'] }})"
                                 @if ($appt['draggable'])

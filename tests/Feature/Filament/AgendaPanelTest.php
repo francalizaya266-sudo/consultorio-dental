@@ -6,9 +6,9 @@ use App\Enums\AppointmentStatus;
 use App\Enums\MessageStatus;
 use App\Enums\MessageTemplateKey;
 use App\Enums\RescheduleRequestStatus;
+use App\Filament\Pages\Agenda;
 use App\Filament\Pages\Dashboard;
 use App\Filament\Resources\Appointments\AppointmentResource;
-use App\Filament\Resources\Appointments\Pages\CreateAppointment;
 use App\Filament\Resources\Appointments\Pages\ListAppointments;
 use App\Filament\Resources\Appointments\Pages\ViewAppointment;
 use App\Filament\Resources\Patients\PatientResource;
@@ -60,7 +60,7 @@ class AgendaPanelTest extends TestCase
             Livewire::test(TodayStats::class)->assertSee(['Citas de hoy', 'Por confirmar']);
             Livewire::test(TodayAppointments::class)->assertOk();
             $this->get(AppointmentResource::getUrl('index'))->assertOk();
-            $this->get(AppointmentResource::getUrl('create'))->assertOk();
+            $this->get(AppointmentResource::newUrl())->assertOk();
             $this->get(WhatsappMessageResource::getUrl('index'))->assertOk();
             $this->get(RescheduleRequestResource::getUrl('index'))->assertOk();
         }
@@ -111,16 +111,17 @@ class AgendaPanelTest extends TestCase
 
         $this->actingAs(User::factory()->reception()->create());
 
-        Livewire::test(CreateAppointment::class)
-            ->fillForm([
+        Livewire::test(Agenda::class)
+            ->mountAction('createAppointment')
+            ->setActionData([
                 'patient_id' => $patient->id,
                 'doctor_id' => $doctor->id,
                 'treatment_id' => $treatment->id,
                 'date' => '2026-11-03',
                 'slot' => '10:00',
             ])
-            ->call('create')
-            ->assertHasNoFormErrors();
+            ->callMountedAction()
+            ->assertHasNoActionErrors();
 
         $appointment = Appointment::sole();
         $this->assertSame('2026-11-03 10:00', $appointment->starts_at->format('Y-m-d H:i'));
@@ -135,8 +136,9 @@ class AgendaPanelTest extends TestCase
 
         $this->actingAs(User::factory()->reception()->create());
 
-        Livewire::test(CreateAppointment::class)
-            ->fillForm([
+        Livewire::test(Agenda::class)
+            ->mountAction('createAppointment')
+            ->setActionData([
                 'patient_id' => Patient::factory()->create()->id,
                 'doctor_id' => $doctor->id,
                 'treatment_id' => $treatment->id,
@@ -144,7 +146,7 @@ class AgendaPanelTest extends TestCase
                 'manual' => true,
                 'manual_time' => '10:15',
             ])
-            ->call('create')
+            ->callMountedAction()
             ->assertNotified();
 
         $this->assertSame(1, Appointment::count());
@@ -207,14 +209,16 @@ class AgendaPanelTest extends TestCase
             ->assertOk()
             ->assertSeeInOrder(['Pacientes', 'Ana Paula Acosta Gaona', 'Cita del 03/11/2026'])
             ->assertSee(PatientResource::getUrl('view', ['record' => $patient]))
-            ->assertSeeInOrder(['Sus citas', 'Mar. 01/12/2026 · 09:00', 'Esta cita', 'Vie. 24/07/2026 · 15:00', 'Ver su ficha'])
+            ->assertSeeInOrder(['Sus citas', 'Mar. 01/12/2026 · 09:00', 'Esta cita', 'Vie. 24/07/2026 · 15:00'])
+            // La ficha del paciente va una sola vez, en el botón de arriba: la tarjeta ya no la repite.
+            ->assertDontSee('Ver su ficha')
             ->assertSee(AppointmentResource::getUrl('view', ['record' => $earlier]))
             ->assertSee(AppointmentResource::getUrl('view', ['record' => $later]))
             ->assertDontSee(AppointmentResource::getUrl('view', ['record' => $someoneElse]));
 
         Livewire::test(ViewAppointment::class, ['record' => $appointment->getKey()])
-            ->assertActionVisible('patient')
-            ->assertActionHidden(TestAction::make('patientProfile')->table($appointment));
+            ->assertActionVisible('patientProfile')
+            ->assertActionHasUrl('patientProfile', PatientResource::getUrl('view', ['record' => $patient]));
 
         // Desde la lista de citas, el menú de cada una también lleva a la ficha.
         Livewire::test(ListAppointments::class, ['activeTab' => 'all'])

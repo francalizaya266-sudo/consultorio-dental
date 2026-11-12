@@ -47,7 +47,10 @@
 
     @if ($contact)
         <div class="pt-contact">
-            <x-filament::link :href="$contact['whatsapp']" target="_blank" icon="heroicon-m-chat-bubble-left-right" color="success" size="sm">WhatsApp</x-filament::link>
+            {{-- En la página de la cita no va: allí WhatsApp es el botón de arriba, con el aviso de esa cita ya escrito. --}}
+            @if ($contact['whatsapp'])
+                <x-filament::link :href="$contact['whatsapp']" target="_blank" icon="heroicon-m-chat-bubble-left-right" color="success" size="sm">WhatsApp</x-filament::link>
+            @endif
             <x-filament::link :href="$contact['call']" icon="heroicon-m-phone" color="gray" size="sm">Llamar</x-filament::link>
         </div>
     @endif

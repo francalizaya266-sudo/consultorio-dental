@@ -16,7 +16,8 @@ enum ScheduleBlockType: string implements HasLabel
     public function getLabel(): string
     {
         return match ($this) {
-            self::Lunch => 'Almuerzo',
+            // El almuerzo de todos los días va en el horario del doctor: esto es un descanso de una vez.
+            self::Lunch => 'Descanso',
             self::Course => 'Curso',
             self::Vacation => 'Vacaciones',
             self::Holiday => 'Feriado',

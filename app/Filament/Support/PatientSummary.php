@@ -38,9 +38,10 @@ final class PatientSummary
      * Lo que muestra la vista del resumen. Los botones que abren una ventana solo van en las páginas que la
      * tienen (la ficha y la cita); en las demás, el resumen lleva a donde se hace.
      *
-     * @return array{step: Step|null, chips: list<Chip>, contact: array{whatsapp: string, call: string}|null}
+     * @param  bool  $withWhatsapp  El enlace para escribirle. La página de la cita no lo lleva: su WhatsApp es el botón de la cita.
+     * @return array{step: Step|null, chips: list<Chip>, contact: array{whatsapp: string|null, call: string}|null}
      */
-    public static function viewData(Patient $patient, User $user, mixed $livewire = null): array
+    public static function viewData(Patient $patient, User $user, mixed $livewire = null, bool $withWhatsapp = true): array
     {
         $withActions = $livewire !== null && in_array(HasPatientSummaryActions::class, class_uses_recursive($livewire), true);
         $step = self::nextStep($patient, $user, $withActions);
@@ -48,7 +49,7 @@ final class PatientSummary
         return [
             'step' => $step,
             'chips' => self::chips($patient, $user, $withActions, $step['key'] ?? null),
-            'contact' => self::contact($patient),
+            'contact' => ($contact = self::contact($patient)) && ! $withWhatsapp ? [...$contact, 'whatsapp' => null] : $contact,
         ];
     }
 
@@ -103,14 +104,14 @@ final class PatientSummary
 
         if ($missed) {
             return self::step('missed', ($missed->status === AppointmentStatus::NoShow ? 'Faltó a su cita del ' : 'Se canceló su cita del ').$missed->starts_at->translatedFormat('j \d\e F'), $missed->treatment->name.' · sigue sin otra cita', $canBook ? 'Agendar' : null, 'heroicon-m-arrow-path',
-                url: $canBook ? AppointmentResource::getUrl('create', ['patient' => $patient->getKey(), 'treatment' => $missed->treatment_id, 'doctor' => $missed->doctor_id]) : null);
+                url: $canBook ? AppointmentResource::newUrl(['patient' => $patient->getKey(), 'treatment' => $missed->treatment_id, 'doctor' => $missed->doctor_id]) : null);
         }
 
         $checkup = $insights->checkup($patient);
 
         if ($checkup && $checkup['due'] && ! $insights->hasUpcomingVisit($patient)) {
             return self::step('checkup', 'Le toca su '.$checkup['kind']->checkupLabel(), 'Última visita '.$patient->last_visit_at->diffForHumans(), $canBook ? 'Agendar' : null, 'heroicon-m-clock',
-                url: $canBook ? AppointmentResource::getUrl('create', ['patient' => $patient->getKey()]) : null);
+                url: $canBook ? AppointmentResource::newUrl(['patient' => $patient->getKey()]) : null);
         }
 
         return null;
@@ -208,7 +209,7 @@ final class PatientSummary
                 'label' => 'Sin cita agendada',
                 'color' => 'gray',
                 'icon' => 'heroicon-m-calendar',
-                'url' => AppointmentResource::getUrl('create', ['patient' => $patient->getKey()]),
+                'url' => AppointmentResource::newUrl(['patient' => $patient->getKey()]),
             ];
         }
 
@@ -248,7 +249,7 @@ final class PatientSummary
             'label' => ($due ? 'Le toca su '.$checkup['kind']->checkupLabel().' · ' : '').'Última visita '.$last->diffForHumans(),
             'color' => $due ? 'warning' : 'gray',
             'icon' => 'heroicon-m-clock',
-            'url' => $due ? AppointmentResource::getUrl('create', ['patient' => $patient->getKey()]) : null,
+            'url' => $due ? AppointmentResource::newUrl(['patient' => $patient->getKey()]) : null,
         ];
     }
 
@@ -262,7 +263,7 @@ final class PatientSummary
                 'label' => 'Plan a medias: falta agendar',
                 'color' => 'warning',
                 'icon' => 'heroicon-m-clipboard-document-list',
-                'url' => AppointmentResource::getUrl('create', ['patient' => $patient->getKey()]),
+                'url' => AppointmentResource::newUrl(['patient' => $patient->getKey()]),
             ],
             (clone $patients)->withPlanAwaitingAnswer()->exists() => [
                 'label' => 'Presupuesto sin respuesta',

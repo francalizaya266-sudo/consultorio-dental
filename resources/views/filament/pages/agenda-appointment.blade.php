@@ -5,8 +5,8 @@
 <div class="appt-panel">
     <div class="appt-panel-chips">
         <x-filament::badge :color="$appointment->status->getColor()">{{ $appointment->status->getLabel() }}</x-filament::badge>
-        @if ($appointment->isPastAndOpen())
-            <x-filament::badge color="danger" icon="heroicon-m-exclamation-triangle">Sin cerrar: marca si vino</x-filament::badge>
+        @if ($appointment->isUnclosed())
+            <x-filament::badge color="danger" icon="heroicon-m-exclamation-triangle">Sin cerrar: {{ $appointment->status->isChangeable() ? 'marca si vino' : 'falta cerrar su atención' }}</x-filament::badge>
         @elseif ($appointment->needsCall())
             <x-filament::badge color="danger" icon="heroicon-m-phone">Por confirmar: llamar</x-filament::badge>
         @endif

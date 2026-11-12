@@ -72,7 +72,7 @@
                                     @if ($row['rebooked'])
                                         Volvió a agendar
                                     @else
-                                        <a href="{{ AppointmentResource::getUrl('create', ['patient' => $appointment->patient_id]) }}" class="report-link">Sin cita: agendarle</a>
+                                        <a href="{{ AppointmentResource::newUrl(['patient' => $appointment->patient_id]) }}" class="report-link">Sin cita: agendarle</a>
                                     @endif
                                 </td>
                                 <td class="num">{{ $row['lost'] !== null ? Money::format($row['lost']) : '—' }}</td>

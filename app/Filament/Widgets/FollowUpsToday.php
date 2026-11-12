@@ -215,7 +215,7 @@ class FollowUpsToday extends Widget implements HasActions, HasSchemas
     }
 
     /**
-     * Citas de días pasados que quedaron sin cerrar. Sin cerrarlas, no se cobra lo atendido,
+     * Citas que quedaron sin cerrar (ya pasó su hora y nadie marcó nada). Sin cerrarlas, no se cobra lo atendido,
      * no se descuentan los materiales y las inasistencias del reporte salen mal.
      *
      * @return array<string, mixed>
@@ -225,8 +225,8 @@ class FollowUpsToday extends Widget implements HasActions, HasSchemas
         return [
             'key' => 'left-open',
             'title' => 'Citas sin cerrar',
-            'hint' => 'De días pasados: marca si vino o si no asistió',
-            'count' => AppointmentResource::getEloquentQuery()->leftOpen()->count(),
+            'hint' => 'Ya pasó su hora: marca si vino o si no asistió',
+            'count' => AppointmentResource::getEloquentQuery()->unclosed()->count(),
             'url' => AppointmentResource::getUrl('index', ['tab' => 'unclosed']),
             'summary' => null,
             'template' => null,
@@ -262,7 +262,7 @@ class FollowUpsToday extends Widget implements HasActions, HasSchemas
     {
         return [
             'key' => 'requests',
-            'title' => 'Solicitudes de cambio',
+            'title' => 'Cambios pedidos',
             'hint' => 'Elige uno de los horarios que propuso el paciente',
             'count' => RescheduleRequestResource::getEloquentQuery()->where('status', RescheduleRequestStatus::Pending)->count(),
             'url' => RescheduleRequestResource::getUrl('index'),
@@ -320,7 +320,7 @@ class FollowUpsToday extends Widget implements HasActions, HasSchemas
                     $patient,
                     'Falta: '.$labels->take(2)->implode(', ').($labels->count() > 2 ? ' y '.($labels->count() - 2).' más' : ''),
                     $contacted,
-                    AppointmentResource::getUrl('create', array_filter([
+                    AppointmentResource::newUrl(array_filter([
                         'patient' => $patient->getKey(),
                         'doctor' => $patient->treatmentPlans->first()?->doctor_id,
                         'treatment' => $items->first()?->treatment_id,
@@ -358,7 +358,7 @@ class FollowUpsToday extends Widget implements HasActions, HasSchemas
                     $patient,
                     ($missed->status === AppointmentStatus::NoShow ? 'No asistió el ' : 'Se canceló su cita del ').$missed->starts_at->translatedFormat('j \d\e F').' · '.$missed->treatment->name,
                     $contacted,
-                    AppointmentResource::getUrl('create', ['patient' => $patient->getKey(), 'treatment' => $missed->treatment_id, 'doctor' => $missed->doctor_id]),
+                    AppointmentResource::newUrl(['patient' => $patient->getKey(), 'treatment' => $missed->treatment_id, 'doctor' => $missed->doctor_id]),
                 );
             })->all(),
         ];
@@ -541,7 +541,7 @@ class FollowUpsToday extends Widget implements HasActions, HasSchemas
                 $patient,
                 'Última visita: '.$patient->last_visit_at->translatedFormat('j M Y'),
                 $contacted,
-                AppointmentResource::getUrl('create', ['patient' => $patient->getKey()]),
+                AppointmentResource::newUrl(['patient' => $patient->getKey()]),
             ))->all(),
         ];
     }

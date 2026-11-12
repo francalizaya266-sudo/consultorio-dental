@@ -3,6 +3,7 @@
 namespace App\Filament\Actions;
 
 use App\Enums\PatientRelationship;
+use App\Filament\Resources\Appointments\AppointmentResource;
 use App\Filament\Resources\Appointments\Schemas\AppointmentForm;
 use App\Filament\Support\Notify;
 use App\Filament\Support\SlotPicker;
@@ -23,8 +24,9 @@ use Filament\Support\Icons\Heroicon;
 use Illuminate\Support\Facades\DB;
 
 /**
- * "Nueva cita" en una ventana sobre la agenda: llega con el doctor, el día y la hora que se tocaron,
- * y el paciente nuevo se registra en la misma ventana.
+ * "Nueva cita", siempre en una ventana: sobre la agenda llega con el doctor, el día y la hora que se tocaron, y
+ * desde otra pantalla (la ficha, la lista de espera, Hoy), con lo que el enlace ya sabe del paciente. El paciente
+ * nuevo se registra en la misma ventana.
  */
 final class CreateAppointmentAction
 {
@@ -36,6 +38,7 @@ final class CreateAppointmentAction
             ->modalHeading('Nueva cita')
             ->modalWidth(Width::ThreeExtraLarge)
             ->modalSubmitActionLabel('Agendar cita')
+            ->visible(fn () => AppointmentResource::canCreate())
             ->schema(fn (Schema $schema) => AppointmentForm::configure($schema))
             ->fillForm(fn (array $arguments) => self::defaults($arguments))
             ->action(fn (array $data, Action $action) => Notify::run(
@@ -98,7 +101,8 @@ final class CreateAppointmentAction
 
     /**
      * Lo que llega puesto: el doctor (el propio, el que se tocó o el único), el día y la hora. Desde "Buscar hueco"
-     * llega también el tratamiento, y entonces la hora ya queda elegida.
+     * llega también el tratamiento, y entonces la hora ya queda elegida. Desde otra pantalla llega el paciente (y la
+     * sesión de su plan): sin un día pedido, se propone el próximo en que suele venir.
      *
      * @param  array<string, mixed>  $arguments
      * @return array<string, mixed>
@@ -108,6 +112,7 @@ final class CreateAppointmentAction
         /** @var User $user */
         $user = auth()->user();
         $date = (string) ($arguments['date'] ?? '');
+        $date = preg_match('/^\d{4}-\d{2}-\d{2}$/', $date) && CarbonImmutable::parse($date)->gte(today()) ? $date : null;
         $time = (string) ($arguments['time'] ?? '');
         $activeDoctors = Doctor::query()->active()->pluck('id');
 
@@ -117,16 +122,19 @@ final class CreateAppointmentAction
         $doctorId ??= $activeDoctors->count() === 1 ? $activeDoctors->first() : null;
         $treatmentId = Treatment::query()->active()->whereKey((int) ($arguments['treatment'] ?? 0))->value('id');
         $time = preg_match('/^\d{2}:\d{2}$/', $time) ? $time : null;
+        $patient = filled($arguments['patient'] ?? null) ? Patient::find((int) $arguments['patient']) : null;
+        $planItemId = (int) ($arguments['plan_item'] ?? 0);
 
         return [
             'new_patient' => false,
-            'patient_id' => filled($arguments['patient'] ?? null) ? (int) $arguments['patient'] : null,
+            'patient_id' => $patient?->getKey(),
             'patient' => ['relationship' => PatientRelationship::Self->value],
+            'treatment_plan_item_id' => array_key_exists($planItemId, AppointmentForm::planItemOptions($patient?->getKey())) ? $planItemId : null,
             'treatment_id' => $treatmentId,
             'doctor_id' => $doctorId,
-            'date' => preg_match('/^\d{4}-\d{2}-\d{2}$/', $date) && CarbonImmutable::parse($date)->gte(today())
-                ? $date
-                : today()->toDateString(),
+            'date' => $date ?? (SlotPicker::nextUsualDay($patient) ?? today())->toDateString(),
+            // Un día pedido a propósito (otro que hoy) se respeta: no se cambia por el día en que suele venir el paciente.
+            'date_from_agenda' => $date !== today()->toDateString() ? $date : null,
             'preferred_time' => $time,
             'slot' => $treatmentId && $doctorId && $time ? $time : null,
             'manual' => false,

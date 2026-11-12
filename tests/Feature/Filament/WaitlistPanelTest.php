@@ -149,6 +149,20 @@ class WaitlistPanelTest extends TestCase
             ->assertSee('Venció el plazo');
     }
 
+    public function test_an_empty_list_says_what_that_list_is_for(): void
+    {
+        $this->actingAs(User::factory()->reception()->create());
+
+        Livewire::test(ManageWaitlistEntries::class)
+            ->assertSee(['Nadie en lista de espera', 'Anota aquí a quien quiere un horario antes'])
+            ->set('activeTab', 'booked')
+            ->assertSee(['Nadie de la lista se agendó todavía', 'Aquí quedan quienes pasaron de la lista de espera a una cita.'])
+            ->assertDontSee('Anota aquí')
+            ->set('activeTab', 'closed')
+            ->assertSee(['Nadie retirado ni vencido', 'Aquí quedan quienes se retiraron de la lista'])
+            ->assertDontSee('Anota aquí');
+    }
+
     public function test_the_freed_slot_link_shows_who_can_come_that_day(): void
     {
         $canCome = WaitlistEntry::factory()->for($this->treatment)->create();
@@ -225,7 +239,7 @@ class WaitlistPanelTest extends TestCase
 
         Livewire::test(ManageWaitlistEntries::class)
             ->assertTableActionHasLabel('book', 'Agendar', $offered)
-            ->assertTableActionHasUrl('book', AppointmentResource::getUrl('create', [
+            ->assertTableActionHasUrl('book', AppointmentResource::newUrl([
                 'patient' => $offered->patient_id,
                 'treatment' => $this->treatment->id,
                 'doctor' => $this->doctor->id,

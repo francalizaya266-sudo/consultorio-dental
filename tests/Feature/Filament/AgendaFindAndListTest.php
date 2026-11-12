@@ -6,6 +6,7 @@ use App\Enums\AppointmentStatus;
 use App\Enums\DayPeriod;
 use App\Filament\Pages\Agenda;
 use App\Models\Appointment;
+use App\Models\Doctor;
 use App\Models\Patient;
 use App\Models\ScheduleBlock;
 use App\Models\Treatment;
@@ -183,6 +184,35 @@ class AgendaFindAndListTest extends TestCase
             ->assertSet('findTreatment', $treatment->id)
             ->call('findFor', '', false)
             ->assertSet('findTreatment', null);
+    }
+
+    public function test_two_people_on_the_waitlist_are_never_offered_the_same_time(): void
+    {
+        $this->travelTo('2026-11-02 14:20');
+        $treatment = Treatment::factory()->create(['duration_minutes' => 30, 'buffer_minutes' => 10]);
+        $doctor = $this->doctorOffering($treatment);
+        $wait = fn (string $name, string $since) => WaitlistEntry::factory()
+            ->for(Patient::factory()->state(['first_name' => $name, 'last_name' => 'Rojas']))
+            ->for($treatment)
+            ->create(['preferred_period' => DayPeriod::Afternoon, 'created_at' => $since]);
+        $wait('Carmen', '2026-10-20 09:00');
+        $wait('Diego', '2026-10-21 09:00');
+        $wait('Elsa', '2026-10-22 09:00');
+
+        $this->actingAs(User::factory()->reception()->create());
+
+        // Por orden de llegada a la lista, cada uno con la siguiente hora que no se cruza con la del anterior.
+        $fits = collect(app(GapFinder::class)->waitlistFits(Doctor::query()->with('treatments')->whereKey($doctor->id)->get(), CarbonImmutable::parse('2026-11-02')))
+            ->mapWithKeys(fn (array $fit) => [$fit['entry']->patient->first_name => $fit['time']]);
+
+        $this->assertSame(['Carmen', 'Diego', 'Elsa'], $fits->keys()->all());
+        $this->assertCount(3, $fits->unique());
+
+        $starts = $fits->map(fn (string $time) => CarbonImmutable::parse('2026-11-02 '.$time))->values();
+        $this->assertGreaterThanOrEqual(40, $starts[0]->diffInMinutes($starts[1]));
+        $this->assertGreaterThanOrEqual(40, $starts[1]->diffInMinutes($starts[2]));
+
+        Livewire::test(Agenda::class)->assertSeeInOrder(['Carmen Rojas', 'Ofrecer '.$fits['Carmen'], 'Diego Rojas', 'Ofrecer '.$fits['Diego'], 'Elsa Rojas', 'Ofrecer '.$fits['Elsa']]);
     }
 
     public function test_the_waitlist_shows_who_fits_that_day_with_the_time_to_offer(): void

@@ -406,7 +406,7 @@ class LabOrderResource extends Resource
 
     private static function bookUrl(LabOrder $record): string
     {
-        return AppointmentResource::getUrl('create', array_filter(['patient' => $record->patient_id, 'doctor' => $record->doctor_id]));
+        return AppointmentResource::newUrl(array_filter(['patient' => $record->patient_id, 'doctor' => $record->doctor_id]));
     }
 
     /** La próxima cita del paciente si quedó antes de la entrega y quien mira la puede abrir. */

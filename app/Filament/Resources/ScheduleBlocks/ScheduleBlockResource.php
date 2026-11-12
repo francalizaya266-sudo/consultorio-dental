@@ -141,7 +141,8 @@ class ScheduleBlockResource extends Resource
                     ->after(fn (ScheduleBlock $record) => ManageScheduleBlocks::warnAboutAppointments($record)),
                 // Borrar va en el menú ⋮: el rojo queda para lo urgente.
                 ActionGroup::make([
-                    DeleteAction::make(),
+                    DeleteAction::make()
+                        ->modalDescription('Ese horario vuelve a quedar libre: la agenda y la web lo ofrecen otra vez.'),
                 ]),
             ])
             ->emptyStateHeading('No hay bloqueos próximos')

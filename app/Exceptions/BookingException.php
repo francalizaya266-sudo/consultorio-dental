@@ -2,7 +2,9 @@
 
 namespace App\Exceptions;
 
+use App\Models\Appointment;
 use App\Models\Doctor;
+use App\Models\ScheduleBlock;
 use App\Models\WaitlistEntry;
 use RuntimeException;
 
@@ -14,10 +16,19 @@ class BookingException extends RuntimeException
         return new self('Ese horario se acaba de ocupar. Por favor elige otro.');
     }
 
-    /** Para el personal, que ve la agenda completa: el horario elegido choca con algo. */
-    public static function overlaps(): self
+    /**
+     * Para el personal, que ve la agenda completa: el horario elegido choca con algo, y se dice con qué (la cita de
+     * quién y a qué hora, o qué bloqueo) para no tener que ir a buscarlo en la agenda.
+     */
+    public static function overlaps(Appointment|ScheduleBlock|null $with = null): self
     {
-        return new self('Ese horario se cruza con otra cita o con un bloqueo de la agenda. Elige otro.');
+        return new self(match (true) {
+            $with instanceof Appointment => "Ese horario se cruza con la cita de {$with->patient->full_name}, de {$with->starts_at->format('H:i')} a {$with->ends_at->format('H:i')}"
+                .($with->buffer_minutes > 0 ? " (más {$with->buffer_minutes} min de esterilización)" : '').'. Elige otro.',
+            $with instanceof ScheduleBlock => 'Ese horario cae en un bloqueo de la agenda: '.($with->reason ?: $with->type->getLabel())
+                .", del {$with->starts_at->format('d/m H:i')} al {$with->ends_at->format('d/m H:i')}. Elige otro.",
+            default => 'Ese horario se cruza con otra cita o con un bloqueo de la agenda. Elige otro.',
+        });
     }
 
     /** Para el personal: el horario está apartado para alguien de la lista de espera mientras responde. */

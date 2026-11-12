@@ -174,7 +174,7 @@ class TreatmentPlanPageTest extends TestCase
         $this->actingAs(User::factory()->reception()->create());
 
         Livewire::test(ViewTreatmentPlan::class, ['record' => $plan->getKey()])
-            ->assertActionHasUrl('book', AppointmentResource::getUrl('create', ['patient' => $plan->patient_id, 'doctor' => $plan->doctor_id, 'treatment' => $item->treatment_id, 'plan_item' => $item->id]))
+            ->assertActionHasUrl('book', AppointmentResource::newUrl(['patient' => $plan->patient_id, 'doctor' => $plan->doctor_id, 'treatment' => $item->treatment_id, 'plan_item' => $item->id]))
             ->mountAction('whatsapp')
             ->assertSchemaStateSet(fn (array $state) => ['body' => str_contains($state['body'], 'queda pendiente: Corona.') ? $state['body'] : 'el aviso del plan sin próxima cita'])
             ->callMountedAction()

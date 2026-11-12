@@ -4,12 +4,13 @@ namespace App\Filament\Actions;
 
 use App\Enums\AppointmentStatus;
 use App\Enums\MessageTemplateKey;
-use App\Filament\Resources\Appointments\Pages\ViewAppointment;
 use App\Filament\Resources\Consultations\ConsultationResource;
 use App\Filament\Resources\Patients\PatientResource;
+use App\Filament\Resources\RescheduleRequests\RescheduleRequestResource;
 use App\Filament\Support\ArrivalChecklist;
 use App\Filament\Support\Notify;
 use App\Filament\Support\SlotPicker;
+use App\Filament\Support\VisitFlags;
 use App\Models\Appointment;
 use App\Models\Consultation;
 use App\Models\Doctor;
@@ -30,44 +31,73 @@ use Filament\Forms\Components\Toggle;
 use Filament\Notifications\Notification;
 use Filament\Resources\RelationManagers\RelationManager;
 use Filament\Support\Icons\Heroicon;
+use Filament\Tables\Contracts\HasTable;
 use Illuminate\Support\Collection;
 
-/** Acciones rápidas sobre una cita, iguales en la agenda, en "Hoy" y en la ficha de la cita. */
+/**
+ * Los botones de una cita. Son los mismos y van en el mismo orden en todos los lugares donde aparece una cita: primero
+ * el paso del día (confirmar, llegó, atender, cobrar), después WhatsApp, la ficha del paciente y lo demás. Lo único
+ * que cambia de un lugar a otro es cuánto cabe a la vista.
+ */
 final class AppointmentActions
 {
-    /** @return list<Action|ActionGroup> */
+    /**
+     * Las de una fila de tabla (Citas, Hoy, las citas de la ficha): el paso del día a la vista y lo demás en el menú,
+     * porque en una fila no hay más sitio.
+     *
+     * @return list<Action|ActionGroup>
+     */
     public static function all(): array
     {
         return [
-            self::confirm(),
-            self::missed(),
-            self::arrived(),
-            self::start(),
-            self::continueConsultation(),
-            self::complete(),
-            CheckoutAction::make(),
-            self::undo(),
+            ...self::daySteps(),
             ActionGroup::make([
-                self::patientProfile(),
-                self::viewConsultation(),
                 self::whatsapp(),
-                self::move(),
-                self::closeWithoutDoctor(),
-                self::noShow(),
-                self::undoInMenu(),
-                self::cancel(),
+                self::patientProfile(),
+                ...self::others(),
             ]),
         ];
     }
 
     /**
-     * Las del panel al costado de la agenda: los botones del día y WhatsApp a la vista.
+     * Las del panel al costado de la agenda: WhatsApp a la vista y lo demás en "Más". La ficha del paciente es el
+     * enlace que el panel ya trae bajo los datos: no se repite en el menú.
      *
      * @return list<Action|ActionGroup>
      */
     public static function panel(): array
     {
         return [
+            ...self::daySteps(),
+            // A la vista pero en gris: el botón de color es el paso del día (llegó, atender, cobrar).
+            self::whatsapp()->color('gray'),
+            self::more(),
+        ];
+    }
+
+    /**
+     * Las de la página de la cita: como en el panel, con la ficha del paciente como botón (una sola vez).
+     *
+     * @return list<Action|ActionGroup>
+     */
+    public static function page(): array
+    {
+        return [
+            ...self::daySteps(),
+            self::whatsapp()->color('gray'),
+            self::patientProfile()->color('gray'),
+            self::more(),
+        ];
+    }
+
+    /**
+     * El paso que toca según el estado de la cita, y deshacer el último.
+     *
+     * @return list<Action>
+     */
+    private static function daySteps(): array
+    {
+        return [
             self::confirm(),
             self::missed(),
             self::arrived(),
@@ -76,18 +106,30 @@ final class AppointmentActions
             self::complete(),
             CheckoutAction::make(),
             self::undo(),
-            // A la vista pero en gris: el botón de color es el paso del día (llegó, atender, cobrar).
-            self::whatsapp()->color('gray'),
-            ActionGroup::make([
-                self::patientProfile(),
-                self::viewConsultation(),
-                self::move(),
-                self::closeWithoutDoctor(),
-                self::noShow(),
-                self::undoInMenu(),
-                self::cancel(),
-            ])->label('Más')->button()->color('gray')->icon(Heroicon::OutlinedEllipsisHorizontal),
         ];
+    }
+
+    /**
+     * Lo que no es el paso del día, en su orden de siempre.
+     *
+     * @return list<Action>
+     */
+    private static function others(): array
+    {
+        return [
+            self::viewConsultation(),
+            self::move(),
+            self::changeRequest(),
+            self::closeWithoutDoctor(),
+            self::noShow(),
+            self::undoInMenu(),
+            self::cancel(),
+        ];
+    }
+
+    private static function more(): ActionGroup
+    {
+        return ActionGroup::make(self::others())->label('Más')->button()->color('gray')->icon(Heroicon::OutlinedEllipsisHorizontal);
     }
 
     public static function confirm(): Action
@@ -174,15 +216,29 @@ final class AppointmentActions
             ->url(fn (Appointment $record) => ConsultationResource::getUrl('edit', ['record' => $record->consultation]));
     }
 
-    /** De la cita a la ficha del paciente. No aparece donde la ficha ya está a la vista. */
+    /** De la cita a la ficha del paciente. No aparece en las citas de la ficha misma. */
     public static function patientProfile(): Action
     {
         return Action::make('patientProfile')
             ->label('Ficha del paciente')
             ->icon(Heroicon::OutlinedUser)
-            ->hidden(fn ($livewire) => $livewire instanceof ViewAppointment || $livewire instanceof RelationManager)
+            ->hidden(fn ($livewire) => $livewire instanceof RelationManager)
             ->visible(fn (Appointment $record) => PatientResource::canView($record->patient))
             ->url(fn (Appointment $record) => PatientResource::getUrl('view', ['record' => $record->patient]));
+    }
+
+    /**
+     * La cita que dice "Pidió cambio" lleva a lo que pidió el paciente, en "Cambios pedidos": ahí se aprueba uno de
+     * sus horarios o se le da otro.
+     */
+    public static function changeRequest(): Action
+    {
+        return Action::make('changeRequest')
+            ->label('Ver el cambio que pidió')
+            ->icon(Heroicon::OutlinedArrowsRightLeft)
+            ->visible(fn (Appointment $record, $livewire) => RescheduleRequestResource::canViewAny()
+                && VisitFlags::of($record, auth()->user(), $livewire instanceof HasTable ? $livewire->getTableRecords() : [])['reschedule'])
+            ->url(fn (Appointment $record) => RescheduleRequestResource::forPatientUrl($record->patient));
     }
 
     public static function viewConsultation(): Action
@@ -292,6 +348,8 @@ final class AppointmentActions
             ->color('danger')
             ->requiresConfirmation()
             ->modalHeading('¿Marcar que el paciente no asistió?')
+            // Qué pasa después, en vez de un "¿Seguro?" que no dice nada.
+            ->modalDescription('Cuenta como una falta del paciente y entra en "Faltaron o cancelaron" (en Pacientes), para darle otro horario. Si fue un error, tienes un día para deshacerlo.')
             ->modalSubmitActionLabel('Marcar inasistencia')
             ->authorize('update')
             ->action(fn (Appointment $record) => Notify::run(

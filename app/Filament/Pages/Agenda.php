@@ -32,6 +32,7 @@ use App\Support\Phone;
 use BackedEnum;
 use Carbon\CarbonImmutable;
 use Filament\Actions\Action;
+use Filament\Facades\Filament;
 use Filament\Forms\Components\Checkbox;
 use Filament\Pages\Page;
 use Filament\Support\Enums\Width;
@@ -39,6 +40,7 @@ use Filament\Support\Icons\Heroicon;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
+use Livewire\Attributes\Locked;
 use Livewire\Attributes\Url;
 
 /**
@@ -86,6 +88,13 @@ class Agenda extends Page
     /** Mes del mini calendario (Y-m) cuando se mira otro que el del día; vacío, el del día. */
     public string $month = '';
 
+    /**
+     * La pantalla desde donde se abrió "Nueva cita" con un enlace (la ficha del paciente, la lista de espera, Hoy):
+     * al agendar se vuelve a ella.
+     */
+    #[Locked]
+    public ?string $returnTo = null;
+
     /** La vista se eligió sola (no la pidió el usuario): en un celular se cambia a la lista del día. */
     protected bool $modeByDefault = false;
 
@@ -119,6 +128,7 @@ class Agenda extends Page
         $this->date = $this->safeDate($this->date)->toDateString();
         $this->mode = in_array($this->mode, ['day', 'week', 'list'], true) ? $this->mode : 'day';
         $this->doctor = $this->managesAll() ? ($this->doctor ?? $this->doctors()->first()?->getKey()) : $this->ownDoctorId();
+        $this->returnTo = $this->defaultAction === 'createAppointment' ? self::screenBefore() : null;
 
         if (! request()->has('mode')) {
             $this->modeByDefault = true;
@@ -128,6 +138,23 @@ class Agenda extends Page
                 $this->mode = 'week';
             }
         }
+    }
+
+    /**
+     * La pantalla del panel desde la que se llegó, si no es la agenda misma. Solo direcciones de este panel: nunca
+     * se vuelve a un sitio de fuera.
+     */
+    private static function screenBefore(): ?string
+    {
+        $from = (string) request()->headers->get('referer');
+        $path = (string) parse_url($from, PHP_URL_PATH);
+        $panel = (string) parse_url(Filament::getCurrentOrDefaultPanel()->getUrl(), PHP_URL_PATH);
+
+        return str_starts_with($from, request()->getSchemeAndHttpHost().'/')
+            && ($path === $panel || str_starts_with($path, rtrim($panel, '/').'/'))
+            && $path !== parse_url(self::getUrl(), PHP_URL_PATH)
+                ? $from
+                : null;
     }
 
     public function shift(int $steps): void
@@ -217,8 +244,7 @@ class Agenda extends Page
     {
         return [
             CreateAppointmentAction::make('newAppointment')
-                ->arguments(['date' => $this->date, 'doctor' => $this->mode === 'week' ? $this->doctor : null])
-                ->visible(fn () => AppointmentResource::canCreate()),
+                ->arguments(['date' => $this->date, 'doctor' => $this->mode === 'week' ? $this->doctor : null]),
         ];
     }
 
@@ -333,10 +359,28 @@ class Agenda extends Page
             ->extraModalFooterActions(fn () => AppointmentActions::panel());
     }
 
-    /** Se abre al tocar un espacio libre o una hora de "Buscar hueco": ya viene con el doctor, el día, la hora (y el tratamiento). */
+    /**
+     * Se abre al tocar un espacio libre o una hora de "Buscar hueco": ya viene con el doctor, el día, la hora (y el
+     * tratamiento). También la abre el enlace "Agendar" de otra pantalla: entonces, al agendar (o con "Volver sin
+     * agendar") se regresa a esa pantalla, donde sale el aviso de la cita creada.
+     */
     public function createAppointmentAction(): Action
     {
-        return CreateAppointmentAction::make();
+        return CreateAppointmentAction::make()
+            ->modalCancelAction(fn (Action $action) => $this->openedFromAnotherScreen()
+                ? $action->label('Volver sin agendar')->url($this->returnTo)
+                : $action)
+            ->after(function (): void {
+                if ($this->openedFromAnotherScreen()) {
+                    $this->redirect($this->returnTo);
+                }
+            });
+    }
+
+    /** ¿"Nueva cita" se abrió con el enlace de otra pantalla, y no tocando la agenda? */
+    private function openedFromAnotherScreen(): bool
+    {
+        return $this->returnTo !== null && (bool) ($this->mountedActions[0]['context']['mountedFromUrl'] ?? false);
     }
 
     /** Ofrecer por WhatsApp la hora libre a alguien de la lista de espera, desde el panel de la agenda. */
@@ -892,8 +936,8 @@ class Agenda extends Page
                 'treatmentId' => $a->treatment_id,
                 'status' => $a->status->value,
                 'statusLabel' => $a->status->getLabel(),
-                'unclosed' => $a->isPastAndOpen(),
-                'needsCall' => $a->needsCall() && ! $a->isPastAndOpen(),
+                'unclosed' => $a->isUnclosed(),
+                'needsCall' => $a->needsCall() && ! $a->isUnclosed(),
                 // Se bloqueó ese horario con la cita ya dada: hasta moverla, el paciente vendría igual.
                 'inBlock' => $a->status->isChangeable() && ! $a->ends_at->isPast() && self::blockOver($a, $blocks) !== null,
                 'isNew' => $a->is_new_patient,

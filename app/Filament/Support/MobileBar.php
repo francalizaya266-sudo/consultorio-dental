@@ -24,7 +24,7 @@ final class MobileBar
                 ? self::item('Agenda', 'heroicon-o-calendar', Agenda::getUrl(), request()->routeIs(Agenda::getRouteName(), AppointmentResource::getRouteBaseName().'.index'))
                 : null,
             AppointmentResource::canCreate()
-                ? self::item('Nueva cita', 'heroicon-o-plus', AppointmentResource::getUrl('create'), request()->routeIs(AppointmentResource::getRouteBaseName().'.create'), primary: true)
+                ? self::item('Nueva cita', 'heroicon-o-plus', AppointmentResource::newUrl(), active: false, primary: true)
                 : null,
             PatientResource::canViewAny()
                 ? self::item('Pacientes', 'heroicon-o-users', PatientResource::getUrl('index'), request()->routeIs(PatientResource::getRouteBaseName().'.*'))

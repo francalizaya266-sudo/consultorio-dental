@@ -106,16 +106,9 @@ class AvailabilityService
     ): bool {
         $start = CarbonImmutable::instance($startsAt);
         $end = $start->addMinutes($durationMinutes);
-        $occupiedUntil = $end->addMinutes($bufferMinutes);
 
-        $clashesWithAppointment = $this->occupyingAppointments($doctor, $start->subDay(), $occupiedUntil, $ignoreAppointmentId)
-            ->contains(fn (Appointment $a) => $a->starts_at->lt($occupiedUntil) && $a->occupied_until->gt($start));
-
-        if ($clashesWithAppointment || $this->holdAt($doctor, $start, $durationMinutes, $bufferMinutes) !== null) {
-            return false;
-        }
-
-        if (ScheduleBlock::query()->affecting($doctor, $start, $end)->exists()) {
+        if ($this->clashAt($doctor, $start, $durationMinutes, $bufferMinutes, $ignoreAppointmentId) !== null
+            || $this->holdAt($doctor, $start, $durationMinutes, $bufferMinutes) !== null) {
             return false;
         }
 
@@ -125,6 +118,27 @@ class AvailabilityService
 
         return $this->workingRanges($doctor, $start)
             ->contains(fn (array $range) => $start->gte($range['start']) && $end->lte($range['end']));
+    }
+
+    /**
+     * Con qué se cruza una cita puesta en ese horario: la primera cita que ocupa ese tramo (contando su tiempo de
+     * esterilización) o, si no hay, el bloqueo de la agenda. Null si no se cruza con ninguno.
+     */
+    public function clashAt(
+        Doctor $doctor,
+        CarbonInterface $startsAt,
+        int $durationMinutes,
+        int $bufferMinutes,
+        ?int $ignoreAppointmentId = null,
+    ): Appointment|ScheduleBlock|null {
+        $start = CarbonImmutable::instance($startsAt);
+        $end = $start->addMinutes($durationMinutes);
+        $occupiedUntil = $end->addMinutes($bufferMinutes);
+
+        return $this->occupyingAppointments($doctor, $start->subDay(), $occupiedUntil, $ignoreAppointmentId)
+            ->sortBy('starts_at')
+            ->first(fn (Appointment $a) => $a->starts_at->lt($occupiedUntil) && $a->occupied_until->gt($start))
+            ?? ScheduleBlock::query()->affecting($doctor, $start, $end)->orderBy('starts_at')->first();
     }
 
     /** Quién tiene apartado (por la lista de espera) un horario que se cruza con este. Null si nadie. */

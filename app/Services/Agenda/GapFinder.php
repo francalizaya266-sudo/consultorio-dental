@@ -138,7 +138,8 @@ final class GapFinder
 
     /**
      * De la lista de espera, quienes caben ese día: les sirve el día y la parte del día que pidieron, y su
-     * tratamiento entra con alguno de los doctores. Cada uno con la primera hora libre que le sirve.
+     * tratamiento entra con alguno de los doctores. Cada uno con la primera hora libre que le sirve y que no se
+     * le propuso ya a otro de la lista: así no se ofrece la misma hora a dos personas.
      *
      * @param  Collection<int, Doctor>  $doctors  Con sus tratamientos cargados.
      * @return list<array{entry: WaitlistEntry, doctor: Doctor, time: string}>
@@ -160,6 +161,8 @@ final class GapFinder
             ->get();
 
         $fits = [];
+        /** @var array<int, list<array{from: CarbonImmutable, to: CarbonImmutable}>> $proposed Lo ya propuesto a otro, por doctor. */
+        $proposed = [];
 
         foreach ($entries as $entry) {
             foreach ($doctors as $doctor) {
@@ -167,10 +170,13 @@ final class GapFinder
                     continue;
                 }
 
-                $slot = $this->waitlist->slotsFor($entry, $doctor, $entry->treatment, $date)->first();
+                $slot = $this->waitlist->slotsFor($entry, $doctor, $entry->treatment, $date)
+                    ->first(fn (Slot $slot) => ! collect($proposed[$doctor->getKey()] ?? [])
+                        ->contains(fn (array $busy) => $slot->startsAt->lt($busy['to']) && $slot->endsAt->gt($busy['from'])));
 
                 if ($slot) {
                     $fits[] = ['entry' => $entry, 'doctor' => $doctor, 'time' => $slot->label()];
+                    $proposed[$doctor->getKey()][] = ['from' => $slot->startsAt, 'to' => $slot->endsAt->addMinutes($entry->treatment->bufferMinutes())];
 
                     break;
                 }

@@ -133,7 +133,7 @@ class PanelAccessTest extends TestCase
             'earnings.print', 'earnings.excel' => Filament::getPanel('admin')->route('reports.'.$page),
             'agenda' => Agenda::getUrl(),
             'appointments' => AppointmentResource::getUrl('index'),
-            'appointments.create' => AppointmentResource::getUrl('create'),
+            'appointments.create' => AppointmentResource::newUrl(),
             'messages' => WhatsappMessageResource::getUrl('index'),
             'requests' => RescheduleRequestResource::getUrl('index'),
             'blocks' => ScheduleBlockResource::getUrl('index'),

@@ -14,6 +14,7 @@ use App\Models\Appointment;
 use App\Models\Doctor;
 use App\Models\Patient;
 use App\Models\RememberedDevice;
+use App\Models\ScheduleBlock;
 use App\Models\Treatment;
 use App\Models\User;
 use App\Models\WhatsappMessage;
@@ -252,8 +253,41 @@ class AppointmentServiceTest extends TestCase
         $late = $this->service()->bookFromStaff($reception, Patient::factory()->create(), $doctor, $treatment, CarbonImmutable::parse('2026-11-03 19:00'));
         $this->assertSame('19:30', $late->ends_at->format('H:i'));
 
-        $this->expectExceptionObject(BookingException::overlaps());
+        $this->expectExceptionObject(BookingException::overlaps($late));
         $this->service()->bookFromStaff($reception, Patient::factory()->create(), $doctor, $treatment, CarbonImmutable::parse('2026-11-03 19:15'));
+    }
+
+    public function test_a_clash_says_which_appointment_or_which_block_is_in_the_way(): void
+    {
+        $this->freezeMonday();
+        $reception = User::factory()->reception()->create();
+        $treatment = Treatment::factory()->create(['duration_minutes' => 30, 'buffer_minutes' => 10]);
+        $doctor = $this->doctorOffering($treatment);
+        $rosa = Patient::factory()->create(['first_name' => 'Rosa', 'last_name' => 'Quispe']);
+        $this->service()->bookFromStaff($reception, $rosa, $doctor, $treatment, CarbonImmutable::parse('2026-11-03 10:00'));
+        ScheduleBlock::query()->create(['doctor_id' => $doctor->id, 'type' => 'course', 'starts_at' => '2026-11-04 15:00', 'ends_at' => '2026-11-04 19:00', 'reason' => 'Congreso de implantes']);
+        ScheduleBlock::query()->create(['type' => 'holiday', 'starts_at' => '2026-11-05 00:00', 'ends_at' => '2026-11-06 00:00']);
+
+        $message = function (string $when) use ($reception, $doctor, $treatment): string {
+            try {
+                $this->service()->bookFromStaff($reception, Patient::factory()->create(), $doctor, $treatment, CarbonImmutable::parse($when));
+            } catch (BookingException $e) {
+                return $e->getMessage();
+            }
+
+            return 'Se agendó.';
+        };
+
+        $withRosa = 'Ese horario se cruza con la cita de Rosa Quispe, de 10:00 a 10:30 (más 10 min de esterilización). Elige otro.';
+
+        $this->assertSame($withRosa, $message('2026-11-03 10:15'));
+        // Pegada a la cita, sin dejar el tiempo de esterilización, también choca con ella.
+        $this->assertSame($withRosa, $message('2026-11-03 10:35'));
+        $this->assertSame($withRosa, $message('2026-11-03 09:25'));
+        $this->assertSame('Se agendó.', $message('2026-11-03 10:40'));
+        $this->assertSame('Ese horario cae en un bloqueo de la agenda: Congreso de implantes, del 04/11 15:00 al 04/11 19:00. Elige otro.', $message('2026-11-04 18:45'));
+        // Sin un motivo escrito, el tipo de bloqueo.
+        $this->assertSame('Ese horario cae en un bloqueo de la agenda: Feriado, del 05/11 00:00 al 06/11 00:00. Elige otro.', $message('2026-11-05 10:00'));
     }
 
     public function test_patient_link_confirmation_marks_the_appointment_confirmed(): void

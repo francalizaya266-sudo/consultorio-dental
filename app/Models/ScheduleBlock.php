@@ -11,7 +11,7 @@ use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
-/** Horario bloqueado (almuerzo, curso, vacaciones). Sin doctor aplica a todo el consultorio. */
+/** Horario bloqueado (descanso, curso, vacaciones). Sin doctor aplica a todo el consultorio. */
 #[Fillable(['doctor_id', 'type', 'starts_at', 'ends_at', 'reason', 'created_by_user_id'])]
 class ScheduleBlock extends Model
 {

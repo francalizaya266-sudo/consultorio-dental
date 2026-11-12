@@ -22,9 +22,7 @@
     @if ($profile_url || $new_url)
         <div class="ap-visits-links">
             @if ($profile_url)
-                <x-filament::link :href="$profile_url" icon="heroicon-m-user" size="sm">
-                    {{ $total > count($rows) ? 'Ver las '.$total.' en su ficha' : 'Ver su ficha' }}
-                </x-filament::link>
+                <x-filament::link :href="$profile_url" icon="heroicon-m-user" size="sm">Ver las {{ $total }} en su ficha</x-filament::link>
             @endif
             @if ($new_url)
                 <x-filament::link :href="$new_url" icon="heroicon-m-calendar-days" size="sm" color="gray">Nueva cita</x-filament::link>

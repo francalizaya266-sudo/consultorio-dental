@@ -14,6 +14,7 @@ use Filament\Actions\EditAction;
 use Filament\Forms\Components\DatePicker;
 use Filament\Forms\Components\Select;
 use Filament\Tables\Columns\TextColumn;
+use Filament\Tables\Contracts\HasTable;
 use Filament\Tables\Filters\Filter;
 use Filament\Tables\Filters\Indicator;
 use Filament\Tables\Table;
@@ -103,8 +104,17 @@ class WaitlistEntriesTable
                     WaitlistEntryActions::remove(),
                 ]),
             ])
-            ->emptyStateHeading('Nadie en lista de espera')
-            ->emptyStateDescription('Anota aquí a quien quiere un horario antes o un día que hoy está lleno. Cuando se libere un hueco, el sistema te avisa a quién ofrecérselo.');
+            // Cada pestaña dice lo suyo cuando está vacía: antes las tres decían "Nadie en lista de espera".
+            ->emptyStateHeading(fn (HasTable $livewire) => match ($livewire->activeTab ?? null) {
+                'booked' => 'Nadie de la lista se agendó todavía',
+                'closed' => 'Nadie retirado ni vencido',
+                default => 'Nadie en lista de espera',
+            })
+            ->emptyStateDescription(fn (HasTable $livewire) => match ($livewire->activeTab ?? null) {
+                'booked' => 'Aquí quedan quienes pasaron de la lista de espera a una cita.',
+                'closed' => 'Aquí quedan quienes se retiraron de la lista y aquellos cuya espera venció sin conseguir horario.',
+                default => 'Anota aquí a quien quiere un horario antes o un día que hoy está lleno. Cuando se libere un hueco, el sistema te avisa a quién ofrecérselo.',
+            });
     }
 
     /** "Lo antes posible", "Desde el 9 nov.", "Hasta el 30 nov." o "Del 9 al 30 nov.". */

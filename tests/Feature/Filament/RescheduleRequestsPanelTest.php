@@ -109,6 +109,21 @@ class RescheduleRequestsPanelTest extends TestCase
             ->assertActionVisible(TestAction::make('reject')->table($request));
     }
 
+    public function test_the_reason_goes_under_the_proposed_times_and_the_state_only_shows_once_resolved(): void
+    {
+        $request = $this->requestFor($this->appointmentAt('2026-11-03 10:00'), ['2026-11-04 10:00']);
+        $request->update(['reason' => 'Tengo examen ese día.']);
+        $this->actingAs(User::factory()->reception()->create());
+
+        // En una laptop, la columna "Motivo" y la de "Estado" sacaban de la pantalla los botones de la fila.
+        Livewire::test(ListRescheduleRequests::class)
+            ->assertSee('Motivo: Tengo examen ese día.')
+            ->assertTableColumnDoesNotExist('reason')
+            ->assertTableColumnHidden('status')
+            ->set('activeTab', 'resolved')
+            ->assertTableColumnVisible('status');
+    }
+
     public function test_a_request_closed_by_moving_the_appointment_leaves_the_pending_list_and_says_why(): void
     {
         $appointment = $this->appointmentAt('2026-11-03 10:00');

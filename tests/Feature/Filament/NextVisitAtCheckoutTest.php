@@ -54,7 +54,7 @@ class NextVisitAtCheckoutTest extends TestCase
         $this->assertStringContainsString('Sin próxima cita. Le toca: Endodoncia, el lunes 9 de noviembre (a la semana).', $notice['body']);
         $this->assertSame(['Agendar próxima cita', 'Ver constancia'], array_column($notice['actions'], 'label'));
         $this->assertSame(
-            AppointmentResource::getUrl('create', ['patient' => $rosa->id, 'doctor' => $this->doctor->id, 'plan_item' => $item->id, 'treatment' => $endo->id, 'date' => '2026-11-09']),
+            AppointmentResource::newUrl(['patient' => $rosa->id, 'doctor' => $this->doctor->id, 'plan_item' => $item->id, 'treatment' => $endo->id, 'date' => '2026-11-09']),
             $notice['actions'][0]['url'],
         );
         // No se cierra sola: el paciente sigue en el mostrador.

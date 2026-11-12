@@ -6,7 +6,6 @@ use App\Enums\AppointmentStatus;
 use App\Enums\MessageTemplateKey;
 use App\Exceptions\BookingException;
 use App\Filament\Pages\Agenda;
-use App\Filament\Resources\Appointments\Pages\CreateAppointment;
 use App\Models\Appointment;
 use App\Models\Charge;
 use App\Models\Patient;
@@ -143,13 +142,14 @@ class AgendaCalendarTest extends TestCase
         $treatment = Treatment::factory()->create(['duration_minutes' => 30]);
         $doctor = $this->doctorOffering($treatment);
         $appointment = Appointment::factory()->for($doctor)->for($treatment)->at('2026-11-04 10:00')->create();
-        Appointment::factory()->for($doctor)->for($treatment)->at('2026-11-04 16:00')->create();
+        $inTheWay = Appointment::factory()->for($doctor)->for($treatment)->for(Patient::factory()->create(['first_name' => 'Rosa', 'last_name' => 'Quispe']))->at('2026-11-04 16:00')->create();
 
         $this->actingAs(User::factory()->reception()->create());
 
+        // El aviso dice con quién choca y a qué hora, para no tener que buscarlo en la agenda.
         Livewire::test(Agenda::class, ['date' => '2026-11-04'])
             ->callAction('move', arguments: ['id' => $appointment->id, 'column' => "{$doctor->id}|2026-11-04", 'time' => '16:15'])
-            ->assertNotified(BookingException::overlaps()->getMessage());
+            ->assertNotified('Ese horario se cruza con la cita de Rosa Quispe, de 16:00 a 16:30'.($inTheWay->buffer_minutes > 0 ? " (más {$inTheWay->buffer_minutes} min de esterilización)" : '').'. Elige otro.');
 
         $this->assertSame('10:00', $appointment->fresh()->starts_at->format('H:i'));
     }
@@ -193,11 +193,12 @@ class AgendaCalendarTest extends TestCase
 
         $this->actingAs(User::factory()->reception()->create());
 
-        Livewire::withQueryParams(['doctor' => $doctor->id, 'date' => '2026-11-03', 'time' => '10:07'])
-            ->test(CreateAppointment::class)
-            ->assertSchemaStateSet(['doctor_id' => $doctor->id, 'date' => '2026-11-03'])
-            ->fillForm(['treatment_id' => $treatment->id])
-            ->assertSchemaStateSet(['slot' => '10:15']);
+        Livewire::test(Agenda::class)
+            ->mountAction('createAppointment', ['doctor' => $doctor->id, 'date' => '2026-11-03', 'time' => '10:07'])
+            ->assertActionDataSet(['doctor_id' => $doctor->id, 'date' => '2026-11-03'])
+            ->assertMountedActionModalSee('queda puesta la primera hora libre desde las 10:07, la que tocaste en la agenda')
+            ->setActionData(['treatment_id' => $treatment->id])
+            ->assertActionDataSet(['slot' => '10:15']);
     }
 
     public function test_tapping_an_appointment_opens_a_side_panel_with_balance_and_the_day_buttons(): void
@@ -325,7 +326,7 @@ class AgendaCalendarTest extends TestCase
         $this->freezeMonday();
         $treatment = Treatment::factory()->create(['duration_minutes' => 30]);
         $doctor = $this->doctorOffering($treatment);
-        Appointment::factory()->for($doctor)->for($treatment)->at('2026-11-03 16:00')->create();
+        $inTheWay = Appointment::factory()->for($doctor)->for($treatment)->at('2026-11-03 16:00')->create();
 
         $this->actingAs(User::factory()->reception()->create());
 
@@ -339,7 +340,7 @@ class AgendaCalendarTest extends TestCase
                 'manual_time' => '16:00',
             ])
             ->callMountedAction()
-            ->assertNotified(BookingException::overlaps()->getMessage());
+            ->assertNotified(BookingException::overlaps($inTheWay)->getMessage());
 
         $this->assertFalse(Patient::query()->where(['first_name' => 'Ana', 'last_name' => 'Rojas'])->exists());
     }
@@ -432,6 +433,20 @@ class AgendaCalendarTest extends TestCase
             ->assertMountedActionModalDontSee('Ya tiene cita');
     }
 
+    public function test_the_legend_names_every_colour_drawn_and_the_red_dot_of_the_week(): void
+    {
+        $this->freezeMonday();
+        $treatment = Treatment::factory()->create();
+        $doctor = $this->doctorOffering($treatment);
+        Appointment::factory()->for($doctor)->for($treatment)->at('2026-11-02 07:00')->create(['status' => AppointmentStatus::NoShow]);
+
+        $this->actingAs(User::factory()->reception()->create());
+
+        Livewire::test(Agenda::class)
+            ->assertSeeHtml('s-no_show')
+            ->assertSeeInOrder(['Pendiente', 'Confirmada', 'En sala', 'En atención', 'Atendida', 'No asistió', 'No se atiende', 'Punto rojo: sin cerrar, llamar o en bloqueo']);
+    }
+
     public function test_with_a_single_doctor_the_doctor_is_already_chosen(): void
     {
         $this->freezeMonday();
@@ -439,9 +454,6 @@ class AgendaCalendarTest extends TestCase
         $doctor = $this->doctorOffering($treatment);
 
         $this->actingAs(User::factory()->reception()->create());
-
-        Livewire::test(CreateAppointment::class)
-            ->assertSchemaStateSet(['doctor_id' => $doctor->id]);
 
         Livewire::test(Agenda::class)
             ->mountAction('createAppointment')
