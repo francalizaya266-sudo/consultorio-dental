@@ -15,6 +15,7 @@ use App\Services\Booking\AppointmentService;
 use App\Services\Clinical\TreatmentPlanService;
 use App\Services\Patients\PatientRegistrar;
 use Carbon\CarbonImmutable;
+use Carbon\CarbonInterface;
 use Filament\Actions\Action;
 use Filament\Schemas\Schema;
 use Filament\Support\Enums\Width;
@@ -39,9 +40,17 @@ final class CreateAppointmentAction
             ->fillForm(fn (array $arguments) => self::defaults($arguments))
             ->action(fn (array $data, Action $action) => Notify::run(
                 fn () => self::book($data),
-                'Cita creada. El aviso al paciente está listo en Avisos.',
+                self::createdMessage(SlotPicker::startsAt($data)),
                 $action,
             ));
+    }
+
+    /** Lo que se dice al crearla: el aviso al paciente solo se prepara si la cita es de ahora en adelante. */
+    public static function createdMessage(CarbonInterface $startsAt): string
+    {
+        return $startsAt->isPast()
+            ? 'Cita registrada en una hora que ya pasó. No se preparó aviso al paciente.'
+            : 'Cita creada. El aviso al paciente está listo en Avisos.';
     }
 
     /**

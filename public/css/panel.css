@@ -257,9 +257,9 @@
 .dark .s-no_show { --c-accent: var(--danger-400); --c-bg: color-mix(in oklab, var(--danger-500) 10%, var(--gray-900)); --c-ink: var(--gray-400); --c-meta: var(--gray-400); --c-ring: color-mix(in oklab, var(--danger-400) 18%, transparent); }
 
 /* Etiquetas junto al nombre: una píldora clara con el texto del color de lo que avisa.
-   "Sin cerrar" es lo único que pide algo: por eso va llena de rojo. */
+   "Sin cerrar" es lo único que pide algo ya: por eso va llena de rojo. "En bloqueo" (hay que moverla) va como "Llamar". */
 :is(.agenda-appt, .agenda-item) .tag { display: inline-block; margin-left: .3rem; padding: 0 .375rem; border-radius: 9999px; font-size: .6875rem; font-weight: 600; line-height: 1.0625rem; letter-spacing: 0; vertical-align: 1px; background: rgb(255 255 255 / .8); box-shadow: inset 0 0 0 1px var(--t-ring, transparent); }
-:is(.agenda-appt, .agenda-item) .tag-call { color: var(--danger-700); --t-ring: color-mix(in oklab, var(--danger-500) 30%, transparent); }
+:is(.agenda-appt, .agenda-item) :is(.tag-call, .tag-block) { color: var(--danger-700); --t-ring: color-mix(in oklab, var(--danger-500) 30%, transparent); }
 :is(.agenda-appt, .agenda-item) .tag-new { color: var(--info-700); --t-ring: color-mix(in oklab, var(--info-500) 30%, transparent); }
 :is(.agenda-appt, .agenda-item) .tag-owes { color: var(--warning-800); --t-ring: color-mix(in oklab, var(--warning-500) 40%, transparent); }
 :is(.agenda-appt, .agenda-item) .tag-note { color: var(--gray-700); --t-ring: color-mix(in oklab, var(--gray-500) 25%, transparent); }
@@ -268,7 +268,7 @@
 :is(.agenda-appt, .agenda-item) .tag-alert.is-caution { color: var(--warning-800); --t-ring: color-mix(in oklab, var(--warning-500) 40%, transparent); }
 :is(.agenda-appt, .agenda-item) :is(.tag-change, .tag-missed) { color: var(--warning-800); --t-ring: color-mix(in oklab, var(--warning-500) 40%, transparent); }
 .dark :is(.agenda-appt, .agenda-item) .tag { background: rgb(0 0 0 / .3); }
-.dark :is(.agenda-appt, .agenda-item) .tag-call { color: var(--danger-300); }
+.dark :is(.agenda-appt, .agenda-item) :is(.tag-call, .tag-block) { color: var(--danger-300); }
 .dark :is(.agenda-appt, .agenda-item) .tag-new { color: var(--info-300); }
 .dark :is(.agenda-appt, .agenda-item) .tag-owes { color: var(--warning-300); }
 .dark :is(.agenda-appt, .agenda-item) .tag-note { color: var(--gray-300); }
@@ -280,8 +280,8 @@
    y lo que pide algo (sin cerrar, llamar) se ve como un punto rojo en la esquina. */
 @container (max-width: 12rem) {
     .agenda-appt .tag { display: none; }
-    .agenda-appt.is-unclosed b, .agenda-appt.needs-call b { padding-right: .6rem; }
-    .agenda-appt.is-unclosed::after, .agenda-appt.needs-call::after { content: ""; position: absolute; top: .4rem; right: .35rem; width: .5rem; height: .5rem; border-radius: 9999px; background: var(--danger-600); box-shadow: 0 0 0 2px var(--c-bg); }
+    .agenda-appt:is(.is-unclosed, .needs-call, .in-block) b { padding-right: .6rem; }
+    .agenda-appt:is(.is-unclosed, .needs-call, .in-block)::after { content: ""; position: absolute; top: .4rem; right: .35rem; width: .5rem; height: .5rem; border-radius: 9999px; background: var(--danger-600); box-shadow: 0 0 0 2px var(--c-bg); }
 }
 
 /* En el celular la agenda va primero: el título más chico, la fecha y los botones en dos filas apretadas,
@@ -291,8 +291,14 @@
     .agenda-page .fi-page-header-main-ctn { padding-top: 1.25rem; row-gap: 1rem; }
     .agenda-page .fi-header-heading { font-size: 1.5rem; line-height: 2rem; }
     .agenda-controls { grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: .625rem .75rem; }
-    .agenda-toolbar, .agenda-info { display: contents; }
+    .agenda-toolbar, .agenda-info, .agenda-toolbar > .agenda-toolbar-group:last-child { display: contents; }
     .agenda-toolbar > .agenda-toolbar-group:first-child { grid-column: 1 / -1; flex-wrap: nowrap; }
+    /* Debajo de la fecha: el doctor (en la semana), las vistas con "Ayuda" al lado y, en su propia fila, "Buscar hueco". */
+    .agenda-toolbar-group:last-child > .fi-input-wrp { grid-column: 1 / -1; }
+    .agenda-modes { justify-self: start; }
+    .agenda-help { order: 1; }
+    .agenda-find-toggle { order: 2; grid-column: 1 / -1; justify-self: start; }
+    .agenda-item-doc { white-space: normal; }
     .agenda-date { flex: 1 1 auto; min-width: 0; }
     .agenda-info > .agenda-legend { display: none; }
     .agenda-help { justify-self: end; text-align: right; }
@@ -308,7 +314,7 @@
     .agenda-frame.is-fit .agenda-head { top: 4rem; }
 }
 @media (pointer: coarse) {
-    .agenda-nav { height: 2.5rem; }
+    .agenda-nav, .agenda-find-toggle { height: 2.5rem; }
     .agenda-nav-btn.is-icon { width: 2.375rem; }
     .agenda-modes .fi-tabs-item { padding-block: .4375rem; }
 }
@@ -319,20 +325,37 @@
 }
 @keyframes agenda-fade { from { opacity: 0; } }
 
-/* ---------- Agenda: panel para buscar horas libres (computadora) ---------- */
+/* ---------- Agenda: panel para buscar horas libres ---------- */
 
-/* La agenda y el panel van lado a lado solo cuando entran holgados; en pantallas más chicas el panel no aparece. */
-.agenda-layout { display: grid; gap: 1rem; align-items: start; }
-.agenda-main { display: grid; gap: 1rem; min-width: 0; }
+/* La agenda y el panel van lado a lado solo cuando entran holgados; en pantallas más chicas el panel se abre con un botón. */
+.agenda-layout { display: grid; grid-template-columns: minmax(0, 1fr); gap: 1rem; align-items: start; }
+/* Una sola columna que nunca crece con lo que lleva dentro: un nombre largo se parte, no ensancha la página. */
+.agenda-main { display: grid; grid-template-columns: minmax(0, 1fr); gap: 1rem; min-width: 0; }
 .agenda-rail { display: none; }
 /* El botón para esconderlo aparece solo donde el panel puede estar. Encendido, con el fondo blanco de un botón elegido. */
 .agenda-rail-toggle { display: none; }
+/* Donde el panel no entra al costado (celular, tablet), "Buscar hueco" lo abre debajo de la barra, antes de la agenda. */
+.agenda-find-toggle { display: inline-flex; align-items: center; gap: .375rem; height: 2.25rem; padding: 0 .875rem 0 .625rem; border-radius: .625rem; background: var(--gray-100); font-size: .875rem; font-weight: 600; color: var(--gray-800); -webkit-tap-highlight-color: transparent; transition: background-color 150ms ease, color 150ms ease, transform 160ms var(--ag-ease); }
+.agenda-find-toggle:active { transform: scale(.97); }
+.agenda-find-toggle:focus-visible { outline: 2px solid var(--primary-600); outline-offset: 1px; }
+.agenda-find-toggle[aria-expanded="true"] { background: var(--primary-50); color: var(--primary-700); box-shadow: inset 0 0 0 1px color-mix(in oklab, var(--primary-500) 35%, transparent); }
+.dark .agenda-find-toggle { background: rgb(255 255 255 / .06); color: var(--gray-200); }
+.dark .agenda-find-toggle[aria-expanded="true"] { background: color-mix(in oklab, var(--primary-500) 16%, transparent); color: var(--primary-300); }
+@media (max-width: 79.9375rem) {
+    /* La barra, el panel abierto y la agenda quedan en una sola fila de piezas, en ese orden. */
+    .agenda-main { display: contents; }
+    .agenda-main > :not(.agenda-controls) { order: 2; }
+    .agenda-layout.is-rail-open .agenda-rail { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(17rem, 100%), 1fr)); gap: .875rem; align-items: start; order: 1; }
+    /* Primero lo que se vino a buscar: las horas libres; después el mes y la lista de espera. */
+    .agenda-rail > .agenda-card:nth-child(2) { order: -1; }
+}
 .agenda-rail-toggle .agenda-nav-btn[aria-pressed="true"] { background: #fff; color: var(--primary-600); box-shadow: 0 1px 2px rgb(0 0 0 / .08), 0 0 0 1px rgb(0 0 0 / .04); }
 .dark .agenda-rail-toggle .agenda-nav-btn[aria-pressed="true"] { background: var(--gray-800); color: var(--primary-300); box-shadow: none; }
 @media (min-width: 80rem) {
     .agenda-layout { grid-template-columns: minmax(0, 1fr) 18.5rem; gap: 1.25rem; }
     .agenda-rail { display: grid; gap: .875rem; }
     .agenda-rail-toggle { display: inline-flex; }
+    .agenda-find-toggle { display: none; }
     .agenda-layout.is-rail-hidden { grid-template-columns: minmax(0, 1fr); }
     .agenda-layout.is-rail-hidden .agenda-rail { display: none; }
 }
@@ -447,7 +470,7 @@ button.agenda-slot:focus-visible { outline: 2px solid var(--primary-600); outlin
  * píldora y el botón del paso que sigue a la derecha. Los huecos libres van con borde punteado y "Agendar".
  */
 .agenda-list { max-width: 46rem; }
-.agenda-list-inner { display: grid; gap: .75rem; }
+.agenda-list-inner { display: grid; grid-template-columns: minmax(0, 1fr); gap: .75rem; }
 .agenda-days { display: grid; grid-auto-flow: column; grid-auto-columns: minmax(0, 1fr); gap: .375rem; }
 .agenda-day { display: grid; justify-items: center; gap: .1875rem; padding: .5rem 0 .5625rem; border-radius: .75rem; background: var(--ag-surface); box-shadow: inset 0 0 0 1px var(--ag-line); -webkit-tap-highlight-color: transparent; transition: background-color 150ms ease, transform 160ms var(--ag-ease); }
 .agenda-day:active { transform: scale(.95); }
@@ -467,7 +490,7 @@ button.agenda-slot:focus-visible { outline: 2px solid var(--primary-600); outlin
 .dark .agenda-day.is-selected { background: var(--primary-500); box-shadow: none; }
 .agenda-list-summary { margin: 0; font-size: .875rem; color: var(--gray-600); }
 .dark .agenda-list-summary { color: var(--gray-400); }
-.agenda-list-items { display: grid; gap: .625rem; margin: 0; padding: 0; list-style: none; }
+.agenda-list-items { display: grid; grid-template-columns: minmax(0, 1fr); gap: .625rem; margin: 0; padding: 0; list-style: none; }
 
 .agenda-item { display: flex; gap: .875rem; padding: .875rem .875rem .75rem; border-radius: .875rem; background: var(--ag-surface); box-shadow: 0 0 0 1px var(--ag-line), 0 1px 2px rgb(0 0 0 / .04); animation: agenda-in 240ms var(--ag-ease) backwards; }
 .agenda-item.s-completed, .agenda-item.s-no_show { background: color-mix(in oklab, var(--ag-off) 70%, var(--ag-surface)); box-shadow: 0 0 0 1px var(--ag-line); }
@@ -477,7 +500,7 @@ button.agenda-slot:focus-visible { outline: 2px solid var(--primary-600); outlin
 .agenda-item-time b { font-size: .9375rem; font-weight: 700; letter-spacing: -.01em; color: var(--gray-950); }
 .agenda-item-time small { font-size: .75rem; color: var(--gray-400); }
 .agenda-item.s-completed .agenda-item-time b, .agenda-item.s-no_show .agenda-item-time b { color: var(--gray-400); }
-.agenda-item-body { display: grid; flex: 1 1 auto; gap: .1875rem; min-width: 0; }
+.agenda-item-body { display: grid; grid-template-columns: minmax(0, 1fr); flex: 1 1 auto; gap: .1875rem; min-width: 0; }
 .agenda-item-title { display: flex; flex-wrap: wrap; align-items: center; gap: .3rem; min-width: 0; }
 .agenda-item-name { max-width: 100%; overflow: hidden; font-size: .9375rem; font-weight: 600; color: var(--gray-950); white-space: nowrap; text-overflow: ellipsis; text-decoration: none; }
 .agenda-item-name:hover { text-decoration: underline; text-underline-offset: 2px; text-decoration-color: var(--gray-300); }

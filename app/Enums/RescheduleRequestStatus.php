@@ -21,7 +21,7 @@ enum RescheduleRequestStatus: string implements HasColor, HasLabel
             self::Approved => 'Aprobada',
             self::Rejected => 'Rechazada',
             self::Withdrawn => 'Retirada',
-            self::Expired => 'Vencida',
+            self::Expired => 'Cerrada',
         };
     }
 

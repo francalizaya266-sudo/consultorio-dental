@@ -15,12 +15,12 @@
         ];
     @endphp
 
-    {{-- En la computadora, al lado de la agenda va el panel para buscar horas libres; en pantallas más chicas no entra. --}}
-    {{-- El panel se puede esconder (la semana gana ancho); cada computadora recuerda cómo lo dejaron. --}}
+    {{-- En la computadora, al lado de la agenda va el panel para buscar horas libres; ahí se puede esconder (la semana gana ancho) y cada computadora recuerda cómo lo dejaron. --}}
+    {{-- En el celular y la tablet no entra al costado: empieza cerrado y "Buscar hueco" lo abre debajo de la barra. --}}
     <div
         class="agenda-layout"
-        x-data="{ railHidden: (() => { try { return localStorage.getItem('agenda-rail') === 'hidden' } catch (e) { return false } })() }"
-        :class="{ 'is-rail-hidden': railHidden }"
+        x-data="{ railHidden: (() => { try { return localStorage.getItem('agenda-rail') === 'hidden' } catch (e) { return false } })(), railOpen: false }"
+        :class="{ 'is-rail-hidden': railHidden, 'is-rail-open': railOpen }"
     >
     <div class="agenda-main">
     {{-- La barra y los colores van juntos, pegados a la grilla: en el celular la agenda empieza más arriba. --}}
@@ -59,6 +59,18 @@
                     <x-filament::tabs.item :active="$mode === 'list'" wire:click="$set('mode', 'list')">Lista</x-filament::tabs.item>
                 </x-filament::tabs>
 
+                <button
+                    type="button"
+                    class="agenda-find-toggle"
+                    x-on:click="railOpen = ! railOpen"
+                    :aria-expanded="railOpen.toString()"
+                    aria-expanded="false"
+                    aria-controls="agenda-rail"
+                >
+                    <x-filament::icon icon="heroicon-m-magnifying-glass" class="agenda-nav-icon" />
+                    Buscar hueco
+                </button>
+
                 <div class="agenda-nav agenda-rail-toggle">
                     <button
                         type="button"
@@ -85,6 +97,8 @@
                 <summary><span class="agenda-help-long">Cómo usar la agenda</span><span class="agenda-help-short">Ayuda</span></summary>
                 <p>Toca una cita para ver sus datos y botones, o un espacio libre para agendar ahí. Arrastra una cita para cambiarla de horario (en celular, mantenla presionada y luego arrástrala).</p>
                 <p>"Sin cerrar" (en la semana, un punto rojo): ya pasó su hora y falta marcar si vino. Ábrela y usa "Llegó" y "Atendido", o "No asistió".</p>
+                <p>"En bloqueo": ese horario se bloqueó con la cita ya dada. Muévela para que el paciente reciba el aviso.</p>
+                <p>¿Marcaste "Llegó", "No asistió", "Confirmar" o "Cancelar" por error? Tienes un día para usar "Deshacer" en la misma cita.</p>
                 <div class="agenda-legend">
                     @foreach ($legend as $class => $label)
                         <span class="{{ $class }}"><i aria-hidden="true"></i>{{ $label }}</span>
@@ -356,7 +370,9 @@
         @endphp
 
         {{-- Con una o dos columnas del día, en el celular la grilla no tiene su propio desplazamiento: se baja con la página. --}}
+        {{-- Con su propia llave: al venir de "Lista" la grilla se arma de cero, con arrastrar y tocar funcionando. --}}
         <div
+            wire:key="agenda-frame"
             @class(['agenda-frame', 'is-fit' => $mode === 'day' && count($columns) <= 2])
             :class="{ 'is-dragging': dragging }"
             data-from="{{ $from }}"
@@ -453,9 +469,9 @@
                             <a
                                 wire:key="appt-{{ $appt['id'] }}"
                                 href="{{ $appt['url'] }}"
-                                @class(['agenda-appt', 's-'.$appt['status'], 'is-movable' => $appt['draggable'], 'is-short' => $appt['end'] - $appt['start'] <= 30, 'is-unclosed' => $appt['unclosed'], 'needs-call' => $appt['needsCall'], 'in-lane' => $appt['lanes'] > 1])
+                                @class(['agenda-appt', 's-'.$appt['status'], 'is-movable' => $appt['draggable'], 'is-short' => $appt['end'] - $appt['start'] <= 30, 'is-unclosed' => $appt['unclosed'], 'needs-call' => $appt['needsCall'], 'in-block' => $appt['inBlock'], 'in-lane' => $appt['lanes'] > 1])
                                 style="top: {{ ($appt['start'] - $from) * $scale }}px; height: {{ max(($appt['end'] - $appt['start']) * $scale - 2, 18) }}px;@if ($appt['lanes'] > 1) --lane: {{ $appt['lane'] }}; --lanes: {{ $appt['lanes'] }};@endif"
-                                title="{{ $appt['time'] }} · {{ $appt['patient'] }} · {{ $appt['treatment'] }} · {{ $appt['statusLabel'] }}{{ $appt['phone'] ? ' · '.$appt['phone'] : '' }}{{ $appt['unclosed'] ? ' · Sin cerrar: falta marcar si vino' : '' }}"
+                                title="{{ $appt['time'] }} · {{ $appt['patient'] }} · {{ $appt['treatment'] }} · {{ $appt['statusLabel'] }}{{ $appt['phone'] ? ' · '.$appt['phone'] : '' }}{{ $appt['unclosed'] ? ' · Sin cerrar: falta marcar si vino' : '' }}{{ $appt['inBlock'] ? ' · Cae en un horario bloqueado: hay que moverla' : '' }}"
                                 draggable="false"
                                 x-on:click="open($event, {{ $appt['id'] }})"
                                 @if ($appt['draggable'])
@@ -468,7 +484,7 @@
                                 @endif
                             >
                                 {{-- En la semana la columna es angosta: nombre corto y solo la hora de inicio (el alto de la tarjeta ya dice cuánto dura). --}}
-                                <b>{{ $mode === 'week' ? $appt['shortName'] : $appt['patient'] }}@if ($appt['unclosed'])<span class="tag tag-unclosed">Sin cerrar</span>@endif @if ($appt['needsCall'])<span class="tag tag-call">Llamar</span>@endif @if ($appt['flags']['alert'])<span @class(['tag', 'tag-alert', 'is-caution' => ! $appt['flags']['alertSevere']]) title="{{ $appt['flags']['alert'] }}">Alerta médica</span>@endif @if ($appt['flags']['reschedule'])<span class="tag tag-change">Pidió cambio</span>@endif @if ($appt['flags']['noShows'])<span class="tag tag-missed">{{ $appt['flags']['noShows'] }}</span>@endif @if ($appt['isNew'])<span class="tag tag-new">Nuevo</span>@endif @if ($appt['owes'])<span class="tag tag-owes">Debe {{ $appt['owes'] }}</span>@endif @if ($appt['hasNote'])<span class="tag tag-note">Nota</span>@endif</b>
+                                <b>{{ $mode === 'week' ? $appt['shortName'] : $appt['patient'] }}@if ($appt['unclosed'])<span class="tag tag-unclosed">Sin cerrar</span>@endif @if ($appt['needsCall'])<span class="tag tag-call">Llamar</span>@endif @if ($appt['inBlock'])<span class="tag tag-block">En bloqueo</span>@endif @if ($appt['flags']['alert'])<span @class(['tag', 'tag-alert', 'is-caution' => ! $appt['flags']['alertSevere']]) title="{{ $appt['flags']['alert'] }}">Alerta médica</span>@endif @if ($appt['flags']['reschedule'])<span class="tag tag-change">Pidió cambio</span>@endif @if ($appt['flags']['noShows'])<span class="tag tag-missed">{{ $appt['flags']['noShows'] }}</span>@endif @if ($appt['isNew'])<span class="tag tag-new">Nuevo</span>@endif @if ($appt['owes'])<span class="tag tag-owes">Debe {{ $appt['owes'] }}</span>@endif @if ($appt['hasNote'])<span class="tag tag-note">Nota</span>@endif</b>
                                 <small>{{ $mode === 'week' ? $appt['startTime'] : $appt['time'] }} · {{ $appt['treatment'] }}{{ $appt['flags']['session'] ? ' · '.mb_strtolower($appt['flags']['session']) : '' }}</small>
                                 <small>{{ $appt['statusLabel'] }}@if ($appt['phone']) · {{ $appt['phone'] }}@endif</small>
                             </a>

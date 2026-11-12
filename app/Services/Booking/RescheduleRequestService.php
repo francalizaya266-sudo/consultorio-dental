@@ -20,6 +20,7 @@ use App\Services\Agenda\AvailabilityService;
 use App\Services\StaffAlerts;
 use App\Services\WhatsApp\WhatsAppOutbox;
 use Carbon\CarbonInterface;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Facades\DB;
 
 /**
@@ -115,12 +116,15 @@ class RescheduleRequestService
         $option->loadMissing('doctor');
 
         return DB::transaction(function () use ($request, $option, $by) {
-            $appointment = $request->appointment;
+            // Queda resuelta antes de mover la cita: al moverla, las que siguen pendientes se cierran solas.
+            $request->update([
+                'status' => RescheduleRequestStatus::Approved,
+                'approved_option_id' => $option->getKey(),
+                'resolved_by_user_id' => $by->getKey(),
+                'resolved_at' => now(),
+            ]);
 
-            if ($request->requested_treatment_id) {
-                $appointment->update(['treatment_id' => $request->requested_treatment_id]);
-            }
-
+            $appointment = $this->withRequestedTreatment($request);
             $appointment = $this->appointments->rescheduleByStaff($appointment, $option->starts_at, $by, $option->doctor);
 
             // El paciente eligió este horario: no hace falta que vuelva a confirmar.
@@ -133,15 +137,60 @@ class RescheduleRequestService
             $this->outbox->discardPending($appointment, MessageTemplateKey::Rescheduled);
             $this->outbox->queueForAppointment($appointment, MessageTemplateKey::RescheduleApproved);
 
-            $request->update([
-                'status' => RescheduleRequestStatus::Approved,
-                'approved_option_id' => $option->getKey(),
-                'resolved_by_user_id' => $by->getKey(),
-                'resolved_at' => now(),
-            ]);
-
             return $appointment;
         });
+    }
+
+    /**
+     * Ninguno de los horarios que propuso el paciente sirve (o ya se ocuparon): se le da otro. La cita se mueve
+     * ahí y la solicitud queda resuelta. Si no se acordó con el paciente, queda listo el aviso para que confirme.
+     */
+    public function offerAnotherTime(RescheduleRequest $request, CarbonInterface $startsAt, User $by, ?Doctor $doctor = null, bool $agreed = false): Appointment
+    {
+        if ($request->status !== RescheduleRequestStatus::Pending) {
+            throw BookingException::notChangeable();
+        }
+
+        return DB::transaction(function () use ($request, $startsAt, $by, $doctor, $agreed) {
+            $request->update([
+                'status' => RescheduleRequestStatus::Approved,
+                'resolved_by_user_id' => $by->getKey(),
+                'resolved_at' => now(),
+                'response_note' => 'Se le dio otro horario: '.$startsAt->translatedFormat('D d/m H:i').'.',
+            ]);
+
+            return $this->appointments->rescheduleByStaff($this->withRequestedTreatment($request), $startsAt, $by, $doctor, $agreed);
+        });
+    }
+
+    /**
+     * Cierra las solicitudes pendientes de citas cuya hora ya pasó o que ya no se pueden mover (canceladas,
+     * atendidas). Devuelve cuántas cerró.
+     */
+    public function expireStale(): int
+    {
+        return RescheduleRequest::query()
+            ->where('status', RescheduleRequestStatus::Pending)
+            ->whereHas('appointment', fn (Builder $appointment) => $appointment->where(fn (Builder $stale) => $stale
+                ->where('starts_at', '<', now())
+                ->orWhereNotIn('status', AppointmentStatus::changeable())))
+            ->with('appointment')
+            ->get()
+            ->sum(fn (RescheduleRequest $request) => $this->appointments->closeRescheduleRequests($request->appointment, 'La cita ya pasó o se cerró.'));
+    }
+
+    /** La cita de la solicitud, ya con el tratamiento que el paciente pidió (si pidió otro). */
+    private function withRequestedTreatment(RescheduleRequest $request): Appointment
+    {
+        $appointment = $request->appointment;
+
+        if ($request->requested_treatment_id) {
+            $appointment->update(['treatment_id' => $request->requested_treatment_id]);
+            // Su duración sale del tratamiento nuevo, no del que ya estaba cargado.
+            $appointment->unsetRelation('treatment');
+        }
+
+        return $appointment;
     }
 
     public function reject(RescheduleRequest $request, User $by, ?string $note = null): void

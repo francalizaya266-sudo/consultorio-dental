@@ -208,6 +208,7 @@ class PatientsAndSetupPanelTest extends TestCase
 
     public function test_a_doctor_can_only_block_their_own_agenda(): void
     {
+        $this->freezeMonday();
         $doctor = Doctor::factory()->create();
         $other = Doctor::factory()->create();
         $this->actingAs($doctor->user);

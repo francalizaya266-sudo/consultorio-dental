@@ -46,6 +46,11 @@ class AppointmentsTable
                     ->label('Solo de hoy y mañana')
                     ->toggle()
                     ->query(fn (Builder $query) => $query->todayOrTomorrow()),
+                // Con él llega el aviso de un bloqueo recién guardado: las citas que quedaron dentro y hay que mover.
+                Filter::make('in_block')
+                    ->label('Solo las que caen en un bloqueo')
+                    ->toggle()
+                    ->query(fn (Builder $query) => $query->insideABlock()),
             ])
             ->recordActions(AppointmentActions::all())
             ->toolbarActions([AppointmentActions::noShowBulk()])

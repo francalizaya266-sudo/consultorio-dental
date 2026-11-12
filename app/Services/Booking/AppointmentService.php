@@ -9,6 +9,7 @@ use App\Enums\CancelledBy;
 use App\Enums\ConfirmationChannel;
 use App\Enums\MessageTemplateKey;
 use App\Enums\PatientRelationship;
+use App\Enums\RescheduleRequestStatus;
 use App\Exceptions\BookingException;
 use App\Filament\Resources\WhatsappMessages\WhatsappMessageResource;
 use App\Models\Account;
@@ -38,6 +39,9 @@ use Illuminate\Support\Facades\DB;
  */
 class AppointmentService
 {
+    /** Horas en que un paso marcado por error (llegó, no asistió, confirmar, cancelar) todavía se puede deshacer. */
+    public const UNDO_HOURS = 24;
+
     public function __construct(
         private readonly AvailabilityService $availability,
         private readonly PatientChangePolicy $policy,
@@ -200,7 +204,8 @@ class AppointmentService
             $appointment->logEvent('created', 'staff');
             $this->waitlist->settle($appointment);
 
-            if ($options['notify'] ?? true) {
+            // Una cita anotada en una hora que ya pasó (alguien que vino sin cita) no se le anuncia como "tu próxima cita".
+            if (($options['notify'] ?? true) && $startsAt->isFuture()) {
                 $this->outbox->queueForAppointment($appointment, MessageTemplateKey::AppointmentScheduled);
             }
 
@@ -302,6 +307,8 @@ class AppointmentService
             'unconfirmed_flagged_at' => null,
         ]);
 
+        $this->closeRescheduleRequests($appointment, 'El paciente movió su cita a otro horario.', 'patient');
+
         $waitlist = $this->waitlist->freedSlotNotice($freedDoctor, $freedAt, $appointment->patient_id);
         $this->alerts->toReception(
             'Un paciente cambió su horario',
@@ -319,11 +326,13 @@ class AppointmentService
      */
     /**
      * @param  bool  $agreed  El nuevo horario ya se acordó con el paciente (por teléfono, en persona): queda
-     *                        confirmada y no se le pide confirmar de nuevo.
+     *                        confirmada y no se le pide confirmar de nuevo. Lo mismo si se mueve a una hora que
+     *                        ya pasó: no hay nada que confirmar ni que avisar.
      */
     public function rescheduleByStaff(Appointment $appointment, CarbonInterface $startsAt, User $by, ?Doctor $doctor = null, bool $agreed = false): Appointment
     {
         $doctor ??= $appointment->doctor;
+        $agreed = $agreed || $startsAt->isPast();
         $this->assertCanManage($by, $appointment->doctor);
         $this->assertCanManage($by, $doctor);
 
@@ -357,12 +366,15 @@ class AppointmentService
             $this->outbox->queueForAppointment($appointment, MessageTemplateKey::Rescheduled);
         }
 
+        $this->closeRescheduleRequests($appointment, 'La cita se movió a otro horario.', 'staff', $by);
+
         $waitlist = $this->waitlist->freedSlotNotice($freedDoctor, $freedAt, $appointment->patient_id);
 
         if ($by->isDoctor()) {
             $this->alerts->toReception(
                 "{$doctor->name} movió una cita",
-                "{$appointment->patient->full_name} ahora va el {$this->when($appointment)}. El aviso al paciente está listo para enviar."
+                "{$appointment->patient->full_name} ahora va el {$this->when($appointment)}."
+                    .($agreed ? '' : ' El aviso al paciente está listo para enviar.')
                     .($waitlist ? ' En el horario que dejó, '.lcfirst($waitlist['text']) : ''),
                 link: $waitlist['link'] ?? null,
             );
@@ -481,6 +493,95 @@ class AppointmentService
         ]);
     }
 
+    /**
+     * El último paso de la cita que todavía se puede deshacer, por si se marcó por error: "llegó", "no asistió",
+     * "confirmar" (a mano, no la cita que nace confirmada al agendarla el personal) o "cancelar" (por el
+     * consultorio), hecho hace menos de un día. Null si no hay nada que deshacer.
+     */
+    public function undoableStep(Appointment $appointment): ?AppointmentStatus
+    {
+        $at = match ($appointment->status) {
+            AppointmentStatus::CheckedIn => $appointment->checked_in_at,
+            AppointmentStatus::NoShow => $appointment->no_show_at,
+            AppointmentStatus::Cancelled => $appointment->cancelled_by === CancelledBy::Clinic ? $appointment->cancelled_at : null,
+            AppointmentStatus::Confirmed => $this->wasConfirmedByHand($appointment) ? $appointment->confirmed_at : null,
+            default => null,
+        };
+
+        return $at !== null && $at->gte(now()->subHours(self::UNDO_HOURS)) ? $appointment->status : null;
+    }
+
+    /**
+     * Deshace el último paso (ver undoableStep): la cita vuelve a como estaba antes y queda anotado en su historial.
+     * Una cita cancelada solo vuelve a la agenda si su horario sigue libre.
+     *
+     * @return AppointmentStatus El paso que se deshizo.
+     */
+    public function undoLastStep(Appointment $appointment, User $by): AppointmentStatus
+    {
+        $this->assertCanManage($by, $appointment->doctor);
+
+        $step = $this->undoableStep($appointment);
+
+        if ($step === null) {
+            throw BookingException::nothingToUndo();
+        }
+
+        return DB::transaction(function () use ($appointment, $step) {
+            if ($step === AppointmentStatus::Cancelled) {
+                $this->assertStillFree($appointment);
+            }
+
+            $before = $appointment->confirmed_at ? AppointmentStatus::Confirmed : AppointmentStatus::Pending;
+
+            $appointment->update(match ($step) {
+                AppointmentStatus::Confirmed => ['status' => AppointmentStatus::Pending, 'confirmed_at' => null, 'confirmed_via' => null],
+                AppointmentStatus::CheckedIn => ['status' => $before, 'checked_in_at' => null],
+                AppointmentStatus::NoShow => ['status' => $before, 'no_show_at' => null],
+                AppointmentStatus::Cancelled => ['status' => $before, 'cancelled_at' => null, 'cancelled_by' => null, 'cancelled_by_user_id' => null, 'cancellation_reason' => null],
+            });
+
+            $appointment->logEvent('undone', 'staff', ['meta' => ['step' => $step->value]]);
+
+            if ($step === AppointmentStatus::CheckedIn) {
+                // El doctor ya no tiene a nadie esperando: su aviso de "llegó" queda como leído.
+                $this->alerts->arrivalAttended($appointment);
+            }
+
+            if ($step === AppointmentStatus::Cancelled) {
+                // El aviso de la cancelación que aún no se envió ya no corresponde.
+                $this->outbox->discardPending($appointment, MessageTemplateKey::Cancelled);
+            }
+
+            return $step;
+        });
+    }
+
+    /**
+     * Una solicitud de cambio pendiente deja de tener sentido cuando la cita se mueve por otro lado, se cancela,
+     * sigue su curso o ya pasó: se cierra sola, con el motivo, y queda anotado en el historial de la cita.
+     *
+     * @param  string  $actor  Quién lo provocó: patient | staff | system.
+     * @return int Cuántas solicitudes cerró.
+     */
+    public function closeRescheduleRequests(Appointment $appointment, string $why, string $actor = 'system', ?User $by = null): int
+    {
+        $closed = $appointment->rescheduleRequests()
+            ->where('status', RescheduleRequestStatus::Pending)
+            ->update([
+                'status' => RescheduleRequestStatus::Expired,
+                'resolved_at' => now(),
+                'resolved_by_user_id' => $by?->getKey(),
+                'response_note' => $why,
+            ]);
+
+        if ($closed > 0) {
+            $appointment->events()->create(['type' => 'reschedule_expired', 'actor' => $actor, 'user_id' => $by?->getKey(), 'notes' => $why]);
+        }
+
+        return $closed;
+    }
+
     /** Asegura que el doctor (o recepción) solo toque las agendas que le corresponden. */
     public function assertCanManage(User $user, Doctor $doctor): void
     {
@@ -493,6 +594,31 @@ class AppointmentService
         }
 
         throw new AuthorizationException('Solo puedes manejar tu propia agenda.');
+    }
+
+    /** La confirmó una persona del consultorio después de creada (la que agenda el personal ya nace confirmada). */
+    private function wasConfirmedByHand(Appointment $appointment): bool
+    {
+        return in_array($appointment->confirmed_via, [ConfirmationChannel::Reception, ConfirmationChannel::Doctor], true)
+            && $appointment->confirmed_at !== null
+            && ($appointment->created_at === null || $appointment->confirmed_at->gt($appointment->created_at));
+    }
+
+    /** Antes de devolver una cita cancelada a la agenda: su horario no debe haberse ocupado ni apartado mientras tanto. */
+    private function assertStillFree(Appointment $appointment): void
+    {
+        $this->lockAgenda($appointment->doctor);
+
+        $duration = (int) $appointment->starts_at->diffInMinutes($appointment->ends_at, true);
+        $availability = $this->availability->forPatient($appointment->patient_id);
+
+        if ($hold = $availability->holdAt($appointment->doctor, $appointment->starts_at, $duration, $appointment->buffer_minutes)) {
+            throw BookingException::held($hold);
+        }
+
+        if (! $availability->isFree($appointment->doctor, $appointment->starts_at, $duration, $appointment->buffer_minutes, $appointment->getKey(), requireWorkingHours: false)) {
+            throw BookingException::slotNoLongerFree();
+        }
     }
 
     private function move(Appointment $appointment, Doctor $doctor, CarbonInterface $startsAt, bool $requireWorkingHours, string $actor): Appointment
@@ -553,6 +679,12 @@ class AppointmentService
 
         $appointment->update(['status' => $to] + $attributes);
         $appointment->logEvent($to->value, 'staff');
+        $this->closeRescheduleRequests(
+            $appointment,
+            $to === AppointmentStatus::NoShow ? 'El paciente no asistió a la cita.' : 'El paciente vino a la cita.',
+            'staff',
+            $by,
+        );
 
         if ($wasWaiting) {
             $this->alerts->arrivalAttended($appointment);
@@ -575,6 +707,7 @@ class AppointmentService
 
         $appointment->logEvent('cancelled', $by === CancelledBy::Patient ? 'patient' : 'staff', ['notes' => $reason]);
         $this->outbox->discardPending($appointment);
+        $this->closeRescheduleRequests($appointment, 'La cita se canceló.', $by === CancelledBy::Patient ? 'patient' : 'staff', $user);
     }
 
     /**

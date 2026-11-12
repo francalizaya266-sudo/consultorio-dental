@@ -515,6 +515,14 @@ class AppointmentInfolist
             'cancelled' => 'Cancelada',
             'reschedule_requested' => 'Pidió cambiar el horario',
             'reschedule_rejected' => 'Cambio no aprobado',
+            'reschedule_expired' => 'Solicitud de cambio cerrada',
+            'undone' => 'Se deshizo: '.match ($event->meta['step'] ?? null) {
+                'no_show' => 'no asistió',
+                'cancelled' => 'la cancelación',
+                'checked_in' => 'llegó al consultorio',
+                'confirmed' => 'la confirmación',
+                default => 'el último paso',
+            },
             default => ucfirst(str_replace('_', ' ', $event->type)),
         };
 
