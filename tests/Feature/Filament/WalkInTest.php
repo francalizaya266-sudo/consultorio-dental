@@ -111,4 +111,103 @@ class WalkInTest extends TestCase
         $this->assertSame(1, Appointment::count());
         $this->assertFalse(Patient::query()->where('first_name', 'Pedro')->exists());
     }
+
+    public function test_who_already_had_an_appointment_today_is_marked_as_arrived_instead_of_getting_another(): void
+    {
+        $rosa = Patient::factory()->create(['first_name' => 'Rosa', 'last_name' => 'Quispe', 'origin' => AppointmentOrigin::Recommendation]);
+        MedicalBackground::create(['patient_id' => $rosa->id]);
+        $booked = Appointment::factory()->for($this->busy)->for($this->cleaning)->for($rosa)->at('2026-11-02 12:00')->confirmed()->create();
+
+        Livewire::test(Dashboard::class)
+            ->mountAction('walkIn')
+            ->setActionData(['patient_id' => $rosa->id])
+            ->assertMountedActionModalSee(['Ya tiene cita hoy', '12:00 · Limpieza dental con '.$this->busy->name, 'Marcar que llegó a esa cita'])
+            // Ya no se elige tratamiento ni doctor: se usa la cita que tenía.
+            ->assertMountedActionModalDontSee('Tratamiento')
+            ->callMountedAction()
+            ->assertHasNoActionErrors();
+
+        $this->assertTrue(Appointment::query()->whereBelongsTo($rosa)->sole()->is($booked));
+        $this->assertSame([AppointmentStatus::CheckedIn, '10:07'], [$booked->refresh()->status, $booked->checked_in_at->format('H:i')]);
+
+        $notice = $this->lastNotification();
+        $this->assertSame(['Paciente en sala', 'Rosa Quispe llegó a su cita de las 12:00 con '.$this->busy->name.'.'], [$notice['title'], $notice['body']]);
+    }
+
+    public function test_it_is_still_a_separate_visit_when_reception_says_it_comes_for_something_else(): void
+    {
+        $rosa = Patient::factory()->create(['first_name' => 'Rosa', 'last_name' => 'Quispe']);
+        $booked = Appointment::factory()->for($this->busy)->for($this->cleaning)->for($rosa)->at('2026-11-02 12:00')->confirmed()->create();
+
+        Livewire::test(Dashboard::class)
+            ->mountAction('walkIn')
+            ->setActionData(['patient_id' => $rosa->id])
+            ->setActionData(['use_appointment' => false])
+            ->setActionData(['treatment_id' => $this->cleaning->id])
+            ->assertMountedActionModalSee('Lo puede atender hoy a las 10:15.')
+            ->callMountedAction()
+            ->assertHasNoActionErrors();
+
+        $this->assertSame(AppointmentStatus::Confirmed, $booked->refresh()->status);
+        $this->assertSame(['10:15', AppointmentStatus::CheckedIn], [($walkIn = Appointment::query()->whereBelongsTo($rosa)->whereKeyNot($booked->id)->sole())->starts_at->format('H:i'), $walkIn->status]);
+    }
+
+    public function test_who_is_already_in_the_room_is_pointed_out_before_opening_another_visit(): void
+    {
+        $rosa = Patient::factory()->create(['first_name' => 'Rosa', 'last_name' => 'Quispe']);
+        Appointment::factory()->for($this->busy)->for($this->cleaning)->for($rosa)->at('2026-11-02 12:00')->create(['status' => AppointmentStatus::CheckedIn, 'checked_in_at' => now()]);
+
+        Livewire::test(Dashboard::class)
+            ->mountAction('walkIn')
+            ->setActionData(['patient_id' => $rosa->id])
+            ->assertMountedActionModalSee(['Ya está en sala', 'Sigue solo si viene por otra atención aparte'])
+            ->assertMountedActionModalDontSee('Marcar que llegó a esa cita')
+            // No hay a qué marcarle llegada: si se sigue, es otra atención.
+            ->assertMountedActionModalSee('Tratamiento');
+    }
+
+    public function test_an_appointment_on_another_day_is_mentioned_under_the_patient(): void
+    {
+        $rosa = Patient::factory()->create(['first_name' => 'Rosa', 'last_name' => 'Quispe']);
+        Appointment::factory()->for($this->busy)->for($this->cleaning)->for($rosa)->at('2026-11-04 16:00')->confirmed()->create();
+
+        Livewire::test(Dashboard::class)
+            ->mountAction('walkIn')
+            ->setActionData(['patient_id' => $rosa->id])
+            ->assertMountedActionModalSee('Ya tiene cita el mié. 4 nov. a las 16:00 · Limpieza dental.')
+            ->assertMountedActionModalDontSee('Ya tiene cita hoy');
+    }
+
+    public function test_a_doctor_receives_who_comes_without_an_appointment_on_their_own_agenda(): void
+    {
+        $rosa = Patient::factory()->create(['first_name' => 'Rosa', 'last_name' => 'Quispe']);
+        $this->actingAs($this->busy->user);
+
+        // Otro doctor se desocupa antes, pero el doctor solo maneja su agenda: llega puesto él y así se queda.
+        Livewire::test(Dashboard::class)
+            ->mountAction('walkIn')
+            ->assertActionDataSet(['doctor_id' => $this->busy->id])
+            ->setActionData(['patient_id' => $rosa->id])
+            ->setActionData(['treatment_id' => $this->cleaning->id])
+            ->assertActionDataSet(['doctor_id' => $this->busy->id])
+            ->callMountedAction()
+            ->assertHasNoActionErrors();
+
+        $appointment = Appointment::query()->whereBelongsTo($rosa)->sole();
+
+        $this->assertSame([$this->busy->id, AppointmentStatus::CheckedIn], [$appointment->doctor_id, $appointment->status]);
+    }
+
+    public function test_a_doctor_is_not_told_about_the_appointment_the_patient_has_with_someone_else(): void
+    {
+        $rosa = Patient::factory()->create(['first_name' => 'Rosa', 'last_name' => 'Quispe']);
+        Appointment::factory()->for($this->busy)->for($this->cleaning)->for($rosa)->at('2026-11-02 12:00')->confirmed()->create();
+        $this->actingAs($this->free->user);
+
+        Livewire::test(Dashboard::class)
+            ->mountAction('walkIn')
+            ->setActionData(['patient_id' => $rosa->id])
+            ->assertMountedActionModalDontSee(['Ya tiene cita', 'Marcar que llegó a esa cita'])
+            ->assertMountedActionModalSee('Tratamiento');
+    }
 }

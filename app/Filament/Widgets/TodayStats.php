@@ -14,7 +14,6 @@ use App\Models\Payment;
 use App\Models\User;
 use App\Support\Money;
 use Filament\Widgets\Widget;
-use Illuminate\Database\Eloquent\Builder;
 
 /**
  * Los números del día, grandes y a la vista. Solo se colorea el que espera una acción (alguien sin
@@ -102,10 +101,7 @@ class TodayStats extends Widget
         }
 
         $collected = Payment::query()->whereNull('voided_at')->whereDate('paid_at', today())->sum('amount');
-        $owing = Patient::query()
-            ->owing()
-            ->whereHas('appointments', fn (Builder $query) => $query->whereDate('starts_at', today())->where('status', AppointmentStatus::Completed))
-            ->count();
+        $owing = Patient::query()->owingAfterTodaysVisit()->count();
         $finished = Appointment::query()->whereDate('starts_at', today())->where('status', AppointmentStatus::Completed)->exists();
 
         return [

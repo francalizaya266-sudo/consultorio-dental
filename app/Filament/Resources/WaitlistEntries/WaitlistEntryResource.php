@@ -15,6 +15,7 @@ use App\Models\Treatment;
 use App\Models\WaitlistEntry;
 use BackedEnum;
 use Carbon\CarbonInterface;
+use Closure;
 use Filament\Forms\Components\DatePicker;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\Textarea;
@@ -64,6 +65,12 @@ class WaitlistEntryResource extends Resource
                     ->options(fn () => Treatment::query()->active()->whereHas('doctors')->orderBy('sort_order')->pluck('name', 'id'))
                     ->searchable()
                     ->required()
+                    // Anotarlo dos veces para lo mismo haría ofrecerle dos horarios: se corrige la anotación que ya tiene.
+                    ->rule(fn (Get $get, ?WaitlistEntry $record) => function (string $attribute, mixed $value, Closure $fail) use ($get, $record) {
+                        if (self::alreadyWaiting($get('patient_id'), $value, $record)) {
+                            $fail('Ya está en la lista de espera para ese tratamiento. Si cambió lo que puede, edita esa anotación.');
+                        }
+                    })
                     ->live()
                     ->afterStateUpdated(function (Get $get, Set $set) {
                         // Si el doctor elegido no hace el tratamiento nuevo, queda "cualquier doctor".
@@ -82,7 +89,7 @@ class WaitlistEntryResource extends Resource
                     ->firstDayOfWeek(1)
                     ->closeOnDateSelection()
                     ->default(today())
-                    ->minDate(fn (string $operation) => $operation === 'create' ? today() : null)
+                    ->minDate(fn (string $operation) => $operation === 'edit' ? null : today())
                     ->required(),
                 DatePicker::make('latest_date')
                     ->label('Hasta')
@@ -166,6 +173,17 @@ class WaitlistEntryResource extends Resource
             'action' => 'offer',
             'actionArguments' => ['entry' => $entry->getKey(), 'doctor' => $doctor->getKey(), 'date' => $startsAt->toDateString(), 'time' => $startsAt->format('H:i')],
         ], panel: 'admin');
+    }
+
+    /** ¿El paciente ya espera por ese tratamiento? Sin contar la anotación que se está editando. */
+    private static function alreadyWaiting(mixed $patientId, mixed $treatmentId, ?WaitlistEntry $editing): bool
+    {
+        return filled($patientId) && filled($treatmentId) && WaitlistEntry::query()
+            ->active()
+            ->where('patient_id', $patientId)
+            ->where('treatment_id', $treatmentId)
+            ->when($editing, fn (Builder $query) => $query->whereKeyNot($editing->getKey()))
+            ->exists();
     }
 
     /** @return array<int, string> Doctores activos que hacen el tratamiento (todos, si aún no se elige). */

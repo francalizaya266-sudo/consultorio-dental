@@ -147,6 +147,18 @@ final class SlotPicker
             ->live();
     }
 
+    /**
+     * El doctor que ya viene puesto en una ventana que llena sus datos a mano: el propio (el doctor solo agenda
+     * con él mismo) o, si el consultorio tiene un solo doctor activo, ese.
+     */
+    public static function defaultDoctorId(): ?int
+    {
+        /** @var User $user */
+        $user = auth()->user();
+
+        return ($user->managesAllAgendas() ? null : $user->doctorId()) ?? self::onlyActiveDoctorId();
+    }
+
     /** Fecha y hora elegidas en el formulario. */
     public static function startsAt(array $data): CarbonImmutable
     {

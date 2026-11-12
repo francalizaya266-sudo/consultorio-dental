@@ -64,6 +64,8 @@ final class RegisterPaymentAction
                     ->placeholder('Busca por nombre, DNI o celular')
                     ->searchable()
                     ->required()
+                    // Antes de escribir, quienes se atendieron hoy y deben: son a quienes más se les cobra desde aquí.
+                    ->options(fn () => self::owingAfterTodaysVisit())
                     ->getSearchResultsUsing(fn (string $search) => Patient::query()
                         ->search($search)
                         ->with('account')
@@ -184,6 +186,24 @@ final class RegisterPaymentAction
                 $fail(DailyClosing::LOCKED);
             }
         };
+    }
+
+    /**
+     * "Olivia Arenas · debe S/ 120.00": los mismos que cuenta "Cobrado hoy" en el inicio.
+     *
+     * @return array<int, string>
+     */
+    private static function owingAfterTodaysVisit(): array
+    {
+        return Patient::query()
+            ->owingAfterTodaysVisit()
+            ->withBalance()
+            ->orderBy('first_name')
+            ->orderBy('last_name')
+            ->limit(20)
+            ->get()
+            ->mapWithKeys(fn (Patient $owing) => [$owing->getKey() => $owing->full_name.' · debe '.Money::format((float) $owing->balance_due)])
+            ->all();
     }
 
     /** "Debe S/ 120.00: Curación con resina S/ 120.00 (5/11)." */

@@ -2,11 +2,13 @@
 
 namespace Tests\Feature\Filament;
 
+use App\Enums\AppointmentStatus;
 use App\Enums\MessageStatus;
 use App\Enums\PaymentMethod;
 use App\Filament\Pages\Dashboard;
 use App\Filament\Resources\Payments\Pages\ManagePayments;
 use App\Models\Account;
+use App\Models\Appointment;
 use App\Models\Charge;
 use App\Models\Patient;
 use App\Models\Payment;
@@ -16,6 +18,7 @@ use App\Models\WhatsappMessage;
 use App\Services\Billing\PaymentReceipt;
 use Filament\Actions\Testing\TestAction;
 use Filament\Facades\Filament;
+use Filament\Forms\Components\Select;
 use Illuminate\Foundation\Testing\LazilyRefreshDatabase;
 use Livewire\Livewire;
 use Tests\Concerns\CreatesAgenda;
@@ -48,6 +51,34 @@ class CollectingAndReceiptsTest extends TestCase
         $payment = Payment::sole();
         $this->assertSame([$doctor->id, $treatment->id], [$payment->doctor_id, $payment->treatment_id]);
         $this->assertSame(90.0, $patient->balance());
+    }
+
+    public function test_collecting_offers_first_who_was_seen_today_and_still_owes(): void
+    {
+        $this->freezeMonday();
+        $treatment = Treatment::factory()->create(['name' => 'Limpieza dental']);
+        $doctor = $this->doctorOffering($treatment);
+        $seen = fn (Patient $patient, string $at) => Appointment::factory()->for($doctor)->for($treatment)->for($patient)->at($at)->create(['status' => AppointmentStatus::Completed]);
+        $owes = Patient::factory()->create(['first_name' => 'Olivia', 'last_name' => 'Arenas']);
+        $seen($owes, '2026-11-02 08:00');
+        Charge::factory()->for($owes)->create(['amount' => 120]);
+        // Quien se atendió hoy y ya pagó, y quien debe pero no vino hoy, no salen: a esos se les busca por nombre.
+        $paid = Patient::factory()->create(['first_name' => 'Pedro', 'last_name' => 'Huamán']);
+        $seen($paid, '2026-11-02 07:00');
+        Charge::factory()->for($paid)->create(['amount' => 80]);
+        Payment::factory()->for($paid)->create(['amount' => 80]);
+        $earlier = Patient::factory()->create(['first_name' => 'Rosa', 'last_name' => 'Quispe']);
+        $seen($earlier, '2026-10-30 10:00');
+        Charge::factory()->for($earlier)->create(['amount' => 60]);
+        $this->actingAs(User::factory()->reception()->create());
+
+        Livewire::test(Dashboard::class)
+            ->mountAction('registerPayment')
+            ->assertFormFieldExists('patient_id', 'mountedActionSchema0', fn (Select $field) => $field->getOptions() === [$owes->id => 'Olivia Arenas · debe S/ 120.00'])
+            // A los demás se les sigue encontrando al escribir.
+            ->assertFormFieldExists('patient_id', 'mountedActionSchema0', fn (Select $field) => array_keys($field->getSearchResults('Quispe')) === [$earlier->id])
+            ->setActionData(['patient_id' => $owes->id])
+            ->assertActionDataSet(['amount' => 120.0]);
     }
 
     public function test_the_receipt_says_what_was_paid_and_what_is_left(): void
