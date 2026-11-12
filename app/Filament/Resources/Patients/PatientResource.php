@@ -123,7 +123,7 @@ class PatientResource extends Resource
             Action::make('newAppointment')
                 ->label('Nueva cita')
                 ->icon(Heroicon::OutlinedCalendarDays)
-                ->url(AppointmentResource::getUrl('create', ['patient' => $record->getKey()])),
+                ->url(AppointmentResource::newUrl(['patient' => $record->getKey()])),
             Action::make('whatsapp')
                 ->label('WhatsApp')
                 ->icon(Heroicon::OutlinedChatBubbleLeftRight)

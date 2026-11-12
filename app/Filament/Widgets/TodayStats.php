@@ -5,6 +5,7 @@ namespace App\Filament\Widgets;
 use App\Enums\AppointmentStatus;
 use App\Enums\RescheduleRequestStatus;
 use App\Filament\Concerns\RefreshesWithToday;
+use App\Filament\Pages\Agenda;
 use App\Filament\Pages\CashClosing as CashClosingPage;
 use App\Filament\Resources\Appointments\AppointmentResource;
 use App\Filament\Resources\RescheduleRequests\RescheduleRequestResource;
@@ -78,7 +79,8 @@ class TodayStats extends Widget
             ])->filter()->implode(' · '),
             'color' => 'gray',
             'icon' => 'heroicon-o-calendar-days',
-            'url' => AppointmentResource::getUrl('index', ['tab' => 'today']),
+            // Las citas de hoy se ven en la Agenda: Citas ya no repite ese día en una pestaña.
+            'url' => Agenda::getUrl(),
         ];
     }
 
@@ -86,8 +88,7 @@ class TodayStats extends Widget
     private function unconfirmed(): array
     {
         $count = AppointmentResource::getEloquentQuery()
-            ->where('status', AppointmentStatus::Pending)
-            ->where('starts_at', '>=', now())
+            ->awaitingConfirmation()
             ->todayOrTomorrow()
             ->count();
 
@@ -97,8 +98,8 @@ class TodayStats extends Widget
             'hint' => $count > 0 ? 'Hoy y mañana · reenvía el aviso o llama' : 'Hoy y mañana, todo confirmado',
             'color' => $count > 0 ? 'warning' : 'gray',
             'icon' => 'heroicon-o-phone',
-            // La pestaña trae todas las que faltan confirmar; con el filtro quedan las de hoy y mañana, que son las que se cuentan aquí.
-            'url' => AppointmentResource::getUrl('index', ['tab' => 'pending', 'filters' => ['soon' => ['isActive' => true]]]),
+            // La pestaña trae todas las que faltan confirmar; con las fechas en el filtro quedan las de hoy y mañana, que son las que se cuentan aquí.
+            'url' => AppointmentResource::toConfirmUrl(today(), today()->addDay()),
         ];
     }
 
@@ -141,7 +142,7 @@ class TodayStats extends Widget
             ->count();
 
         return [
-            'label' => 'Solicitudes de cambio',
+            'label' => 'Cambios pedidos',
             'value' => $count,
             'hint' => $count > 0 ? 'Aprueba un horario con un clic' : 'Nada pendiente',
             'color' => $count > 0 ? 'warning' : 'gray',

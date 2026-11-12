@@ -218,7 +218,7 @@ class TreatmentPlansTable
     {
         $item = self::openItems($plan)->first();
 
-        return AppointmentResource::getUrl('create', array_filter([
+        return AppointmentResource::newUrl(array_filter([
             'patient' => $plan->patient_id,
             'doctor' => $plan->doctor_id,
             'treatment' => $item?->treatment_id,

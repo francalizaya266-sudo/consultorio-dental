@@ -6,6 +6,7 @@ use App\Enums\RescheduleRequestStatus;
 use App\Filament\Concerns\HasSpanishLabels;
 use App\Filament\Resources\RescheduleRequests\Pages\ListRescheduleRequests;
 use App\Filament\Resources\RescheduleRequests\Tables\RescheduleRequestsTable;
+use App\Models\Patient;
 use App\Models\RescheduleRequest;
 use App\Models\User;
 use BackedEnum;
@@ -23,11 +24,12 @@ class RescheduleRequestResource extends Resource
 
     protected static ?string $model = RescheduleRequest::class;
 
-    protected static ?string $modelLabel = 'solicitud de cambio';
+    // "Solicitudes de cambio" no entraba en el menú y se leía cortado: el nombre corto dice lo mismo.
+    protected static ?string $modelLabel = 'cambio pedido';
 
-    protected static ?string $pluralModelLabel = 'solicitudes de cambio';
+    protected static ?string $pluralModelLabel = 'cambios pedidos';
 
-    protected static ?string $navigationLabel = 'Solicitudes de cambio';
+    protected static ?string $navigationLabel = 'Cambios pedidos';
 
     protected static ?string $navigationParentItem = 'Agenda';
 
@@ -49,6 +51,12 @@ class RescheduleRequestResource extends Resource
         return parent::getEloquentQuery()
             ->with(['appointment.patient.account', 'appointment.doctor', 'appointment.treatment', 'options.doctor', 'requestedTreatment', 'resolvedBy'])
             ->when(! $user->managesAllAgendas(), fn (Builder $q) => $q->whereHas('appointment', fn (Builder $a) => $a->where('doctor_id', $user->doctorId())));
+    }
+
+    /** Lo que ese paciente tiene pedido y sigue pendiente: la lista ya filtrada por su nombre. */
+    public static function forPatientUrl(Patient $patient): string
+    {
+        return self::getUrl('index', ['tab' => 'pending', 'search' => $patient->full_name]);
     }
 
     public static function getNavigationBadge(): ?string

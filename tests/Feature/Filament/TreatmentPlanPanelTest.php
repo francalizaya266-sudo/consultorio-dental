@@ -8,7 +8,7 @@ use App\Enums\MessageTemplateKey;
 use App\Enums\PlanPaymentMode;
 use App\Enums\ToothState;
 use App\Enums\TreatmentPlanStatus;
-use App\Filament\Resources\Appointments\Pages\CreateAppointment;
+use App\Filament\Pages\Agenda;
 use App\Filament\Resources\Consultations\ConsultationResource;
 use App\Filament\Resources\Consultations\Pages\EditConsultation;
 use App\Filament\Resources\Patients\Pages\ViewClinicalRecord;
@@ -133,19 +133,19 @@ class TreatmentPlanPanelTest extends TestCase
         $this->actingAs(User::factory()->reception()->create());
 
         // Al elegir la sesión del plan, el doctor y el tratamiento se completan solos.
-        Livewire::withQueryParams(['patient' => $patient->id])
-            ->test(CreateAppointment::class)
-            ->fillForm(['treatment_plan_item_id' => $item->id])
-            ->assertSchemaStateSet(['doctor_id' => $doctor->id, 'treatment_id' => $resin->id]);
+        Livewire::test(Agenda::class)
+            ->mountAction('createAppointment', ['patient' => $patient->id])
+            ->setActionData(['treatment_plan_item_id' => $item->id])
+            ->assertActionDataSet(['doctor_id' => $doctor->id, 'treatment_id' => $resin->id]);
 
-        Livewire::withQueryParams(['patient' => $patient->id, 'doctor' => $doctor->id, 'treatment' => $resin->id, 'plan_item' => $item->id])
-            ->test(CreateAppointment::class)
-            ->assertSchemaStateSet(['patient_id' => $patient->id, 'treatment_plan_item_id' => $item->id, 'treatment_id' => $resin->id])
-            ->assertSee('Curación con resina')
-            ->assertDontSee('pieza 36')
-            ->fillForm(['date' => '2026-11-03', 'slot' => '10:00'])
-            ->call('create')
-            ->assertHasNoFormErrors();
+        Livewire::test(Agenda::class)
+            ->mountAction('createAppointment', ['patient' => $patient->id, 'doctor' => $doctor->id, 'treatment' => $resin->id, 'plan_item' => $item->id])
+            ->assertActionDataSet(['patient_id' => $patient->id, 'treatment_plan_item_id' => $item->id, 'treatment_id' => $resin->id])
+            ->assertMountedActionModalSee('Curación con resina')
+            ->assertMountedActionModalDontSee('pieza 36')
+            ->setActionData(['date' => '2026-11-03', 'slot' => '10:00'])
+            ->callMountedAction()
+            ->assertHasNoActionErrors();
 
         // Agendar una sesión no es aceptar el plan: sigue esperando su firma.
         $appointment = Appointment::sole();
@@ -174,21 +174,21 @@ class TreatmentPlanPanelTest extends TestCase
         $item = $plan->items()->create(['treatment_id' => $resin->id, 'description' => 'Curación con resina', 'tooth' => '36', 'unit_price' => 150]);
         $this->actingAs(User::factory()->reception()->create());
 
-        Livewire::withQueryParams(['patient' => $patient->id, 'doctor' => $doctor->id, 'treatment' => $resin->id, 'plan_item' => $item->id])
-            ->test(CreateAppointment::class)
-            ->assertSee('El paciente ya aceptó el plan')
-            ->fillForm(['date' => '2026-11-03', 'slot' => '10:00', 'plan_accepted' => true])
-            ->call('create')
-            ->assertHasNoFormErrors();
+        Livewire::test(Agenda::class)
+            ->mountAction('createAppointment', ['patient' => $patient->id, 'doctor' => $doctor->id, 'treatment' => $resin->id, 'plan_item' => $item->id])
+            ->assertMountedActionModalSee('El paciente ya aceptó el plan')
+            ->setActionData(['date' => '2026-11-03', 'slot' => '10:00', 'plan_accepted' => true])
+            ->callMountedAction()
+            ->assertHasNoActionErrors();
 
         $plan->refresh();
         $this->assertSame(TreatmentPlanStatus::Accepted, $plan->status);
         $this->assertNotNull($item->fresh()->accepted_at);
 
         // Con el plan ya aceptado, ya no se pregunta.
-        Livewire::withQueryParams(['patient' => $patient->id, 'plan_item' => $item->id])
-            ->test(CreateAppointment::class)
-            ->assertDontSee('El paciente ya aceptó el plan');
+        Livewire::test(Agenda::class)
+            ->mountAction('createAppointment', ['patient' => $patient->id, 'plan_item' => $item->id])
+            ->assertMountedActionModalDontSee('El paciente ya aceptó el plan');
     }
 
     public function test_the_doctor_adds_the_odontogram_suggestions_to_the_diagnosis_and_the_plan(): void

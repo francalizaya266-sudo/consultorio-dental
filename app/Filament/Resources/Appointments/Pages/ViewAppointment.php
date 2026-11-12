@@ -66,13 +66,7 @@ class ViewAppointment extends ViewRecord
     protected function getHeaderActions(): array
     {
         return [
-            ...AppointmentActions::all(),
-            Action::make('patient')
-                ->label('Ficha del paciente')
-                ->icon(Heroicon::OutlinedUser)
-                ->color('gray')
-                ->visible(fn () => PatientResource::canView($this->getRecord()->patient))
-                ->url(fn () => PatientResource::getUrl('view', ['record' => $this->getRecord()->patient])),
+            ...AppointmentActions::page(),
             Action::make('notes')
                 ->label('Editar notas')
                 ->icon(Heroicon::OutlinedPencilSquare)

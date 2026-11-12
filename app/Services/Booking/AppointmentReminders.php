@@ -134,7 +134,8 @@ class AppointmentReminders
                 $ofTheDay->count() === 1
                     ? 'Llama a ese paciente para confirmar su asistencia. En la agenda sale con "Llamar".'
                     : 'Llama a esos pacientes para confirmar su asistencia. En la agenda salen con "Llamar".',
-                link: ['label' => 'Ver citas por confirmar', 'url' => AppointmentResource::getUrl('index', ['tab' => 'pending'])],
+                // Lleva a esas mismas citas: las de ese día que ya toca llamar.
+                link: ['label' => 'Ver citas por confirmar', 'url' => AppointmentResource::toConfirmUrl($ofTheDay->first()->starts_at, $ofTheDay->first()->starts_at, onlyToCall: true)],
             ));
 
         return $appointments->count();

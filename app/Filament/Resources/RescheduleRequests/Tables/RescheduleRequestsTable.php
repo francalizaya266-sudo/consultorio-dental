@@ -21,7 +21,10 @@ use Filament\Forms\Components\Radio;
 use Filament\Forms\Components\Textarea;
 use Filament\Support\Icons\Heroicon;
 use Filament\Tables\Columns\TextColumn;
+use Filament\Tables\Contracts\HasTable;
 use Filament\Tables\Table;
+use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Support\Str;
 use WeakMap;
 
 class RescheduleRequestsTable
@@ -42,22 +45,23 @@ class RescheduleRequestsTable
                 TextColumn::make('appointment.patient.first_name')
                     ->label('Paciente')
                     ->formatStateUsing(fn (RescheduleRequest $record) => $record->appointment->patient->full_name)
+                    ->searchable(query: fn (Builder $query, string $search) => $query->whereHas('appointment.patient', fn (Builder $patient) => $patient->search($search)))
                     ->description(fn (RescheduleRequest $record) => $record->appointment->patient->account ? Phone::display($record->appointment->patient->account->phone) : null),
                 TextColumn::make('appointment.starts_at')
                     ->label('Cita actual')
                     ->dateTime('D d/m H:i')
-                    ->description(fn (RescheduleRequest $record) => $record->appointment->treatment->name.' · '.$record->appointment->doctor->name),
+                    ->description(fn (RescheduleRequest $record) => $record->appointment->treatment->name.' · '.$record->appointment->doctor->name)
+                    ->wrap(),
                 TextColumn::make('options_list')
                     ->label('Horarios que propone')
                     // Mientras está pendiente se dice cuál ya no sirve y por qué: así se ve sin abrir "Aprobar".
                     ->state(fn (RescheduleRequest $record) => $record->options->map(fn (RescheduleRequestOption $o) => self::optionLabel($o, $record).self::problemSuffix($o, $record))->all())
                     ->listWithLineBreaks()
-                    ->bulleted(),
-                TextColumn::make('reason')
-                    ->label('Motivo')
-                    ->placeholder('—')
-                    ->wrap()
-                    ->limit(80),
+                    ->bulleted()
+                    // El motivo va debajo y no en una columna propia: en una laptop esa columna sacaba de la pantalla
+                    // los botones "Aprobar" y "No aprobar".
+                    ->description(fn (RescheduleRequest $record) => filled($record->reason) ? 'Motivo: '.Str::limit($record->reason, 120) : null)
+                    ->wrap(),
                 TextColumn::make('status')
                     ->label('Estado')
                     ->badge()
@@ -66,7 +70,9 @@ class RescheduleRequestsTable
                         $record->resolvedBy ? $record->resolvedBy->name.' · '.$record->resolved_at?->format('d/m H:i') : null,
                         $record->status === RescheduleRequestStatus::Rejected ? null : $record->response_note,
                     ])->filter()->implode(' · ') ?: null)
-                    ->wrap(),
+                    ->wrap()
+                    // En "Pendientes" todas dicen lo mismo: la columna solo ocupa sitio.
+                    ->hidden(fn (HasTable $livewire) => ($livewire->activeTab ?? null) === 'pending'),
             ])
             ->defaultSort('created_at', 'desc')
             ->recordUrl(fn (RescheduleRequest $record) => AppointmentResource::getUrl('view', ['record' => $record->appointment_id]))
@@ -84,7 +90,7 @@ class RescheduleRequestsTable
                 ]),
             ])
             ->poll('30s')
-            ->emptyStateHeading('No hay solicitudes de cambio')
+            ->emptyStateHeading('No hay cambios pedidos')
             ->emptyStateDescription('Cuando un paciente proponga otros horarios, aparecerán aquí para aprobar uno.')
             ->emptyStateIcon('heroicon-o-arrows-right-left');
     }

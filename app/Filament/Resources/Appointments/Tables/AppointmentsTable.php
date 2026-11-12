@@ -7,12 +7,16 @@ use App\Filament\Actions\AppointmentActions;
 use App\Filament\Support\VisitFlags;
 use App\Models\Appointment;
 use App\Models\Doctor;
+use App\Models\Treatment;
 use App\Models\User;
 use App\Support\Money;
 use App\Support\Phone;
+use Carbon\CarbonImmutable;
+use Filament\Forms\Components\DatePicker;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Contracts\HasTable;
 use Filament\Tables\Filters\Filter;
+use Filament\Tables\Filters\Indicator;
 use Filament\Tables\Filters\SelectFilter;
 use Filament\Tables\Table;
 use Illuminate\Database\Eloquent\Builder;
@@ -27,8 +31,39 @@ class AppointmentsTable
 
         return $table
             ->columns(self::columns(showDoctor: $showDoctor))
-            ->defaultSort('starts_at')
+            // Lo que viene, en orden de llegada; en "Todas" y "Sin cerrar", lo más reciente arriba.
+            ->defaultSort(fn (Builder $query, HasTable $livewire) => in_array($livewire->activeTab ?? null, ['all', 'unclosed'], true)
+                ? $query->orderByDesc('starts_at')->orderByDesc('id')
+                : $query->orderBy('starts_at')->orderBy('id'))
             ->filters([
+                Filter::make('dates')
+                    ->label('Fecha')
+                    ->schema([
+                        DatePicker::make('from')->label('Desde')->native(false)->displayFormat('d/m/Y')->firstDayOfWeek(1)->closeOnDateSelection(),
+                        DatePicker::make('until')->label('Hasta')->native(false)->displayFormat('d/m/Y')->firstDayOfWeek(1)->closeOnDateSelection(),
+                    ])
+                    ->columns(2)
+                    ->query(fn (Builder $query, array $data) => $query
+                        ->when(self::day($data['from'] ?? null), fn (Builder $q, string $date) => $q->whereDate('starts_at', '>=', $date))
+                        ->when(self::day($data['until'] ?? null), fn (Builder $q, string $date) => $q->whereDate('starts_at', '<=', $date)))
+                    ->indicateUsing(function (array $data): array {
+                        $from = self::day($data['from'] ?? null);
+                        $until = self::day($data['until'] ?? null);
+
+                        if (! $from && ! $until) {
+                            return [];
+                        }
+
+                        $label = match (true) {
+                            $from === today()->toDateString() && $until === today()->addDay()->toDateString() => 'Hoy y mañana',
+                            $from === $until => 'Día '.now()->parse($from)->format('d/m/Y'),
+                            ! $until => 'Desde el '.now()->parse($from)->format('d/m/Y'),
+                            ! $from => 'Hasta el '.now()->parse($until)->format('d/m/Y'),
+                            default => 'Del '.now()->parse($from)->format('d/m/Y').' al '.now()->parse($until)->format('d/m/Y'),
+                        };
+
+                        return [Indicator::make($label)->removeField('from')->removeField('until')];
+                    }),
                 SelectFilter::make('doctor_id')
                     ->label('Doctor')
                     ->options(fn () => Doctor::query()->active()->orderBy('sort_order')->pluck('name', 'id'))
@@ -37,15 +72,19 @@ class AppointmentsTable
                     ->label('Estado')
                     ->options(AppointmentStatus::class)
                     ->multiple(),
+                SelectFilter::make('treatment_id')
+                    ->label('Tratamiento')
+                    ->options(fn () => Treatment::query()->orderBy('name')->pluck('name', 'id'))
+                    ->searchable(),
                 Filter::make('new_patients')
                     ->label('Solo pacientes nuevos')
                     ->toggle()
                     ->query(fn (Builder $query) => $query->where('is_new_patient', true)),
-                // Con él llega "Por confirmar" de Hoy: la lista muestra las mismas citas que cuenta ese número.
-                Filter::make('soon')
-                    ->label('Solo de hoy y mañana')
+                // Con él llega el aviso "citas sin confirmar": la lista muestra las mismas que cuenta el aviso.
+                Filter::make('to_call')
+                    ->label('Solo las que toca llamar')
                     ->toggle()
-                    ->query(fn (Builder $query) => $query->todayOrTomorrow()),
+                    ->query(fn (Builder $query) => $query->whereNotNull('unconfirmed_flagged_at')),
                 // Con él llega el aviso de un bloqueo recién guardado: las citas que quedaron dentro y hay que mover.
                 Filter::make('in_block')
                     ->label('Solo las que caen en un bloqueo')
@@ -76,7 +115,12 @@ class AppointmentsTable
         return [
             TextColumn::make('starts_at')
                 ->label($timeOnly ? 'Hora' : 'Fecha y hora')
-                ->dateTime($timeOnly ? 'H:i' : 'D d/m H:i')
+                // Con el año cuando no es de este: en "Todas", un "lun. 01/12" del año pasado parecía del mes que viene.
+                ->formatStateUsing(fn (Appointment $record) => $record->starts_at->translatedFormat(match (true) {
+                    $timeOnly => 'H:i',
+                    $record->starts_at->isCurrentYear() => 'D d/m H:i',
+                    default => 'D d/m/Y H:i',
+                }))
                 ->description(fn (Appointment $record) => $record->ends_at->diffInMinutes($record->starts_at, true).' min')
                 ->sortable(),
             TextColumn::make('patient.first_name')
@@ -98,6 +142,12 @@ class AppointmentsTable
                 ->badge(),
             self::flagsColumn(),
         ];
+    }
+
+    /** El calendario del panel guarda "2026-11-01 00:00:00": para filtrar por día basta "2026-11-01". */
+    private static function day(?string $value): ?string
+    {
+        return filled($value) ? CarbonImmutable::parse($value)->toDateString() : null;
     }
 
     /**

@@ -2,48 +2,19 @@
 
 namespace App\Filament\Resources\Appointments\Pages;
 
-use App\Exceptions\BookingException;
-use App\Filament\Actions\CreateAppointmentAction;
 use App\Filament\Resources\Appointments\AppointmentResource;
-use Filament\Actions\Action;
-use Filament\Notifications\Notification;
 use Filament\Resources\Pages\CreateRecord;
-use Illuminate\Auth\Access\AuthorizationException;
-use Illuminate\Database\Eloquent\Model;
 
+/**
+ * La dirección de la antigua página "Nueva cita" (marcadores y enlaces guardados). Nueva cita es una sola, la ventana
+ * sobre la agenda: quien llega aquí pasa a ella con lo mismo que traía el enlace.
+ */
 class CreateAppointment extends CreateRecord
 {
     protected static string $resource = AppointmentResource::class;
 
-    protected static ?string $title = 'Nueva cita';
-
-    protected static ?string $breadcrumb = 'Nueva';
-
-    protected static bool $canCreateAnother = false;
-
-    /** La cita se crea con la misma lógica que la web (y que la ventana de la agenda): nunca se cruzan dos citas. */
-    protected function handleRecordCreation(array $data): Model
+    public function mount(): void
     {
-        try {
-            return CreateAppointmentAction::book($data);
-        } catch (BookingException|AuthorizationException $e) {
-            Notification::make()->danger()->title($e->getMessage())->send();
-            $this->halt();
-        }
-    }
-
-    protected function getCreateFormAction(): Action
-    {
-        return parent::getCreateFormAction()->label('Agendar cita');
-    }
-
-    protected function getCreatedNotificationTitle(): ?string
-    {
-        return CreateAppointmentAction::createdMessage($this->getRecord()->starts_at);
-    }
-
-    protected function getRedirectUrl(): string
-    {
-        return $this->getResource()::getUrl('index');
+        $this->redirect(AppointmentResource::newUrl(request()->only(AppointmentResource::NEW_APPOINTMENT_ARGUMENTS)));
     }
 }

@@ -3,10 +3,12 @@
 namespace Tests\Feature\Console\Commands;
 
 use App\Filament\Resources\Appointments\AppointmentResource;
+use App\Filament\Resources\Appointments\Pages\ListAppointments;
 use App\Models\Appointment;
 use App\Models\Doctor;
 use App\Models\User;
 use Illuminate\Foundation\Testing\LazilyRefreshDatabase;
+use Livewire\Livewire;
 use Tests\Concerns\CreatesAgenda;
 use Tests\TestCase;
 
@@ -38,7 +40,16 @@ class FlagUnconfirmedAppointmentsTest extends TestCase
         // Una sola alerta, que dice de qué día son y lleva a la lista.
         $alert = $reception->notifications()->sole()->data;
         $this->assertSame('1 cita de mañana sin confirmar', $alert['title']);
-        $this->assertSame(AppointmentResource::getUrl('index', ['tab' => 'pending']), $alert['actions'][0]['url']);
+        $this->assertSame(AppointmentResource::toConfirmUrl($pending->starts_at, $pending->starts_at, onlyToCall: true), $alert['actions'][0]['url']);
+
+        // Esa lista trae la misma cita que cuenta la alerta, no las demás por confirmar.
+        $this->actingAs($reception);
+        Livewire::test(ListAppointments::class, ['activeTab' => 'pending'])
+            ->assertCanSeeTableRecords([$pending, $justBooked])
+            ->filterTable('to_call')
+            ->filterTable('dates', ['from' => '2026-11-03', 'until' => '2026-11-03'])
+            ->assertCanSeeTableRecords([$pending])
+            ->assertCanNotSeeTableRecords([$justBooked]);
     }
 
     public function test_mondays_unconfirmed_appointments_are_flagged_on_saturday(): void

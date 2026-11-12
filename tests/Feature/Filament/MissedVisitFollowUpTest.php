@@ -71,7 +71,7 @@ class MissedVisitFollowUpTest extends TestCase
 
         Livewire::test(FollowUpsToday::class)
             ->assertSeeInOrder(['Faltaron o cancelaron', 'En los últimos 2 meses y siguen sin otra cita', 'Luis Mamani', 'Se canceló su cita del 5 de noviembre · Limpieza dental', 'Rosa Quispe', 'No asistió el 27 de octubre · Limpieza dental'])
-            ->assertSee(AppointmentResource::getUrl('create', ['patient' => $noShow->id, 'treatment' => $this->cleaning->id, 'doctor' => $this->doctor->id]))
+            ->assertSee(AppointmentResource::newUrl(['patient' => $noShow->id, 'treatment' => $this->cleaning->id, 'doctor' => $this->doctor->id]))
             ->assertDontSee(['Ana Flores', 'Pedro Huamán', 'Carmen Rojas'])
             ->mountAction('whatsapp', ['template' => MessageTemplateKey::MissedVisit->value, 'patient' => $noShow->id])
             ->assertSchemaStateSet(['body' => "Hola Rosa, te escribimos de Clínica Vega Implant.\nNo pudimos verte en tu cita de limpieza dental del martes 27 de octubre. ¿Te reservamos otro horario? Respóndenos con el día y la hora que te acomodan."])
@@ -98,7 +98,7 @@ class MissedVisitFollowUpTest extends TestCase
         $this->get(PatientResource::getUrl('view', ['record' => $rosa]))
             ->assertOk()
             ->assertSeeInOrder(['Siguiente paso', 'Faltó a su cita del 27 de octubre', 'Limpieza dental · sigue sin otra cita', 'Agendar'])
-            ->assertSee(AppointmentResource::getUrl('create', ['patient' => $rosa->id, 'treatment' => $this->cleaning->id, 'doctor' => $this->doctor->id]));
+            ->assertSee(AppointmentResource::newUrl(['patient' => $rosa->id, 'treatment' => $this->cleaning->id, 'doctor' => $this->doctor->id]));
 
         // Con la cita nueva, el paso desaparece.
         $this->visit($rosa, '2026-11-04 10:00', AppointmentStatus::Confirmed);

@@ -96,9 +96,16 @@ final class SlotPicker
                 ->required(fn (Get $get) => ! $get('manual'))
                 ->hidden(fn (Get $get) => (bool) $get('manual')),
 
+            // No es para poner una cita encima de otra (eso nunca se puede): es para una hora que la agenda no
+            // ofrece. Llega con la hora que se había elegido o tocado en la agenda.
             Toggle::make('manual')
-                ->label('Otra hora (fuera de los horarios libres)')
-                ->live(),
+                ->label('Otra hora (fuera del horario de atención)')
+                ->live()
+                ->afterStateUpdated(function (?bool $state, Get $get, Set $set): void {
+                    if ($state && blank($get('manual_time'))) {
+                        $set('manual_time', $get('slot') ?? $get('preferred_time'));
+                    }
+                }),
 
             TimePicker::make('manual_time')
                 ->label('Hora')
@@ -207,7 +214,7 @@ final class SlotPicker
     }
 
     /** El próximo día (desde hoy) en que suele venir; null si no tiene un día fijo. */
-    private static function nextUsualDay(?Patient $patient): ?CarbonImmutable
+    public static function nextUsualDay(?Patient $patient): ?CarbonImmutable
     {
         $weekday = $patient ? app(PatientInsights::class)->usualVisit($patient)['weekday'] ?? null : null;
 
@@ -290,7 +297,10 @@ final class SlotPicker
         }
 
         if (! self::canSearch($get, $moving)) {
-            return 'Elige tratamiento, doctor y día para ver los horarios libres.';
+            // La hora que se tocó en la agenda no se pierde: se dice, y queda puesta al elegir lo que falta.
+            return filled($get('preferred_time'))
+                ? 'Elige tratamiento y doctor: queda puesta la primera hora libre desde las '.$get('preferred_time').', la que tocaste en la agenda.'
+                : 'Elige tratamiento, doctor y día para ver los horarios libres.';
         }
 
         $next = self::nextDayWithSlots($get, $moving);

@@ -65,7 +65,7 @@ class ViewPatient extends ViewRecord
                 ->label('Nueva cita')
                 ->icon(Heroicon::OutlinedCalendarDays)
                 ->color($clinicFirst ? 'gray' : 'primary')
-                ->url(fn () => AppointmentResource::getUrl('create', ['patient' => $this->getRecord()->getKey()])),
+                ->url(fn () => AppointmentResource::newUrl(['patient' => $this->getRecord()->getKey()])),
             EditAction::make()
                 ->color('gray'),
         ];

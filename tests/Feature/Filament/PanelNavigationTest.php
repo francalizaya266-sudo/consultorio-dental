@@ -54,7 +54,7 @@ class PanelNavigationTest extends TestCase
 
         $this->get(AppointmentResource::getUrl('index'))
             ->assertOk()
-            ->assertSeeInOrder(['Agenda', 'Citas', 'Solicitudes de cambio', 'Lista de espera', 'Bloqueos de horario', 'Pacientes']);
+            ->assertSeeInOrder(['Agenda', 'Citas', 'Cambios pedidos', 'Lista de espera', 'Bloqueos de horario', 'Pacientes']);
 
         $this->get(PatientResource::getUrl('index'))
             ->assertOk()
@@ -124,7 +124,7 @@ class PanelNavigationTest extends TestCase
         Livewire::test(GlobalSearch::class)
             ->set('search', 'Quispe')
             ->assertSee(['María Quispe', 'Nueva cita', 'WhatsApp'])
-            ->assertSeeHtml(e(AppointmentResource::getUrl('create', ['patient' => $patient->id])))
+            ->assertSeeHtml(e(AppointmentResource::newUrl(['patient' => $patient->id])))
             ->assertSeeHtml('https://wa.me/51987654321');
     }
 }

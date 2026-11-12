@@ -10,19 +10,26 @@ use App\Enums\PlanPaymentMode;
 use App\Filament\Resources\Appointments\AppointmentResource;
 use App\Filament\Resources\Patients\Schemas\PatientForm;
 use App\Filament\Support\SlotPicker;
+use App\Models\Doctor;
 use App\Models\Patient;
+use App\Models\Treatment;
 use App\Models\TreatmentPlanItem;
 use App\Models\User;
 use App\Services\Clinical\TreatmentPlanService;
+use App\Support\Dates;
+use App\Support\Money;
 use App\Support\Phone;
+use Carbon\CarbonImmutable;
 use Filament\Forms\Components\Checkbox;
 use Filament\Forms\Components\Field;
+use Filament\Forms\Components\Hidden;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\Textarea;
 use Filament\Forms\Components\TextInput;
 use Filament\Forms\Components\Toggle;
 use Filament\Schemas\Components\Grid;
 use Filament\Schemas\Components\Section;
+use Filament\Schemas\Components\Text;
 use Filament\Schemas\Components\Utilities\Get;
 use Filament\Schemas\Components\Utilities\Set;
 use Filament\Schemas\Schema;
@@ -37,10 +44,18 @@ class AppointmentForm
                 self::patientSection(),
                 Section::make('Horario')
                     ->columns(2)
-                    ->schema(SlotPicker::fields()),
+                    ->schema([
+                        ...SlotPicker::fields(),
+                        // Lo que el paciente pregunta al agendar: cuánto dura, a qué hora sale y cuánto cuesta.
+                        Text::make(fn (Get $get) => self::visitSummary($get))
+                            ->visible(fn (Get $get) => self::visitSummary($get) !== null)
+                            ->columnSpanFull(),
+                    ]),
+                // Cerrado: casi nunca se usa y empujaba "Agendar cita" fuera de la pantalla.
                 Section::make('Detalles')
                     ->columns(2)
                     ->collapsible()
+                    ->collapsed()
                     ->schema([
                         Toggle::make('fixed_date')
                             ->label('Fecha fija (el paciente no la mueve solo)')
@@ -63,10 +78,19 @@ class AppointmentForm
     {
         return Section::make('Paciente')
             ->schema([
+                // El paciente que estaba elegido al marcar "paciente nuevo": si se desmarca, vuelve.
+                Hidden::make('patient_before_new')->dehydrated(false),
                 Toggle::make('new_patient')
                     ->label('Es un paciente nuevo (aún no está registrado)')
                     ->live()
-                    ->afterStateUpdated(fn (Set $set) => $set('patient_id', null)),
+                    ->afterStateUpdated(function (?bool $state, Get $get, Set $set): void {
+                        if ($state) {
+                            $set('patient_before_new', $get('patient_id'));
+                            $set('patient_id', null);
+                        } else {
+                            $set('patient_id', $get('patient_before_new'));
+                        }
+                    }),
                 self::patientSelect()
                     ->hidden(fn (Get $get) => (bool) $get('new_patient'))
                     ->required(fn (Get $get) => ! $get('new_patient'))
@@ -93,6 +117,36 @@ class AppointmentForm
                     ->options(AppointmentOrigin::class)
                     ->visible(fn (Get $get) => self::isFirstTime($get)),
             ]);
+    }
+
+    /**
+     * "Dura 30 min: de 10:00 a 10:30 · Precio desde S/ 80." Con el tratamiento y el doctor ya elegidos; las horas,
+     * cuando ya hay una. Una sesión de su plan se cobra a lo acordado en el plan, no al precio de lista.
+     */
+    private static function visitSummary(Get $get): ?string
+    {
+        $treatment = Treatment::find($get('treatment_id'));
+        $doctor = Doctor::find($get('doctor_id'));
+
+        if (! $treatment || ! $doctor) {
+            return null;
+        }
+
+        $minutes = $doctor->durationFor($treatment);
+        $time = $get('manual') ? $get('manual_time') : $get('slot');
+        $start = filled($time) && filled($get('date')) ? CarbonImmutable::parse($get('date'))->setTimeFromTimeString($time) : null;
+
+        $price = match (true) {
+            filled($get('treatment_plan_item_id')) => 'Precio: el acordado en su plan',
+            $treatment->price_from === null => null,
+            (float) $treatment->price_from === 0.0 => 'Sin costo',
+            default => 'Precio desde '.Money::short($treatment->price_from),
+        };
+
+        return collect([
+            'Dura '.Dates::duration($minutes).($start ? ': de '.$start->format('H:i').' a '.$start->addMinutes($minutes)->format('H:i') : ''),
+            $price,
+        ])->filter()->implode(' · ').'.';
     }
 
     /**

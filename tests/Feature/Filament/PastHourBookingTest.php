@@ -5,7 +5,6 @@ namespace Tests\Feature\Filament;
 use App\Enums\AppointmentStatus;
 use App\Enums\MessageTemplateKey;
 use App\Filament\Pages\Agenda;
-use App\Filament\Resources\Appointments\Pages\CreateAppointment;
 use App\Filament\Resources\Appointments\Pages\ViewAppointment;
 use App\Models\Appointment;
 use App\Models\Doctor;
@@ -52,18 +51,20 @@ class PastHourBookingTest extends TestCase
             'manual_time' => '09:00',
         ];
 
-        Livewire::test(CreateAppointment::class)
-            ->fillForm($form)
-            ->assertSee('Esa hora ya pasó: registrar la cita igual')
-            ->call('create')
-            ->assertHasFormErrors(['past_time_ok']);
+        Livewire::test(Agenda::class)
+            ->mountAction('createAppointment')
+            ->setActionData($form)
+            ->assertMountedActionModalSee('Esa hora ya pasó: registrar la cita igual')
+            ->callMountedAction()
+            ->assertHasActionErrors(['past_time_ok']);
 
         $this->assertSame(0, Appointment::count());
 
-        Livewire::test(CreateAppointment::class)
-            ->fillForm([...$form, 'past_time_ok' => true])
-            ->call('create')
-            ->assertHasNoFormErrors()
+        Livewire::test(Agenda::class)
+            ->mountAction('createAppointment')
+            ->setActionData([...$form, 'past_time_ok' => true])
+            ->callMountedAction()
+            ->assertHasNoActionErrors()
             ->assertNotified('Cita registrada en una hora que ya pasó. No se preparó aviso al paciente.');
 
         $this->assertSame('2026-11-02 09:00', Appointment::sole()->starts_at->format('Y-m-d H:i'));

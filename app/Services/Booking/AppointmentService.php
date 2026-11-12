@@ -174,7 +174,7 @@ class AppointmentService
             }
 
             if (! $availability->isFree($doctor, $startsAt, $duration, $buffer, requireWorkingHours: false)) {
-                throw BookingException::overlaps();
+                throw BookingException::overlaps($availability->clashAt($doctor, $startsAt, $duration, $buffer));
             }
 
             $appointment = Appointment::create([
@@ -637,7 +637,9 @@ class AppointmentService
             }
 
             if (! $availability->isFree($doctor, $startsAt, $duration, $buffer, $appointment->getKey(), $requireWorkingHours)) {
-                throw $actor === 'patient' ? BookingException::slotTaken() : BookingException::overlaps();
+                throw $actor === 'patient'
+                    ? BookingException::slotTaken()
+                    : BookingException::overlaps($availability->clashAt($doctor, $startsAt, $duration, $buffer, $appointment->getKey()));
             }
 
             $from = $appointment->starts_at;

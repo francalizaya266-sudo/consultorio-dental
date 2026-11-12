@@ -123,7 +123,7 @@ class TreatmentPlansListPanelTest extends TestCase
 
         Livewire::test(ListTreatmentPlans::class)
             ->assertTableActionVisible('book', $plan)
-            ->assertTableActionHasUrl('book', AppointmentResource::getUrl('create', ['patient' => $plan->patient_id, 'doctor' => $plan->doctor_id, 'treatment' => $plan->items()->first()->treatment_id, 'plan_item' => $plan->items()->first()->id]), $plan)
+            ->assertTableActionHasUrl('book', AppointmentResource::newUrl(['patient' => $plan->patient_id, 'doctor' => $plan->doctor_id, 'treatment' => $plan->items()->first()->treatment_id, 'plan_item' => $plan->items()->first()->id]), $plan)
             ->mountTableAction('whatsapp', $plan)
             ->assertSet('mountedActions.0.data.body', fn (string $body) => str_contains($body, 'queda pendiente: Corona.'));
     }

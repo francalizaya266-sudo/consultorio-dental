@@ -6,8 +6,8 @@ use App\Enums\AppointmentStatus;
 use App\Enums\ExpenseCategory;
 use App\Enums\LabOrderStatus;
 use App\Enums\PaymentMethod;
+use App\Filament\Pages\Agenda;
 use App\Filament\Resources\Appointments\AppointmentResource;
-use App\Filament\Resources\Appointments\Pages\CreateAppointment;
 use App\Filament\Resources\Consultations\Pages\EditConsultation;
 use App\Filament\Resources\Consultations\Pages\ViewConsultation;
 use App\Filament\Resources\LabOrders\LabOrderResource;
@@ -81,11 +81,12 @@ class LabOrdersTest extends TestCase
             ->assertSee('Laboratorio: Corona de zirconio · su cita del jue. 5 nov. es antes de la entrega');
 
         // Al agendarle antes de la entrega, la cita lo advierte; desde el día de la entrega, no.
-        Livewire::test(CreateAppointment::class)
-            ->fillForm(['patient_id' => $this->rosa->id, 'date' => '2026-11-06'])
-            ->assertSee('llega del laboratorio el sáb. 7 nov.')
-            ->fillForm(['date' => '2026-11-07'])
-            ->assertDontSee('llega del laboratorio');
+        Livewire::test(Agenda::class)
+            ->mountAction('createAppointment')
+            ->setActionData(['patient_id' => $this->rosa->id, 'date' => '2026-11-06'])
+            ->assertMountedActionModalSee('llega del laboratorio el sáb. 7 nov.')
+            ->setActionData(['date' => '2026-11-07'])
+            ->assertMountedActionModalDontSee('llega del laboratorio');
 
         // Con la cita movida para después de la entrega, ya no hay nada que resolver.
         $visit->update(['starts_at' => '2026-11-09 10:00', 'ends_at' => '2026-11-09 10:30']);
@@ -108,7 +109,7 @@ class LabOrdersTest extends TestCase
         Livewire::withQueryParams(['tab' => 'attention'])
             ->test(ManageLabOrders::class)
             ->assertCanSeeTableRecords([$order])
-            ->assertActionHasUrl(TestAction::make('book')->table($order), AppointmentResource::getUrl('create', ['patient' => $this->rosa->id, 'doctor' => $this->doctor->id]));
+            ->assertActionHasUrl(TestAction::make('book')->table($order), AppointmentResource::newUrl(['patient' => $this->rosa->id, 'doctor' => $this->doctor->id]));
 
         // Se le paga al laboratorio: queda en los gastos de Caja y ya no se elimina.
         Livewire::test(ManageLabOrders::class)

@@ -83,14 +83,14 @@ class DashboardPanelTest extends TestCase
         Livewire::test(TodayStats::class)
             ->assertSeeInOrder(['Citas de hoy', 'Por confirmar', 'Cobrado hoy'])
             // Las horas libres se ven en "Huecos de la semana", no también aquí.
-            ->assertDontSee(['Horas libres', 'Solicitudes de cambio', 'Avisos por enviar']);
+            ->assertDontSee(['Horas libres', 'Cambios pedidos', 'Avisos por enviar']);
 
         // El doctor ve su paciente; cómo va el mes, solo si el consultorio se lo permite.
         $this->actingAs($doctor->user);
         $this->assertSame([TodayStats::class, NextPatient::class, TodayAppointments::class], $this->visibleWidgets());
         $this->get(Dashboard::getUrl())->assertOk()->assertSee(['Nueva cita', 'Llegó sin cita'])->assertDontSee(['Cobrar', 'Anotar en lista de espera']);
         Livewire::test(TodayStats::class)
-            ->assertSeeInOrder(['Citas de hoy', 'Por confirmar', 'Solicitudes de cambio', 'Avisos por enviar'])
+            ->assertSeeInOrder(['Citas de hoy', 'Por confirmar', 'Cambios pedidos', 'Avisos por enviar'])
             ->assertDontSee(['Cobrado hoy', 'Horas libres']);
 
         Setting::set('reports.doctors_see_own', true);
@@ -261,12 +261,12 @@ class DashboardPanelTest extends TestCase
             ->assertSeeHtmlInOrder(['Citas de hoy', '<strong class="dash-kpi-value">2</strong>', '0 atendidas · 1 por llegar · 1 no asistió'])
             // "Por confirmar" son las de hoy y mañana, y lleva a la lista con esas mismas.
             ->assertSeeHtmlInOrder(['Por confirmar', '<strong class="dash-kpi-value">2</strong>', 'Hoy y mañana'])
-            ->assertSeeHtml('href="'.e(AppointmentResource::getUrl('index', ['tab' => 'pending', 'filters' => ['soon' => ['isActive' => true]]])).'"');
+            ->assertSeeHtml('href="'.e(AppointmentResource::toConfirmUrl(today(), today()->addDay())).'"');
         Livewire::test(TodayAppointments::class)->assertSee(['Rosa Prueba', 'Luis Prueba'])->assertDontSee('Carmen Prueba');
 
         Livewire::test(ListAppointments::class, ['activeTab' => 'pending'])
             ->assertCanSeeTableRecords([$today, $tomorrow, $later])
-            ->filterTable('soon')
+            ->filterTable('dates', ['from' => '2026-11-02', 'until' => '2026-11-03'])
             ->assertCanSeeTableRecords([$today, $tomorrow])
             ->assertCanNotSeeTableRecords([$later]);
     }
@@ -651,7 +651,7 @@ class DashboardPanelTest extends TestCase
 
         // Mientras sigan abiertas no se cobra lo atendido: su número va pintado, como lo demás que no puede esperar.
         Livewire::test(FollowUpsToday::class)
-            ->assertSee(['Citas sin cerrar', 'De días pasados: marca si vino o si no asistió'])
+            ->assertSee(['Citas sin cerrar', 'Ya pasó su hora: marca si vino o si no asistió'])
             ->assertSeeHtmlInOrder(['Citas sin cerrar', '<span class="dash-count is-warning">2</span>']);
 
         Livewire::test(ListAppointments::class, ['activeTab' => 'unclosed'])

@@ -4,8 +4,8 @@ namespace Tests\Feature\Filament;
 
 use App\Enums\AppointmentStatus;
 use App\Enums\TreatmentPlanStatus;
+use App\Filament\Pages\Agenda;
 use App\Filament\Resources\Appointments\AppointmentResource;
-use App\Filament\Resources\Appointments\Pages\CreateAppointment;
 use App\Filament\Resources\Appointments\Pages\ViewAppointment;
 use App\Filament\Resources\Consultations\ConsultationResource;
 use App\Filament\Resources\Consultations\Pages\EditConsultation;
@@ -170,16 +170,15 @@ class AttentionFollowsScheduleTest extends TestCase
         Appointment::factory()->for($patient)->for($this->doctor)->for($resin)->at('2026-11-05 10:00')->confirmed()->create(['treatment_plan_item_id' => $booked->id]);
 
         // La resina ya tiene cita: lo siguiente por agendar es la extracción.
-        $url = AppointmentResource::nextVisitUrl($patient, $this->doctor->id);
-        $this->assertStringContainsString('plan_item='.$next->id, $url);
-        $this->assertStringContainsString('treatment='.$extraction->id, $url);
+        parse_str((string) parse_url(AppointmentResource::nextVisitUrl($patient, $this->doctor->id), PHP_URL_QUERY), $query);
+        $this->assertSame('createAppointment', $query['action']);
+        $this->assertEquals(['patient' => $patient->id, 'doctor' => $this->doctor->id, 'treatment' => $extraction->id, 'plan_item' => $next->id], $query['actionArguments']);
 
         $this->actingAs($this->doctor->user);
-        parse_str((string) parse_url($url, PHP_URL_QUERY), $query);
 
-        Livewire::withQueryParams($query)
-            ->test(CreateAppointment::class)
-            ->assertSchemaStateSet(['patient_id' => $patient->id, 'treatment_plan_item_id' => $next->id, 'treatment_id' => $extraction->id]);
+        Livewire::test(Agenda::class)
+            ->mountAction('createAppointment', $query['actionArguments'])
+            ->assertActionDataSet(['patient_id' => $patient->id, 'treatment_plan_item_id' => $next->id, 'treatment_id' => $extraction->id]);
     }
 
     public function test_consultations_from_before_keep_what_was_charged(): void

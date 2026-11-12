@@ -133,6 +133,7 @@
 .agenda-legend span { display: inline-flex; align-items: center; gap: .4rem; }
 .agenda-legend i { width: .625rem; height: .625rem; flex: none; border-radius: .1875rem; background: var(--c-accent); }
 .agenda-legend .s-block i { background: repeating-linear-gradient(135deg, var(--gray-400) 0 1px, var(--ag-off) 1px 3px); box-shadow: inset 0 0 0 1px var(--gray-300); }
+.agenda-legend .s-dot i { width: .5rem; height: .5rem; border-radius: 9999px; background: var(--danger-600); }
 .dark .agenda-legend { color: var(--gray-400); }
 .dark .agenda-legend .s-block i { background: repeating-linear-gradient(135deg, var(--gray-500) 0 1px, var(--gray-800) 1px 3px); box-shadow: none; }
 .agenda-help { font-size: .875rem; color: var(--gray-600); }
@@ -460,7 +461,9 @@ button.agenda-slot:focus-visible { outline: 2px solid var(--primary-600); outlin
 .agenda-wait li { display: flex; align-items: center; gap: .75rem; }
 .agenda-wait-who { display: grid; flex: 1 1 auto; min-width: 0; line-height: 1.3; }
 .agenda-wait-who b { overflow: hidden; font-size: .875rem; font-weight: 600; color: var(--gray-950); white-space: nowrap; text-overflow: ellipsis; }
-.agenda-wait-who small { overflow: hidden; font-size: .75rem; color: var(--gray-500); white-space: nowrap; text-overflow: ellipsis; }
+/* El detalle (tratamiento y cuándo le acomoda) baja de línea en vez de cortarse, y el botón no se parte en dos. */
+.agenda-wait-who small { font-size: .75rem; color: var(--gray-500); }
+.agenda-wait li > :not(.agenda-wait-who) { flex: none; white-space: nowrap; }
 .dark .agenda-wait-who b { color: #fff; }
 
 /* ---------- Agenda: el día en lista (celular) ---------- */

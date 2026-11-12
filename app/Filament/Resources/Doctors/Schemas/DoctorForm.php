@@ -228,7 +228,7 @@ class DoctorForm
                             ->dehydratedWhenHidden(),
                     ]),
                 Section::make('Horario de atención')
-                    ->description('Puedes poner varios tramos por día (por ejemplo, mañana y tarde). Almuerzos, cursos y vacaciones van en "Bloqueos de horario".')
+                    ->description('Puedes poner varios tramos por día (por ejemplo, mañana y tarde): el almuerzo es el espacio entre uno y otro. Cursos, vacaciones y feriados van en "Bloqueos de horario".')
                     ->schema([
                         Repeater::make('schedules')
                             ->hiddenLabel()

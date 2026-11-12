@@ -143,11 +143,27 @@ class Appointment extends Model
         return $query->where('starts_at', '>=', today())->where('starts_at', '<', today()->addDays(2));
     }
 
-    /** Citas de días pasados que nadie cerró: no se marcó si vino, si se atendió o si faltó. */
+    /**
+     * "Sin cerrar", con una sola regla para todo el panel: ya pasó su hora y nadie marcó si vino o si faltó, o
+     * llegó otro día y su atención nunca se cerró. La de hoy que está en sala o en consulta no cuenta: sigue su curso.
+     */
     #[Scope]
-    protected function leftOpen(Builder $query): Builder
+    protected function unclosed(Builder $query): Builder
     {
-        return $query->where('starts_at', '<', today())->whereIn('status', AppointmentStatus::open());
+        return $query->where(fn (Builder $open) => $open
+            ->where(fn (Builder $unmarked) => $unmarked
+                ->whereIn('status', AppointmentStatus::changeable())
+                ->where('ends_at', '<', now()))
+            ->orWhere(fn (Builder $unfinished) => $unfinished
+                ->whereIn('status', [AppointmentStatus::CheckedIn, AppointmentStatus::InProgress])
+                ->where('starts_at', '<', today())));
+    }
+
+    /** "Por confirmar": citas por venir que el paciente todavía no confirma. */
+    #[Scope]
+    protected function awaitingConfirmation(Builder $query): Builder
+    {
+        return $query->where('status', AppointmentStatus::Pending)->where('starts_at', '>=', now());
     }
 
     /**
@@ -208,16 +224,16 @@ class Appointment extends Model
         return $this->starts_at->lt(today());
     }
 
-    /** Como en "leftOpen": de un día pasado y nadie la cerró. */
+    /** De un día pasado y nadie la cerró: lo que se marque ahora queda con la fecha de ese día. */
     public function isLeftOpen(): bool
     {
         return $this->isFromAnEarlierDay() && in_array($this->status, AppointmentStatus::open(), true);
     }
 
-    /** Ya pasó su hora de término y nadie marcó si vino y se atendió, o si faltó. */
-    public function isPastAndOpen(): bool
+    /** Como en "unclosed": ya pasó su hora sin que nadie marcara si vino, o llegó otro día y no se cerró su atención. */
+    public function isUnclosed(): bool
     {
-        return $this->ends_at->isPast() && in_array($this->status, AppointmentStatus::open(), true);
+        return $this->endedWithoutArriving() || $this->isLeftOpen();
     }
 
     /** Minutos que lleva en sala desde que llegó; null si no está esperando. */

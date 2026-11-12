@@ -11,7 +11,6 @@ use App\Enums\RescheduleRequestStatus;
 use App\Enums\TreatmentPlanStatus;
 use App\Filament\Pages\Agenda;
 use App\Filament\Resources\Appointments\AppointmentResource;
-use App\Filament\Resources\Appointments\Pages\CreateAppointment;
 use App\Filament\Resources\Appointments\Pages\ViewAppointment;
 use App\Filament\Resources\Consultations\ConsultationResource;
 use App\Filament\Resources\Consultations\Pages\EditConsultation;
@@ -36,6 +35,7 @@ use App\Services\Dashboard\FollowUps;
 use App\Services\Patients\PatientInsights;
 use App\Services\WhatsApp\WhatsAppOutbox;
 use Filament\Actions\Testing\TestAction;
+use Filament\Forms\Components\ToggleButtons;
 use Illuminate\Foundation\Testing\LazilyRefreshDatabase;
 use Livewire\Livewire;
 use Tests\Concerns\CreatesAgenda;
@@ -68,7 +68,7 @@ class PatientNextStepTest extends TestCase
         $this->get(PatientResource::getUrl('view', ['record' => $rosa]))
             ->assertOk()
             ->assertSeeInOrder(['Siguiente paso', 'Agendar: Endodoncia', 'Sesión 1 de 2 · de su plan con '.$doctor->name])
-            ->assertSee(AppointmentResource::getUrl('create', ['patient' => $rosa->id, 'doctor' => $doctor->id, 'plan_item' => $item->id, 'treatment' => $endo->id]))
+            ->assertSee(AppointmentResource::newUrl(['patient' => $rosa->id, 'doctor' => $doctor->id, 'plan_item' => $item->id, 'treatment' => $endo->id]))
             ->assertDontSee(['Continuar la atención', 'pieza 46']);
 
         // Con la siguiente sesión ya agendada no hay nada que agendar.
@@ -302,25 +302,27 @@ class PatientNextStepTest extends TestCase
 
         $this->actingAs(User::factory()->reception()->create());
 
-        $form = Livewire::test(CreateAppointment::class)
-            ->fillForm(['treatment_id' => $cleaning->id, 'doctor_id' => $doctor->id])
-            ->fillForm(['patient_id' => $patient->id])
-            ->assertSchemaStateSet(['date' => '2026-11-04'])
-            ->assertSee('Suele venir los miércoles en la tarde: esos horarios van primero.');
+        Livewire::test(Agenda::class)
+            ->mountAction('createAppointment')
+            ->setActionData(['treatment_id' => $cleaning->id, 'doctor_id' => $doctor->id])
+            ->setActionData(['patient_id' => $patient->id])
+            ->assertActionDataSet(['date' => '2026-11-04'])
+            ->assertMountedActionModalSee('Suele venir los miércoles en la tarde: esos horarios van primero.')
+            ->assertSchemaComponentExists('slot', checkComponentUsing: function (ToggleButtons $slot): bool {
+                $slots = array_keys($slot->getOptions());
 
-        $slots = array_keys($form->instance()->form->getComponent('slot')->getOptions());
-        $this->assertSame('15:00', $slots[0]);
-        $this->assertContains('09:00', $slots);
+                return $slots[0] === '15:00' && in_array('09:00', $slots, true);
+            });
 
         // Desde la ficha, con el paciente en el enlace, el día ya viene elegido.
-        Livewire::withQueryParams(['patient' => $patient->id])
-            ->test(CreateAppointment::class)
-            ->assertSchemaStateSet(['date' => '2026-11-04']);
+        Livewire::test(Agenda::class)
+            ->mountAction('createAppointment', ['patient' => $patient->id])
+            ->assertActionDataSet(['patient_id' => $patient->id, 'date' => '2026-11-04']);
 
-        // Si el día se eligió en la agenda, se respeta.
-        Livewire::withQueryParams(['date' => '2026-11-06', 'doctor' => $doctor->id])
-            ->test(CreateAppointment::class)
-            ->fillForm(['patient_id' => $patient->id])
-            ->assertSchemaStateSet(['date' => '2026-11-06']);
+        // Si se pidió otro día (se miraba ese en la agenda, o lo trae el enlace), se respeta.
+        Livewire::test(Agenda::class)
+            ->mountAction('createAppointment', ['date' => '2026-11-06', 'doctor' => $doctor->id])
+            ->setActionData(['patient_id' => $patient->id])
+            ->assertActionDataSet(['date' => '2026-11-06']);
     }
 }

@@ -44,7 +44,7 @@ class AppointmentInfolist
             ->components([
                 // Lo mismo que bajo el nombre en su ficha: el siguiente paso, saldo, próxima cita, control y cómo escribirle.
                 View::make('filament.patients.summary')
-                    ->viewData(fn (Appointment $record, $livewire) => PatientSummary::viewData($record->patient, auth()->user(), $livewire))
+                    ->viewData(fn (Appointment $record, $livewire) => PatientSummary::viewData($record->patient, auth()->user(), $livewire, withWhatsapp: false))
                     ->columnSpanFull(),
                 // Dos columnas que crecen cada una por su lado: una tarjeta alta al costado no abre un hueco en la otra.
                 Group::make([
@@ -294,15 +294,19 @@ class AppointmentInfolist
             'current' => $current,
         ];
 
+        $rows = [
+            ...$after->reverse()->map(fn (Appointment $visit) => $row($visit))->values()->all(),
+            $row($appointment, current: true),
+            ...$before->map(fn (Appointment $visit) => $row($visit))->all(),
+        ];
+        $total = $query()->count() + 1;
+
         return [
-            'rows' => [
-                ...$after->reverse()->map(fn (Appointment $visit) => $row($visit))->values()->all(),
-                $row($appointment, current: true),
-                ...$before->map(fn (Appointment $visit) => $row($visit))->all(),
-            ],
-            'total' => $query()->count() + 1,
-            'profile_url' => PatientResource::canView($patient) ? PatientResource::getUrl('view', ['record' => $patient]) : null,
-            'new_url' => AppointmentResource::canCreate() ? AppointmentResource::getUrl('create', ['patient' => $patient->getKey()]) : null,
+            'rows' => $rows,
+            'total' => $total,
+            // La ficha ya tiene su botón arriba: aquí solo se ofrece cuando guarda más citas de las que caben en la tarjeta.
+            'profile_url' => $total > count($rows) && PatientResource::canView($patient) ? PatientResource::getUrl('view', ['record' => $patient]) : null,
+            'new_url' => AppointmentResource::canCreate() ? AppointmentResource::newUrl(['patient' => $patient->getKey()]) : null,
         ];
     }
 

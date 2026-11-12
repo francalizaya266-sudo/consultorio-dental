@@ -284,7 +284,7 @@ class TreatmentPlansRelationManager extends RelationManager
             ->url(function (TreatmentPlan $record) {
                 $item = $record->items->first(fn (TreatmentPlanItem $item) => $item->isOpen());
 
-                return AppointmentResource::getUrl('create', array_filter([
+                return AppointmentResource::newUrl(array_filter([
                     'patient' => $record->patient_id,
                     'doctor' => $record->doctor_id,
                     'treatment' => $item?->treatment_id,

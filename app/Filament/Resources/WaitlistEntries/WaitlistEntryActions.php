@@ -167,7 +167,7 @@ final class WaitlistEntryActions
             ->visible(fn (WaitlistEntry $record) => $record->isActive())
             ->url(fn (WaitlistEntry $record) => $record->upcoming_appointment_id !== null
                 ? AppointmentResource::getUrl('view', ['record' => $record->upcoming_appointment_id])
-                : AppointmentResource::getUrl('create', array_filter([
+                : AppointmentResource::newUrl(array_filter([
                     'patient' => $record->patient_id,
                     'treatment' => $record->treatment_id,
                     'doctor' => $record->offered_doctor_id ?? $record->doctor_id,
