@@ -68,7 +68,7 @@ class DashboardPanelTest extends TestCase
         $this->actingAs(User::factory()->admin()->create());
         // Lo del mes va al final, después de todo lo del día.
         $this->assertSame([SystemHealth::class, TodayStats::class, TodayAppointments::class, WaitingRoom::class, FollowUpsToday::class, WeekGaps::class, MonthOverview::class], $this->visibleWidgets());
-        $this->get(Dashboard::getUrl())->assertOk()->assertSee(['Lunes 2 de noviembre', 'Nueva cita', 'Cobrar', 'Anotar en espera']);
+        $this->get(Dashboard::getUrl())->assertOk()->assertSee(['Lunes 2 de noviembre', 'Nueva cita', 'Llegó sin cita', 'Cobrar', 'Anotar en lista de espera']);
 
         // Quien administra y también atiende ve a quien lo espera en "Tu próximo paciente", no otra vez en la sala.
         $dentist = User::factory()->admin(isDentist: true)->create();
@@ -87,7 +87,7 @@ class DashboardPanelTest extends TestCase
         // El doctor ve su paciente; cómo va el mes, solo si el consultorio se lo permite.
         $this->actingAs($doctor->user);
         $this->assertSame([TodayStats::class, NextPatient::class, TodayAppointments::class], $this->visibleWidgets());
-        $this->get(Dashboard::getUrl())->assertOk()->assertDontSee(['Cobrar', 'Anotar en espera']);
+        $this->get(Dashboard::getUrl())->assertOk()->assertSee(['Nueva cita', 'Llegó sin cita'])->assertDontSee(['Cobrar', 'Anotar en lista de espera']);
         Livewire::test(TodayStats::class)
             ->assertSeeInOrder(['Citas de hoy', 'Por confirmar', 'Solicitudes de cambio', 'Avisos por enviar'])
             ->assertDontSee(['Cobrado hoy', 'Horas libres']);

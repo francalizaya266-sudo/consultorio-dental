@@ -7,6 +7,7 @@ use App\Enums\MessageStatus;
 use App\Enums\MessageTemplateKey;
 use App\Enums\WaitlistStatus;
 use App\Filament\Pages\Agenda;
+use App\Filament\Pages\Dashboard;
 use App\Filament\Resources\Appointments\AppointmentResource;
 use App\Filament\Resources\WaitlistEntries\Pages\ManageWaitlistEntries;
 use App\Filament\Resources\WaitlistEntries\WaitlistEntryResource;
@@ -76,6 +77,56 @@ class WaitlistPanelTest extends TestCase
         $this->assertSame(WaitlistStatus::Waiting, $entry->status);
         $this->assertSame(DayPeriod::Morning, $entry->preferred_period);
         $this->assertTrue($entry->createdBy->is($reception));
+    }
+
+    public function test_reception_adds_to_the_waitlist_from_home_without_leaving_it(): void
+    {
+        $reception = User::factory()->reception()->create();
+        $patient = Patient::factory()->create(['first_name' => 'Rosa', 'last_name' => 'Quispe']);
+        $this->actingAs($reception);
+
+        Livewire::test(Dashboard::class)
+            ->mountAction('waitlist')
+            ->assertMountedActionModalSee(['Anotar en lista de espera', 'Cuando se libere uno que le sirva, llega la alerta para ofrecérselo.'])
+            // Lo normal ya viene puesto: desde hoy y a cualquier hora.
+            ->assertActionDataSet(['earliest_date' => '2026-11-02', 'preferred_period' => DayPeriod::Any])
+            ->setActionData(['patient_id' => $patient->id, 'treatment_id' => $this->treatment->id])
+            ->callMountedAction()
+            ->assertHasNoActionErrors()
+            ->assertNotified('Rosa Quispe quedó en la lista de espera');
+
+        $entry = WaitlistEntry::sole();
+        $this->assertSame([WaitlistStatus::Waiting, $patient->id, $this->treatment->id, null], [$entry->status, $entry->patient_id, $entry->treatment_id, $entry->doctor_id]);
+        $this->assertTrue($entry->createdBy->is($reception));
+
+        // El doctor no maneja la lista: tampoco la anota desde su inicio.
+        $this->actingAs($this->doctor->user);
+        Livewire::test(Dashboard::class)->assertActionHidden('waitlist');
+    }
+
+    public function test_a_patient_is_not_added_twice_for_the_same_treatment(): void
+    {
+        $patient = Patient::factory()->create();
+        $other = Treatment::factory()->create(['name' => 'Curación con resina']);
+        $this->doctor->treatments()->attach($other);
+        $waiting = WaitlistEntry::factory()->for($patient)->for($this->treatment)->create();
+        // Lo que ya se agendó o se retiró no estorba: puede volver a anotarse.
+        WaitlistEntry::factory()->for($patient)->for($other)->removed()->create();
+        $this->actingAs(User::factory()->reception()->create());
+
+        Livewire::test(ManageWaitlistEntries::class)
+            ->callAction('create', ['patient_id' => $patient->id, 'treatment_id' => $this->treatment->id])
+            ->assertHasActionErrors(['treatment_id' => 'Ya está en la lista de espera para ese tratamiento. Si cambió lo que puede, edita esa anotación.']);
+
+        Livewire::test(ManageWaitlistEntries::class)
+            ->callAction('create', ['patient_id' => $patient->id, 'treatment_id' => $other->id])
+            ->assertHasNoActionErrors()
+            // Editar la anotación que ya tiene no choca consigo misma.
+            ->callTableAction('edit', $waiting, ['notes' => 'Solo puede sábados'])
+            ->assertHasNoTableActionErrors();
+
+        $this->assertSame(2, WaitlistEntry::query()->active()->count());
+        $this->assertSame('Solo puede sábados', $waiting->refresh()->notes);
     }
 
     public function test_the_lists_split_who_is_waiting_from_who_was_booked_or_left(): void

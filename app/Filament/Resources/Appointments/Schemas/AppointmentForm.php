@@ -3,9 +3,11 @@
 namespace App\Filament\Resources\Appointments\Schemas;
 
 use App\Enums\AppointmentOrigin;
+use App\Enums\AppointmentStatus;
 use App\Enums\DocumentType;
 use App\Enums\PatientRelationship;
 use App\Enums\PlanPaymentMode;
+use App\Filament\Resources\Appointments\AppointmentResource;
 use App\Filament\Resources\Patients\Schemas\PatientForm;
 use App\Filament\Support\SlotPicker;
 use App\Models\Patient;
@@ -53,10 +55,11 @@ class AppointmentForm
 
     /**
      * Quién viene: uno registrado o uno nuevo que se registra ahí mismo, con su sesión del plan si la tiene.
+     * Si ya tiene una cita por delante, se dice bajo su nombre: así no se le agenda dos veces lo mismo.
      *
-     * @param  bool  $followUsualDay  Al elegirlo, proponer el próximo día en que suele venir (no aplica si la cita es para hoy).
+     * @param  bool  $forToday  La cita es para hoy ("Llegó sin cita"): no se propone el día en que suele venir, y su cita de hoy la muestra esa ventana.
      */
-    public static function patientSection(bool $followUsualDay = true): Section
+    public static function patientSection(bool $forToday = false): Section
     {
         return Section::make('Paciente')
             ->schema([
@@ -67,12 +70,13 @@ class AppointmentForm
                 self::patientSelect()
                     ->hidden(fn (Get $get) => (bool) $get('new_patient'))
                     ->required(fn (Get $get) => ! $get('new_patient'))
+                    ->helperText(fn (Get $get) => self::upcomingAppointmentHint($get('patient_id'), afterToday: $forToday))
                     ->live()
-                    ->afterStateUpdated(function (Set $set, Get $get) use ($followUsualDay) {
+                    ->afterStateUpdated(function (Set $set, Get $get) use ($forToday) {
                         $set('treatment_plan_item_id', null);
 
                         // Si suele venir un mismo día, se propone el próximo, con sus horarios de siempre primero.
-                        if ($followUsualDay) {
+                        if (! $forToday) {
                             SlotPicker::followUsualDay($get, $set);
                         }
                     }),
@@ -89,6 +93,38 @@ class AppointmentForm
                     ->options(AppointmentOrigin::class)
                     ->visible(fn (Get $get) => self::isFirstTime($get)),
             ]);
+    }
+
+    /**
+     * "Ya tiene cita mañana a las 10:00 · Limpieza dental." La próxima que le falta, entre las que quien mira
+     * puede ver (el doctor, solo las de su agenda).
+     *
+     * @param  bool  $afterToday  Sin contar las de hoy.
+     */
+    private static function upcomingAppointmentHint(mixed $patientId, bool $afterToday): ?string
+    {
+        if (blank($patientId)) {
+            return null;
+        }
+
+        $next = AppointmentResource::getEloquentQuery()
+            ->where('patient_id', $patientId)
+            ->where('starts_at', '>=', $afterToday ? today()->addDay() : today())
+            ->whereIn('status', AppointmentStatus::changeable())
+            ->orderBy('starts_at')
+            ->first();
+
+        if (! $next) {
+            return null;
+        }
+
+        $day = match (true) {
+            $next->starts_at->isToday() => 'hoy',
+            $next->starts_at->isTomorrow() => 'mañana',
+            default => 'el '.$next->starts_at->translatedFormat('D j M'),
+        };
+
+        return 'Ya tiene cita '.$day.' a las '.$next->starts_at->format('H:i').' · '.$next->treatment->name.'.';
     }
 
     /** Paciente nuevo, o uno registrado que nunca vino y del que no se sabe cómo llegó. */

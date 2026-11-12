@@ -6,7 +6,7 @@ use App\Filament\Actions\CreateAppointmentAction;
 use App\Filament\Actions\RegisterPaymentAction;
 use App\Filament\Actions\WalkInAction;
 use App\Filament\Resources\Appointments\AppointmentResource;
-use App\Filament\Resources\WaitlistEntries\WaitlistEntryResource;
+use App\Filament\Resources\WaitlistEntries\WaitlistEntryActions;
 use App\Filament\Widgets\DayMomentCard;
 use App\Filament\Widgets\FollowUpsToday;
 use App\Filament\Widgets\MonthOverview;
@@ -16,7 +16,6 @@ use App\Filament\Widgets\TodayAppointments;
 use App\Filament\Widgets\TodayStats;
 use App\Filament\Widgets\WaitingRoom;
 use App\Filament\Widgets\WeekGaps;
-use Filament\Actions\Action;
 use Filament\Pages\Dashboard as BaseDashboard;
 use Filament\Schemas\Components\Grid;
 use Filament\Schemas\Components\Group;
@@ -85,21 +84,28 @@ class Dashboard extends BaseDashboard
         ]);
     }
 
-    /** Lo que más se hace al llegar alguien, a un clic desde el inicio. */
+    /**
+     * Lo que más se hace al llegar o llamar alguien, a un clic desde el inicio y sin salir de él. Al pasar el
+     * mouse, cada botón dice para qué es: "Llegó sin cita" lo pasa a la sala de hoy; la lista de espera es para
+     * quien quiere un horario que todavía no hay.
+     */
     protected function getHeaderActions(): array
     {
         return [
             CreateAppointmentAction::make('newAppointment')
+                ->tooltip('Agenda una cita para hoy o para otro día. El aviso al paciente queda listo en Avisos.')
                 ->visible(fn () => AppointmentResource::canCreate()),
             WalkInAction::make()
+                ->tooltip('Está en el mostrador y no tiene cita: se le da el primer hueco de hoy y pasa a la sala de espera.')
                 ->visible(fn () => AppointmentResource::canCreate()),
-            RegisterPaymentAction::make()->color('gray'),
-            Action::make('waitlist')
-                ->label('Anotar en espera')
+            RegisterPaymentAction::make()
+                ->color('gray')
+                ->tooltip('Registra el pago de cualquier paciente, aunque hoy no tenga cita, y deja lista su constancia.'),
+            WaitlistEntryActions::add('waitlist')
+                ->label('Anotar en lista de espera')
                 ->icon(Heroicon::OutlinedQueueList)
                 ->color('gray')
-                ->url(fn () => WaitlistEntryResource::getUrl('index', ['action' => 'create']))
-                ->visible(fn () => WaitlistEntryResource::canCreate()),
+                ->tooltip('Quiere un horario antes o un día que está lleno: te llega la alerta cuando se libere uno que le sirva.'),
         ];
     }
 }

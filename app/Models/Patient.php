@@ -247,6 +247,15 @@ class Patient extends Model
         return $query->whereRaw(self::balanceSql().' > 0');
     }
 
+    /** Se atendieron hoy y todavía deben: a quienes toca cobrarles antes de que se vayan. */
+    #[Scope]
+    protected function owingAfterTodaysVisit(Builder $query): Builder
+    {
+        return $query
+            ->owing()
+            ->whereHas('appointments', fn (Builder $visits) => $visits->whereDate('starts_at', today())->where('status', AppointmentStatus::Completed));
+    }
+
     /** Pacientes que no deben nada (al día, o con saldo a favor). */
     #[Scope]
     protected function upToDate(Builder $query): Builder

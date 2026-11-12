@@ -2,6 +2,7 @@
 
 namespace App\Filament\Resources\WaitlistEntries;
 
+use App\Enums\WaitlistStatus;
 use App\Filament\Resources\Appointments\AppointmentResource;
 use App\Models\Doctor;
 use App\Models\Treatment;
@@ -11,19 +12,46 @@ use App\Services\Booking\WaitlistService;
 use App\Services\WhatsApp\WhatsAppOutbox;
 use Carbon\CarbonImmutable;
 use Filament\Actions\Action;
+use Filament\Actions\CreateAction;
 use Filament\Forms\Components\DatePicker;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\Textarea;
 use Filament\Notifications\Notification;
 use Filament\Schemas\Components\Utilities\Get;
 use Filament\Schemas\Components\Utilities\Set;
+use Filament\Schemas\Schema;
 use Filament\Support\Enums\Width;
 use Filament\Support\Icons\Heroicon;
 use Livewire\Component;
 
-/** Ofrecerle un horario por WhatsApp (queda apartado mientras responde), agendarlo cuando dice que sí, liberarlo o retirarlo de la lista. */
+/** Anotarlo en la lista, ofrecerle un horario por WhatsApp (queda apartado mientras responde), agendarlo cuando dice que sí, liberarlo o retirarlo. */
 final class WaitlistEntryActions
 {
+    /**
+     * Anotar a alguien en la lista: la misma ventana en la lista de espera y en "Hoy", sin salir de donde se está.
+     * El aviso dice qué pasa después, porque quien anota no vuelve a mirar la lista hasta que se libera un horario.
+     */
+    public static function add(string $name = 'create'): CreateAction
+    {
+        return CreateAction::make($name)
+            ->model(WaitlistEntry::class)
+            ->label('Anotar paciente')
+            ->visible(fn () => auth()->user()->can('create', WaitlistEntry::class))
+            ->modalHeading('Anotar en lista de espera')
+            ->modalDescription('Para quien quiere un horario antes o un día que hoy está lleno. Cuando se libere uno que le sirva, llega la alerta para ofrecérselo.')
+            ->modalSubmitActionLabel('Anotar')
+            ->modalWidth(Width::ThreeExtraLarge)
+            ->schema(fn (Schema $schema) => WaitlistEntryResource::form($schema))
+            ->createAnother(false)
+            ->mutateDataUsing(fn (array $data) => $data + [
+                'status' => WaitlistStatus::Waiting,
+                'created_by_user_id' => auth()->id(),
+            ])
+            ->successNotification(fn (Notification $notification, WaitlistEntry $record) => $notification
+                ->title($record->patient->full_name.' quedó en la lista de espera')
+                ->body('Cuando se libere un horario que le sirva, llegará la alerta para ofrecérselo.'));
+    }
+
     /**
      * Llega con el primer horario libre que le sirve (o con el que se tocó en la agenda). Al cambiar el doctor, el día o la hora, el
      * mensaje se vuelve a escribir; al abrir WhatsApp queda como avisado con ese horario.

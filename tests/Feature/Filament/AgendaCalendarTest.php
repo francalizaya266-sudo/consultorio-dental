@@ -404,6 +404,34 @@ class AgendaCalendarTest extends TestCase
             ->assertActionDataSet(['date' => '2026-11-05', 'doctor_id' => $doctor->id]);
     }
 
+    public function test_new_appointment_says_when_the_patient_already_has_one_coming(): void
+    {
+        $this->freezeMonday();
+        $treatment = Treatment::factory()->create(['name' => 'Limpieza dental']);
+        $doctor = $this->doctorOffering($treatment);
+        $other = $this->doctorOffering($treatment);
+        $patient = Patient::factory()->create();
+        Appointment::factory()->for($doctor)->for($treatment)->for($patient)->at('2026-11-02 16:00')->cancelled()->create();
+        Appointment::factory()->for($doctor)->for($treatment)->for($patient)->at('2026-11-03 10:00')->confirmed()->create();
+
+        $this->actingAs(User::factory()->reception()->create());
+
+        // Para no agendarle dos veces lo mismo: bajo su nombre sale la cita que le falta (la cancelada no cuenta).
+        Livewire::test(Agenda::class)
+            ->mountAction('newAppointment')
+            ->assertMountedActionModalDontSee('Ya tiene cita')
+            ->setActionData(['patient_id' => $patient->id])
+            ->assertMountedActionModalSee('Ya tiene cita mañana a las 10:00 · Limpieza dental.');
+
+        // El doctor solo se entera de las de su propia agenda.
+        $this->actingAs($other->user);
+
+        Livewire::test(Agenda::class)
+            ->mountAction('newAppointment')
+            ->setActionData(['patient_id' => $patient->id])
+            ->assertMountedActionModalDontSee('Ya tiene cita');
+    }
+
     public function test_with_a_single_doctor_the_doctor_is_already_chosen(): void
     {
         $this->freezeMonday();
