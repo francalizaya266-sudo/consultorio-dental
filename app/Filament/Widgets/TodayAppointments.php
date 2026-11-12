@@ -4,13 +4,16 @@ namespace App\Filament\Widgets;
 
 use App\Enums\AppointmentStatus;
 use App\Filament\Actions\AppointmentActions;
+use App\Filament\Pages\Dashboard;
 use App\Filament\Resources\Appointments\AppointmentResource;
 use App\Filament\Resources\Appointments\Tables\AppointmentsTable;
+use App\Filament\Widgets\Concerns\RefreshesWithToday;
 use App\Models\Appointment;
 use App\Models\Charge;
 use App\Models\User;
 use App\Support\Dates;
 use App\Support\Phone;
+use Filament\Actions\Action;
 use Filament\Support\Enums\FontWeight;
 use Filament\Support\Enums\TextSize;
 use Filament\Tables\Columns\Layout\Split;
@@ -27,6 +30,8 @@ use Filament\Widgets\TableWidget;
  */
 class TodayAppointments extends TableWidget
 {
+    use RefreshesWithToday;
+
     /** Desde aquí la espera se marca en rojo: alguien tiene que ver qué pasa. */
     public const LONG_WAIT_MINUTES = 20;
 
@@ -107,6 +112,12 @@ class TodayAppointments extends TableWidget
             ->emptyStateHeading('No hay citas hoy')
             ->emptyStateDescription('Las citas de hoy aparecen aquí en orden, con el botón del paso que sigue.')
             ->emptyStateIcon('heroicon-o-calendar');
+    }
+
+    /** Llegó, pasó a consulta, se confirmó o se cobró: la sala, los números y lo que toca cambian con la fila. */
+    protected function afterActionCalled(Action $action): void
+    {
+        $this->dispatch(Dashboard::CHANGED);
     }
 
     private function nextId(): ?int

@@ -11,8 +11,10 @@ use App\Models\Patient;
 use App\Models\Payment;
 use App\Models\User;
 use App\Services\Billing\BillingService;
+use App\Services\Billing\CashClosing;
 use App\Services\Patients\PatientInsights;
 use App\Support\Money;
+use Carbon\CarbonImmutable;
 use Closure;
 use Filament\Actions\Action;
 use Filament\Facades\Filament;
@@ -64,8 +66,8 @@ final class RegisterPaymentAction
                     ->placeholder('Busca por nombre, DNI o celular')
                     ->searchable()
                     ->required()
-                    // Antes de escribir, quienes se atendieron hoy y deben: son a quienes más se les cobra desde aquí.
-                    ->options(fn () => self::owingAfterTodaysVisit())
+                    // Antes de escribir, a quienes se les cargó algo hoy y no lo pagaron: son a quienes más se les cobra desde aquí.
+                    ->options(fn () => self::owingFromToday())
                     ->getSearchResultsUsing(fn (string $search) => Patient::query()
                         ->search($search)
                         ->with('account')
@@ -189,20 +191,16 @@ final class RegisterPaymentAction
     }
 
     /**
-     * "Olivia Arenas · debe S/ 120.00": los mismos que cuenta "Cobrado hoy" en el inicio.
+     * "Olivia Arenas · debe S/ 120.00": los mismos que cuentan "Cobrado hoy" en el inicio y el cierre del día,
+     * primero quien más debe de lo de hoy. Lo que dice es todo su saldo, que es lo que se propone cobrar.
      *
      * @return array<int, string>
      */
-    private static function owingAfterTodaysVisit(): array
+    private static function owingFromToday(): array
     {
-        return Patient::query()
-            ->owingAfterTodaysVisit()
-            ->withBalance()
-            ->orderBy('first_name')
-            ->orderBy('last_name')
-            ->limit(20)
-            ->get()
-            ->mapWithKeys(fn (Patient $owing) => [$owing->getKey() => $owing->full_name.' · debe '.Money::format((float) $owing->balance_due)])
+        return (new CashClosing(CarbonImmutable::today()))->pending()
+            ->take(20)
+            ->mapWithKeys(fn (array $line) => [$line['patient']->getKey() => $line['patient']->full_name.' · debe '.Money::format((float) $line['patient']->balance_due)])
             ->all();
     }
 

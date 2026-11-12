@@ -9,6 +9,7 @@ use App\Filament\Resources\Consultations\ConsultationResource;
 use App\Filament\Resources\Patients\PatientResource;
 use App\Filament\Support\ClinicalAlerts;
 use App\Filament\Support\VisitFlags;
+use App\Filament\Widgets\Concerns\RefreshesWithToday;
 use App\Models\Appointment;
 use App\Models\Consultation;
 use App\Models\User;
@@ -30,6 +31,7 @@ class NextPatient extends Widget implements HasActions, HasSchemas
 {
     use InteractsWithActions;
     use InteractsWithSchemas;
+    use RefreshesWithToday;
 
     /** Tu próximo paciente se ve apenas abre "Hoy", sin un recuadro vacío mientras carga. */
     protected static bool $isLazy = false;
@@ -53,10 +55,10 @@ class NextPatient extends Widget implements HasActions, HasSchemas
             ->record(fn (array $arguments) => AppointmentResource::getEloquentQuery()->find($arguments['appointment'] ?? null));
     }
 
-    /** @return array<string, mixed> */
     /** Las atenciones abiertas que se ven en Hoy; el resto queda a un clic en Atenciones. */
     private const OPEN_SHOWN = 3;
 
+    /** @return array<string, mixed> */
     protected function getViewData(): array
     {
         /** @var User $user */
@@ -81,6 +83,8 @@ class NextPatient extends Widget implements HasActions, HasSchemas
                         $consultation->appointment?->treatment?->name,
                         'abierta '.($since->isToday() ? 'hoy a las '.$since->format('H:i') : $since->diffForHumans()),
                     ])->filter()->implode(' · '),
+                    // De otro día: mientras siga abierta no se cobra ni avanza el plan.
+                    'late' => ! $since->isToday(),
                     'url' => ConsultationResource::urlFor($consultation),
                 ];
             })->all(),
@@ -124,6 +128,8 @@ class NextPatient extends Widget implements HasActions, HasSchemas
             'consentMissing' => app(ConsentService::class)->signedForVisit($appointment) === false,
             'last' => $last ? $last->treatment->name.' · '.$last->starts_at->translatedFormat('j M Y') : null,
             'notes' => $appointment->patient_note,
+            // Lo que recepción (o el mismo doctor) anotó al agendar: "viene con dolor", "trae su radiografía".
+            'internalNotes' => $appointment->internal_notes,
             'historyUrl' => PatientResource::getUrl('clinical', ['record' => $patient]),
         ];
     }

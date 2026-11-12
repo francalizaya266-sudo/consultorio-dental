@@ -16,6 +16,7 @@ use App\Filament\Resources\RescheduleRequests\RescheduleRequestResource;
 use App\Filament\Resources\Supplies\SupplyResource;
 use App\Filament\Resources\TreatmentPlans\TreatmentPlanResource;
 use App\Filament\Resources\WhatsappMessages\WhatsappMessageResource;
+use App\Filament\Widgets\Concerns\RefreshesWithToday;
 use App\Models\Appointment;
 use App\Models\DeskNote;
 use App\Models\LabOrder;
@@ -56,6 +57,7 @@ class FollowUpsToday extends Widget implements HasActions, HasSchemas
 {
     use InteractsWithActions;
     use InteractsWithSchemas;
+    use RefreshesWithToday;
 
     /** Mientras carga, un recuadro del mismo alto: la página no salta. */
     protected ?string $placeholderHeight = '24rem';

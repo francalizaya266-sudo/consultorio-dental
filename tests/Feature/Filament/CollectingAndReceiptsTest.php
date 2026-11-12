@@ -5,8 +5,11 @@ namespace Tests\Feature\Filament;
 use App\Enums\AppointmentStatus;
 use App\Enums\MessageStatus;
 use App\Enums\PaymentMethod;
+use App\Filament\Pages\CashClosing;
 use App\Filament\Pages\Dashboard;
 use App\Filament\Resources\Payments\Pages\ManagePayments;
+use App\Filament\Widgets\CashClosingCheck;
+use App\Filament\Widgets\TodayStats;
 use App\Models\Account;
 use App\Models\Appointment;
 use App\Models\Charge;
@@ -53,7 +56,7 @@ class CollectingAndReceiptsTest extends TestCase
         $this->assertSame(90.0, $patient->balance());
     }
 
-    public function test_collecting_offers_first_who_was_seen_today_and_still_owes(): void
+    public function test_collecting_offers_first_who_was_charged_today_and_still_owes(): void
     {
         $this->freezeMonday();
         $treatment = Treatment::factory()->create(['name' => 'Limpieza dental']);
@@ -62,23 +65,37 @@ class CollectingAndReceiptsTest extends TestCase
         $owes = Patient::factory()->create(['first_name' => 'Olivia', 'last_name' => 'Arenas']);
         $seen($owes, '2026-11-02 08:00');
         Charge::factory()->for($owes)->create(['amount' => 120]);
-        // Quien se atendió hoy y ya pagó, y quien debe pero no vino hoy, no salen: a esos se les busca por nombre.
+        // Una urgencia sin cita también se cobra hoy: sale igual, después de quien más debe.
+        $urgency = Patient::factory()->create(['first_name' => 'Luis', 'last_name' => 'Mamani']);
+        Charge::factory()->for($urgency)->create(['amount' => 90]);
+        // Quien se atendió hoy y ya pagó, y quien debe de otro día, no salen: a esos se les busca por nombre.
         $paid = Patient::factory()->create(['first_name' => 'Pedro', 'last_name' => 'Huamán']);
         $seen($paid, '2026-11-02 07:00');
         Charge::factory()->for($paid)->create(['amount' => 80]);
         Payment::factory()->for($paid)->create(['amount' => 80]);
         $earlier = Patient::factory()->create(['first_name' => 'Rosa', 'last_name' => 'Quispe']);
         $seen($earlier, '2026-10-30 10:00');
-        Charge::factory()->for($earlier)->create(['amount' => 60]);
+        Charge::factory()->for($earlier)->create(['amount' => 60, 'charged_at' => '2026-10-30 10:40']);
         $this->actingAs(User::factory()->reception()->create());
 
         Livewire::test(Dashboard::class)
             ->mountAction('registerPayment')
-            ->assertFormFieldExists('patient_id', 'mountedActionSchema0', fn (Select $field) => $field->getOptions() === [$owes->id => 'Olivia Arenas · debe S/ 120.00'])
+            ->assertFormFieldExists('patient_id', 'mountedActionSchema0', fn (Select $field) => $field->getOptions() === [
+                $owes->id => 'Olivia Arenas · debe S/ 120.00',
+                $urgency->id => 'Luis Mamani · debe S/ 90.00',
+            ])
             // A los demás se les sigue encontrando al escribir.
             ->assertFormFieldExists('patient_id', 'mountedActionSchema0', fn (Select $field) => array_keys($field->getSearchResults('Quispe')) === [$earlier->id])
             ->setActionData(['patient_id' => $owes->id])
             ->assertActionDataSet(['amount' => 120.0]);
+
+        // Son los mismos que cuenta "Cobrado hoy" y lista el cierre del día, a donde lleva ese número.
+        Livewire::test(TodayStats::class)
+            ->assertSee('Falta cobrar S/ 210.00 a 2 pacientes')
+            ->assertSeeHtml('href="'.e(CashClosing::getUrl()).'"');
+        Livewire::test(CashClosingCheck::class)
+            ->assertSeeInOrder(['Se fueron debiendo', 'Olivia Arenas', 'S/ 120.00', 'Luis Mamani', 'S/ 90.00'])
+            ->assertDontSee(['Pedro Huamán', 'Rosa Quispe']);
     }
 
     public function test_the_receipt_says_what_was_paid_and_what_is_left(): void

@@ -34,6 +34,9 @@
                     @if (filled($next['notes']))
                         <div><dt>Dejó una nota</dt><dd>{{ $next['notes'] }}</dd></div>
                     @endif
+                    @if (filled($next['internalNotes']))
+                        <div><dt>Nota interna</dt><dd>{{ $next['internalNotes'] }}</dd></div>
+                    @endif
                     @if ($othersWaiting > 0)
                         <div><dt>En sala</dt><dd>{{ $othersWaiting === 1 ? '1 paciente más espera' : $othersWaiting.' pacientes más esperan' }}</dd></div>
                     @endif
@@ -55,7 +58,7 @@
                             <li>
                                 <div class="dash-row-text">
                                     <span class="dash-name">{{ $consultation['name'] }}</span>
-                                    <small>{{ $consultation['detail'] }}</small>
+                                    <small @class(['dash-late' => $consultation['late']])>{{ $consultation['detail'] }}</small>
                                 </div>
                                 <div class="dash-row-actions">
                                     <x-filament::link :href="$consultation['url']" icon="heroicon-m-pencil-square" size="sm">Continuar</x-filament::link>

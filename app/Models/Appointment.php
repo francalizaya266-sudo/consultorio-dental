@@ -136,6 +136,13 @@ class Appointment extends Model
         return $query->where('starts_at', '>=', now())->whereIn('status', AppointmentStatus::changeable());
     }
 
+    /** De hoy o de mañana: lo que no puede esperar a otro día (por ejemplo, confirmar la asistencia). */
+    #[Scope]
+    protected function todayOrTomorrow(Builder $query): Builder
+    {
+        return $query->where('starts_at', '>=', today())->where('starts_at', '<', today()->addDays(2));
+    }
+
     /** Citas de días pasados que nadie cerró: no se marcó si vino, si se atendió o si faltó. */
     #[Scope]
     protected function leftOpen(Builder $query): Builder

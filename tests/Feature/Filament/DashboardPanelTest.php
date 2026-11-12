@@ -10,6 +10,7 @@ use App\Enums\ScheduleBlockType;
 use App\Enums\TreatmentPlanStatus;
 use App\Filament\Pages\Dashboard;
 use App\Filament\Pages\Settings;
+use App\Filament\Resources\Appointments\AppointmentResource;
 use App\Filament\Resources\Appointments\Pages\ListAppointments;
 use App\Filament\Resources\Appointments\Pages\ViewAppointment;
 use App\Filament\Resources\Consultations\ConsultationResource;
@@ -128,11 +129,21 @@ class DashboardPanelTest extends TestCase
             ->callAction('missed', arguments: ['appointment' => $ana->id])
             ->assertNotified('Marcada como inasistencia')
             ->assertDontSee(['Citas sin cerrar', 'Ana Prueba'])
-            ->assertSeeInOrder(['Se fueron debiendo', 'Pedro Prueba', 'Falta el cierre de caja']);
+            ->assertSeeInOrder(['Se fueron debiendo', 'Pedro Prueba', 'Cobrar', 'Falta el cierre de caja']);
 
         $this->assertSame(AppointmentStatus::Completed, $pedro->refresh()->status);
         $this->assertSame(AppointmentStatus::NoShow, $ana->refresh()->status);
         $this->assertSame(120.0, $pedro->patient->balance());
+
+        // A quien se fue debiendo se le cobra ahí mismo, con el "Cobrar" del cierre del día.
+        Livewire::test(DayMomentCard::class)
+            ->mountAction('collect', ['patient' => $pedro->patient_id])
+            ->assertActionDataSet(['amount' => 120.0])
+            ->callMountedAction()
+            ->assertNotified('Pago registrado')
+            ->assertDispatched(Dashboard::CHANGED)
+            ->assertDontSee(['Se fueron debiendo', 'Pedro Prueba']);
+        $this->assertSame(0.0, $pedro->patient->balance());
     }
 
     public function test_who_stayed_checked_in_for_hours_is_no_longer_waiting(): void
@@ -169,7 +180,8 @@ class DashboardPanelTest extends TestCase
         $this->assertContains(DayMomentCard::class, $this->visibleWidgets());
         Livewire::test(DayMomentCard::class)
             ->assertSeeInOrder(['Antes de abrir', '1 cita de hoy sin confirmar', '10:00 · Rosa Quispe', 'Limpieza dental', 'Confirmar'])
-            ->assertDontSee(['Pedro', 'Para cerrar el día']);
+            // La cita completa y no solo "Pedro": el doctor de la prueba lleva un nombre al azar y puede llamarse igual.
+            ->assertDontSee(['16:00 · Pedro Huamán', 'Para cerrar el día']);
 
         // Durante el día mandan la agenda y la sala.
         $this->travelTo(CarbonImmutable::parse('2026-11-02 11:00', 'America/Lima'));
@@ -188,6 +200,75 @@ class DashboardPanelTest extends TestCase
         // El doctor no la ve: lo suyo es su próximo paciente.
         $this->actingAs($doctor->user);
         $this->assertNotContains(DayMomentCard::class, $this->visibleWidgets());
+    }
+
+    public function test_what_is_done_on_one_card_shows_on_the_others_at_once(): void
+    {
+        $treatment = Treatment::factory()->create(['name' => 'Limpieza dental', 'price_from' => 120]);
+        $doctor = $this->doctorOffering($treatment);
+        $rosa = Appointment::factory()->for($doctor)->for($treatment)->for($this->patient('Rosa', 'Quispe'))->at('2026-11-02 10:00')->create();
+        $this->actingAs(User::factory()->reception()->create());
+
+        // Las tarjetas ya están abiertas cuando recepción toca un botón en otra.
+        $stats = Livewire::test(TodayStats::class)->assertSee('Hoy y mañana · reenvía el aviso o llama');
+        $agenda = Livewire::test(TodayAppointments::class)->assertSee('Pendiente');
+        $room = Livewire::test(WaitingRoom::class)->assertSee('Nadie esperando');
+
+        // "Confirmar" en "Antes de abrir" avisa a las demás, que se vuelven a pintar sin esperar su recarga de 30 s.
+        Livewire::test(DayMomentCard::class)
+            ->callAction('confirm', arguments: ['appointment' => $rosa->id])
+            ->assertDispatched(Dashboard::CHANGED);
+        $stats->dispatch(Dashboard::CHANGED)->assertSee('Hoy y mañana, todo confirmado');
+        $agenda->dispatch(Dashboard::CHANGED)->assertSee('Confirmada')->assertDontSee('Pendiente');
+
+        // "Llegó" en la agenda: la sala de espera la muestra al momento.
+        $agenda->callTableAction('arrived', $rosa)->assertDispatched(Dashboard::CHANGED);
+        $room->dispatch(Dashboard::CHANGED)->assertSee('Rosa Quispe')->assertDontSee('Nadie esperando');
+
+        // Los botones de arriba también avisan: un cobro cambia "Cobrado hoy".
+        Charge::factory()->for($rosa->patient)->create(['amount' => 120]);
+        $stats->dispatch(Dashboard::CHANGED)->assertSee(['S/ 0.00', 'Falta cobrar S/ 120.00 a 1 paciente']);
+        Livewire::test(Dashboard::class)
+            ->mountAction('registerPayment')
+            ->setActionData(['patient_id' => $rosa->patient_id, 'amount' => 120])
+            ->callMountedAction()
+            ->assertNotified('Pago registrado')
+            ->assertDispatched(Dashboard::CHANGED);
+        $stats->dispatch(Dashboard::CHANGED)->assertSee('S/ 120.00')->assertDontSee('Falta cobrar');
+
+        // Las del costado y la del doctor escuchan el mismo aviso.
+        Livewire::test(FollowUpsToday::class)->dispatch(Dashboard::CHANGED)->assertOk();
+        Livewire::test(WeekGaps::class)->dispatch(Dashboard::CHANGED)->assertOk();
+        $this->actingAs($doctor->user);
+        Livewire::test(NextPatient::class)->dispatch(Dashboard::CHANGED)->assertSee('Rosa Quispe');
+    }
+
+    public function test_the_numbers_of_the_day_count_what_the_lists_they_lead_to_show(): void
+    {
+        $treatment = Treatment::factory()->create(['name' => 'Limpieza dental']);
+        $doctor = $this->doctorOffering($treatment);
+        $visit = fn (string $firstName, string $when, array $attributes = []) => Appointment::factory()->for($doctor)->for($treatment)
+            ->for($this->patient($firstName, 'Prueba'))->at($when)->create($attributes);
+        $today = $visit('Rosa', '2026-11-02 10:00');
+        $tomorrow = $visit('Pedro', '2026-11-03 10:00');
+        $later = $visit('Ana', '2026-11-05 10:00');
+        $visit('Luis', '2026-11-02 11:00', ['status' => AppointmentStatus::NoShow]);
+        $visit('Carmen', '2026-11-02 12:00', ['status' => AppointmentStatus::Cancelled]);
+        $this->actingAs(User::factory()->reception()->create());
+
+        // "Citas de hoy" cuenta las filas de la agenda de abajo: quien faltó sigue ahí; la cancelada, no.
+        Livewire::test(TodayStats::class)
+            ->assertSeeHtmlInOrder(['Citas de hoy', '<strong class="dash-kpi-value">2</strong>', '0 atendidas · 1 por llegar · 1 no asistió'])
+            // "Por confirmar" son las de hoy y mañana, y lleva a la lista con esas mismas.
+            ->assertSeeHtmlInOrder(['Por confirmar', '<strong class="dash-kpi-value">2</strong>', 'Hoy y mañana'])
+            ->assertSeeHtml('href="'.e(AppointmentResource::getUrl('index', ['tab' => 'pending', 'filters' => ['soon' => ['isActive' => true]]])).'"');
+        Livewire::test(TodayAppointments::class)->assertSee(['Rosa Prueba', 'Luis Prueba'])->assertDontSee('Carmen Prueba');
+
+        Livewire::test(ListAppointments::class, ['activeTab' => 'pending'])
+            ->assertCanSeeTableRecords([$today, $tomorrow, $later])
+            ->filterTable('soon')
+            ->assertCanSeeTableRecords([$today, $tomorrow])
+            ->assertCanNotSeeTableRecords([$later]);
     }
 
     public function test_only_the_number_that_needs_someone_is_highlighted(): void
@@ -482,9 +563,10 @@ class DashboardPanelTest extends TestCase
         $jose->medicalBackground()->create(['allergies' => 'Penicilina']);
         Appointment::factory()->for($doctor)->for($cleaning)->for($jose)->at('2026-10-05 10:00')->create(['status' => AppointmentStatus::Completed]);
         $waiting = Appointment::factory()->for($doctor)->for($treatment)->for($jose)->at('2026-11-02 11:00')
-            ->create(['status' => AppointmentStatus::CheckedIn, 'checked_in_at' => now()->subMinutes(25)]);
+            ->create(['status' => AppointmentStatus::CheckedIn, 'checked_in_at' => now()->subMinutes(25), 'patient_note' => 'Me duele al masticar', 'internal_notes' => 'Trae su radiografía']);
 
         $unfinished = Consultation::factory()->for($doctor)->for($this->patient('Luz', 'Ramos'))->create(['attended_at' => now()->subDay()]);
+        Consultation::factory()->for($doctor)->for($this->patient('Eva', 'Sol'))->create(['attended_at' => now()->subMinutes(40)]);
 
         $this->actingAs($doctor->user);
 
@@ -493,7 +575,11 @@ class DashboardPanelTest extends TestCase
             ->assertSee(['11:00', 'José Condori', '36 años', 'Curación con resina', 'En sala hace 25'.self::NBSP.'min'])
             ->assertSee(['Alergia: Penicilina', 'Limpieza dental · 5 oct. 2026', 'Ver historia'])
             ->assertDontSee('María Quispe')
-            ->assertSee(['Atenciones sin terminar', 'Luz Ramos', 'Continuar']);
+            // Lo que el paciente escribió al reservar y lo que recepción anotó al agendar.
+            ->assertSeeInOrder(['Dejó una nota', 'Me duele al masticar', 'Nota interna', 'Trae su radiografía'])
+            ->assertSee(['Atenciones sin terminar', 'Luz Ramos', 'Continuar'])
+            // La que quedó de ayer resalta: mientras siga abierta no se cobra ni avanza el plan. La de hoy, no.
+            ->assertSeeHtmlInOrder(['Luz Ramos', '<small class="dash-late">abierta hace 1 día</small>', 'Eva Sol', '<small class="">abierta hoy a las 07:20</small>']);
 
         // En la agenda, la etiqueta ya dice "En sala": la fila solo agrega cuánto lleva.
         Livewire::test(TodayAppointments::class)->assertSee('Esperando 25'.self::NBSP.'min')->assertDontSee('En sala hace');
@@ -563,8 +649,10 @@ class DashboardPanelTest extends TestCase
 
         $this->actingAs(User::factory()->reception()->create());
 
+        // Mientras sigan abiertas no se cobra lo atendido: su número va pintado, como lo demás que no puede esperar.
         Livewire::test(FollowUpsToday::class)
-            ->assertSee(['Citas sin cerrar', 'De días pasados: marca si vino o si no asistió']);
+            ->assertSee(['Citas sin cerrar', 'De días pasados: marca si vino o si no asistió'])
+            ->assertSeeHtmlInOrder(['Citas sin cerrar', '<span class="dash-count is-warning">2</span>']);
 
         Livewire::test(ListAppointments::class, ['activeTab' => 'unclosed'])
             ->assertCanSeeTableRecords([$forgotten, $leftInRoom])
