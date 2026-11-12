@@ -942,6 +942,29 @@ html.odv-locked :has(.odv.is-expanded) { z-index: 45 !important; }
 }
 @media print { .odv-head, .odv-tools, .odv-card, .odv-parse { display: none !important; } }
 
+/* Historia clínica: al llegar a una pestaña desde otro lado, la barra de arriba no la tapa. */
+.fi-sc-tabs { scroll-margin-top: 5rem; }
+
+/* ---------- Paciente: sus presupuestos y planes, cada uno abre su página ---------- */
+
+.pt-plans { display: grid; gap: .5rem; margin: 0; padding: 0; list-style: none; }
+.pt-plan { display: grid; gap: .3rem; padding: .6rem .7rem; border-radius: .65rem; color: inherit; text-decoration: none; background: var(--gray-50); box-shadow: inset 0 0 0 1px rgb(3 7 18 / .05); transition: background-color .15s ease, box-shadow .15s ease; }
+a.pt-plan:hover { background: #fff; box-shadow: inset 0 0 0 1px var(--primary-300); }
+a.pt-plan:focus-visible { outline: 2px solid var(--primary-500); outline-offset: 2px; }
+.pt-plan-top { display: flex; align-items: baseline; justify-content: space-between; gap: .75rem; font-size: .875rem; }
+.pt-plan-top b { font-weight: 600; color: var(--gray-950); }
+.pt-plan-total { font-weight: 600; font-variant-numeric: tabular-nums; white-space: nowrap; color: var(--gray-950); }
+.pt-plan-state { display: flex; flex-wrap: wrap; align-items: center; gap: .3rem .5rem; }
+.pt-plan-state small, .pt-plan-pay { font-size: .78rem; color: var(--gray-500); }
+.pt-plan-pay .plan-pay { display: inline; white-space: normal; }
+.pt-plan-pay .plan-pay + .plan-pay::before { content: ' · '; font-weight: 400; color: var(--gray-400); }
+.pt-plan.is-closed .pt-plan-top b, .pt-plan.is-closed .pt-plan-total { font-weight: 500; color: var(--gray-600); }
+.dark .pt-plan { background: rgb(255 255 255 / .04); box-shadow: inset 0 0 0 1px rgb(255 255 255 / .08); }
+.dark a.pt-plan:hover { background: rgb(255 255 255 / .07); box-shadow: inset 0 0 0 1px var(--primary-500); }
+.dark .pt-plan-top b, .dark .pt-plan-total { color: #fff; }
+.dark .pt-plan.is-closed .pt-plan-top b, .dark .pt-plan.is-closed .pt-plan-total { color: var(--gray-400); }
+@media (prefers-reduced-motion: reduce) { .pt-plan { transition: none; } }
+
 /* ---------- Paciente: línea de tiempo ---------- */
 
 .pt-timeline { display: grid; gap: 1rem; }
@@ -1584,6 +1607,21 @@ a.ap-visit:hover { background: var(--gray-50); }
 .dark .plan-pay.is-paid { color: var(--success-300); }
 .dark .plan-pay.is-due { color: var(--warning-300); }
 .dark .plan-pay.is-late { color: var(--danger-300); }
+/* La página de un presupuesto: el pago en cifras (total, pagó, debe, falta) y, debajo, lo que firmó con su cronograma. */
+.plan-money { display: grid; gap: 1.1rem; }
+.plan-money-figures { display: grid; grid-template-columns: repeat(auto-fit, minmax(8.5rem, 1fr)); gap: .6rem; margin: 0; }
+.plan-money-figures > div { padding: .6rem .8rem; border-radius: .65rem; background: var(--gray-50); box-shadow: inset 0 0 0 1px rgb(3 7 18 / .05); }
+.plan-money-figures dt { font-size: .75rem; font-weight: 600; color: var(--gray-500); }
+.plan-money-figures dd { margin: .1rem 0 0; font-size: 1.125rem; font-weight: 700; letter-spacing: -.01em; color: var(--gray-950); font-variant-numeric: tabular-nums; }
+.plan-money-figures dd.is-paid { color: var(--success-700); }
+.plan-money-figures dd.is-due { color: var(--warning-800); }
+.plan-money-figures dd.is-late { color: var(--danger-700); }
+.dark .plan-money-figures > div { background: rgb(255 255 255 / .04); box-shadow: inset 0 0 0 1px rgb(255 255 255 / .08); }
+.dark .plan-money-figures dt { color: var(--gray-400); }
+.dark .plan-money-figures dd { color: #fff; }
+.dark .plan-money-figures dd.is-paid { color: var(--success-300); }
+.dark .plan-money-figures dd.is-due { color: var(--warning-300); }
+.dark .plan-money-figures dd.is-late { color: var(--danger-300); }
 .visit-plan-options { margin-top: .25rem; padding: .6rem .75rem; border-radius: .5rem; background: var(--gray-50); font-size: .8125rem; color: var(--gray-700); }
 .visit-plan-options ul { margin-top: .2rem; padding-left: 1.1rem; list-style: disc; display: grid; gap: .15rem; }
 .dark .visit-plan-options { background: rgb(255 255 255 / .04); color: var(--gray-300); }

@@ -11,6 +11,7 @@ use App\Filament\Actions\SignPlanAction;
 use App\Filament\Resources\Appointments\AppointmentResource;
 use App\Filament\Resources\Patients\Schemas\TreatmentPlanForm;
 use App\Models\Appointment;
+use App\Models\Doctor;
 use App\Models\Patient;
 use App\Models\TreatmentPlan;
 use App\Models\TreatmentPlanItem;
@@ -85,7 +86,9 @@ class TreatmentPlansRelationManager extends RelationManager
             ->columns([
                 TextColumn::make('created_at')
                     ->label('Fecha')
-                    ->date('d/m/Y'),
+                    ->date('d/m/Y')
+                    // Quién lo armó va bajo la fecha: como columna aparte, los botones de la fila no entraban en una laptop.
+                    ->description(fn (TreatmentPlan $record) => Doctor::severalActive() ? $record->doctor?->name : null),
                 TextColumn::make('title')
                     ->label('Plan')
                     ->placeholder('Plan de tratamiento')
@@ -110,9 +113,6 @@ class TreatmentPlansRelationManager extends RelationManager
                     ->description(fn (TreatmentPlan $record) => self::payment($record)['detail'])
                     ->color(fn (TreatmentPlan $record) => self::payment($record)['color'])
                     ->wrap(),
-                TextColumn::make('doctor.name')
-                    ->label('Doctor')
-                    ->visibleFrom('md'),
                 TextColumn::make('status')
                     ->label('Estado')
                     ->badge(),

@@ -7,8 +7,8 @@ use App\Enums\PlanItemStatus;
 use App\Enums\TreatmentPlanStatus;
 use App\Filament\Actions\SendWhatsAppAction;
 use App\Filament\Resources\Appointments\AppointmentResource;
-use App\Filament\Resources\Patients\PatientResource;
 use App\Filament\Resources\Patients\RelationManagers\TreatmentPlansRelationManager;
+use App\Filament\Resources\TreatmentPlans\TreatmentPlanResource;
 use App\Models\Doctor;
 use App\Models\TreatmentPlan;
 use App\Models\TreatmentPlanItem;
@@ -97,25 +97,14 @@ class TreatmentPlansTable
             ])
             ->recordActions([
                 self::whatsappAction(),
-                Action::make('book')
-                    ->label('Agendar')
-                    ->icon(Heroicon::OutlinedCalendarDays)
-                    ->color('gray')
-                    ->visible(fn (TreatmentPlan $record) => self::waitsForAppointment($record) && AppointmentResource::canCreate())
-                    ->url(fn (TreatmentPlan $record) => self::bookUrl($record)),
+                self::bookAction(),
                 ActionGroup::make([
-                    // Quien no ve la historia imprime solo el presupuesto, sin pieza ni diagnóstico.
-                    Action::make('print')
-                        ->label('Ver e imprimir')
-                        ->icon(Heroicon::OutlinedPrinter)
-                        ->url(fn (TreatmentPlan $record) => TreatmentPlansRelationManager::printUrl($record), shouldOpenInNewTab: true),
+                    self::printAction(),
                     self::declineAction(),
                 ]),
             ])
-            // Tocar la fila abre el plan (o el paciente, para quien no ve lo clínico).
-            ->recordUrl(fn (TreatmentPlan $record) => $user->can('view', $record)
-                ? PatientResource::getUrl('clinical', ['record' => $record->patient_id, 'relation' => '1'])
-                : PatientResource::getUrl('view', ['record' => $record->patient_id]))
+            // Tocar la fila abre el presupuesto: lo que incluye, cómo va su pago y su seguimiento.
+            ->recordUrl(fn (TreatmentPlan $record) => TreatmentPlanResource::getUrl('view', ['record' => $record]))
             ->emptyStateHeading('No hay presupuestos aquí')
             ->emptyStateDescription('Los presupuestos se arman en la historia clínica del paciente, al terminar su evaluación.');
     }
@@ -124,7 +113,7 @@ class TreatmentPlansTable
      * El aviso que toca: "¿pudiste revisar tu presupuesto?" mientras no responde, o "¿te reservamos
      * tu próxima cita?" si lo aceptó y no tiene cita. Al abrir WhatsApp queda como "Le escribiste".
      */
-    private static function whatsappAction(): Action
+    public static function whatsappAction(): Action
     {
         return SendWhatsAppAction::compose('whatsapp', fn (TreatmentPlan $record) => ($key = self::followUpTemplate($record))
             ? app(FollowUps::class)->draft($key, $record->patient, $record)
@@ -133,8 +122,28 @@ class TreatmentPlansTable
             ->visible(fn (TreatmentPlan $record) => $record->patient->account !== null && self::followUpTemplate($record) !== null);
     }
 
+    /** La cita nueva llega con la próxima sesión del plan: solo falta elegir el horario. */
+    public static function bookAction(): Action
+    {
+        return Action::make('book')
+            ->label('Agendar')
+            ->icon(Heroicon::OutlinedCalendarDays)
+            ->color('gray')
+            ->visible(fn (TreatmentPlan $record) => self::waitsForAppointment($record) && AppointmentResource::canCreate())
+            ->url(fn (TreatmentPlan $record) => self::bookUrl($record));
+    }
+
+    /** Quien no ve la historia imprime solo el presupuesto, sin pieza ni diagnóstico. */
+    public static function printAction(): Action
+    {
+        return Action::make('print')
+            ->label('Ver e imprimir')
+            ->icon(Heroicon::OutlinedPrinter)
+            ->url(fn (TreatmentPlan $record) => TreatmentPlansRelationManager::printUrl($record), shouldOpenInNewTab: true);
+    }
+
     /** El paciente dijo que no: el presupuesto se cierra como cancelado y deja de aparecer para seguimiento. */
-    private static function declineAction(): Action
+    public static function declineAction(): Action
     {
         return Action::make('decline')
             ->label('No lo aceptó')
@@ -173,7 +182,7 @@ class TreatmentPlansTable
      * que no pagó); si no debe, lo que le falta pagar del plan. El presupuesto sin aceptar y el plan que va
      * incluido en un 2x1 no llevan pagos.
      */
-    private static function paymentSummary(TreatmentPlan $plan): ?HtmlString
+    public static function paymentSummary(TreatmentPlan $plan): ?HtmlString
     {
         if ($plan->accepted_at === null || $plan->included_in_plan_id !== null) {
             return null;
@@ -218,7 +227,7 @@ class TreatmentPlansTable
     }
 
     /** Vigente, con procedimientos por hacer y sin ninguna cita de hoy en adelante. */
-    private static function waitsForAppointment(TreatmentPlan $plan): bool
+    public static function waitsForAppointment(TreatmentPlan $plan): bool
     {
         return in_array($plan->status, [TreatmentPlanStatus::Proposed, ...TreatmentPlan::ACCEPTED_STATUSES], true)
             && $plan->next_appointment_at === null
@@ -226,13 +235,13 @@ class TreatmentPlansTable
     }
 
     /** @return Collection<int, TreatmentPlanItem> */
-    private static function openItems(TreatmentPlan $plan): Collection
+    public static function openItems(TreatmentPlan $plan): Collection
     {
         return $plan->items->filter(fn (TreatmentPlanItem $item) => $item->isOpen())->values();
     }
 
     /** "Corona, Endodoncia y 2 más". Un paquete va como uno: "Paquete Ortodoncia (18 meses), Corona". */
-    private static function summary(TreatmentPlan $plan, bool $withTooth): string
+    public static function summary(TreatmentPlan $plan, bool $withTooth): string
     {
         $labels = TreatmentPlan::lines($plan->items->reject(fn (TreatmentPlanItem $item) => $item->status === PlanItemStatus::Cancelled)->values(), $withTooth)
             ->pluck('label')
@@ -247,7 +256,7 @@ class TreatmentPlansTable
     }
 
     /** Hace cuánto está así: lo que lleva sin respuesta, desde cuándo se trabaja o cuándo terminó. */
-    private static function since(TreatmentPlan $plan): ?string
+    public static function since(TreatmentPlan $plan): ?string
     {
         return match ($plan->status) {
             TreatmentPlanStatus::Draft => 'Sin presentar',

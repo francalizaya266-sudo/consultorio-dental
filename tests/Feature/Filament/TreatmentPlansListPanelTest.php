@@ -54,15 +54,16 @@ class TreatmentPlansListPanelTest extends TestCase
             // Recepción ve el procedimiento, no la pieza.
             ->assertSee(['Corona', 'Dra. Ana Torres'])
             ->assertDontSee('pieza 46')
-            // Al tocar la fila, recepción va a la ficha del paciente.
-            ->assertSeeHtml('href="'.e(PatientResource::getUrl('view', ['record' => $mine->patient_id])).'"');
+            // Al tocar la fila se abre ese presupuesto, no la ficha del paciente.
+            ->assertSeeHtml('href="'.e(TreatmentPlanResource::getUrl('view', ['record' => $mine])).'"')
+            ->assertDontSeeHtml('href="'.e(PatientResource::getUrl('view', ['record' => $mine->patient_id])).'"');
 
         $this->actingAs($this->torres->user);
         Appointment::factory()->for($mine->patient)->for($this->torres)->at('2026-11-05 10:00')->create();
 
         Livewire::test(ListTreatmentPlans::class)
-            // La doctora que la atiende va directo al plan.
-            ->assertSeeHtml('href="'.e(PatientResource::getUrl('clinical', ['record' => $mine->patient_id, 'relation' => '1'])).'"')
+            // La doctora también abre el presupuesto; a la historia llega desde ahí.
+            ->assertSeeHtml('href="'.e(TreatmentPlanResource::getUrl('view', ['record' => $mine])).'"')
             ->assertCanSeeTableRecords([$mine])
             ->assertCanNotSeeTableRecords([$theirs])
             ->assertSee('Corona · pieza 46');

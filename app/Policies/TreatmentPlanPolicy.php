@@ -41,6 +41,15 @@ class TreatmentPlanPolicy
         return $user->managesAllAgendas() || ($user->canSeeClinical() && $user->doctorId() !== null);
     }
 
+    /**
+     * La página de un presupuesto, con lo que incluye, cómo va su pago y su seguimiento: recepción y
+     * administración abren cualquiera (sin la pieza ni los datos clínicos); el doctor, los de sus pacientes.
+     */
+    public function viewBudget(User $user, TreatmentPlan $plan): bool
+    {
+        return $user->managesAllAgendas() || $this->view($user, $plan);
+    }
+
     /** El paciente dijo que no al presupuesto: lo cierra quien le hace seguimiento o el doctor que lo armó. */
     public function decline(User $user, TreatmentPlan $plan): bool
     {

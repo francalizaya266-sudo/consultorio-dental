@@ -5,6 +5,7 @@ namespace App\Filament\Resources\TreatmentPlans\Pages;
 use App\Enums\TreatmentPlanStatus;
 use App\Filament\Concerns\HasNoBreadcrumbs;
 use App\Filament\Resources\TreatmentPlans\TreatmentPlanResource;
+use App\Models\User;
 use Filament\Resources\Pages\ListRecords;
 use Filament\Schemas\Components\Tabs\Tab;
 use Illuminate\Database\Eloquent\Builder;
@@ -15,6 +16,16 @@ class ListTreatmentPlans extends ListRecords
     use HasNoBreadcrumbs;
 
     protected static string $resource = TreatmentPlanResource::class;
+
+    /** Para qué es esta lista: aquí no se arma nada, se le hace seguimiento a lo que ya se propuso. */
+    public function getSubheading(): ?string
+    {
+        /** @var User $user */
+        $user = auth()->user();
+
+        return ($user->managesAllAgendas() ? 'Lo que se le propuso a cada paciente' : 'Lo que le propusiste a cada paciente')
+            .' y en qué quedó: si respondió, si le falta cita y cuánto lleva pagado. Toca uno para abrirlo.';
+    }
 
     public function getTabs(): array
     {

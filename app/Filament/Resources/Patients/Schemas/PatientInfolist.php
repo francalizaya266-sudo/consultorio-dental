@@ -3,15 +3,20 @@
 namespace App\Filament\Resources\Patients\Schemas;
 
 use App\Enums\PatientRelationship;
+use App\Enums\TreatmentPlanStatus;
 use App\Filament\Resources\Accounts\AccountActions;
 use App\Filament\Resources\Accounts\AccountResource;
 use App\Filament\Resources\Patients\Pages\ViewPatient;
 use App\Filament\Resources\Patients\PatientResource;
+use App\Filament\Resources\TreatmentPlans\Tables\TreatmentPlansTable;
+use App\Filament\Resources\TreatmentPlans\TreatmentPlanResource;
 use App\Filament\Support\ClinicalAlerts;
 use App\Filament\Support\PatientSummary;
 use App\Filament\Support\PatientTimeline;
 use App\Models\Patient;
+use App\Models\TreatmentPlan;
 use App\Services\Clinical\ConsentService;
+use App\Support\Money;
 use App\Support\Phone;
 use Filament\Infolists\Components\TextEntry;
 use Filament\Schemas\Components\Group;
@@ -35,8 +40,8 @@ class PatientInfolist
                 // La alerta médica arriba de todo, para quien atiende al paciente.
                 Group::make(fn (Patient $record) => auth()->user()->can('viewClinical', $record) ? array_filter([ClinicalAlerts::callout($record)]) : [])
                     ->columnSpanFull(),
-                // A la izquierda, los datos y la línea de tiempo; a la derecha, el celular y la familia. El saldo va
-                // una sola vez, en las etiquetas de arriba; lo que pagó, en la línea de tiempo.
+                // A la izquierda, los datos y la línea de tiempo; a la derecha, el celular y la familia y, debajo, sus
+                // presupuestos. El saldo va una sola vez, en las etiquetas de arriba; lo que pagó, en la línea de tiempo.
                 Group::make([
                     // Etiqueta y dato en la misma línea: la ficha entra en media pantalla.
                     Section::make('Datos del paciente')
@@ -83,7 +88,7 @@ class PatientInfolist
                         ]),
                 ])
                     ->columnSpan(['default' => 'full', 'lg' => 2]),
-                Group::make([self::phoneAndFamily()])
+                Group::make([self::phoneAndFamily(), self::plans()])
                     ->columnSpan(['default' => 'full', 'lg' => 1]),
             ]);
     }
@@ -143,5 +148,49 @@ class PatientInfolist
                     ->placeholder('Falta: quién firma por él')
                     ->visible(fn (Patient $record) => $record->isMinor()),
             ]);
+    }
+
+    /**
+     * Lo que se le propuso: cada presupuesto o plan con lo que incluye, en qué quedó y cuánto suma. Cada uno abre
+     * su página, donde se le escribe, se le agenda y se le cobra. Sin esto, quien no ve la historia clínica no
+     * tenía cómo saber desde la ficha qué se le presupuestó.
+     */
+    private static function plans(): Section
+    {
+        return Section::make('Presupuestos y planes')
+            ->key('plans')
+            ->compact()
+            ->schema([
+                View::make('filament.patients.plans')
+                    ->viewData(fn (Patient $record) => ['rows' => self::planRows($record)]),
+            ])
+            ->visible(fn (Patient $record) => self::planRows($record) !== []);
+    }
+
+    /**
+     * Los presupuestos del paciente que quien mira puede abrir, los vigentes primero. Quien no ve lo clínico
+     * lee el procedimiento, no la pieza (Ley 29733).
+     *
+     * @return list<array{url: string, summary: string, total: string, status: TreatmentPlanStatus, since: ?string, payment: ?HtmlString, open: bool}>
+     */
+    private static function planRows(Patient $patient): array
+    {
+        if (! TreatmentPlanResource::canViewAny()) {
+            return [];
+        }
+
+        $withTooth = auth()->user()->can('viewClinical', $patient);
+
+        return once(fn () => TreatmentPlanResource::forPatient($patient)
+            ->map(fn (TreatmentPlan $plan) => [
+                'url' => TreatmentPlanResource::getUrl('view', ['record' => $plan]),
+                'summary' => TreatmentPlansTable::summary($plan, $withTooth),
+                'total' => Money::format($plan->total()),
+                'status' => $plan->status,
+                'since' => TreatmentPlansTable::since($plan),
+                'payment' => TreatmentPlansTable::paymentSummary($plan),
+                'open' => $plan->isOpen(),
+            ])
+            ->all());
     }
 }
