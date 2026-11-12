@@ -4,10 +4,10 @@ namespace App\Filament\Widgets;
 
 use App\Enums\AppointmentStatus;
 use App\Filament\Actions\AppointmentActions;
+use App\Filament\Concerns\RefreshesWithToday;
 use App\Filament\Pages\Dashboard;
 use App\Filament\Resources\Appointments\AppointmentResource;
 use App\Filament\Resources\Appointments\Tables\AppointmentsTable;
-use App\Filament\Widgets\Concerns\RefreshesWithToday;
 use App\Models\Appointment;
 use App\Models\Charge;
 use App\Models\User;

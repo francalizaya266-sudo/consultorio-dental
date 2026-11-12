@@ -47,6 +47,7 @@ use Illuminate\Cookie\Middleware\EncryptCookies;
 use Illuminate\Foundation\Http\Middleware\PreventRequestForgery;
 use Illuminate\Routing\Middleware\SubstituteBindings;
 use Illuminate\Session\Middleware\StartSession;
+use Illuminate\Support\Facades\Blade;
 use Illuminate\Support\Facades\Route;
 use Illuminate\View\Middleware\ShareErrorsFromSession;
 
@@ -180,6 +181,8 @@ class AdminPanelProvider extends PanelProvider
             ->renderHook(PanelsRenderHook::USER_MENU_BEFORE, fn () => auth()->check() ? view('filament.user-badge', ['user' => auth()->user()]) : '')
             ->renderHook(PanelsRenderHook::USER_MENU_PROFILE_BEFORE, fn () => auth()->check() ? view('filament.user-menu-header', ['user' => auth()->user()]) : '')
             ->renderHook(PanelsRenderHook::BODY_END, fn () => auth()->check() ? view('filament.mobile-bar', ['items' => MobileBar::items()]) : '')
+            // En todas las pantallas: lo que guarda otra persona se ve en pocos segundos, sin recargar.
+            ->renderHook(PanelsRenderHook::BODY_END, fn () => auth()->check() ? Blade::render('<livewire:panel-pulse />') : '')
             ->discoverResources(in: app_path('Filament/Resources'), for: 'App\Filament\Resources')
             ->discoverPages(in: app_path('Filament/Pages'), for: 'App\Filament\Pages')
             ->pages([

@@ -4,12 +4,12 @@ namespace App\Filament\Widgets;
 
 use App\Enums\AppointmentStatus;
 use App\Filament\Actions\AppointmentActions;
+use App\Filament\Concerns\RefreshesWithToday;
 use App\Filament\Resources\Appointments\AppointmentResource;
 use App\Filament\Resources\Consultations\ConsultationResource;
 use App\Filament\Resources\Patients\PatientResource;
 use App\Filament\Support\ClinicalAlerts;
 use App\Filament\Support\VisitFlags;
-use App\Filament\Widgets\Concerns\RefreshesWithToday;
 use App\Models\Appointment;
 use App\Models\Consultation;
 use App\Models\User;

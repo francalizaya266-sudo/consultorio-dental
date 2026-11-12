@@ -4,6 +4,7 @@ namespace App\Filament\Resources\Appointments\Pages;
 
 use App\Enums\AppointmentStatus;
 use App\Filament\Concerns\HasNoBreadcrumbs;
+use App\Filament\Concerns\RefreshesWithToday;
 use App\Filament\Resources\Appointments\AppointmentResource;
 use Filament\Actions\CreateAction;
 use Filament\Resources\Pages\ListRecords;
@@ -12,7 +13,7 @@ use Illuminate\Database\Eloquent\Builder;
 
 class ListAppointments extends ListRecords
 {
-    use HasNoBreadcrumbs;
+    use HasNoBreadcrumbs, RefreshesWithToday;
 
     protected static string $resource = AppointmentResource::class;
 

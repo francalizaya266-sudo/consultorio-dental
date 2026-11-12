@@ -2,9 +2,9 @@
 
 namespace App\Filament\Widgets;
 
+use App\Filament\Concerns\RefreshesWithToday;
 use App\Filament\Pages\Agenda;
 use App\Filament\Resources\WaitlistEntries\WaitlistEntryResource;
-use App\Filament\Widgets\Concerns\RefreshesWithToday;
 use App\Models\User;
 use App\Services\Dashboard\WeekGaps as WeekGapsService;
 use App\Support\Dates;
