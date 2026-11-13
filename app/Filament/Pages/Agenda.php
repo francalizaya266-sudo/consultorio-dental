@@ -7,8 +7,10 @@ use App\Enums\DayPeriod;
 use App\Filament\Actions\AppointmentActions;
 use App\Filament\Actions\CheckoutAction;
 use App\Filament\Actions\CreateAppointmentAction;
+use App\Filament\Actions\WalkInAction;
 use App\Filament\Resources\Appointments\AppointmentResource;
 use App\Filament\Resources\Patients\PatientResource;
+use App\Filament\Resources\ScheduleBlocks\ScheduleBlockActions;
 use App\Filament\Resources\WaitlistEntries\WaitlistEntryActions;
 use App\Filament\Resources\WaitlistEntries\WaitlistEntryResource;
 use App\Filament\Support\ClinicalAlerts;
@@ -32,6 +34,7 @@ use App\Support\Phone;
 use BackedEnum;
 use Carbon\CarbonImmutable;
 use Filament\Actions\Action;
+use Filament\Actions\ActionGroup;
 use Filament\Facades\Filament;
 use Filament\Forms\Components\Checkbox;
 use Filament\Pages\Page;
@@ -44,7 +47,8 @@ use Livewire\Attributes\Locked;
 use Livewire\Attributes\Url;
 
 /**
- * Agenda en calendario: por día (una columna por doctor), por semana (un doctor) o el día en lista (el celular).
+ * Agenda en calendario: por día (una columna por doctor), por semana (un doctor, o todo el consultorio con los
+ * doctores lado a lado) o el día en lista (el celular).
  * Las citas se mueven arrastrándolas. Al tocar una cita se abre un panel al costado con sus datos y
  * botones; al tocar un espacio libre, "Nueva cita" en una ventana sobre la agenda. En la computadora,
  * al lado va el mini calendario con lo lleno que está cada día, "Buscar hueco" y la lista de espera que cabe.
@@ -70,6 +74,7 @@ class Agenda extends Page
     #[Url]
     public string $mode = 'day';
 
+    /** El doctor de la semana; 0 es "todo el consultorio". */
     #[Url]
     public ?int $doctor = null;
 
@@ -239,13 +244,45 @@ class Agenda extends Page
         return ['agenda-page'];
     }
 
-    /** "Nueva cita" a la vista, sin buscar un espacio libre: llega con el día que se mira (y el doctor en la semana). */
+    /**
+     * "Nueva cita" a la vista, sin buscar un espacio libre: llega con el día que se mira (y el doctor en la semana).
+     * Al lado, "Llegó sin cita" (recepción trabaja aquí: no tiene que ir a Hoy) y, en "Más", bloquear un horario
+     * desde el día que se mira y la hoja del día para imprimir.
+     */
     protected function getHeaderActions(): array
     {
         return [
             CreateAppointmentAction::make('newAppointment')
                 ->arguments(['date' => $this->date, 'doctor' => $this->mode === 'week' ? $this->doctor : null]),
+            WalkInAction::make()
+                ->visible(fn () => AppointmentResource::canCreate()),
+            ActionGroup::make([
+                ScheduleBlockActions::add('blockSchedule', fn () => [
+                    'from_day' => $this->day()->max(today())->toDateString(),
+                    'doctor_id' => $this->managesAll() ? ($this->mode === 'week' && ! $this->wholeClinic() ? $this->doctor : null) : $this->ownDoctorId(),
+                ]),
+                Action::make('printDay')
+                    ->label('Imprimir la agenda del día')
+                    ->icon(Heroicon::OutlinedPrinter)
+                    ->url(fn () => self::printUrl($this->date), shouldOpenInNewTab: true),
+            ])
+                ->label('Más')
+                ->icon(Heroicon::OutlinedEllipsisHorizontal)
+                ->color('gray')
+                ->button(),
         ];
+    }
+
+    /** La hoja del día para imprimir o guardar en PDF: las citas de cada doctor, por si se cae internet o la luz. */
+    public static function printUrl(string $date): string
+    {
+        return Filament::getPanel('admin')->route('agenda.print', ['date' => $date]);
+    }
+
+    /** La semana de todo el consultorio: cada día con los doctores lado a lado, para ver qué días están flojos. */
+    private function wholeClinic(): bool
+    {
+        return $this->mode === 'week' && $this->managesAll() && ! $this->doctor && $this->doctors()->count() > 1;
     }
 
     /**
@@ -483,6 +520,11 @@ class Agenda extends Page
             'scale' => self::SCALE,
             'hours' => range(intdiv($from, 60), intdiv($to - 1, 60)),
             'doctors' => $this->managesAll() ? $this->doctors()->pluck('name', 'id') : collect(),
+            'wholeClinic' => $this->wholeClinic(),
+            // En la semana de todo el consultorio, quién es quién: el color de cada doctor.
+            'doctorKey' => $this->wholeClinic()
+                ? $this->doctors()->map(fn (Doctor $doctor) => ['name' => $doctor->name, 'initials' => self::initials($doctor->name), 'color' => $doctor->agenda_color ?: '#1e4f91'])->all()
+                : [],
             'modeByDefault' => $this->modeByDefault,
             'rail' => $this->rail(),
             'list' => $this->mode === 'list' ? $this->listOfTheDay($columns) : null,
@@ -581,7 +623,7 @@ class Agenda extends Page
     /** @return Collection<int, Doctor> */
     private function railDoctors(): Collection
     {
-        return $this->mode === 'week' ? $this->doctors()->where('id', $this->doctor)->values() : $this->doctors();
+        return $this->mode === 'week' && ! $this->wholeClinic() ? $this->doctors()->where('id', $this->weekDoctor()?->getKey())->values() : $this->doctors();
     }
 
     /**
@@ -836,57 +878,188 @@ class Agenda extends Page
      */
     private function columns(): array
     {
+        if ($this->wholeClinic()) {
+            return $this->clinicWeekColumns();
+        }
+
         $targets = $this->mode === 'week'
             ? collect(range(0, 6))
-                ->map(fn (int $i) => [$this->doctors()->firstWhere('id', $this->doctor), $this->weekStart()->addDays($i)])
+                ->map(fn (int $i) => [$this->weekDoctor(), $this->weekStart()->addDays($i)])
                 ->filter(fn (array $t) => $t[0] !== null)
             : $this->doctors()->map(fn (Doctor $d) => [$d, $this->day()]);
 
-        return $targets->map(function (array $target) {
-            /** @var Doctor $doctor */
-            [$doctor, $day] = $target;
-            $blocks = ScheduleBlock::query()->affecting($doctor, $day->startOfDay(), $day->endOfDay())->get();
-
-            return [
-                'key' => $doctor->getKey().'|'.$day->toDateString(),
-                'title' => $this->mode === 'week' ? ucfirst($day->translatedFormat('D j')) : $doctor->name,
-                'subtitle' => $this->mode === 'week' ? null : $doctor->specialty,
-                'weekday' => ucfirst($day->translatedFormat('D')),
-                'dayNumber' => $day->day,
-                'isToday' => $day->isToday(),
-                'isPast' => $day->lt(today()),
-                'color' => $doctor->agenda_color ?: '#1e4f91',
-                'initials' => self::initials($doctor->name),
-                'date' => $day->toDateString(),
-                'doctorId' => $doctor->getKey(),
-                'treatments' => $doctor->treatments->modelKeys(),
-                'working' => app(AvailabilityService::class)->workingRanges($doctor, $day)
-                    ->map(fn (array $r) => ['start' => $this->minuteOf($r['start']), 'end' => $this->minuteOf($r['end'])])
-                    ->all(),
-                'blocks' => [
-                    ...$blocks
-                        ->map(fn (ScheduleBlock $b) => [
-                            'start' => $b->starts_at->lt($day) ? 0 : $this->minuteOf($b->starts_at),
-                            'end' => $b->ends_at->gt($day->endOfDay()) ? 24 * 60 : $this->minuteOf($b->ends_at),
-                            'label' => $b->reason ?: $b->type->getLabel(),
-                            'hold' => false,
-                        ]),
-                    // Lo ofrecido a alguien de la lista de espera queda apartado mientras responde.
-                    ...app(AvailabilityService::class)
-                        ->holds($doctor, $day->startOfDay(), $day->endOfDay())
-                        ->map(fn (WaitlistEntry $hold) => [
-                            'start' => $this->minuteOf($hold->offered_starts_at),
-                            'end' => $this->minuteOf($hold->offered_until),
-                            'label' => 'Apartado para '.$hold->patient->full_name.' · hasta las '.$hold->held_until->format('H:i'),
-                            'hold' => true,
-                        ]),
-                ],
-                'appointments' => $this->appointmentsFor($doctor, $day, $blocks)->all(),
-            ];
-        })
+        return $targets->map(fn (array $target) => $this->column(...$target))
             ->reject(fn (array $column) => $this->mode === 'week' && $column['working'] === [] && $column['appointments'] === [])
             ->values()
             ->all();
+    }
+
+    /** El doctor de la semana. Si se pidió "todo el consultorio" y hay uno solo, ese. */
+    private function weekDoctor(): ?Doctor
+    {
+        return $this->doctors()->firstWhere('id', $this->doctor) ?? ($this->doctors()->count() === 1 ? $this->doctors()->first() : null);
+    }
+
+    /**
+     * La semana de todo el consultorio: una columna por día con las citas de todos, cada doctor en su carril (y
+     * con su color), el horario en que atiende alguno y los bloqueos de todo el consultorio. Arriba, lo lleno del día.
+     *
+     * @return list<array<string, mixed>>
+     */
+    private function clinicWeekColumns(): array
+    {
+        $doctors = $this->doctors();
+        $start = $this->weekStart();
+        $load = app(GapFinder::class)->occupancy($doctors, $start, $start->addDays(6));
+
+        return collect(range(0, 6))
+            ->map(function (int $i) use ($doctors, $start, $load) {
+                $day = $start->addDays($i);
+                // Solo quienes atienden o tienen citas ese día ocupan un carril.
+                $present = $doctors
+                    ->map(fn (Doctor $doctor) => $this->column($doctor, $day))
+                    ->filter(fn (array $column) => $column['working'] !== [] || $column['appointments'] !== [])
+                    ->values();
+                $lanes = (int) $present->sum(fn (array $column) => self::lanesOf($column));
+                $offset = 0;
+                $appointments = [];
+
+                foreach ($present as $column) {
+                    foreach ($column['appointments'] as $card) {
+                        $appointments[] = [
+                            ...$card,
+                            'lane' => $offset + $card['lane'],
+                            'lanes' => $lanes,
+                            'doctor' => ['name' => $column['title'], 'initials' => $column['initials'], 'color' => $column['color']],
+                        ];
+                    }
+
+                    $offset += self::lanesOf($column);
+                }
+
+                return [
+                    ...$this->dayHeading($day),
+                    'key' => '0|'.$day->toDateString(),
+                    'color' => '#1e4f91',
+                    'initials' => '',
+                    'doctorId' => 0,
+                    'treatments' => $doctors->flatMap(fn (Doctor $doctor) => $doctor->treatments->modelKeys())->unique()->values()->all(),
+                    'working' => self::mergedRanges($present->flatMap(fn (array $column) => $column['working'])->all()),
+                    'blocks' => ScheduleBlock::query()
+                        ->whereNull('doctor_id')
+                        ->where('starts_at', '<', $day->endOfDay())
+                        ->where('ends_at', '>', $day->startOfDay())
+                        ->get()
+                        ->map(fn (ScheduleBlock $block) => $this->blockCard($block, $day))
+                        ->all(),
+                    'appointments' => collect($appointments)->sortBy('start')->values()->all(),
+                    'load' => $load[$day->toDateString()] ?? null,
+                    'level' => self::loadLevel($load[$day->toDateString()] ?? null),
+                ];
+            })
+            ->reject(fn (array $column) => $column['working'] === [] && $column['appointments'] === [])
+            ->values()
+            ->all();
+    }
+
+    /** Cuántos carriles pide un doctor en un día: uno, salvo que tenga citas a la misma hora (un sobrecupo). */
+    private static function lanesOf(array $column): int
+    {
+        return max([1, ...array_column($column['appointments'], 'lanes')]);
+    }
+
+    /**
+     * Tramos que se pisan o se tocan, unidos en uno: el horario en que atiende al menos un doctor.
+     *
+     * @param  list<array{start: int, end: int}>  $ranges
+     * @return list<array{start: int, end: int}>
+     */
+    private static function mergedRanges(array $ranges): array
+    {
+        usort($ranges, fn (array $a, array $b) => $a['start'] <=> $b['start']);
+        $merged = [];
+
+        foreach ($ranges as $range) {
+            $last = count($merged) - 1;
+
+            if ($last >= 0 && $range['start'] <= $merged[$last]['end']) {
+                $merged[$last]['end'] = max($merged[$last]['end'], $range['end']);
+            } else {
+                $merged[] = $range;
+            }
+        }
+
+        return $merged;
+    }
+
+    /**
+     * Lo que la cabecera de una columna dice del día.
+     *
+     * @return array<string, mixed>
+     */
+    private function dayHeading(CarbonImmutable $day): array
+    {
+        return [
+            'title' => ucfirst($day->translatedFormat('D j')),
+            'subtitle' => null,
+            'weekday' => ucfirst($day->translatedFormat('D')),
+            'dayNumber' => $day->day,
+            'isToday' => $day->isToday(),
+            'isPast' => $day->lt(today()),
+            'date' => $day->toDateString(),
+        ];
+    }
+
+    /**
+     * Un bloqueo como franja de la grilla en ese día.
+     *
+     * @return array{start: int, end: int, label: string, hold: bool}
+     */
+    private function blockCard(ScheduleBlock $block, CarbonImmutable $day): array
+    {
+        return [
+            'start' => $block->starts_at->lt($day) ? 0 : $this->minuteOf($block->starts_at),
+            'end' => $block->ends_at->gt($day->endOfDay()) ? 24 * 60 : $this->minuteOf($block->ends_at),
+            'label' => $block->reason ?: $block->type->getLabel(),
+            'hold' => false,
+        ];
+    }
+
+    /**
+     * La columna de un doctor en un día: su horario de atención, sus bloqueos y sus citas.
+     *
+     * @return array<string, mixed>
+     */
+    private function column(Doctor $doctor, CarbonImmutable $day): array
+    {
+        $blocks = ScheduleBlock::query()->affecting($doctor, $day->startOfDay(), $day->endOfDay())->get();
+
+        return [
+            ...$this->dayHeading($day),
+            'key' => $doctor->getKey().'|'.$day->toDateString(),
+            'title' => $this->mode === 'week' && ! $this->wholeClinic() ? ucfirst($day->translatedFormat('D j')) : $doctor->name,
+            'subtitle' => $this->mode === 'week' ? null : $doctor->specialty,
+            'color' => $doctor->agenda_color ?: '#1e4f91',
+            'initials' => self::initials($doctor->name),
+            'doctorId' => $doctor->getKey(),
+            'treatments' => $doctor->treatments->modelKeys(),
+            'working' => app(AvailabilityService::class)->workingRanges($doctor, $day)
+                ->map(fn (array $r) => ['start' => $this->minuteOf($r['start']), 'end' => $this->minuteOf($r['end'])])
+                ->all(),
+            'blocks' => [
+                ...$blocks->map(fn (ScheduleBlock $block) => $this->blockCard($block, $day)),
+                // Lo ofrecido a alguien de la lista de espera queda apartado mientras responde.
+                ...app(AvailabilityService::class)
+                    ->holds($doctor, $day->startOfDay(), $day->endOfDay())
+                    ->map(fn (WaitlistEntry $hold) => [
+                        'start' => $this->minuteOf($hold->offered_starts_at),
+                        'end' => $this->minuteOf($hold->offered_until),
+                        'label' => 'Apartado para '.$hold->patient->full_name.' · hasta las '.$hold->held_until->format('H:i'),
+                        'hold' => true,
+                    ]),
+            ],
+            'appointments' => $this->appointmentsFor($doctor, $day, $blocks)->all(),
+        ];
     }
 
     /** Iniciales del doctor para su círculo en la cabecera: "Dr. Jassmanny Neil Vega Jaen" queda "JV" (el nombre y el primer apellido). */
@@ -941,6 +1114,8 @@ class Agenda extends Page
                 // Se bloqueó ese horario con la cita ya dada: hasta moverla, el paciente vendría igual.
                 'inBlock' => $a->status->isChangeable() && ! $a->ends_at->isPast() && self::blockOver($a, $blocks) !== null,
                 'isNew' => $a->is_new_patient,
+                // Se agendó a propósito encima de otra cita: una urgencia que el doctor aceptó ver.
+                'overbooked' => $a->is_overbooked,
                 'owes' => $seesMoney && (float) $a->patient->balance_due > 0 ? Money::short($a->patient->balance_due) : null,
                 'hasNote' => filled($a->patient_note) || filled($a->internal_notes),
                 // Alerta médica (solo para quien ve lo clínico), sesión del plan, pidió cambio y si suele faltar.
@@ -1040,6 +1215,7 @@ class Agenda extends Page
             'alertsSevere' => $user->canSeeClinical() && ClinicalAlerts::isSevere($appointment->patient),
             'patientUrl' => PatientResource::getUrl('view', ['record' => $appointment->patient]),
             'appointmentUrl' => AppointmentResource::getUrl('view', ['record' => $appointment]),
+            'series' => $appointment->seriesPosition(),
             'block' => $appointment->status->isChangeable() && ! $appointment->ends_at->isPast()
                 ? self::blockOver($appointment, ScheduleBlock::query()->affecting($appointment->doctor, $appointment->starts_at, $appointment->ends_at)->get())
                 : null,
@@ -1091,6 +1267,9 @@ class Agenda extends Page
         if (! preg_match('/^\d{4}-\d{2}-\d{2}$/', (string) $date) || ! preg_match('/^\d{2}:\d{2}$/', $time)) {
             return [null, null];
         }
+
+        // En la semana de todo el consultorio la columna es el día: la cita sigue con su doctor.
+        $doctorId = (int) $doctorId ?: Appointment::query()->whereKey($arguments['id'] ?? null)->value('doctor_id');
 
         return [
             $this->doctors()->firstWhere('id', (int) $doctorId),

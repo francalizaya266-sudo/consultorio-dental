@@ -21,7 +21,7 @@ use Illuminate\Database\Eloquent\Relations\HasOne;
 use Illuminate\Database\Eloquent\SoftDeletes;
 
 /** Cita en la agenda. Ocupa desde starts_at hasta ends_at + buffer_minutes. */
-#[Fillable(['patient_id', 'doctor_id', 'treatment_id', 'treatment_plan_item_id', 'starts_at', 'ends_at', 'buffer_minutes', 'status', 'booked_via', 'origin', 'campaign_id', 'promo_code', 'is_new_patient', 'fixed_date', 'from_verified_device', 'patient_note', 'internal_notes', 'confirmed_at', 'confirmed_via', 'unconfirmed_flagged_at', 'checked_in_at', 'started_at', 'finished_at', 'no_show_at', 'cancelled_at', 'cancelled_by', 'cancelled_by_user_id', 'cancellation_reason', 'reschedule_count', 'created_by_user_id'])]
+#[Fillable(['patient_id', 'doctor_id', 'treatment_id', 'treatment_plan_item_id', 'series_id', 'starts_at', 'ends_at', 'buffer_minutes', 'custom_duration', 'status', 'booked_via', 'origin', 'campaign_id', 'promo_code', 'is_new_patient', 'fixed_date', 'is_overbooked', 'from_verified_device', 'patient_note', 'internal_notes', 'confirmed_at', 'confirmed_via', 'unconfirmed_flagged_at', 'checked_in_at', 'started_at', 'finished_at', 'no_show_at', 'cancelled_at', 'cancelled_by', 'cancelled_by_user_id', 'cancellation_reason', 'reschedule_count', 'created_by_user_id'])]
 class Appointment extends Model
 {
     /** @use HasFactory<AppointmentFactory> */
@@ -42,6 +42,8 @@ class Appointment extends Model
             'cancelled_by' => CancelledBy::class,
             'is_new_patient' => 'boolean',
             'fixed_date' => 'boolean',
+            'custom_duration' => 'boolean',
+            'is_overbooked' => 'boolean',
             'from_verified_device' => 'boolean',
             'confirmed_at' => 'datetime',
             'unconfirmed_flagged_at' => 'datetime',
@@ -210,6 +212,43 @@ class Appointment extends Model
                 ->orWhereColumn('schedule_blocks.doctor_id', $query->qualifyColumn('doctor_id')))
             ->whereColumn('schedule_blocks.starts_at', '<', $query->qualifyColumn('ends_at'))
             ->whereColumn('schedule_blocks.ends_at', '>', $query->qualifyColumn('starts_at')));
+    }
+
+    /** Las citas que le siguen en su serie (las que se agendaron juntas, "cada 4 semanas") y todavía se pueden cancelar. */
+    #[Scope]
+    protected function laterInSeries(Builder $query, self $appointment): Builder
+    {
+        return $query
+            ->where('series_id', $appointment->series_id ?? '')
+            ->where('starts_at', '>', $appointment->starts_at)
+            ->whereIn('status', AppointmentStatus::changeable());
+    }
+
+    /**
+     * Qué lugar ocupa en su serie (las que se agendaron juntas para repetirse), sin contar las canceladas. Null si
+     * no es de una serie.
+     *
+     * @return array{position: int, total: int}|null
+     */
+    public function seriesPosition(): ?array
+    {
+        if ($this->series_id === null) {
+            return null;
+        }
+
+        $series = static::query()
+            ->where('series_id', $this->series_id)
+            ->where(fn (Builder $kept) => $kept->where('status', '!=', AppointmentStatus::Cancelled)->orWhere('id', $this->getKey()))
+            ->orderBy('starts_at')
+            ->pluck('id');
+
+        return ['position' => $series->search($this->getKey()) + 1, 'total' => $series->count()];
+    }
+
+    /** Cuánto dura la atención, sin el tiempo de esterilización. */
+    public function durationMinutes(): int
+    {
+        return (int) $this->starts_at->diffInMinutes($this->ends_at, true);
     }
 
     /** Ya pasó su hora y nadie anotó que llegó: o vino y se atendió, o no asistió. */

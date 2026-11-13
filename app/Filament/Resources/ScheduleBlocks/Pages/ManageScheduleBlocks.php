@@ -3,12 +3,12 @@
 namespace App\Filament\Resources\ScheduleBlocks\Pages;
 
 use App\Filament\Resources\Appointments\AppointmentResource;
+use App\Filament\Resources\ScheduleBlocks\ScheduleBlockActions;
 use App\Filament\Resources\ScheduleBlocks\ScheduleBlockResource;
 use App\Models\Appointment;
 use App\Models\ScheduleBlock;
 use App\Models\User;
 use Filament\Actions\Action;
-use Filament\Actions\CreateAction;
 use Filament\Notifications\Notification;
 use Filament\Resources\Pages\ManageRecords;
 use Illuminate\Database\Eloquent\Builder;
@@ -20,11 +20,8 @@ class ManageScheduleBlocks extends ManageRecords
     protected function getHeaderActions(): array
     {
         return [
-            CreateAction::make()
-                ->label('Bloquear horario')
-                ->createAnother(false)
-                ->mutateDataUsing(fn (array $data) => self::forOwnAgenda($data) + ['created_by_user_id' => auth()->id()])
-                ->after(fn (ScheduleBlock $record) => self::warnAboutAppointments($record)),
+            ScheduleBlockActions::add(),
+            ScheduleBlockActions::loadHolidays(),
         ];
     }
 
@@ -50,9 +47,13 @@ class ManageScheduleBlocks extends ManageRecords
      * Un bloqueo no mueve citas solo: avisa cuáles quedaron dentro, con nombre y hora, y lleva a la lista de
      * esas citas, donde cada una se mueve (y queda listo el aviso al paciente) o se le escribe por WhatsApp.
      */
-    public static function warnAboutAppointments(ScheduleBlock $block): void
+    public static function warnAboutAppointments(ScheduleBlock ...$blocks): void
     {
-        $inside = self::appointmentsInside($block)->orderBy('starts_at')->get();
+        $inside = collect($blocks)
+            ->flatMap(fn (ScheduleBlock $block) => self::appointmentsInside($block)->get())
+            ->unique('id')
+            ->sortBy('starts_at')
+            ->values();
 
         if ($inside->isEmpty()) {
             return;

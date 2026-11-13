@@ -326,7 +326,8 @@ class AgendaCalendarTest extends TestCase
         $this->freezeMonday();
         $treatment = Treatment::factory()->create(['duration_minutes' => 30]);
         $doctor = $this->doctorOffering($treatment);
-        $inTheWay = Appointment::factory()->for($doctor)->for($treatment)->at('2026-11-03 16:00')->create();
+        // Un bloqueo: encima de otra cita la ventana ya frena antes y ofrece el sobrecupo.
+        $inTheWay = ScheduleBlock::query()->create(['doctor_id' => $doctor->id, 'type' => 'course', 'starts_at' => '2026-11-03 15:00', 'ends_at' => '2026-11-03 19:00']);
 
         $this->actingAs(User::factory()->reception()->create());
 

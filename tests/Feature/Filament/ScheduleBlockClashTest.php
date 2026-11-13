@@ -50,6 +50,7 @@ class ScheduleBlockClashTest extends TestCase
             ->callAction('create', [
                 'doctor_id' => $this->doctor->id,
                 'type' => 'vacation',
+                'all_day' => false,
                 'starts_at' => '2026-11-10 08:00',
                 'ends_at' => '2026-11-10 19:00',
             ])
@@ -74,7 +75,7 @@ class ScheduleBlockClashTest extends TestCase
         $this->actingAs(User::factory()->reception()->create());
 
         Livewire::test(ManageScheduleBlocks::class)
-            ->callAction('create', ['type' => 'holiday', 'starts_at' => '2026-11-10 08:00', 'ends_at' => '2026-11-10 19:00'])
+            ->callAction('create', ['type' => 'holiday', 'all_day' => false, 'starts_at' => '2026-11-10 08:00', 'ends_at' => '2026-11-10 19:00'])
             ->assertHasNoFormErrors();
 
         $notice = $this->shownNotifications()->firstWhere('title', 'Hay 5 citas en ese horario');
@@ -170,14 +171,14 @@ class ScheduleBlockClashTest extends TestCase
         $this->actingAs(User::factory()->reception()->create());
 
         Livewire::test(ManageScheduleBlocks::class)
-            ->callAction('create', ['type' => 'course', 'starts_at' => '2026-10-27 09:00', 'ends_at' => '2026-10-27 13:00'])
+            ->callAction('create', ['type' => 'course', 'all_day' => false, 'starts_at' => '2026-10-27 09:00', 'ends_at' => '2026-10-27 13:00'])
             ->assertHasFormErrors(['ends_at' => 'Ese horario ya pasó. Revisa la fecha, porque un bloqueo solo sirve de ahora en adelante.']);
 
         $this->assertSame(1, ScheduleBlock::query()->count());
 
         // Empezó antes y sigue vigente: todavía bloquea lo que queda.
         Livewire::test(ManageScheduleBlocks::class)
-            ->callAction('create', ['type' => 'course', 'starts_at' => '2026-11-02 07:00', 'ends_at' => '2026-11-02 13:00'])
+            ->callAction('create', ['type' => 'course', 'all_day' => false, 'starts_at' => '2026-11-02 07:00', 'ends_at' => '2026-11-02 13:00'])
             ->assertHasNoFormErrors();
 
         Livewire::test(ManageScheduleBlocks::class)

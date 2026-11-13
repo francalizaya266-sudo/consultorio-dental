@@ -26,9 +26,18 @@ class BookingException extends RuntimeException
             $with instanceof Appointment => "Ese horario se cruza con la cita de {$with->patient->full_name}, de {$with->starts_at->format('H:i')} a {$with->ends_at->format('H:i')}"
                 .($with->buffer_minutes > 0 ? " (más {$with->buffer_minutes} min de esterilización)" : '').'. Elige otro.',
             $with instanceof ScheduleBlock => 'Ese horario cae en un bloqueo de la agenda: '.($with->reason ?: $with->type->getLabel())
-                .", del {$with->starts_at->format('d/m H:i')} al {$with->ends_at->format('d/m H:i')}. Elige otro.",
+                .', '.$with->span().'. Elige otro.',
             default => 'Ese horario se cruza con otra cita o con un bloqueo de la agenda. Elige otro.',
         });
+    }
+
+    /** Para el personal: al alargar una cita (otra duración u otro tratamiento), el tiempo que se agrega choca con lo que sigue. */
+    public static function tooLong(Appointment|ScheduleBlock $with): self
+    {
+        return new self('Con esa duración la cita se cruza con '.($with instanceof Appointment
+            ? "la cita de {$with->patient->full_name}, que empieza a las {$with->starts_at->format('H:i')}"
+            : 'un bloqueo de la agenda ('.($with->reason ?: $with->type->getLabel()).", desde las {$with->starts_at->format('H:i')})")
+            .'. Ponle menos tiempo o muévela a otro horario.');
     }
 
     /** Para el personal: el horario está apartado para alguien de la lista de espera mientras responde. */

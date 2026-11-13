@@ -3,10 +3,13 @@
 namespace App\Filament\Actions;
 
 use App\Enums\AppointmentStatus;
+use App\Enums\CancelledBy;
 use App\Enums\MessageTemplateKey;
+use App\Filament\Resources\Appointments\AppointmentResource;
 use App\Filament\Resources\Consultations\ConsultationResource;
 use App\Filament\Resources\Patients\PatientResource;
 use App\Filament\Resources\RescheduleRequests\RescheduleRequestResource;
+use App\Filament\Resources\WaitlistEntries\WaitlistEntryResource;
 use App\Filament\Support\ArrivalChecklist;
 use App\Filament\Support\Notify;
 use App\Filament\Support\SlotPicker;
@@ -14,9 +17,12 @@ use App\Filament\Support\VisitFlags;
 use App\Models\Appointment;
 use App\Models\Consultation;
 use App\Models\Doctor;
+use App\Models\Treatment;
 use App\Models\User;
+use App\Models\WaitlistEntry;
 use App\Models\WhatsappMessage;
 use App\Services\Booking\AppointmentService;
+use App\Services\Booking\WaitlistService;
 use App\Services\Clinical\ConsultationService;
 use App\Services\WhatsApp\WhatsAppOutbox;
 use App\Support\Dates;
@@ -26,12 +32,19 @@ use Filament\Actions\Action;
 use Filament\Actions\ActionGroup;
 use Filament\Actions\BulkAction;
 use Filament\Forms\Components\Checkbox;
+use Filament\Forms\Components\Radio;
+use Filament\Forms\Components\Select;
 use Filament\Forms\Components\Textarea;
 use Filament\Forms\Components\Toggle;
+use Filament\Forms\Components\ToggleButtons;
 use Filament\Notifications\Notification;
 use Filament\Resources\RelationManagers\RelationManager;
+use Filament\Schemas\Components\Utilities\Get;
+use Filament\Schemas\Components\Utilities\Set;
+use Filament\Support\Enums\Width;
 use Filament\Support\Icons\Heroicon;
 use Filament\Tables\Contracts\HasTable;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Collection;
 
 /**
@@ -55,7 +68,7 @@ final class AppointmentActions
                 self::whatsapp(),
                 self::patientProfile(),
                 ...self::others(),
-            ]),
+            ])->dropdownWidth(Width::ExtraSmall),
         ];
     }
 
@@ -119,6 +132,8 @@ final class AppointmentActions
         return [
             self::viewConsultation(),
             self::move(),
+            self::changeTreatment(),
+            self::notes(),
             self::changeRequest(),
             self::closeWithoutDoctor(),
             self::noShow(),
@@ -129,7 +144,7 @@ final class AppointmentActions
 
     private static function more(): ActionGroup
     {
-        return ActionGroup::make(self::others())->label('Más')->button()->color('gray')->icon(Heroicon::OutlinedEllipsisHorizontal);
+        return ActionGroup::make(self::others())->label('Más')->button()->color('gray')->icon(Heroicon::OutlinedEllipsisHorizontal)->dropdownWidth(Width::ExtraSmall);
     }
 
     public static function confirm(): Action
@@ -488,6 +503,96 @@ final class AppointmentActions
             ));
     }
 
+    /**
+     * El paciente venía por una cosa y termina siendo otra, o el caso necesita más tiempo: se cambia aquí, sin
+     * cancelar la cita ni crear otra. Hasta que pasa con el doctor; después, lo que se hizo queda en su atención.
+     */
+    public static function changeTreatment(): Action
+    {
+        return Action::make('changeTreatment')
+            ->label('Cambiar tratamiento o duración')
+            ->icon(Heroicon::OutlinedAdjustmentsHorizontal)
+            ->color('gray')
+            ->modalHeading('Cambiar tratamiento o duración')
+            ->modalDescription(fn (Appointment $record) => 'La cita sigue el '.Dates::dayAndTime($record->starts_at).' con '.$record->doctor->name.': solo cambia qué se le hace o cuánto dura.')
+            ->modalSubmitActionLabel('Guardar cambio')
+            ->modalWidth(Width::Large)
+            ->visible(fn (Appointment $record) => in_array($record->status, AppointmentStatus::notYetAttended(), true))
+            ->authorize('update')
+            ->fillForm(fn (Appointment $record) => [
+                'treatment_id' => $record->treatment_id,
+                'duration_minutes' => $record->durationMinutes(),
+            ])
+            ->schema(fn (Appointment $record) => [
+                Select::make('treatment_id')
+                    ->label('Tratamiento')
+                    ->options(fn () => Treatment::query()
+                        ->where(fn (Builder $offered) => $offered
+                            ->whereKey($record->treatment_id)
+                            ->orWhere(fn (Builder $active) => $active->active()->whereHas('doctors', fn (Builder $doctor) => $doctor->whereKey($record->doctor_id))))
+                        ->orderBy('sort_order')
+                        ->pluck('name', 'id'))
+                    ->helperText(fn (Get $get) => $record->treatment_plan_item_id && (int) $get('treatment_id') !== $record->treatment_id
+                        ? 'Esta cita era una sesión de su plan de tratamiento. Con otro tratamiento deja de contar como esa sesión.'
+                        : 'Solo los que realiza '.$record->doctor->name.'.')
+                    ->searchable()
+                    ->required()
+                    ->live()
+                    // Con otro tratamiento, la duración pasa a ser la normal de ese.
+                    ->afterStateUpdated(fn (?string $state, Set $set) => $set('duration_minutes', ($treatment = Treatment::find($state)) ? $record->doctor->durationFor($treatment) : null)),
+                Select::make('duration_minutes')
+                    ->label('Duración')
+                    ->options(fn (Get $get) => SlotPicker::durationOptions(
+                        ($treatment = Treatment::find($get('treatment_id'))) ? $record->doctor->durationFor($treatment) : null,
+                        $record->durationMinutes(),
+                    ))
+                    ->helperText(fn (Get $get) => filled($get('duration_minutes'))
+                        ? 'De '.$record->starts_at->format('H:i').' a '.$record->starts_at->copy()->addMinutes((int) $get('duration_minutes'))->format('H:i').'.'
+                        : null)
+                    ->selectablePlaceholder(false)
+                    ->required()
+                    ->live(),
+            ])
+            ->action(fn (array $data, Appointment $record, Action $action) => Notify::run(
+                fn () => app(AppointmentService::class)->changeTreatment($record, auth()->user(), Treatment::findOrFail($data['treatment_id']), (int) $data['duration_minutes']),
+                'Cita actualizada',
+                $action,
+            ));
+    }
+
+    /**
+     * Las notas internas ("viene con su mamá") y la fecha fija, desde cualquier lugar donde se ve la cita: antes solo
+     * se podían editar en su página.
+     */
+    public static function notes(): Action
+    {
+        return Action::make('notes')
+            ->label('Editar notas')
+            ->icon(Heroicon::OutlinedPencilSquare)
+            ->color('gray')
+            ->modalHeading('Notas de la cita')
+            ->modalSubmitActionLabel('Guardar')
+            ->modalWidth(Width::Large)
+            ->visible(fn (Appointment $record) => $record->status !== AppointmentStatus::Cancelled)
+            ->authorize('update')
+            ->fillForm(fn (Appointment $record) => $record->only(['internal_notes', 'fixed_date']))
+            ->schema(fn (Appointment $record) => [
+                Textarea::make('internal_notes')
+                    ->label('Notas internas')
+                    ->helperText('Solo las ve el personal. En la agenda, la cita muestra la etiqueta "Nota".')
+                    ->rows(3)
+                    ->autofocus(),
+                Toggle::make('fixed_date')
+                    ->label('Fecha fija (el paciente no la mueve solo)')
+                    ->visible($record->status->isChangeable()),
+            ])
+            ->action(function (array $data, Appointment $record): void {
+                $record->update($data);
+
+                Notification::make()->success()->title('Notas guardadas')->send();
+            });
+    }
+
     /** Lo que se dice al mover una cita: si quedó confirmada, si hay un aviso por enviar o si se movió a una hora que ya pasó. */
     public static function movedMessage(CarbonInterface $startsAt, bool $agreed): string
     {
@@ -498,6 +603,10 @@ final class AppointmentActions
         };
     }
 
+    /**
+     * Cancelar dice quién cancela y por qué, con un toque (así se sabe por qué se pierden las citas), y no deja al
+     * paciente suelto: se le puede agendar otra cita ahí mismo o pasarlo a la lista de espera.
+     */
     public static function cancel(): Action
     {
         return Action::make('cancel')
@@ -505,18 +614,135 @@ final class AppointmentActions
             ->icon(Heroicon::OutlinedXCircle)
             ->color('danger')
             ->modalHeading('Cancelar cita')
+            ->modalDescription('Si solo quiere otro día u otra hora, usa "Mover cita": la cita se conserva y no cuenta como cancelación.')
             ->modalSubmitActionLabel('Cancelar la cita')
             ->modalCancelActionLabel('Volver')
+            ->modalWidth(Width::Large)
             ->visible(fn (Appointment $record) => $record->status->isChangeable())
             ->authorize('update')
-            ->schema([
-                Textarea::make('reason')->label('Motivo')->rows(2)->maxLength(250),
-                Toggle::make('notify')->label('Avisar al paciente por WhatsApp')->default(true),
+            ->schema(fn (Appointment $record) => [
+                ToggleButtons::make('who')
+                    ->label('¿Quién cancela?')
+                    ->options([CancelledBy::Patient->value => 'El paciente', CancelledBy::Clinic->value => 'El consultorio'])
+                    ->inline()
+                    ->required()
+                    ->validationMessages(['required' => 'Marca si cancela el paciente o el consultorio.'])
+                    ->live()
+                    // El paciente que cancela ya lo sabe; si cancela el consultorio, hay que avisarle.
+                    ->afterStateUpdated(function (?string $state, Set $set): void {
+                        $set('motive', null);
+                        $set('notify', $state === CancelledBy::Clinic->value);
+                    }),
+                ToggleButtons::make('motive')
+                    ->label('Motivo')
+                    ->options(fn (Get $get) => array_combine(self::cancelMotives($get('who')), self::cancelMotives($get('who'))))
+                    ->inline()
+                    ->visible(fn (Get $get) => filled($get('who'))),
+                Textarea::make('reason')
+                    ->label('Detalle')
+                    ->placeholder('Opcional')
+                    ->rows(2)
+                    ->maxLength(200),
+                Toggle::make('notify')
+                    ->label('Avisar al paciente por WhatsApp')
+                    ->default(true),
+                Checkbox::make('series')
+                    ->label(fn () => match ($later = Appointment::query()->laterInSeries($record)->count()) {
+                        1 => 'Cancelar también su cita siguiente de la serie',
+                        default => "Cancelar también sus {$later} citas siguientes de la serie",
+                    })
+                    ->helperText('Se agendaron juntas, para repetirse cada tantas semanas.')
+                    ->visible(fn () => $record->series_id !== null && Appointment::query()->laterInSeries($record)->exists()),
+                Radio::make('then')
+                    ->label('¿Y después?')
+                    ->options(array_filter([
+                        'nothing' => 'Nada más',
+                        'rebook' => AppointmentResource::canCreate() ? 'Agendarle otra cita ahora' : null,
+                        'waitlist' => auth()->user()->can('create', WaitlistEntry::class) ? 'Pasarlo a la lista de espera' : null,
+                    ]))
+                    ->descriptions([
+                        'rebook' => 'Se abre "Nueva cita" con el paciente, el doctor y el tratamiento ya puestos.',
+                        'waitlist' => 'Queda anotado para ese tratamiento: llega la alerta cuando se libere un horario.',
+                    ])
+                    ->default('nothing'),
             ])
-            ->action(fn (array $data, Appointment $record) => Notify::run(
-                fn () => app(AppointmentService::class)->cancelByStaff($record, auth()->user(), $data['reason'] ?? null, (bool) $data['notify']),
-                'Cita cancelada',
-            ));
+            ->action(function (array $data, Appointment $record, Action $action): void {
+                /** @var User $user */
+                $user = auth()->user();
+                $cancelled = 0;
+
+                Notify::run(
+                    function () use ($data, $record, $user, &$cancelled): void {
+                        $cancelled = app(AppointmentService::class)->cancelByStaff(
+                            $record,
+                            $user,
+                            self::cancelReason($data),
+                            (bool) ($data['notify'] ?? false),
+                            CancelledBy::tryFrom((string) ($data['who'] ?? '')) ?? CancelledBy::Clinic,
+                            (bool) ($data['series'] ?? false),
+                        );
+                    },
+                    'Cita cancelada',
+                    $action,
+                    function (Notification $notification) use (&$cancelled): Notification {
+                        return $cancelled > 1 ? $notification->title($cancelled.' citas canceladas') : $notification;
+                    },
+                );
+
+                match ($data['then'] ?? 'nothing') {
+                    'rebook' => $action->redirect(AppointmentResource::newUrl([
+                        'patient' => $record->patient_id,
+                        'doctor' => $record->doctor_id,
+                        'treatment' => $record->treatment_id,
+                        'plan_item' => $record->treatment_plan_item_id,
+                    ])),
+                    'waitlist' => self::passToWaitlist($record, $user),
+                    default => null,
+                };
+            });
+    }
+
+    /**
+     * Los motivos de un toque, según quién cancela.
+     *
+     * @return list<string>
+     */
+    public static function cancelMotives(?string $who): array
+    {
+        return match (CancelledBy::tryFrom((string) $who)) {
+            CancelledBy::Patient => ['No puede venir ese día', 'Está enfermo', 'Por el costo', 'Ya no quiere el tratamiento', 'Otro'],
+            CancelledBy::Clinic => ['El doctor no podrá atender', 'No se atiende ese día', 'Se agendó por error', 'Otro'],
+            default => [],
+        };
+    }
+
+    /**
+     * El motivo que queda guardado: el de un toque y, si se escribió, el detalle ("Está enfermo: tiene fiebre").
+     *
+     * @param  array<string, mixed>  $data
+     */
+    private static function cancelReason(array $data): ?string
+    {
+        $motive = ($data['motive'] ?? null) === 'Otro' && filled($data['reason'] ?? null) ? null : ($data['motive'] ?? null);
+
+        return collect([$motive, $data['reason'] ?? null])->filter()->implode(': ') ?: null;
+    }
+
+    /** Tras cancelar: el paciente queda en la lista de espera (si no estaba ya) y se dice dónde verlo. */
+    private static function passToWaitlist(Appointment $record, User $by): void
+    {
+        if (! $by->can('create', WaitlistEntry::class)) {
+            return;
+        }
+
+        $entry = app(WaitlistService::class)->addAfterCancellation($record, $by);
+
+        Notification::make()
+            ->success()
+            ->title($record->patient->full_name.($entry ? ' quedó en la lista de espera' : ' ya estaba en la lista de espera'))
+            ->body($entry ? 'Para '.mb_strtolower($record->treatment->name).', desde hoy y a cualquier hora. Si pidió algo más preciso, ajústalo en la lista.' : null)
+            ->actions([Action::make('seeWaitlist')->label('Ver la lista de espera')->url(WaitlistEntryResource::getUrl())])
+            ->send();
     }
 
     private static function openConsultation(Appointment $record): ?Consultation

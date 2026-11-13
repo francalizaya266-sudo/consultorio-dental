@@ -13,6 +13,9 @@
         @if ($block)
             <x-filament::badge color="danger" icon="heroicon-m-no-symbol">En bloqueo: muévela</x-filament::badge>
         @endif
+        @if ($appointment->is_overbooked)
+            <x-filament::badge color="warning" icon="heroicon-m-square-2-stack">Sobrecupo</x-filament::badge>
+        @endif
         @if ($appointment->is_new_patient)
             <x-filament::badge color="info">Paciente nuevo</x-filament::badge>
         @endif
@@ -34,6 +37,10 @@
         <dd>{{ $appointment->treatment->name }}</dd>
         <dt>Doctor</dt>
         <dd>{{ $appointment->doctor->name }}</dd>
+        @if ($series)
+            <dt>Se repite</dt>
+            <dd>Cita {{ $series['position'] }} de {{ $series['total'] }} de su serie</dd>
+        @endif
         @if ($phone)
             <dt>Celular</dt>
             <dd><a href="{{ $phoneLink }}">{{ $phone }}</a></dd>

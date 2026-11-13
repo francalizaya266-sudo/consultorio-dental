@@ -159,7 +159,7 @@ class NewAppointmentWindowTest extends TestCase
 
         Livewire::test(Agenda::class)
             ->mountAction('createAppointment', ['doctor' => $this->doctor->id, 'date' => '2026-11-03'])
-            ->assertMountedActionModalDontSee('Dura')
+            ->assertMountedActionModalDontSee('Dura ')
             ->setActionData(['treatment_id' => $this->treatment->id])
             ->assertMountedActionModalSee("Dura 30\u{00A0}min · Precio desde S/ 80.")
             ->setActionData(['slot' => '10:00'])

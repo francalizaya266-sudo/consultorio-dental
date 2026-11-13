@@ -151,8 +151,9 @@ class AppointmentsTable
     }
 
     /**
-     * Avisos de la cita: llamar, paciente nuevo, fecha fija, alerta médica (para quien ve lo clínico), pidió
-     * cambio, si suele faltar, qué sesión de su plan es y, si se pasa el saldo, cuánto debe.
+     * Avisos de la cita: llamar, paciente nuevo, fecha fija, sobrecupo, si es de una serie que se repite, alerta
+     * médica (para quien ve lo clínico), pidió cambio, si suele faltar, qué sesión de su plan es y, si se pasa el
+     * saldo, cuánto debe.
      */
     public static function flagsColumn(bool $withBalance = false): TextColumn
     {
@@ -163,6 +164,8 @@ class AppointmentsTable
                 ...VisitFlags::labels(VisitFlags::of($record, auth()->user(), $livewire->getTableRecords())),
                 $record->is_new_patient ? 'Nuevo' : null,
                 $record->fixed_date ? 'Fecha fija' : null,
+                $record->is_overbooked ? 'Sobrecupo' : null,
+                $record->series_id !== null ? 'Se repite' : null,
                 $withBalance && (float) $record->patient->balance_due > 0 ? 'Debe '.Money::short($record->patient->balance_due) : null,
             ])))
             ->badge()

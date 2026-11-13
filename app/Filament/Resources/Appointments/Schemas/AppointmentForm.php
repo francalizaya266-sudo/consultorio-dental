@@ -15,6 +15,7 @@ use App\Models\Patient;
 use App\Models\Treatment;
 use App\Models\TreatmentPlanItem;
 use App\Models\User;
+use App\Services\Booking\AppointmentService;
 use App\Services\Clinical\TreatmentPlanService;
 use App\Support\Dates;
 use App\Support\Money;
@@ -50,6 +51,7 @@ class AppointmentForm
                         Text::make(fn (Get $get) => self::visitSummary($get))
                             ->visible(fn (Get $get) => self::visitSummary($get) !== null)
                             ->columnSpanFull(),
+                        ...self::repeatFields(),
                     ]),
                 // Cerrado: casi nunca se usa y empujaba "Agendar cita" fuera de la pantalla.
                 Section::make('Detalles')
@@ -57,15 +59,110 @@ class AppointmentForm
                     ->collapsible()
                     ->collapsed()
                     ->schema([
+                        // Para el caso que necesita más (o menos) tiempo que el de siempre: los horarios libres se vuelven a calcular.
+                        Select::make('duration_minutes')
+                            ->label('Duración')
+                            ->placeholder('La normal del tratamiento')
+                            ->options(fn (Get $get) => SlotPicker::durationOptions(self::usualDuration($get)))
+                            ->live()
+                            ->afterStateUpdated(fn (Get $get, Set $set) => SlotPicker::keepSlotIfItFits($get, $set)),
                         Toggle::make('fixed_date')
                             ->label('Fecha fija (el paciente no la mueve solo)')
                             ->inline(false),
+                        // Con el paciente al frente o al teléfono, el aviso sobra y ensucia Avisos.
+                        Toggle::make('notify')
+                            ->label('Preparar el aviso de WhatsApp para el paciente')
+                            ->helperText('Apágalo si ya se lo dijiste (está al frente o al teléfono): no queda nada por enviar en Avisos.')
+                            ->default(true)
+                            ->columnSpanFull(),
                         Textarea::make('internal_notes')
                             ->label('Notas internas')
                             ->rows(2)
                             ->columnSpanFull(),
                     ]),
             ]);
+    }
+
+    /**
+     * "Repetir": los controles que vuelven cada tantas semanas se agendan de una vez. Antes de guardar se dice qué
+     * fechas quedan, cuáles cambian de hora porque la de siempre está ocupada y cuáles se saltan por no tener lugar.
+     *
+     * @return list<Field|Text>
+     */
+    private static function repeatFields(): array
+    {
+        return [
+            Toggle::make('repeat')
+                ->label('Repetir esta cita (por ejemplo, un control cada 4 semanas)')
+                ->live()
+                ->columnSpanFull(),
+            Select::make('repeat_every')
+                ->label('Cada')
+                ->options([1 => '1 semana', 2 => '2 semanas', 3 => '3 semanas', 4 => '4 semanas', 6 => '6 semanas', 8 => '8 semanas', 12 => '12 semanas'])
+                ->default(4)
+                ->selectablePlaceholder(false)
+                ->required(fn (Get $get) => (bool) $get('repeat'))
+                ->visible(fn (Get $get) => (bool) $get('repeat'))
+                ->live(),
+            Select::make('repeat_times')
+                ->label('Cuántas citas en total')
+                ->options(collect(range(2, AppointmentService::SERIES_MAX_TIMES))->mapWithKeys(fn (int $times) => [$times => $times.' citas'])->all())
+                ->default(6)
+                ->selectablePlaceholder(false)
+                ->required(fn (Get $get) => (bool) $get('repeat'))
+                ->visible(fn (Get $get) => (bool) $get('repeat'))
+                ->live(),
+            Text::make(fn (Get $get) => self::repeatSummary($get))
+                ->visible(fn (Get $get) => (bool) $get('repeat') && self::repeatSummary($get) !== null)
+                ->columnSpanFull(),
+        ];
+    }
+
+    /**
+     * "Además de esta, quedan: lun 30 nov 10:00 · lun 28 dic 10:30 (las 10:00 están ocupadas). Sin lugar, se saltan:
+     * lun 25 ene." Con el tratamiento, el doctor, el día y la hora ya elegidos.
+     */
+    private static function repeatSummary(Get $get): ?string
+    {
+        $treatment = Treatment::find($get('treatment_id'));
+        $doctor = Doctor::find($get('doctor_id'));
+        $time = $get('manual') ? $get('manual_time') : $get('slot');
+
+        if (! $treatment || ! $doctor || blank($time) || blank($get('date')) || blank($get('repeat_every')) || blank($get('repeat_times'))) {
+            return null;
+        }
+
+        $first = CarbonImmutable::parse($get('date'))->setTimeFromTimeString($time);
+        $plan = collect(app(AppointmentService::class)->seriesPlan(
+            $doctor,
+            $treatment,
+            $first,
+            (int) $get('repeat_every'),
+            (int) $get('repeat_times'),
+            filled($get('patient_id')) ? (int) $get('patient_id') : null,
+            SlotPicker::chosenDuration($get),
+        ));
+
+        $booked = $plan->filter(fn (array $step) => $step['startsAt'] !== null)
+            ->map(fn (array $step) => $step['startsAt']->translatedFormat('D j M H:i').($step['moved'] ? ' (las '.$first->format('H:i').' están ocupadas)' : ''));
+        $skipped = $plan->filter(fn (array $step) => $step['startsAt'] === null)
+            ->map(fn (array $step) => $step['date']->translatedFormat('D j M'));
+
+        return collect([
+            $booked->isNotEmpty() ? 'Además de esta, quedan: '.$booked->implode(' · ').'.' : 'Las demás fechas no tienen lugar: solo se agenda esta.',
+            // "nov." ya trae su punto.
+            $skipped->isNotEmpty() && $booked->isNotEmpty() ? 'Sin lugar ese día, se saltan: '.rtrim($skipped->implode(' · '), '.').'.' : null,
+            'Al paciente se le prepara un solo aviso, el de la primera.',
+        ])->filter()->implode(' ');
+    }
+
+    /** Lo que ese doctor tarda en ese tratamiento; null si falta elegir alguno. */
+    private static function usualDuration(Get $get): ?int
+    {
+        $treatment = Treatment::find($get('treatment_id'));
+        $doctor = Doctor::find($get('doctor_id'));
+
+        return $treatment && $doctor ? $doctor->durationFor($treatment) : null;
     }
 
     /**
@@ -132,7 +229,7 @@ class AppointmentForm
             return null;
         }
 
-        $minutes = $doctor->durationFor($treatment);
+        $minutes = SlotPicker::chosenDuration($get) ?? $doctor->durationFor($treatment);
         $time = $get('manual') ? $get('manual_time') : $get('slot');
         $start = filled($time) && filled($get('date')) ? CarbonImmutable::parse($get('date'))->setTimeFromTimeString($time) : null;
 

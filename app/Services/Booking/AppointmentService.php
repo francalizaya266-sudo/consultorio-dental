@@ -21,6 +21,7 @@ use App\Models\RememberedDevice;
 use App\Models\Setting;
 use App\Models\Treatment;
 use App\Models\User;
+use App\Models\WaitlistEntry;
 use App\Services\Access\MagicLinkService;
 use App\Services\Agenda\AvailabilityService;
 use App\Services\Agenda\Slot;
@@ -28,10 +29,13 @@ use App\Services\Billing\BillingService;
 use App\Services\Inventory\InventoryService;
 use App\Services\StaffAlerts;
 use App\Services\WhatsApp\WhatsAppOutbox;
+use App\Support\Dates;
 use App\Support\Phone;
+use Carbon\CarbonImmutable;
 use Carbon\CarbonInterface;
 use Illuminate\Auth\Access\AuthorizationException;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Str;
 
 /**
  * Reserva, confirmación, cambio de horario y cancelación de citas.
@@ -41,6 +45,9 @@ class AppointmentService
 {
     /** Horas en que un paso marcado por error (llegó, no asistió, confirmar, cancelar) todavía se puede deshacer. */
     public const UNDO_HOURS = 24;
+
+    /** Cuántas citas puede tener, como mucho, una serie que se repite. */
+    public const SERIES_MAX_TIMES = 12;
 
     public function __construct(
         private readonly AvailabilityService $availability,
@@ -149,7 +156,10 @@ class AppointmentService
      * Cita creada por recepción o por el doctor (por ejemplo, la próxima sesión al
      * terminar la consulta). Queda confirmada y se prepara el aviso al paciente (salvo que se pida que no).
      *
-     * @param  array{duration_minutes?: int, treatment_plan_item_id?: int|null, origin?: mixed, fixed_date?: bool, internal_notes?: string|null, notify?: bool}  $options
+     * Con "overbook" se agenda a propósito encima de otra cita (una urgencia que el doctor aceptó ver): queda marcada
+     * como sobrecupo. Un bloqueo de la agenda o un horario apartado de la lista de espera se respetan igual.
+     *
+     * @param  array{duration_minutes?: int|null, treatment_plan_item_id?: int|null, origin?: mixed, fixed_date?: bool, internal_notes?: string|null, notify?: bool, overbook?: bool, series_id?: string|null}  $options
      */
     public function bookFromStaff(
         User $by,
@@ -161,10 +171,11 @@ class AppointmentService
     ): Appointment {
         $this->assertCanManage($by, $doctor);
 
-        $duration = (int) ($options['duration_minutes'] ?? $doctor->durationFor($treatment));
+        $usual = $doctor->durationFor($treatment);
+        $duration = (int) ($options['duration_minutes'] ?? $usual);
         $buffer = $treatment->bufferMinutes();
 
-        return DB::transaction(function () use ($by, $patient, $doctor, $treatment, $startsAt, $options, $duration, $buffer) {
+        return DB::transaction(function () use ($by, $patient, $doctor, $treatment, $startsAt, $options, $usual, $duration, $buffer) {
             $this->lockAgenda($doctor);
 
             $availability = $this->availability->forPatient($patient->getKey());
@@ -173,8 +184,14 @@ class AppointmentService
                 throw BookingException::held($hold);
             }
 
-            if (! $availability->isFree($doctor, $startsAt, $duration, $buffer, requireWorkingHours: false)) {
-                throw BookingException::overlaps($availability->clashAt($doctor, $startsAt, $duration, $buffer));
+            $clash = $availability->clashAt($doctor, $startsAt, $duration, $buffer);
+            $overbooks = ($options['overbook'] ?? false) && $clash instanceof Appointment;
+
+            // El sobrecupo va encima de otra cita, nunca de un bloqueo (vacaciones, feriado).
+            $inTheWay = $overbooks ? $availability->blockAt($doctor, $startsAt, $duration) : $clash;
+
+            if ($inTheWay !== null) {
+                throw BookingException::overlaps($inTheWay);
             }
 
             $appointment = Appointment::create([
@@ -182,9 +199,12 @@ class AppointmentService
                 'doctor_id' => $doctor->getKey(),
                 'treatment_id' => $treatment->getKey(),
                 'treatment_plan_item_id' => $options['treatment_plan_item_id'] ?? null,
+                'series_id' => $options['series_id'] ?? null,
                 'starts_at' => $startsAt,
                 'ends_at' => $startsAt->copy()->addMinutes($duration),
                 'buffer_minutes' => $buffer,
+                'custom_duration' => $duration !== $usual,
+                'is_overbooked' => $overbooks,
                 'status' => AppointmentStatus::Confirmed,
                 'confirmed_at' => now(),
                 'confirmed_via' => $by->isDoctor() ? ConfirmationChannel::Doctor : ConfirmationChannel::Reception,
@@ -201,7 +221,7 @@ class AppointmentService
                 $patient->update(['origin' => $appointment->origin]);
             }
 
-            $appointment->logEvent('created', 'staff');
+            $appointment->logEvent('created', 'staff', $overbooks ? ['notes' => 'Sobrecupo: encima de la cita de '.$clash->patient->full_name.'.'] : []);
             $this->waitlist->settle($appointment);
 
             // Una cita anotada en una hora que ya pasó (alguien que vino sin cita) no se le anuncia como "tu próxima cita".
@@ -215,6 +235,143 @@ class AppointmentService
                     "{$patient->full_name} · {$treatment->name} · {$this->when($appointment)}.",
                 );
             }
+
+            return $appointment;
+        });
+    }
+
+    /**
+     * Citas que se repiten ("cada 4 semanas, 6 veces", para los controles de ortodoncia): la primera se agenda como
+     * cualquier otra y las siguientes, el mismo día de la semana a la misma hora. Si esa hora ya está ocupada toman
+     * la hora libre más cercana de ese día; el día sin lugar (feriado, vacaciones, lleno) se salta. Al paciente se
+     * le prepara un solo aviso, el de la primera: de las demás le llega su recordatorio.
+     *
+     * @param  array<string, mixed>  $options  Las mismas de bookFromStaff.
+     * @return array{booked: list<Appointment>, skipped: list<CarbonImmutable>}
+     */
+    public function bookSeries(
+        User $by,
+        Patient $patient,
+        Doctor $doctor,
+        Treatment $treatment,
+        CarbonInterface $startsAt,
+        int $everyWeeks,
+        int $times,
+        array $options = [],
+    ): array {
+        return DB::transaction(function () use ($by, $patient, $doctor, $treatment, $startsAt, $everyWeeks, $times, $options) {
+            $options['series_id'] = (string) Str::uuid();
+            $booked = [$this->bookFromStaff($by, $patient, $doctor, $treatment, $startsAt, $options)];
+            $skipped = [];
+
+            foreach ($this->seriesPlan($doctor, $treatment, $startsAt, $everyWeeks, $times, $patient->getKey(), $options['duration_minutes'] ?? null) as $step) {
+                if ($step['startsAt'] === null) {
+                    $skipped[] = $step['date'];
+
+                    continue;
+                }
+
+                $booked[] = $this->bookFromStaff($by, $patient, $doctor, $treatment, $step['startsAt'], ['notify' => false, 'overbook' => false] + $options);
+            }
+
+            return ['booked' => $booked, 'skipped' => $skipped];
+        });
+    }
+
+    /**
+     * Las fechas que siguen a la primera en una serie y la hora que tomaría cada una: la misma si está libre, la
+     * libre más cercana de ese día si no ("moved"; entre dos igual de cerca, la de después), o ninguna si ese día no
+     * hay lugar.
+     *
+     * @return list<array{date: CarbonImmutable, startsAt: CarbonImmutable|null, moved: bool}>
+     */
+    public function seriesPlan(
+        Doctor $doctor,
+        Treatment $treatment,
+        CarbonInterface $startsAt,
+        int $everyWeeks,
+        int $times,
+        ?int $patientId = null,
+        ?int $durationMinutes = null,
+    ): array {
+        $first = CarbonImmutable::instance($startsAt);
+        $availability = $this->availability->forPatient($patientId);
+        $plan = [];
+
+        for ($i = 1; $i < min($times, self::SERIES_MAX_TIMES); $i++) {
+            $wanted = $first->addWeeks($i * max(1, $everyWeeks));
+            $slot = $availability
+                ->slotsFor($doctor, $treatment, $wanted, earliest: now(), durationMinutes: $durationMinutes)
+                // A igual distancia, la de después: quien viene siempre a las 4 llega tarde a una cita adelantada.
+                ->sortBy(fn (Slot $slot) => [abs($slot->startsAt->getTimestamp() - $wanted->getTimestamp()), $slot->startsAt->lt($wanted)])
+                ->first();
+
+            $plan[] = [
+                'date' => $wanted->startOfDay(),
+                'startsAt' => $slot?->startsAt,
+                'moved' => $slot !== null && ! $slot->startsAt->eq($wanted),
+            ];
+        }
+
+        return $plan;
+    }
+
+    /**
+     * Cambia qué se le va a hacer en la cita, cuánto dura, o las dos cosas, sin cancelarla: el paciente que venía
+     * por una limpieza y termina en una curación, o el caso que necesita más tiempo. La cita no cambia de hora de
+     * inicio ni de doctor. Si con la nueva duración se cruza con lo que sigue, no se guarda y se dice con qué.
+     *
+     * @param  int|null  $durationMinutes  Null: lo que ese doctor tarda en ese tratamiento.
+     */
+    public function changeTreatment(Appointment $appointment, User $by, Treatment $treatment, ?int $durationMinutes = null): Appointment
+    {
+        $doctor = $appointment->doctor;
+        $this->assertCanManage($by, $doctor);
+
+        if (! in_array($appointment->status, AppointmentStatus::notYetAttended(), true)) {
+            throw BookingException::notChangeable();
+        }
+
+        $changesTreatment = $treatment->isNot($appointment->treatment);
+
+        if ($changesTreatment) {
+            $this->assertDoctorOffers($doctor, $treatment);
+        }
+
+        $usual = $doctor->durationFor($treatment);
+        $duration = $durationMinutes ?? $usual;
+        $buffer = $treatment->bufferMinutes();
+        $endsAt = $appointment->starts_at->copy()->addMinutes($duration);
+
+        return DB::transaction(function () use ($appointment, $doctor, $treatment, $changesTreatment, $usual, $duration, $buffer, $endsAt) {
+            $this->lockAgenda($doctor);
+
+            $clash = $this->availability->clashWhenExtending($appointment, $endsAt, $buffer);
+
+            if ($clash instanceof WaitlistEntry) {
+                throw BookingException::held($clash);
+            }
+
+            if ($clash !== null) {
+                throw BookingException::tooLong($clash);
+            }
+
+            $before = $appointment->treatment->name.' ('.Dates::duration($appointment->durationMinutes()).')';
+
+            $appointment->update([
+                'treatment_id' => $treatment->getKey(),
+                // La sesión de su plan era de otro tratamiento: la cita deja de contar como esa sesión.
+                'treatment_plan_item_id' => $changesTreatment ? null : $appointment->treatment_plan_item_id,
+                'ends_at' => $endsAt,
+                'buffer_minutes' => $buffer,
+                'custom_duration' => $duration !== $usual,
+            ]);
+
+            $appointment->refresh();
+            $appointment->logEvent('changed', 'staff', ['notes' => $before.' → '.$treatment->name.' ('.Dates::duration($duration).')']);
+
+            // El aviso que todavía no se envió debe decir el tratamiento nuevo.
+            $this->outbox->refreshPending($appointment);
 
             return $appointment;
         });
@@ -406,11 +563,41 @@ class AppointmentService
         );
     }
 
-    public function cancelByStaff(Appointment $appointment, User $by, ?string $reason = null, bool $notifyPatient = true): void
+    /**
+     * El personal cancela la cita: porque el consultorio no podrá atender, o porque el paciente llamó o escribió para
+     * cancelar (así se sabe por qué se pierden las citas).
+     *
+     * @param  CancelledBy  $onBehalfOf  Quién decidió cancelar.
+     * @param  bool  $withLaterInSeries  También las que le siguen en su serie ("cada 4 semanas"), sin más avisos al paciente.
+     * @return int Cuántas citas se cancelaron.
+     */
+    public function cancelByStaff(
+        Appointment $appointment,
+        User $by,
+        ?string $reason = null,
+        bool $notifyPatient = true,
+        CancelledBy $onBehalfOf = CancelledBy::Clinic,
+        bool $withLaterInSeries = false,
+    ): int {
+        $this->assertCanManage($by, $appointment->doctor);
+
+        return DB::transaction(function () use ($appointment, $by, $reason, $notifyPatient, $onBehalfOf, $withLaterInSeries) {
+            $later = $withLaterInSeries
+                ? Appointment::query()->laterInSeries($appointment)->with(['doctor', 'patient'])->orderBy('starts_at')->get()
+                : collect();
+
+            $this->cancelOneByStaff($appointment, $by, $reason, $notifyPatient, $onBehalfOf);
+            $later->each(fn (Appointment $next) => $this->cancelOneByStaff($next, $by, $reason, false, $onBehalfOf));
+
+            return 1 + $later->count();
+        });
+    }
+
+    private function cancelOneByStaff(Appointment $appointment, User $by, ?string $reason, bool $notifyPatient, CancelledBy $onBehalfOf): void
     {
         $this->assertCanManage($by, $appointment->doctor);
 
-        $this->cancel($appointment, CancelledBy::Clinic, $reason, $by);
+        $this->cancel($appointment, $onBehalfOf, $reason, $by);
 
         if ($notifyPatient) {
             $this->outbox->queueForAppointment($appointment, MessageTemplateKey::Cancelled);
@@ -495,15 +682,15 @@ class AppointmentService
 
     /**
      * El último paso de la cita que todavía se puede deshacer, por si se marcó por error: "llegó", "no asistió",
-     * "confirmar" (a mano, no la cita que nace confirmada al agendarla el personal) o "cancelar" (por el
-     * consultorio), hecho hace menos de un día. Null si no hay nada que deshacer.
+     * "confirmar" (a mano, no la cita que nace confirmada al agendarla el personal) o "cancelar" (lo anotó alguien
+     * del consultorio, aunque lo pidiera el paciente), hecho hace menos de un día. Null si no hay nada que deshacer.
      */
     public function undoableStep(Appointment $appointment): ?AppointmentStatus
     {
         $at = match ($appointment->status) {
             AppointmentStatus::CheckedIn => $appointment->checked_in_at,
             AppointmentStatus::NoShow => $appointment->no_show_at,
-            AppointmentStatus::Cancelled => $appointment->cancelled_by === CancelledBy::Clinic ? $appointment->cancelled_at : null,
+            AppointmentStatus::Cancelled => $appointment->cancelled_by === CancelledBy::Clinic || $appointment->cancelled_by_user_id !== null ? $appointment->cancelled_at : null,
             AppointmentStatus::Confirmed => $this->wasConfirmedByHand($appointment) ? $appointment->confirmed_at : null,
             default => null,
         };
@@ -609,14 +796,19 @@ class AppointmentService
     {
         $this->lockAgenda($appointment->doctor);
 
-        $duration = (int) $appointment->starts_at->diffInMinutes($appointment->ends_at, true);
+        $duration = $appointment->durationMinutes();
         $availability = $this->availability->forPatient($appointment->patient_id);
 
         if ($hold = $availability->holdAt($appointment->doctor, $appointment->starts_at, $duration, $appointment->buffer_minutes)) {
             throw BookingException::held($hold);
         }
 
-        if (! $availability->isFree($appointment->doctor, $appointment->starts_at, $duration, $appointment->buffer_minutes, $appointment->getKey(), requireWorkingHours: false)) {
+        // Un sobrecupo ya iba encima de otra cita: para volver solo importa que no haya un bloqueo.
+        $clash = $appointment->is_overbooked
+            ? $availability->blockAt($appointment->doctor, $appointment->starts_at, $duration)
+            : $availability->clashAt($appointment->doctor, $appointment->starts_at, $duration, $appointment->buffer_minutes, $appointment->getKey());
+
+        if ($clash !== null) {
             throw BookingException::slotNoLongerFree();
         }
     }
@@ -624,7 +816,8 @@ class AppointmentService
     private function move(Appointment $appointment, Doctor $doctor, CarbonInterface $startsAt, bool $requireWorkingHours, string $actor): Appointment
     {
         $treatment = $appointment->treatment;
-        $duration = $doctor->durationFor($treatment);
+        // La duración que se le puso a mano se conserva; si no, la que ese doctor tarda en el tratamiento.
+        $duration = $appointment->custom_duration ? $appointment->durationMinutes() : $doctor->durationFor($treatment);
         $buffer = $treatment->bufferMinutes();
 
         return DB::transaction(function () use ($appointment, $doctor, $startsAt, $requireWorkingHours, $actor, $duration, $buffer) {
@@ -649,6 +842,8 @@ class AppointmentService
                 'starts_at' => $startsAt,
                 'ends_at' => $startsAt->copy()->addMinutes($duration),
                 'buffer_minutes' => $buffer,
+                // Solo se mueve a un horario libre: deja de ser un sobrecupo.
+                'is_overbooked' => false,
                 'reschedule_count' => $appointment->reschedule_count + 1,
             ]);
 
@@ -707,9 +902,12 @@ class AppointmentService
             'cancellation_reason' => $reason,
         ]);
 
-        $appointment->logEvent('cancelled', $by === CancelledBy::Patient ? 'patient' : 'staff', ['notes' => $reason]);
+        // Lo anotó alguien del consultorio, aunque cancelara por pedido del paciente.
+        $actor = $user === null && $by === CancelledBy::Patient ? 'patient' : 'staff';
+
+        $appointment->logEvent('cancelled', $actor, ['notes' => $reason]);
         $this->outbox->discardPending($appointment);
-        $this->closeRescheduleRequests($appointment, 'La cita se canceló.', $by === CancelledBy::Patient ? 'patient' : 'staff', $user);
+        $this->closeRescheduleRequests($appointment, 'La cita se canceló.', $actor, $user);
     }
 
     /**

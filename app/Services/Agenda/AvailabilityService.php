@@ -36,6 +36,7 @@ class AvailabilityService
     /**
      * @param  CarbonInterface|null  $earliest  No ofrecer horarios antes de este momento (anticipación mínima).
      * @param  int|null  $ignoreAppointmentId  Cita que se está moviendo (no cuenta como ocupada).
+     * @param  int|null  $durationMinutes  Duración puesta a mano para esta cita; null, lo que ese doctor tarda en el tratamiento.
      * @return Collection<int, Slot>
      */
     public function slotsFor(
@@ -44,8 +45,9 @@ class AvailabilityService
         CarbonInterface $date,
         ?CarbonInterface $earliest = null,
         ?int $ignoreAppointmentId = null,
+        ?int $durationMinutes = null,
     ): Collection {
-        $duration = $doctor->durationFor($treatment);
+        $duration = $durationMinutes ?? $doctor->durationFor($treatment);
         $buffer = $treatment->bufferMinutes();
         $step = max(5, (int) Setting::get('agenda.slot_step_minutes', 15));
         $minUsefulGap = (int) Setting::get('agenda.min_useful_gap_minutes', 30);
@@ -122,7 +124,8 @@ class AvailabilityService
 
     /**
      * Con qué se cruza una cita puesta en ese horario: la primera cita que ocupa ese tramo (contando su tiempo de
-     * esterilización) o, si no hay, el bloqueo de la agenda. Null si no se cruza con ninguno.
+     * esterilización), con su paciente ya cargado para poder nombrarlo, o, si no hay, el bloqueo de la agenda. Null si
+     * no se cruza con ninguno.
      */
     public function clashAt(
         Doctor $doctor,
@@ -138,7 +141,46 @@ class AvailabilityService
         return $this->occupyingAppointments($doctor, $start->subDay(), $occupiedUntil, $ignoreAppointmentId)
             ->sortBy('starts_at')
             ->first(fn (Appointment $a) => $a->starts_at->lt($occupiedUntil) && $a->occupied_until->gt($start))
-            ?? ScheduleBlock::query()->affecting($doctor, $start, $end)->orderBy('starts_at')->first();
+            ?->loadMissing('patient')
+            ?? $this->blockAt($doctor, $start, $durationMinutes);
+    }
+
+    /** El bloqueo de la agenda (del doctor o de todo el consultorio) que se cruza con una cita puesta en ese horario. */
+    public function blockAt(Doctor $doctor, CarbonInterface $startsAt, int $durationMinutes): ?ScheduleBlock
+    {
+        $start = CarbonImmutable::instance($startsAt);
+
+        return ScheduleBlock::query()->affecting($doctor, $start, $start->addMinutes($durationMinutes))->orderBy('starts_at')->first();
+    }
+
+    /**
+     * Con qué se cruzaría una cita ya agendada si pasara a terminar a otra hora (dura más, o su tratamiento pide más
+     * esterilización): la cita, el bloqueo o el horario apartado que caen en el tiempo que se agrega. Lo que la cita
+     * ya ocupaba no cuenta. Null si no se cruza con nada.
+     */
+    public function clashWhenExtending(Appointment $appointment, CarbonInterface $endsAt, int $bufferMinutes): Appointment|ScheduleBlock|WaitlistEntry|null
+    {
+        $doctor = $appointment->doctor;
+        $oldEnd = CarbonImmutable::instance($appointment->ends_at);
+        $oldUntil = CarbonImmutable::instance($appointment->occupied_until);
+        $newEnd = CarbonImmutable::instance($endsAt);
+        $newUntil = $newEnd->addMinutes($bufferMinutes);
+
+        if ($newUntil->gt($oldUntil)) {
+            $next = $this->occupyingAppointments($doctor, $oldUntil->subDay(), $newUntil, $appointment->getKey())
+                ->sortBy('starts_at')
+                ->first(fn (Appointment $a) => $a->starts_at->lt($newUntil) && $a->occupied_until->gt($oldUntil))
+                ?->loadMissing('patient')
+                ?? $this->forPatient($appointment->patient_id)->holds($doctor, $oldUntil, $newUntil)->first();
+
+            if ($next !== null) {
+                return $next;
+            }
+        }
+
+        return $newEnd->gt($oldEnd)
+            ? ScheduleBlock::query()->affecting($doctor, $oldEnd, $newEnd)->orderBy('starts_at')->first()
+            : null;
     }
 
     /** Quién tiene apartado (por la lista de espera) un horario que se cruza con este. Null si nadie. */

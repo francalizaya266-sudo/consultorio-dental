@@ -287,7 +287,7 @@ class AppointmentServiceTest extends TestCase
         $this->assertSame('Se agendó.', $message('2026-11-03 10:40'));
         $this->assertSame('Ese horario cae en un bloqueo de la agenda: Congreso de implantes, del 04/11 15:00 al 04/11 19:00. Elige otro.', $message('2026-11-04 18:45'));
         // Sin un motivo escrito, el tipo de bloqueo.
-        $this->assertSame('Ese horario cae en un bloqueo de la agenda: Feriado, del 05/11 00:00 al 06/11 00:00. Elige otro.', $message('2026-11-05 10:00'));
+        $this->assertSame('Ese horario cae en un bloqueo de la agenda: Feriado, el jue. 05/11 (todo el día). Elige otro.', $message('2026-11-05 10:00'));
     }
 
     public function test_patient_link_confirmation_marks_the_appointment_confirmed(): void

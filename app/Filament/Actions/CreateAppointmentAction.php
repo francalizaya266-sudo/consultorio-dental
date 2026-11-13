@@ -16,8 +16,8 @@ use App\Services\Booking\AppointmentService;
 use App\Services\Clinical\TreatmentPlanService;
 use App\Services\Patients\PatientRegistrar;
 use Carbon\CarbonImmutable;
-use Carbon\CarbonInterface;
 use Filament\Actions\Action;
+use Filament\Notifications\Notification;
 use Filament\Schemas\Schema;
 use Filament\Support\Enums\Width;
 use Filament\Support\Icons\Heroicon;
@@ -41,29 +41,82 @@ final class CreateAppointmentAction
             ->visible(fn () => AppointmentResource::canCreate())
             ->schema(fn (Schema $schema) => AppointmentForm::configure($schema))
             ->fillForm(fn (array $arguments) => self::defaults($arguments))
-            ->action(fn (array $data, Action $action) => Notify::run(
-                fn () => self::book($data),
-                self::createdMessage(SlotPicker::startsAt($data)),
-                $action,
-            ));
-    }
+            ->action(function (array $data, Action $action): void {
+                $result = ['booked' => [], 'skipped' => []];
 
-    /** Lo que se dice al crearla: el aviso al paciente solo se prepara si la cita es de ahora en adelante. */
-    public static function createdMessage(CarbonInterface $startsAt): string
-    {
-        return $startsAt->isPast()
-            ? 'Cita registrada en una hora que ya pasó. No se preparó aviso al paciente.'
-            : 'Cita creada. El aviso al paciente está listo en Avisos.';
+                Notify::run(
+                    function () use ($data, &$result): void {
+                        $result = self::bookAll($data);
+                    },
+                    'Cita creada',
+                    $action,
+                    function (Notification $notification) use ($data, &$result): Notification {
+                        return $notification->title(self::createdMessage($data, $result));
+                    },
+                );
+            });
     }
 
     /**
-     * Crea la cita con la misma lógica que la web: nunca se cruzan dos citas. Si el paciente es nuevo,
-     * se registra en la misma transacción (si el horario ya se ocupó, no queda un paciente suelto).
+     * Lo que se dice al crearla: si es un sobrecupo, cuántas quedaron si se repite (y qué fechas se saltaron por no
+     * tener lugar) y si hay un aviso por enviar: solo se prepara si se pidió y la cita es de ahora en adelante.
+     *
+     * @param  array<string, mixed>  $data
+     * @param  array{booked: list<Appointment>, skipped: list<CarbonImmutable>}  $result
+     */
+    public static function createdMessage(array $data, array $result): string
+    {
+        $first = $result['booked'][0];
+        $count = count($result['booked']);
+        $notified = (bool) ($data['notify'] ?? true);
+
+        if ($first->starts_at->isPast()) {
+            return 'Cita registrada en una hora que ya pasó. No se preparó aviso al paciente.';
+        }
+
+        $created = match (true) {
+            $count > 1 => $count.' citas creadas, una cada '.((int) $data['repeat_every'] === 1 ? 'semana' : (int) $data['repeat_every'].' semanas').'.',
+            $first->is_overbooked => 'Sobrecupo agendado.',
+            default => 'Cita creada.',
+        };
+
+        $notice = match (true) {
+            ! $notified => 'No se preparó aviso al paciente.',
+            $count > 1 => 'El aviso de la primera está listo en Avisos.',
+            default => 'El aviso al paciente está listo en Avisos.',
+        };
+
+        $skipped = collect($result['skipped'])->map(fn (CarbonImmutable $date) => $date->translatedFormat('D j M'));
+
+        return collect([
+            $created,
+            $notice,
+            // "nov." ya trae su punto.
+            $skipped->isNotEmpty() ? 'Sin lugar, no se agendó: '.rtrim($skipped->implode(' · '), '.').'.' : null,
+        ])->filter()->implode(' ');
+    }
+
+    /**
+     * Crea la cita y devuelve la primera (la única, si no se repite).
      *
      * @param  array<string, mixed>  $data
      * @param  bool  $walkIn  Llegó sin cita: toma el primer hueco de hoy y queda en sala de una vez.
      */
     public static function book(array $data, bool $walkIn = false): Appointment
+    {
+        return self::bookAll($data, $walkIn)['booked'][0];
+    }
+
+    /**
+     * Crea la cita con la misma lógica que la web: nunca se cruzan dos citas, salvo el sobrecupo que se marcó a
+     * propósito. Si el paciente es nuevo, se registra en la misma transacción (si el horario ya se ocupó, no queda
+     * un paciente suelto). Con "Repetir" se agendan también las fechas siguientes.
+     *
+     * @param  array<string, mixed>  $data
+     * @param  bool  $walkIn  Llegó sin cita: toma el primer hueco de hoy y queda en sala de una vez.
+     * @return array{booked: list<Appointment>, skipped: list<CarbonImmutable>}
+     */
+    public static function bookAll(array $data, bool $walkIn = false): array
     {
         return DB::transaction(function () use ($data, $walkIn) {
             $patient = ($data['new_patient'] ?? false)
@@ -82,10 +135,21 @@ final class CreateAppointmentAction
                 'internal_notes' => $data['internal_notes'] ?? null,
                 'treatment_plan_item_id' => $planItem?->getKey(),
             ];
+            $service = app(AppointmentService::class);
 
-            $appointment = $walkIn
-                ? app(AppointmentService::class)->walkIn(auth()->user(), $patient, $doctor, $treatment, $options)
-                : app(AppointmentService::class)->bookFromStaff(auth()->user(), $patient, $doctor, $treatment, SlotPicker::startsAt($data), $options);
+            if ($walkIn) {
+                $result = ['booked' => [$service->walkIn(auth()->user(), $patient, $doctor, $treatment, $options)], 'skipped' => []];
+            } else {
+                $options += [
+                    'duration_minutes' => filled($data['duration_minutes'] ?? null) ? (int) $data['duration_minutes'] : null,
+                    'notify' => (bool) ($data['notify'] ?? true),
+                    'overbook' => (bool) ($data['overbook'] ?? false),
+                ];
+
+                $result = ($data['repeat'] ?? false)
+                    ? $service->bookSeries(auth()->user(), $patient, $doctor, $treatment, SlotPicker::startsAt($data), (int) $data['repeat_every'], (int) $data['repeat_times'], $options)
+                    : ['booked' => [$service->bookFromStaff(auth()->user(), $patient, $doctor, $treatment, SlotPicker::startsAt($data), $options)], 'skipped' => []];
+            }
 
             // Agendar una sesión no es aceptar el plan: solo si recepción marcó que el paciente lo aceptó.
             // Si no, al menos ya se le presentó.
@@ -95,7 +159,7 @@ final class CreateAppointmentAction
                     : app(TreatmentPlanService::class)->markProposed($planItem->plan);
             }
 
-            return $appointment;
+            return $result;
         });
     }
 
@@ -139,6 +203,10 @@ final class CreateAppointmentAction
             'slot' => $treatmentId && $doctorId && $time ? $time : null,
             'manual' => false,
             'fixed_date' => false,
+            'notify' => true,
+            'repeat' => false,
+            'repeat_every' => 4,
+            'repeat_times' => 6,
         ];
     }
 }
