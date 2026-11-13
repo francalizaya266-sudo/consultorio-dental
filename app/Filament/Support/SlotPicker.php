@@ -13,6 +13,7 @@ use App\Services\Agenda\AvailabilityService;
 use App\Services\Agenda\GapFinder;
 use App\Services\Agenda\Slot;
 use App\Services\Patients\PatientInsights;
+use App\Support\Dates;
 use Carbon\CarbonImmutable;
 use Filament\Actions\Action;
 use Filament\Forms\Components\Checkbox;
@@ -96,10 +97,10 @@ final class SlotPicker
                 ->required(fn (Get $get) => ! $get('manual'))
                 ->hidden(fn (Get $get) => (bool) $get('manual')),
 
-            // No es para poner una cita encima de otra (eso nunca se puede): es para una hora que la agenda no
-            // ofrece. Llega con la hora que se había elegido o tocado en la agenda.
+            // Para una hora que la agenda no ofrece: fuera del horario de atención o, en una cita nueva, un
+            // sobrecupo. Llega con la hora que se había elegido o tocado en la agenda.
             Toggle::make('manual')
-                ->label('Otra hora (fuera del horario de atención)')
+                ->label($moving === null ? 'Otra hora (fuera del horario, o un sobrecupo)' : 'Otra hora (fuera del horario de atención)')
                 ->live()
                 ->afterStateUpdated(function (?bool $state, Get $get, Set $set): void {
                     if ($state && blank($get('manual_time'))) {
@@ -123,7 +124,54 @@ final class SlotPicker
                 ->accepted(fn (Get $get) => self::manualTimeIsPast($get))
                 ->validationMessages(['accepted' => 'Esa hora ya pasó. Corrígela o marca la casilla para registrar la cita igual.'])
                 ->dehydrated(false),
+
+            // Sobrecupo: la urgencia que el doctor aceptó ver aunque esa hora ya tenga cita. Solo con "Otra hora" en
+            // una cita nueva, y se pregunta antes: sin marcarlo, dos citas nunca se cruzan.
+            Checkbox::make('overbook')
+                ->label(fn (Get $get) => 'Sobrecupo: agendar igual, encima de la cita de '.self::appointmentInTheWay($get)?->patient->full_name)
+                ->helperText(fn (Get $get) => self::overbookWarning(self::appointmentInTheWay($get)))
+                ->visible(fn (Get $get) => $moving === null && self::appointmentInTheWay($get) !== null)
+                ->accepted(fn (Get $get) => self::appointmentInTheWay($get) !== null)
+                ->validationMessages(['accepted' => 'Esa hora se cruza con otra cita. Elige otra hora, o marca "Sobrecupo" si el doctor aceptó verlo igual.']),
         ];
+    }
+
+    /** "Luis Quispe tiene esa hora (de 10:00 a 10:30). Márcalo solo si…" */
+    private static function overbookWarning(?Appointment $inTheWay): ?string
+    {
+        return $inTheWay
+            ? $inTheWay->patient->full_name.' ya tiene esa hora (de '.$inTheWay->starts_at->format('H:i').' a '.$inTheWay->ends_at->format('H:i')
+                .'). Márcalo solo para una urgencia que el doctor aceptó ver: los dos quedan a la misma hora y esta cita se marca como sobrecupo.'
+            : null;
+    }
+
+    /**
+     * Con "Otra hora" en una cita nueva: la cita que ya ocupa la hora escrita. Null si esa hora está libre, si falta
+     * algún dato o si lo que estorba es un bloqueo (encima de un bloqueo no hay sobrecupo).
+     */
+    private static function appointmentInTheWay(Get $get): ?Appointment
+    {
+        $doctor = Doctor::find($get('doctor_id'));
+        $treatment = Treatment::find($get('treatment_id'));
+
+        if (! $get('manual') || blank($get('date')) || blank($get('manual_time')) || ! $doctor || ! $treatment) {
+            return null;
+        }
+
+        $startsAt = CarbonImmutable::parse($get('date'))->setTimeFromTimeString($get('manual_time'));
+        $duration = self::chosenDuration($get) ?? $doctor->durationFor($treatment);
+        $patientId = filled($get('patient_id')) ? (int) $get('patient_id') : null;
+
+        // Lo piden el texto, la casilla y su validación en el mismo pedido: se busca una sola vez.
+        $memo = 'slot-picker.in-the-way.'.implode('|', [$doctor->getKey(), $treatment->getKey(), $startsAt->getTimestamp(), $duration, $patientId]);
+
+        if (! request()->attributes->has($memo)) {
+            $clash = app(AvailabilityService::class)->forPatient($patientId)->clashAt($doctor, $startsAt, $duration, $treatment->bufferMinutes());
+
+            request()->attributes->set($memo, $clash instanceof Appointment ? $clash : null);
+        }
+
+        return request()->attributes->get($memo);
     }
 
     /** Con "Otra hora", la fecha y hora escritas ya quedaron atrás. */
@@ -330,14 +378,14 @@ final class SlotPicker
         $patientId = $moving?->patient_id ?? (filled($get('patient_id')) ? (int) $get('patient_id') : null);
 
         // Lo piden el texto y el botón en el mismo pedido: se busca una sola vez.
-        $memo = 'slot-picker.next-day.'.implode('|', [$doctor->getKey(), $treatment->getKey(), $from->toDateString(), $patientId, $moving?->getKey()]);
+        $memo = 'slot-picker.next-day.'.implode('|', [$doctor->getKey(), $treatment->getKey(), $from->toDateString(), $patientId, $moving?->getKey(), self::chosenDuration($get, $moving)]);
 
         if (! request()->attributes->has($memo)) {
             $availability = app(AvailabilityService::class)->forPatient($patientId);
             $found = null;
 
             for ($day = $from->addDay(); $found === null && $day->lte($from->addDays(GapFinder::SEARCH_DAYS)); $day = $day->addDay()) {
-                if ($availability->slotsFor($doctor, $treatment, $day, ignoreAppointmentId: $moving?->getKey())->isNotEmpty()) {
+                if ($availability->slotsFor($doctor, $treatment, $day, ignoreAppointmentId: $moving?->getKey(), durationMinutes: self::chosenDuration($get, $moving))->isNotEmpty()) {
                     $found = $day;
                 }
             }
@@ -346,6 +394,43 @@ final class SlotPicker
         }
 
         return request()->attributes->get($memo);
+    }
+
+    /**
+     * La duración puesta a mano: la que ya tiene la cita que se mueve o la elegida en "Detalles" de la cita nueva.
+     * Null, la normal del tratamiento con ese doctor.
+     */
+    public static function chosenDuration(Get $get, ?Appointment $moving = null): ?int
+    {
+        if ($moving !== null) {
+            return $moving->custom_duration ? $moving->durationMinutes() : null;
+        }
+
+        return filled($get('duration_minutes')) ? (int) $get('duration_minutes') : null;
+    }
+
+    /**
+     * Para elegir cuánto dura una cita: las duraciones de siempre más las que se pidan (la normal de ese
+     * tratamiento, la que la cita ya tiene), de menor a mayor.
+     *
+     * @return array<int, string> Minutos => "45 min"
+     */
+    public static function durationOptions(?int $usual = null, int ...$include): array
+    {
+        return collect([10, 15, 20, 30, 40, 45, 60, 75, 90, 105, 120, 150, 180, 210, 240, $usual, ...$include])
+            ->filter()
+            ->unique()
+            ->sort()
+            ->mapWithKeys(fn (int $minutes) => [$minutes => Dates::duration($minutes).($minutes === $usual ? ' (lo normal)' : '')])
+            ->all();
+    }
+
+    /** Al cambiar la duración, la hora elegida solo se conserva si la cita todavía cabe ahí. */
+    public static function keepSlotIfItFits(Get $get, Set $set): void
+    {
+        if (filled($get('slot')) && ! array_key_exists($get('slot'), self::slotOptions($get, null))) {
+            $set('slot', null);
+        }
     }
 
     /** @return array<string, string> */
@@ -367,7 +452,7 @@ final class SlotPicker
         // El horario apartado para este paciente (de la lista de espera) le sirve; el de otro, no.
         return app(AvailabilityService::class)
             ->forPatient($moving?->patient_id ?? (filled($get('patient_id')) ? (int) $get('patient_id') : null))
-            ->slotsFor($doctor, $treatment, $day, earliest: $day->isToday() ? now() : null, ignoreAppointmentId: $moving?->getKey())
+            ->slotsFor($doctor, $treatment, $day, earliest: $day->isToday() ? now() : null, ignoreAppointmentId: $moving?->getKey(), durationMinutes: self::chosenDuration($get, $moving))
             ->sortBy(fn (Slot $slot) => $usualPeriod && ! $usualPeriod->includes($slot->startsAt) ? 1 : 0)
             ->mapWithKeys(fn (Slot $slot) => [$slot->label() => $slot->label().($slot->recommended ? ' ★' : '')])
             ->all();

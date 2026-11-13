@@ -49,6 +49,7 @@
                 @if ($mode === 'week' && $doctors->count() > 1)
                     <x-filament::input.wrapper>
                         <x-filament::input.select wire:model.live="doctor" aria-label="Doctor">
+                            <option value="0">Todo el consultorio</option>
                             @foreach ($doctors as $id => $name)
                                 <option value="{{ $id }}">{{ $name }}</option>
                             @endforeach
@@ -103,6 +104,8 @@
                 <p>En la semana no entran las etiquetas: un punto rojo en la cita avisa que está sin cerrar, que toca llamar para confirmarla o que cayó en un bloqueo. Ábrela para ver cuál.</p>
                 <p>"En bloqueo": ese horario se bloqueó con la cita ya dada. Muévela para que el paciente reciba el aviso.</p>
                 <p>¿Marcaste "Llegó", "No asistió", "Confirmar" o "Cancelar" por error? Tienes un día para usar "Deshacer" en la misma cita.</p>
+                <p>"Sobrecupo": una urgencia que se agendó a propósito encima de otra cita. Se ven lado a lado; la web nunca ofrece esa hora.</p>
+                <p>En la semana, "Todo el consultorio" pone a los doctores lado a lado en cada día, cada uno con su color, y arriba dice qué tan lleno está el día.</p>
                 <div class="agenda-legend">
                     @foreach ($legend as $class => $label)
                         <span class="{{ $class }}"><i aria-hidden="true"></i>{{ $label }}</span>
@@ -110,6 +113,15 @@
                 </div>
             </details>
         </div>
+
+        {{-- En la semana de todo el consultorio: de quién es cada cita (el punto de color junto al nombre). --}}
+        @if ($wholeClinic)
+            <div class="agenda-key" aria-label="Doctores">
+                @foreach ($doctorKey as $entry)
+                    <span class="agenda-item-doc" style="--doc: {{ $entry['color'] }}">{{ $entry['name'] }}</span>
+                @endforeach
+            </div>
+        @endif
     </div>
 
     <script>
@@ -369,7 +381,12 @@
         @php
             $height = ($to - $from) * $scale;
             $nowMinute = now()->hour * 60 + now()->minute;
-            $columnWidth = $mode === 'week' ? '7rem' : '9.5rem';
+            // En la semana de todo el consultorio cada doctor ocupa un carril del día: la columna crece con ellos.
+            $columnWidth = match (true) {
+                $wholeClinic => max(7.5, 4.75 * (int) collect($columns)->max(fn (array $column) => collect($column['appointments'])->max('lanes') ?? 1)).'rem',
+                $mode === 'week' => '7rem',
+                default => '9.5rem',
+            };
             $showsNow = $nowMinute > $from && $nowMinute < $to && collect($columns)->contains(fn (array $column) => $column['date'] === today()->toDateString());
         @endphp
 
@@ -405,8 +422,12 @@
                             <span class="agenda-head-num" @if ($column['isToday']) aria-label="Hoy" @endif>{{ $column['dayNumber'] }}</span>
                             <span class="agenda-head-text">
                                 <span class="agenda-head-title">{{ $column['weekday'] }}</span>
-                                <span class="agenda-head-sub">{{ $countLabel }}</span>
+                                <span class="agenda-head-sub">{{ $wholeClinic && $column['load'] ? ($column['load'] >= 90 ? 'Lleno' : $column['load'].' %').' · ' : '' }}{{ $countLabel }}</span>
                             </span>
+                            {{-- Qué tan lleno está el día entre todos los doctores: los días flojos se ven de un vistazo. --}}
+                            @if ($wholeClinic && $column['load'] !== null)
+                                <span class="agenda-head-load is-{{ $column['level'] }}" style="--load: {{ $column['load'] }}%" title="{{ $column['load'] >= 90 ? 'Lleno' : $column['load'].' % ocupado' }}"></span>
+                            @endif
                         @else
                             <span class="agenda-head-avatar" style="--doc: {{ $column['color'] }}" aria-hidden="true">{{ $column['initials'] }}</span>
                             <span class="agenda-head-text">
@@ -473,9 +494,9 @@
                             <a
                                 wire:key="appt-{{ $appt['id'] }}"
                                 href="{{ $appt['url'] }}"
-                                @class(['agenda-appt', 's-'.$appt['status'], 'is-movable' => $appt['draggable'], 'is-short' => $appt['end'] - $appt['start'] <= 30, 'is-unclosed' => $appt['unclosed'], 'needs-call' => $appt['needsCall'], 'in-block' => $appt['inBlock'], 'in-lane' => $appt['lanes'] > 1])
-                                style="top: {{ ($appt['start'] - $from) * $scale }}px; height: {{ max(($appt['end'] - $appt['start']) * $scale - 2, 18) }}px;@if ($appt['lanes'] > 1) --lane: {{ $appt['lane'] }}; --lanes: {{ $appt['lanes'] }};@endif"
-                                title="{{ $appt['time'] }} · {{ $appt['patient'] }} · {{ $appt['treatment'] }} · {{ $appt['statusLabel'] }}{{ $appt['phone'] ? ' · '.$appt['phone'] : '' }}{{ $appt['unclosed'] ? ' · Sin cerrar: '.(in_array($appt['status'], ['pending', 'confirmed'], true) ? 'falta marcar si vino' : 'vino y falta cerrar su atención') : '' }}{{ $appt['inBlock'] ? ' · Cae en un horario bloqueado: hay que moverla' : '' }}"
+                                @class(['agenda-appt', 's-'.$appt['status'], 'is-movable' => $appt['draggable'], 'is-short' => $appt['end'] - $appt['start'] <= 30, 'is-unclosed' => $appt['unclosed'], 'needs-call' => $appt['needsCall'], 'in-block' => $appt['inBlock'], 'in-lane' => $appt['lanes'] > 1, 'is-overbooked' => $appt['overbooked'], 'has-doc' => isset($appt['doctor'])])
+                                style="top: {{ ($appt['start'] - $from) * $scale }}px; height: {{ max(($appt['end'] - $appt['start']) * $scale - 2, 18) }}px;@if ($appt['lanes'] > 1) --lane: {{ $appt['lane'] }}; --lanes: {{ $appt['lanes'] }};@endif @isset($appt['doctor'])--doc: {{ $appt['doctor']['color'] }};@endisset"
+                                title="{{ $appt['time'] }} · {{ $appt['patient'] }} · {{ $appt['treatment'] }}{{ isset($appt['doctor']) ? ' · '.$appt['doctor']['name'] : '' }} · {{ $appt['statusLabel'] }}{{ $appt['overbooked'] ? ' · Sobrecupo' : '' }}{{ $appt['phone'] ? ' · '.$appt['phone'] : '' }}{{ $appt['unclosed'] ? ' · Sin cerrar: '.(in_array($appt['status'], ['pending', 'confirmed'], true) ? 'falta marcar si vino' : 'vino y falta cerrar su atención') : '' }}{{ $appt['inBlock'] ? ' · Cae en un horario bloqueado: hay que moverla' : '' }}"
                                 draggable="false"
                                 x-on:click="open($event, {{ $appt['id'] }})"
                                 @if ($appt['draggable'])
@@ -488,7 +509,7 @@
                                 @endif
                             >
                                 {{-- En la semana la columna es angosta: nombre corto y solo la hora de inicio (el alto de la tarjeta ya dice cuánto dura). --}}
-                                <b>{{ $mode === 'week' ? $appt['shortName'] : $appt['patient'] }}@if ($appt['unclosed'])<span class="tag tag-unclosed">Sin cerrar</span>@endif @if ($appt['needsCall'])<span class="tag tag-call">Llamar</span>@endif @if ($appt['inBlock'])<span class="tag tag-block">En bloqueo</span>@endif @if ($appt['flags']['alert'])<span @class(['tag', 'tag-alert', 'is-caution' => ! $appt['flags']['alertSevere']]) title="{{ $appt['flags']['alert'] }}">Alerta médica</span>@endif @if ($appt['flags']['reschedule'])<span class="tag tag-change">Pidió cambio</span>@endif @if ($appt['flags']['noShows'])<span class="tag tag-missed">{{ $appt['flags']['noShows'] }}</span>@endif @if ($appt['isNew'])<span class="tag tag-new">Nuevo</span>@endif @if ($appt['owes'])<span class="tag tag-owes">Debe {{ $appt['owes'] }}</span>@endif @if ($appt['hasNote'])<span class="tag tag-note">Nota</span>@endif</b>
+                                <b>{{ $mode === 'week' ? $appt['shortName'] : $appt['patient'] }}@if ($appt['unclosed'])<span class="tag tag-unclosed">Sin cerrar</span>@endif @if ($appt['needsCall'])<span class="tag tag-call">Llamar</span>@endif @if ($appt['inBlock'])<span class="tag tag-block">En bloqueo</span>@endif @if ($appt['overbooked'])<span class="tag tag-over">Sobrecupo</span>@endif @if ($appt['flags']['alert'])<span @class(['tag', 'tag-alert', 'is-caution' => ! $appt['flags']['alertSevere']]) title="{{ $appt['flags']['alert'] }}">Alerta médica</span>@endif @if ($appt['flags']['reschedule'])<span class="tag tag-change">Pidió cambio</span>@endif @if ($appt['flags']['noShows'])<span class="tag tag-missed">{{ $appt['flags']['noShows'] }}</span>@endif @if ($appt['isNew'])<span class="tag tag-new">Nuevo</span>@endif @if ($appt['owes'])<span class="tag tag-owes">Debe {{ $appt['owes'] }}</span>@endif @if ($appt['hasNote'])<span class="tag tag-note">Nota</span>@endif</b>
                                 <small>{{ $mode === 'week' ? $appt['startTime'] : $appt['time'] }} · {{ $appt['treatment'] }}{{ $appt['flags']['session'] ? ' · '.mb_strtolower($appt['flags']['session']) : '' }}</small>
                                 <small>{{ $appt['statusLabel'] }}@if ($appt['phone']) · {{ $appt['phone'] }}@endif</small>
                             </a>

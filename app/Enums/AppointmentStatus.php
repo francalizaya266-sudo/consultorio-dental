@@ -60,6 +60,12 @@ enum AppointmentStatus: string implements HasColor, HasLabel
         return [self::Pending, self::Confirmed, self::CheckedIn, self::InProgress];
     }
 
+    /** @return list<self> Todavía no pasa con el doctor: aún se puede cambiar qué se le va a hacer o cuánto dura. */
+    public static function notYetAttended(): array
+    {
+        return [self::Pending, self::Confirmed, self::CheckedIn];
+    }
+
     /** @return list<self> El paciente no llegó a venir: faltó o se canceló. */
     public static function missed(): array
     {

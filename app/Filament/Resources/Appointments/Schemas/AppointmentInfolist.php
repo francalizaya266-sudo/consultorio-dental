@@ -233,6 +233,18 @@ class AppointmentInfolist
                 'value' => 'El paciente no la mueve solo',
                 'hint' => null,
             ] : null,
+            $appointment->is_overbooked ? [
+                'icon' => Heroicon::OutlinedSquare2Stack,
+                'label' => 'Sobrecupo',
+                'value' => 'Se agendó a propósito encima de otra cita',
+                'hint' => null,
+            ] : null,
+            ($series = $appointment->seriesPosition()) ? [
+                'icon' => Heroicon::OutlinedArrowPath,
+                'label' => 'Se repite',
+                'value' => "Cita {$series['position']} de {$series['total']} de su serie",
+                'hint' => null,
+            ] : null,
         ]));
     }
 
@@ -512,6 +524,7 @@ class AppointmentInfolist
             'created' => 'Cita creada',
             'confirmed' => 'Confirmada',
             'rescheduled' => 'Horario cambiado',
+            'changed' => 'Tratamiento o duración cambiados',
             'checked_in' => 'Llegó al consultorio',
             'in_progress' => 'Pasó a atención',
             'completed' => 'Atendida',
@@ -545,7 +558,7 @@ class AppointmentInfolist
             'checked_in' => 'info',
             'in_progress' => 'primary',
             'no_show', 'reschedule_rejected' => 'danger',
-            'rescheduled', 'reschedule_requested' => 'warning',
+            'rescheduled', 'changed', 'reschedule_requested' => 'warning',
             default => 'gray',
         };
     }

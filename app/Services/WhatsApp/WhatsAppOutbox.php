@@ -103,6 +103,22 @@ class WhatsAppOutbox
             ->update(['status' => MessageStatus::Cancelled]);
     }
 
+    /**
+     * Los avisos de la cita que todavía no se enviaron vuelven a tomar sus datos (por ejemplo, cuando le cambian el
+     * tratamiento): así no sale un mensaje con lo que ya no es.
+     */
+    public function refreshPending(Appointment $appointment): void
+    {
+        $appointment->unsetRelation('treatment');
+        $params = $this->appointmentParams($appointment->loadMissing('patient', 'doctor', 'treatment', 'campaign'));
+
+        WhatsappMessage::query()
+            ->where('appointment_id', $appointment->getKey())
+            ->pending()
+            ->get()
+            ->each(fn (WhatsappMessage $message) => $message->update(['params' => $params + ($message->params ?? [])]));
+    }
+
     /** Arma el texto final. Si lleva {enlace}, se genera un enlace personal nuevo. */
     public function render(WhatsappMessage $message, ?User $by = null): string
     {

@@ -217,6 +217,7 @@ class PatientsAndSetupPanelTest extends TestCase
             ->callAction('create', [
                 'doctor_id' => $other->id,
                 'type' => 'course',
+                'all_day' => false,
                 'starts_at' => '2026-11-10 09:00',
                 'ends_at' => '2026-11-10 13:00',
             ])
@@ -237,6 +238,7 @@ class PatientsAndSetupPanelTest extends TestCase
             ->callAction('create', [
                 'doctor_id' => $doctor->id,
                 'type' => 'vacation',
+                'all_day' => false,
                 'starts_at' => '2026-11-10 08:00',
                 'ends_at' => '2026-11-10 19:00',
             ])

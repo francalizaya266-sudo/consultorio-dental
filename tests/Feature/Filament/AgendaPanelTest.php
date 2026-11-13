@@ -147,7 +147,8 @@ class AgendaPanelTest extends TestCase
                 'manual_time' => '10:15',
             ])
             ->callMountedAction()
-            ->assertNotified();
+            // Solo pasa si se marca a propósito como sobrecupo.
+            ->assertHasFormErrors(['overbook']);
 
         $this->assertSame(1, Appointment::count());
     }

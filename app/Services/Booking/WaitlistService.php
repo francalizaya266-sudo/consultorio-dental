@@ -2,12 +2,14 @@
 
 namespace App\Services\Booking;
 
+use App\Enums\DayPeriod;
 use App\Enums\MessageTemplateKey;
 use App\Enums\WaitlistStatus;
 use App\Filament\Resources\WaitlistEntries\WaitlistEntryResource;
 use App\Models\Appointment;
 use App\Models\Doctor;
 use App\Models\Treatment;
+use App\Models\User;
 use App\Models\WaitlistEntry;
 use App\Models\WhatsappMessage;
 use App\Services\Agenda\AvailabilityService;
@@ -220,6 +222,34 @@ final class WaitlistService
                 },
             'link' => ['label' => 'Ofrecérselo a '.$first->patient->first_name, 'url' => WaitlistEntryResource::urlForOffer($first, $doctor, $startsAt)],
         ];
+    }
+
+    /**
+     * Al cancelar una cita, el paciente pasa a la lista de espera para ese tratamiento con su doctor, desde hoy y a
+     * cualquier hora: no se le pierde. Null si ya estaba esperando por lo mismo.
+     */
+    public function addAfterCancellation(Appointment $appointment, User $by): ?WaitlistEntry
+    {
+        $alreadyWaiting = WaitlistEntry::query()
+            ->active()
+            ->where('patient_id', $appointment->patient_id)
+            ->where(fn ($query) => $query->whereNull('treatment_id')->orWhere('treatment_id', $appointment->treatment_id))
+            ->exists();
+
+        if ($alreadyWaiting) {
+            return null;
+        }
+
+        return WaitlistEntry::create([
+            'patient_id' => $appointment->patient_id,
+            'treatment_id' => $appointment->treatment_id,
+            'doctor_id' => $appointment->doctor_id,
+            'earliest_date' => today(),
+            'preferred_period' => DayPeriod::Any,
+            'status' => WaitlistStatus::Waiting,
+            'notes' => 'Se canceló su cita del '.$appointment->starts_at->translatedFormat('D j M, H:i').'.',
+            'created_by_user_id' => $by->getKey(),
+        ]);
     }
 
     /** Ya no quiere esperar (consiguió otro horario, se atendió en otro lado...). */

@@ -23,6 +23,7 @@ use App\Http\Controllers\Backup\BackupDownloadController;
 use App\Http\Controllers\Billing\PaymentReceiptController;
 use App\Http\Controllers\Clinical\ClinicalFileController;
 use App\Http\Controllers\Clinical\PrintController;
+use App\Http\Controllers\Reports\AgendaDayController;
 use App\Http\Controllers\Reports\CashClosingController;
 use App\Http\Controllers\Reports\EarningsExportController;
 use App\Http\Middleware\KeepRemindersUpToDate;
@@ -216,6 +217,7 @@ class AdminPanelProvider extends PanelProvider
                 Route::get('reportes/ingresos/imprimir', [EarningsExportController::class, 'print'])->name('reports.earnings.print');
                 Route::get('reportes/ingresos/excel', [EarningsExportController::class, 'excel'])->name('reports.earnings.excel');
                 Route::get('caja/cierre/imprimir', [CashClosingController::class, 'print'])->name('cash-closing.print');
+                Route::get('agenda/imprimir', [AgendaDayController::class, 'print'])->name('agenda.print');
                 Route::get('imprimir/constancia/{payment}', [PaymentReceiptController::class, 'show'])->name('print.receipt');
                 Route::post('imprimir/constancia/{payment}/whatsapp', [PaymentReceiptController::class, 'whatsapp'])->name('print.receipt.whatsapp');
                 Route::get('copias-de-seguridad/{file}', BackupDownloadController::class)->name('backups.download');
