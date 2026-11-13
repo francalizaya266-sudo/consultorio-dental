@@ -58,16 +58,19 @@ use Illuminate\View\Middleware\ShareErrorsFromSession;
 /** Panel interno único: lo que ve cada persona depende de su rol (políticas en app/Policies). */
 class AdminPanelProvider extends PanelProvider
 {
-    /** @var list<class-string> Páginas y secciones que van dentro de "Configuración". */
+    /**
+     * @var list<class-string> Páginas y secciones que van dentro de "Configuración", en el orden del menú:
+     *                         Consultorio (Ajustes, Copias), Catálogo (Tratamientos, Paquetes), Equipo (Doctores, Usuarios) y Textos.
+     */
     private const SETTINGS = [
         Settings::class,
+        Backups::class,
         TreatmentResource::class,
         TreatmentPackageResource::class,
         DoctorResource::class,
         UserResource::class,
         TextSnippetResource::class,
         ConsentTemplateResource::class,
-        Backups::class,
     ];
 
     /** @var list<class-string> Todo lo de la página web, en un solo lugar: primero su puesta a punto. */

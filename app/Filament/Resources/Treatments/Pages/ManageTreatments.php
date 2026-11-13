@@ -13,7 +13,12 @@ class ManageTreatments extends ManageRecords
     protected function getHeaderActions(): array
     {
         return [
-            CreateAction::make()->label('Nuevo tratamiento'),
+            CreateAction::make()
+                ->label('Nuevo tratamiento')
+                ->mutateDataUsing(fn (array $data) => TreatmentResource::withPresence($data))
+                ->successNotificationTitle('Tratamiento guardado')
+                // "Guardar" y "Cancelar", como en las demás ventanas de Configuración: aquí además salía "Crear y crear otro".
+                ->createAnother(false),
         ];
     }
 }

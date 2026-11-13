@@ -1845,6 +1845,13 @@ a.ap-visit:hover { background: var(--gray-50); }
 .fi-main-sidebar .fi-sidebar-item-grouped-border-part-not-first,
 .fi-main-sidebar .fi-sidebar-item-grouped-border-part-not-last { background: rgb(255 255 255 / .18); }
 .fi-main-sidebar .fi-sidebar-item.fi-active > .fi-sidebar-item-btn .fi-sidebar-item-grouped-border-part { background: var(--menu-accent); }
+/* Dentro de "Configuración", el nombre del grupo (Consultorio, Catálogo, Equipo, Textos) va sobre su primera entrada. */
+.fi-main-sidebar .fi-sidebar-item[data-menu-group]::before { content: attr(data-menu-group); display: block; padding: .7rem .75rem .2rem 3.1rem; font-size: .6875rem; font-weight: 600; letter-spacing: .08em; text-transform: uppercase; color: rgb(255 255 255 / .5); }
+.fi-main-sidebar .fi-sidebar-item[data-menu-group]:first-child::before { padding-top: .3rem; }
+.fi-main-sidebar .fi-sidebar-item[data-menu-group="Consultorio"] ~ .fi-sidebar-item[data-menu-group="Consultorio"]::before,
+.fi-main-sidebar .fi-sidebar-item[data-menu-group="Catálogo"] ~ .fi-sidebar-item[data-menu-group="Catálogo"]::before,
+.fi-main-sidebar .fi-sidebar-item[data-menu-group="Equipo"] ~ .fi-sidebar-item[data-menu-group="Equipo"]::before,
+.fi-main-sidebar .fi-sidebar-item[data-menu-group="Textos"] ~ .fi-sidebar-item[data-menu-group="Textos"]::before { content: none; }
 /* En el celular el menú se abre encima de la página: su cabecera también va en azul, con la marca en blanco. */
 .fi-body-has-topbar .fi-main-sidebar .fi-sidebar-header { background: transparent; box-shadow: inset 0 -1px 0 rgb(255 255 255 / .1); }
 .fi-main-sidebar .fi-sidebar-header .fi-logo { color: #fff; }
@@ -1939,3 +1946,46 @@ a.ap-visit:hover { background: var(--gray-50); }
 
 /* El mensaje arranca con el nombre del campo, que llega en minúscula ("contraseña debe tener al menos 8 caracteres."). */
 .fi-fo-field-wrp-error-message::first-letter { text-transform: uppercase; }
+
+/* ---------- Horario de la semana: una fila por día ---------- */
+
+/* Cada día en una fila: su nombre, sus tramos (desde y hasta) uno al lado del otro, y al final "Agregar tramo". */
+.week-schedule { display: grid; border-radius: .75rem; box-shadow: inset 0 0 0 1px var(--gray-200); background: #fff; }
+.week-day { display: grid; grid-template-columns: 7rem minmax(0, 1fr) auto; align-items: center; gap: .5rem 1rem; padding: .55rem .9rem; }
+.week-day + .week-day { box-shadow: inset 0 1px 0 var(--gray-200); }
+.week-day-name { font-size: .875rem; font-weight: 600; color: var(--gray-950); }
+.week-day-ranges { display: flex; flex-wrap: wrap; align-items: center; gap: .5rem 1.25rem; min-height: 2.25rem; }
+.week-day-closed { font-size: .875rem; color: var(--gray-500); }
+.week-range { display: flex; align-items: flex-start; gap: .25rem; }
+.week-range > .fi-sc { display: grid; grid-template-columns: 6.25rem 6.25rem; gap: .35rem; }
+.week-range .fi-fo-field-label-ctn, .week-range .fi-fo-field-label-col { display: none; }
+.week-range .fi-input { padding-block: .35rem; }
+.week-range .fi-fo-field-wrp-error-message { font-size: .75rem; }
+.week-range > .fi-ac-icon-btn-action, .week-range > .fi-icon-btn { margin-top: .2rem; }
+.week-day-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; align-items: center; gap: .25rem 1rem; }
+.dark .week-schedule { background: rgb(255 255 255 / .03); box-shadow: inset 0 0 0 1px rgb(255 255 255 / .1); }
+.dark .week-day + .week-day { box-shadow: inset 0 1px 0 rgb(255 255 255 / .1); }
+.dark .week-day-name { color: #fff; }
+.dark .week-day-closed { color: var(--gray-400); }
+@media (max-width: 48rem) {
+    .week-day { grid-template-columns: minmax(0, 1fr) auto; }
+    .week-day-ranges { grid-column: 1 / -1; grid-row: 2; }
+}
+
+/* ---------- Color en la agenda: botones con nombre en vez de un código ---------- */
+
+.color-swatches { display: flex; flex-wrap: wrap; gap: .5rem; }
+.color-swatch { display: inline-flex; align-items: center; gap: .45rem; padding: .3rem .7rem .3rem .4rem; border-radius: 9999px; font-size: .8125rem; color: var(--gray-700); background: #fff; box-shadow: inset 0 0 0 1px var(--gray-300); cursor: pointer; }
+.color-swatch input { position: absolute; opacity: 0; width: 1px; height: 1px; }
+.color-swatch-dot { width: 1.15rem; height: 1.15rem; border-radius: 9999px; box-shadow: inset 0 0 0 1px rgb(0 0 0 / .12); }
+.color-swatch:has(input:checked) { color: var(--gray-950); font-weight: 600; box-shadow: inset 0 0 0 2px var(--primary-600); background: var(--primary-50); }
+.color-swatch:has(input:focus-visible) { outline: 2px solid var(--primary-600); outline-offset: 2px; }
+.color-swatch:has(input:disabled) { opacity: .6; cursor: default; }
+.dark .color-swatch { color: var(--gray-200); background: rgb(255 255 255 / .05); box-shadow: inset 0 0 0 1px rgb(255 255 255 / .2); }
+.dark .color-swatch:has(input:checked) { color: #fff; background: color-mix(in oklab, var(--primary-400) 18%, transparent); box-shadow: inset 0 0 0 2px var(--primary-400); }
+
+/* ---------- Enlaces bajo el título de una pantalla ---------- */
+
+/* "Otros textos: Mensajes de WhatsApp · …": los enlaces se leen como enlaces. */
+.fi-header-subheading a { color: var(--primary-600); font-weight: 500; text-decoration: underline; text-underline-offset: 2px; }
+.dark .fi-header-subheading a { color: var(--primary-300); }

@@ -2,6 +2,7 @@
 
 namespace App\Filament\Pages;
 
+use App\Filament\Concerns\HasSettingsMenuGroup;
 use App\Models\User;
 use App\Services\Backup\DatabaseBackup;
 use App\Services\Backup\FilesBackup;
@@ -23,6 +24,8 @@ use Illuminate\Support\Number;
  */
 class Backups extends Page
 {
+    use HasSettingsMenuGroup;
+
     protected string $view = 'filament.pages.backups';
 
     protected static ?string $title = 'Copias de seguridad';
@@ -31,9 +34,14 @@ class Backups extends Page
 
     protected static ?string $navigationParentItem = 'Configuración';
 
-    protected static ?int $navigationSort = 11;
+    protected static ?int $navigationSort = 1;
 
     protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedCircleStack;
+
+    public static function settingsMenuGroup(): string
+    {
+        return 'Consultorio';
+    }
 
     public static function canAccess(): bool
     {

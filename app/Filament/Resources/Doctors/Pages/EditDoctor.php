@@ -19,6 +19,9 @@ class EditDoctor extends EditRecord
 {
     protected static string $resource = DoctorResource::class;
 
+    /** "Guardar cambios" queda a la vista al pie de la pantalla: la ficha es larga y el botón se perdía al medio. */
+    public static bool $formActionsAreSticky = true;
+
     /** @var list<int> */
     protected array $alreadyOutsideSchedule = [];
 
@@ -66,6 +69,11 @@ class EditDoctor extends EditRecord
             ->send();
     }
 
+    protected function getSavedNotificationTitle(): ?string
+    {
+        return 'Doctor guardado';
+    }
+
     protected function getHeaderActions(): array
     {
         return [
@@ -73,8 +81,10 @@ class EditDoctor extends EditRecord
             ActionGroup::make([
                 DeleteAction::make()
                     ->authorizationNotification()
-                    ->modalDescription('Deja de aparecer en la agenda y en la web. Se puede recuperar.'),
-                RestoreAction::make(),
+                    ->modalDescription('Solo se borra a un doctor que nunca tuvo citas ni historias. A los demás se les apaga "Activo". Se puede restaurar.')
+                    ->successNotificationTitle('Doctor borrado'),
+                RestoreAction::make()
+                    ->successNotificationTitle('Doctor restaurado'),
             ]),
         ];
     }

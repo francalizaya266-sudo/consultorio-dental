@@ -2,6 +2,7 @@
 
 namespace App\Filament\Resources\Doctors;
 
+use App\Filament\Concerns\HasSettingsMenuGroup;
 use App\Filament\Concerns\HasSpanishLabels;
 use App\Filament\Resources\Doctors\Pages\CreateDoctor;
 use App\Filament\Resources\Doctors\Pages\EditDoctor;
@@ -20,7 +21,7 @@ use Illuminate\Database\Eloquent\SoftDeletingScope;
 
 class DoctorResource extends Resource
 {
-    use HasSpanishLabels;
+    use HasSettingsMenuGroup, HasSpanishLabels;
 
     protected static ?string $slug = 'doctores';
 
@@ -32,11 +33,16 @@ class DoctorResource extends Resource
 
     protected static ?string $navigationParentItem = 'Configuración';
 
-    protected static ?int $navigationSort = 3;
+    protected static ?int $navigationSort = 4;
 
     protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedIdentification;
 
     protected static ?string $recordTitleAttribute = 'name';
+
+    public static function settingsMenuGroup(): string
+    {
+        return 'Equipo';
+    }
 
     public static function form(Schema $schema): Schema
     {

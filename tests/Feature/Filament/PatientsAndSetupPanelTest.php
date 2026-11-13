@@ -474,7 +474,7 @@ class PatientsAndSetupPanelTest extends TestCase
 
         Livewire::test(CreateDoctor::class)
             ->assertSchemaStateSet(['access' => 'new'])
-            ->fillForm(['name' => 'Dra. Ana Torres', 'slug' => 'ana-torres', 'access_email' => 'ana@consultorio.test', 'access_password' => 'corto'])
+            ->fillForm(['name' => 'Dra. Ana Torres', 'presence' => 'web', 'slug' => 'ana-torres', 'access_email' => 'ana@consultorio.test', 'access_password' => 'corto'])
             ->call('create')
             ->assertHasFormErrors(['access_password' => 'min'])
             ->fillForm(['access_password' => 'clave-segura-1'])
@@ -487,7 +487,7 @@ class PatientsAndSetupPanelTest extends TestCase
 
         // Sin acceso por ahora: el doctor queda sin usuario, y se le puede dar después desde su ficha.
         Livewire::test(CreateDoctor::class)
-            ->fillForm(['name' => 'Dr. Luis Paz', 'slug' => 'luis-paz', 'access' => 'none'])
+            ->fillForm(['name' => 'Dr. Luis Paz', 'presence' => 'web', 'slug' => 'luis-paz', 'access' => 'none'])
             ->call('create')
             ->assertHasNoFormErrors();
 

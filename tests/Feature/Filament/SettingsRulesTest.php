@@ -3,8 +3,11 @@
 namespace Tests\Feature\Filament;
 
 use App\Filament\Pages\Settings;
+use App\Filament\Pages\WebSetup;
+use App\Models\Doctor;
 use App\Models\Setting;
 use App\Models\User;
+use App\Support\Dates;
 use Illuminate\Foundation\Testing\LazilyRefreshDatabase;
 use Livewire\Livewire;
 use PHPUnit\Framework\Attributes\DataProvider;
@@ -53,12 +56,12 @@ class SettingsRulesTest extends TestCase
             'para cambiar la cita hay que avisar antes de poder reservarla' => [
                 ['self_reschedule_min_hours' => 48, 'horizon_days' => 2],
                 'booking.self_reschedule_min_hours',
-                'Así ningún paciente puede cambiar su cita solo',
+                'Así ningún paciente puede cambiar su cita por su cuenta',
             ],
             'para cancelar hay que avisar antes de poder reservar' => [
                 ['self_cancel_min_hours' => 48, 'self_reschedule_min_hours' => 0, 'horizon_days' => 2],
                 'booking.self_cancel_min_hours',
-                'Así ningún paciente puede cancelar solo',
+                'Así ningún paciente puede cancelar por su cuenta',
             ],
         ];
     }
@@ -68,7 +71,7 @@ class SettingsRulesTest extends TestCase
         Livewire::test(Settings::class)
             ->fillForm(['booking' => [
                 'horizon_days' => 2,
-                'min_lead_minutes' => 2879,
+                'min_lead_minutes' => 1440,
                 'self_reschedule_min_hours' => 47,
                 'self_cancel_min_hours' => 47,
                 'max_web_appointments_per_patient' => 4,
@@ -77,7 +80,50 @@ class SettingsRulesTest extends TestCase
             ->call('save')
             ->assertHasNoFormErrors();
 
-        $this->assertSame([2, 2879, 4], [Setting::get('booking.horizon_days'), Setting::get('booking.min_lead_minutes'), Setting::get('booking.max_web_appointments_per_phone')]);
+        $this->assertSame([2, 1440, 4], [Setting::get('booking.horizon_days'), Setting::get('booking.min_lead_minutes'), Setting::get('booking.max_web_appointments_per_phone')]);
+    }
+
+    public function test_the_lead_time_is_chosen_from_a_list_and_a_value_saved_before_is_kept(): void
+    {
+        Livewire::test(Settings::class)
+            ->assertSee(['Sin anticipación', '2 horas antes', '2 días antes'])
+            ->fillForm(['booking' => ['min_lead_minutes' => 45]])
+            ->call('save')
+            ->assertHasFormErrors(['booking.min_lead_minutes']);
+
+        // Lo que se escribió a mano cuando el campo iba en minutos sigue en la lista hasta que se cambie.
+        Setting::set('booking.min_lead_minutes', 90);
+
+        Livewire::test(Settings::class)
+            ->assertSee('90 minutos antes')
+            ->call('save')
+            ->assertHasNoFormErrors();
+
+        $this->assertSame(90, (int) Setting::get('booking.min_lead_minutes'));
+    }
+
+    public function test_money_settings_are_together_and_the_clinic_tab_links_to_the_web_setup(): void
+    {
+        Livewire::test(Settings::class)
+            ->assertSeeInOrder(['Consultorio', 'Agenda y reservas', 'Dinero', 'Un presupuesto vale por', 'Meta de cobro del mes', 'Cada doctor ve sus propios ingresos'])
+            ->assertSee('El paciente puede cancelar por su cuenta hasta')
+            ->assertSee(WebSetup::getUrl())
+            ->assertDontSee(['Reportes', 'El paciente puede cancelar solo hasta']);
+
+        Livewire::test(WebSetup::class)
+            ->assertSee(Settings::getUrl())
+            ->assertSee('La web todavía no muestra ningún horario');
+    }
+
+    public function test_the_note_about_hours_shows_the_hours_the_website_already_has(): void
+    {
+        Doctor::factory()->withSchedule([['09:00', '13:00'], ['15:00', '19:00']], [1, 2, 3, 4, 5])->create();
+
+        // La nota es para lo que el horario no dice: se muestra el horario para no repetirlo a mano.
+        Livewire::test(WebSetup::class)
+            ->assertSee('La web ya muestra el horario de los doctores (Lunes a viernes '.Dates::time('09:00').' – '.Dates::time('13:00').' y '.Dates::time('15:00').' – '.Dates::time('19:00').'). Esta nota va debajo, para lo que el horario no dice.')
+            ->assertSee('Nombre, dirección y teléfonos: en Ajustes')
+            ->assertDontSee('La web todavía no muestra ningún horario');
     }
 
     public function test_slots_are_offered_only_at_steps_that_fall_on_round_hours(): void

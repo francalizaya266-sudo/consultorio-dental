@@ -3,7 +3,10 @@
 namespace App\Models;
 
 use App\Enums\TreatmentKind;
+use App\Enums\WebPresence;
 use App\Models\Concerns\Auditable;
+use App\Models\Concerns\HasWebSlug;
+use App\Services\Agenda\LearnedDurations;
 use App\Support\Money;
 use Database\Factories\TreatmentFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
@@ -20,7 +23,7 @@ use Illuminate\Database\Eloquent\SoftDeletes;
 class Treatment extends Model
 {
     /** @use HasFactory<TreatmentFactory> */
-    use Auditable, HasFactory, SoftDeletes;
+    use Auditable, HasFactory, HasWebSlug, SoftDeletes;
 
     protected function casts(): array
     {
@@ -38,7 +41,37 @@ class Treatment extends Model
 
     public function doctors(): BelongsToMany
     {
-        return $this->belongsToMany(Doctor::class, 'doctor_treatment')->withPivot('duration_minutes')->withTimestamps();
+        return $this->belongsToMany(Doctor::class, 'doctor_treatment')->withPivot('duration_minutes', 'learned_minutes', 'learned_samples')->withTimestamps();
+    }
+
+    /** Dónde aparece: solo en el consultorio, también en la página web o también con reserva en línea. */
+    public function webPresence(): WebPresence
+    {
+        return WebPresence::fromFlags((bool) $this->is_public, (bool) $this->online_bookable);
+    }
+
+    /**
+     * Los doctores activos a los que se les reserva otro tiempo que el general, y de dónde sale: el que se puso
+     * a mano en su ficha o lo que de verdad suele tardar.
+     *
+     * @return list<array{doctor: string, minutes: int, source: string}>
+     */
+    public function ownDurations(): array
+    {
+        return $this->doctors
+            ->where('is_active', true)
+            ->map(function (Doctor $doctor): ?array {
+                $learned = $doctor->pivot->learned_minutes !== null ? (int) $doctor->pivot->learned_minutes : null;
+
+                return match (true) {
+                    (bool) $doctor->pivot->duration_minutes => ['doctor' => $doctor->name, 'minutes' => (int) $doctor->pivot->duration_minutes, 'source' => 'puesta en su ficha'],
+                    LearnedDurations::applies($learned, (int) $this->duration_minutes) => ['doctor' => $doctor->name, 'minutes' => $learned, 'source' => 'lo que suele tardar'],
+                    default => null,
+                };
+            })
+            ->filter()
+            ->values()
+            ->all();
     }
 
     public function appointments(): HasMany
