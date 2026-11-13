@@ -65,11 +65,11 @@ class WebContentPanelTest extends TestCase
 
         // Marcado para la web, pero solo lo atiende un doctor que no recibe reservas por la web.
         Livewire::test(ManageTreatments::class)
-            ->assertTableColumnStateSet('online_bookable', true, $cleaning)
-            ->assertSee('No aparece en la reserva: ningún doctor que reciba reservas por la web lo atiende.')
+            ->assertTableColumnStateSet('presence', 'Web y reserva', $cleaning)
+            ->assertSee('No aparece en la reserva: ningún doctor que reciba reservas en línea lo atiende.')
             ->mountAction(TestAction::make('edit')->table($cleaning))
             ->assertSchemaStateSet(['doctors' => [(string) $ramos->id]])
-            ->assertMountedActionModalSee(['¿Quién lo atiende?', 'Dr. Ramos (no recibe reservas por la web)', 'Así no aparece en la reserva'])
+            ->assertMountedActionModalSee(['¿Quién lo atiende?', 'Dr. Ramos (no recibe reservas en línea)', 'Así no aparece en la reserva'])
             ->fillForm(['doctors' => [(string) $ramos->id, (string) $torres->id]])
             ->assertMountedActionModalDontSee('Así no aparece en la reserva')
             ->callMountedAction()

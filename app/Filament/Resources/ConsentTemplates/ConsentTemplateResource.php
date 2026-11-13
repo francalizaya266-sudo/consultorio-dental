@@ -2,13 +2,15 @@
 
 namespace App\Filament\Resources\ConsentTemplates;
 
+use App\Filament\Concerns\HasSettingsMenuGroup;
 use App\Filament\Concerns\HasSpanishLabels;
 use App\Filament\Resources\ConsentTemplates\Pages\ManageConsentTemplates;
 use App\Models\ConsentTemplate;
 use App\Models\Treatment;
 use App\Services\Clinical\ConsentService;
 use BackedEnum;
-use Filament\Actions\CreateAction;
+use Filament\Actions\ActionGroup;
+use Filament\Actions\DeleteAction;
 use Filament\Actions\EditAction;
 use Filament\Actions\ViewAction;
 use Filament\Forms\Components\Select;
@@ -26,7 +28,7 @@ use Filament\Tables\Table;
 /** Textos de consentimiento informado. Uno general y, si hace falta, uno por tratamiento. */
 class ConsentTemplateResource extends Resource
 {
-    use HasSpanishLabels;
+    use HasSettingsMenuGroup, HasSpanishLabels;
 
     protected static ?string $slug = 'consentimientos';
 
@@ -38,9 +40,14 @@ class ConsentTemplateResource extends Resource
 
     protected static ?string $navigationParentItem = 'Configuración';
 
-    protected static ?int $navigationSort = 6;
+    protected static ?int $navigationSort = 7;
 
     protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedDocumentCheck;
+
+    public static function settingsMenuGroup(): string
+    {
+        return 'Textos';
+    }
 
     public static function form(Schema $schema): Schema
     {
@@ -51,6 +58,10 @@ class ConsentTemplateResource extends Resource
                     ->label('Nombre')
                     ->required()
                     ->maxLength(255),
+                Toggle::make('is_active')
+                    ->label('En uso')
+                    ->default(true)
+                    ->helperText('Apagado, ya no se propone al firmar. Lo ya firmado no cambia.'),
                 Select::make('treatment_id')
                     ->label('Tratamiento')
                     ->placeholder('General (para cualquier tratamiento)')
@@ -60,9 +71,6 @@ class ConsentTemplateResource extends Resource
                     ->rows(14)
                     ->required()
                     ->helperText('Puedes usar: '.collect(ConsentService::PLACEHOLDERS)->map(fn (string $help, string $key) => "{$key} {$help}")->implode(' · ').'. Cambiar el texto no toca los consentimientos ya firmados.'),
-                Toggle::make('is_active')
-                    ->label('En uso')
-                    ->default(true),
             ]);
     }
 
@@ -97,18 +105,23 @@ class ConsentTemplateResource extends Resource
                         ->body($state ? null : 'Los consentimientos ya firmados no cambian.')
                         ->send()),
             ])
-            ->headerActions([
-                CreateAction::make()->label('Nuevo texto')->createAnother(false),
-            ])
             ->recordActions([
                 // Los doctores no redactan los textos, pero los firman con el paciente: pueden leerlos.
                 ViewAction::make()
                     ->label('Ver')
                     ->modalHeading(fn (ConsentTemplate $record) => $record->name)
                     ->visible(fn (ConsentTemplate $record) => ! auth()->user()->can('update', $record)),
-                EditAction::make(),
+                EditAction::make()
+                    ->successNotificationTitle('Texto de consentimiento guardado'),
+                // La misma regla que en el resto de Configuración: se borra solo el texto con el que nunca se firmó.
+                ActionGroup::make([
+                    DeleteAction::make()
+                        ->authorizationNotification()
+                        ->modalDescription('Solo se borra un texto con el que nunca se firmó. Los demás se apagan con "En uso".')
+                        ->successNotificationTitle('Texto de consentimiento borrado'),
+                ])->visible(fn () => auth()->user()->isAdmin()),
             ])
-            ->paginated(false);
+            ->defaultPaginationPageOption(25);
     }
 
     public static function getPages(): array

@@ -35,6 +35,8 @@ class TreatmentsRelationManager extends RelationManager
         return $table
             ->stackedOnMobile()
             ->recordTitleAttribute('name')
+            // Esta lista no espera al botón "Guardar cambios" de la ficha: cada cambio queda guardado al hacerlo.
+            ->description('Es la misma lista que "¿Quién lo atiende?" en cada tratamiento: cambiarla aquí o allá da igual. Lo que agregues o quites aquí se guarda al instante, aparte de "Guardar cambios".')
             ->columns([
                 TextColumn::make('name')
                     ->label('Tratamiento'),
@@ -61,7 +63,9 @@ class TreatmentsRelationManager extends RelationManager
                     ]),
             ])
             ->recordActions([
-                EditAction::make()->label('Duración'),
+                EditAction::make()
+                    ->label('Duración')
+                    ->successNotificationTitle('Duración guardada'),
                 DetachAction::make()
                     ->label('Quitar')
                     ->modalHeading(fn (Treatment $record) => '¿Quitar '.$record->name.'?')

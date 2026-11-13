@@ -4,6 +4,7 @@ namespace App\Filament\Resources\TextSnippets;
 
 use App\Enums\SnippetField;
 use App\Enums\SnippetStatus;
+use App\Filament\Concerns\HasSettingsMenuGroup;
 use App\Filament\Concerns\HasSpanishLabels;
 use App\Filament\Resources\TextSnippets\Pages\ManageTextSnippets;
 use App\Models\TextSnippet;
@@ -25,6 +26,7 @@ use Filament\Schemas\Schema;
 use Filament\Support\Icons\Heroicon;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Filters\SelectFilter;
+use Filament\Tables\Filters\TernaryFilter;
 use Filament\Tables\Table;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Arr;
@@ -36,7 +38,7 @@ use Illuminate\Support\HtmlString;
  */
 class TextSnippetResource extends Resource
 {
-    use HasSpanishLabels;
+    use HasSettingsMenuGroup, HasSpanishLabels;
 
     protected static ?string $slug = 'opciones-rapidas';
 
@@ -48,9 +50,14 @@ class TextSnippetResource extends Resource
 
     protected static ?string $navigationParentItem = 'Configuración';
 
-    protected static ?int $navigationSort = 5;
+    protected static ?int $navigationSort = 6;
 
     protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedBolt;
+
+    public static function settingsMenuGroup(): string
+    {
+        return 'Textos';
+    }
 
     public static function form(Schema $schema): Schema
     {
@@ -124,6 +131,17 @@ class TextSnippetResource extends Resource
                 SelectFilter::make('field')
                     ->label('Dónde aparece')
                     ->options(SnippetField::class),
+                // Las archivadas no estorban: se ven solo si se piden.
+                TernaryFilter::make('archived')
+                    ->label('Archivadas')
+                    ->placeholder('Sin las archivadas')
+                    ->trueLabel('Solo las archivadas')
+                    ->falseLabel('Todas')
+                    ->queries(
+                        true: fn (Builder $query) => $query->where('status', SnippetStatus::Archived),
+                        false: fn (Builder $query) => $query,
+                        blank: fn (Builder $query) => $query->where('status', '!=', SnippetStatus::Archived),
+                    ),
             ])
             ->recordActions([
                 Action::make('propose')
@@ -155,12 +173,42 @@ class TextSnippetResource extends Resource
                         Notification::make()->success()->title('Ahora la usa todo el equipo')->send();
                     }),
                 EditAction::make()
-                    ->mutateDataUsing(fn (array $data, TextSnippet $record) => self::withOwnership($data, $record)),
-                // Borrar va en el menú ⋮: el rojo queda para lo urgente.
+                    ->mutateDataUsing(fn (array $data, TextSnippet $record) => self::withOwnership($data, $record))
+                    ->successNotificationTitle('Opción rápida guardada'),
+                // En el menú ⋮: archivar lo que ya no se usa (deja de ofrecerse, pero se conserva) y borrar lo que
+                // nunca se usó. El estado "Archivada" existía, pero ninguna pantalla dejaba archivar.
                 ActionGroup::make([
-                    DeleteAction::make(),
+                    Action::make('archive')
+                        ->label('Archivar')
+                        ->icon(Heroicon::OutlinedArchiveBox)
+                        ->requiresConfirmation()
+                        ->modalHeading(fn (TextSnippet $record) => '¿Archivar "'.$record->label.'"?')
+                        ->modalDescription('Deja de ofrecerse al escribir la historia. Queda en esta lista y se puede volver a usar.')
+                        ->modalSubmitActionLabel('Archivar')
+                        ->visible(fn (TextSnippet $record) => $record->status === SnippetStatus::Active)
+                        ->authorize('archive')
+                        ->action(function (TextSnippet $record) {
+                            $record->update(['status' => SnippetStatus::Archived]);
+
+                            Notification::make()->success()->title('"'.$record->label.'" archivada')->body('Ya no se ofrece al escribir la historia.')->send();
+                        }),
+                    Action::make('unarchive')
+                        ->label('Volver a usar')
+                        ->icon(Heroicon::OutlinedArrowUturnLeft)
+                        ->visible(fn (TextSnippet $record) => $record->status === SnippetStatus::Archived)
+                        ->authorize('archive')
+                        ->action(function (TextSnippet $record) {
+                            $record->update(['status' => SnippetStatus::Active]);
+
+                            Notification::make()->success()->title('"'.$record->label.'" se ofrece de nuevo')->send();
+                        }),
+                    DeleteAction::make()
+                        ->authorizationNotification()
+                        ->modalDescription('Solo se borra una opción que nunca se usó. Las que ya se usaron se archivan.')
+                        ->successNotificationTitle('Opción rápida borrada'),
                 ]),
-            ]);
+            ])
+            ->defaultPaginationPageOption(25);
     }
 
     /** Si al guardar la opción queda para todo el equipo (solo el administrador puede) o solo para quien la guarda. */

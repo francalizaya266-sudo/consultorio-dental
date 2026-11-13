@@ -57,6 +57,13 @@ class TreatmentPackage extends Model
         return $query->where('is_active', true);
     }
 
+    /** Ya está en un plan o en una campaña: los presupuestos lo nombran, así que no se borra; se apaga "Se ofrece". */
+    public function hasHistory(): bool
+    {
+        return collect([TreatmentPlanItem::class, Campaign::class])
+            ->contains(fn (string $model) => $model::query()->where('treatment_package_id', $this->getKey())->exists());
+    }
+
     /** Lo que costaría todo por separado, con los precios del catálogo de hoy. */
     public function normalPrice(): float
     {

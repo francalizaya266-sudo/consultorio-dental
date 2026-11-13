@@ -2,6 +2,7 @@
 
 namespace App\Filament\Resources\Doctors\Tables;
 
+use App\Enums\WebPresence;
 use App\Filament\Resources\Doctors\Schemas\DoctorForm;
 use App\Models\Doctor;
 use App\Models\DoctorSchedule;
@@ -9,7 +10,6 @@ use Filament\Actions\Contracts\HasActions;
 use Filament\Actions\EditAction;
 use Filament\Notifications\Notification;
 use Filament\Tables\Columns\ColorColumn;
-use Filament\Tables\Columns\IconColumn;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Columns\ToggleColumn;
 use Filament\Tables\Filters\TrashedFilter;
@@ -53,9 +53,12 @@ class DoctorsTable
                     ->placeholder('Sin horario'),
                 TextColumn::make('treatments_count')
                     ->label('Tratamientos'),
-                IconColumn::make('accepts_online_booking')
-                    ->label('Reserva web')
-                    ->boolean(),
+                // En palabras, no con una X roja que parecía un error.
+                TextColumn::make('presence')
+                    ->label('Dónde aparece')
+                    ->state(fn (Doctor $record) => $record->is_active ? $record->webPresence()->shortLabel() : null)
+                    ->color(fn (Doctor $record) => $record->webPresence() === WebPresence::Clinic ? 'gray' : null)
+                    ->placeholder('—'),
                 // Desactivar lo saca de la agenda y de la web: antes se pregunta y se dice cuántas citas le quedan.
                 ToggleColumn::make('is_active')
                     ->label('Activo')
@@ -76,6 +79,7 @@ class DoctorsTable
             ->filters([
                 TrashedFilter::make(),
             ])
+            ->defaultPaginationPageOption(25)
             ->recordActions([
                 EditAction::make(),
             ]);

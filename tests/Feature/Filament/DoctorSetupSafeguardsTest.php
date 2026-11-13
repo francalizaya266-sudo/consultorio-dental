@@ -86,14 +86,16 @@ class DoctorSetupSafeguardsTest extends TestCase
         $this->actingAs(User::factory()->admin()->create());
 
         Livewire::test(CreateDoctor::class)
-            ->assertSchemaStateSet(['is_public' => false, 'accepts_online_booking' => false, 'is_active' => true])
-            ->fillForm(['name' => 'Dra. Ana Torres', 'slug' => 'ana-torres', 'access' => 'none'])
+            ->assertSchemaStateSet(['presence' => 'clinic', 'is_active' => true])
+            // Mientras no salga en la web no se le pide la dirección: sale sola del nombre.
+            ->assertFormFieldHidden('slug')
+            ->fillForm(['name' => 'Dra. Ana Torres', 'access' => 'none'])
             ->call('create')
             ->assertHasNoFormErrors()
             ->assertNotified('Doctor guardado');
 
-        $doctor = Doctor::query()->where('slug', 'ana-torres')->sole();
-        $this->assertSame([false, false], [$doctor->is_public, $doctor->accepts_online_booking]);
+        $doctor = Doctor::query()->where('name', 'Dra. Ana Torres')->sole();
+        $this->assertSame(['dra-ana-torres', false, false], [$doctor->slug, $doctor->is_public, $doctor->accepts_online_booking]);
 
         // En su ficha y en la lista se dice qué le falta para que se le pueda agendar.
         Livewire::test(EditDoctor::class, ['record' => $doctor->getKey()])

@@ -51,6 +51,12 @@ class TextSnippet extends Model
             ->orderBy('label');
     }
 
+    /** Ya se usó en alguna historia: no se borra, se archiva para que deje de ofrecerse. */
+    public function hasHistory(): bool
+    {
+        return $this->usages()->where('count', '>', 0)->exists();
+    }
+
     public function isShared(): bool
     {
         return $this->user_id === null;

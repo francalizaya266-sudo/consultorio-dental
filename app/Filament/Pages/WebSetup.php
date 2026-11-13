@@ -4,9 +4,11 @@ namespace App\Filament\Pages;
 
 use App\Filament\Forms\WebPhotoUpload;
 use App\Filament\Pages\Concerns\EditsSettings;
+use App\Services\Web\OpeningHours;
 use App\Services\Web\PublicImages;
 use App\Services\Web\SetupChecklist;
 use BackedEnum;
+use Filament\Actions\Action;
 use Filament\Forms\Components\FileUpload;
 use Filament\Forms\Components\Textarea;
 use Filament\Forms\Components\TextInput;
@@ -83,6 +85,23 @@ class WebSetup extends Page
         return 'Página web guardada';
     }
 
+    /** El horario que la web ya muestra, en una línea, para que la nota solo agregue lo que falta. */
+    private static function hoursOnTheWeb(): string
+    {
+        $hours = OpeningHours::fromSchedules();
+
+        if ($hours->isEmpty()) {
+            return 'La web todavía no muestra ningún horario: ponlo en la ficha de cada doctor. Esta nota va debajo.';
+        }
+
+        $lines = collect($hours->lines())
+            ->reject(fn (array $line) => $line['hours'] === ['Cerrado'])
+            ->map(fn (array $line) => $line['days'].' '.implode(' y ', $line['hours']))
+            ->implode('; ');
+
+        return "La web ya muestra el horario de los doctores ({$lines}). Esta nota va debajo, para lo que el horario no dice.";
+    }
+
     public function form(Schema $schema): Schema
     {
         return $schema
@@ -156,15 +175,27 @@ class WebSetup extends Page
                     ]),
                 Section::make('Cómo llegar y redes')
                     ->id('como-llegar')
+                    // El nombre, la dirección y los teléfonos que la web muestra se cambian en Ajustes: se llega con un enlace.
+                    ->description('La dirección y los teléfonos que salen en la web son los de Configuración › Ajustes.')
+                    ->headerActions([
+                        Action::make('clinicData')
+                            ->label('Nombre, dirección y teléfonos: en Ajustes')
+                            ->link()
+                            ->icon(Heroicon::OutlinedArrowTopRightOnSquare)
+                            ->url(fn () => Settings::getUrl()),
+                    ])
                     ->columns(2)
                     ->schema([
                         TextInput::make('clinic.maps_url')
                             ->label('Enlace de Google Maps')
                             ->url()
                             ->helperText('Para el botón "Cómo llegar". Vacío = se busca la dirección.'),
+                        // El horario de la web sale de los horarios de los doctores: se muestra aquí para que la nota
+                        // no lo repita a mano, solo diga lo que el horario no dice.
                         TextInput::make('clinic.hours_note')
                             ->label('Nota sobre el horario')
-                            ->placeholder('Feriados: con cita previa'),
+                            ->placeholder('Feriados: con cita previa')
+                            ->helperText(fn () => self::hoursOnTheWeb()),
                         TextInput::make('clinic.instagram')
                             ->label('Instagram')
                             ->url()

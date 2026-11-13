@@ -30,6 +30,12 @@ class ConsentTemplate extends Model
         ];
     }
 
+    /** Ya se firmó un consentimiento con este texto: se conserva, y se apaga "En uso" para que no se proponga más. */
+    public function hasHistory(): bool
+    {
+        return Consent::query()->where('consent_template_id', $this->getKey())->exists();
+    }
+
     public function treatment(): BelongsTo
     {
         return $this->belongsTo(Treatment::class);

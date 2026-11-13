@@ -27,6 +27,7 @@ use Filament\Schemas\Schema;
 use Filament\Support\Icons\Heroicon;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Filters\Filter;
+use Filament\Tables\Filters\SelectFilter;
 use Filament\Tables\Table;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Arr;
@@ -258,6 +259,16 @@ class ScheduleBlockResource extends Resource
                     ->toggle()
                     ->default()
                     ->query(fn (Builder $query) => $query->where('ends_at', '>=', now())),
+                // Lo que le quita horas a un doctor: sus bloqueos y los de todo el consultorio (feriados). Desde la
+                // ficha del doctor se llega aquí con este filtro puesto.
+                SelectFilter::make('doctor')
+                    ->label('Doctor')
+                    ->options(fn () => Doctor::query()->active()->orderBy('sort_order')->pluck('name', 'id'))
+                    ->query(fn (Builder $query, array $data) => $query->when(
+                        filled($data['value'] ?? null),
+                        fn (Builder $blocks) => $blocks->where(fn (Builder $own) => $own->whereNull('doctor_id')->orWhere('doctor_id', $data['value'])),
+                    ))
+                    ->visible(fn () => auth()->user()->managesAllAgendas()),
             ])
             ->recordActions([
                 EditAction::make()
@@ -284,6 +295,12 @@ class ScheduleBlockResource extends Resource
             ->with('doctor')
             ->addSelect(['appointments_inside' => ManageScheduleBlocks::appointmentsInsideCount()])
             ->when(! $user->managesAllAgendas(), fn (Builder $q) => $q->where(fn (Builder $w) => $w->whereNull('doctor_id')->orWhere('doctor_id', $user->doctorId())));
+    }
+
+    /** La lista con los bloqueos que le quitan horas a ese doctor (los suyos y los de todo el consultorio), vigentes y próximos. */
+    public static function urlForDoctor(Doctor $doctor): string
+    {
+        return self::getUrl('index', ['filters' => ['upcoming' => ['isActive' => true], 'doctor' => ['value' => $doctor->getKey()]]]);
     }
 
     public static function getPages(): array

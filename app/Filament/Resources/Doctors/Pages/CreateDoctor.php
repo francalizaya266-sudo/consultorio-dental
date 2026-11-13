@@ -4,6 +4,7 @@ namespace App\Filament\Resources\Doctors\Pages;
 
 use App\Filament\Resources\Doctors\DoctorResource;
 use App\Filament\Resources\Doctors\Schemas\DoctorForm;
+use Filament\Actions\Action;
 use Filament\Notifications\Notification;
 use Filament\Resources\Pages\CreateRecord;
 
@@ -16,6 +17,14 @@ class CreateDoctor extends CreateRecord
     protected static ?string $breadcrumb = 'Nuevo';
 
     protected static bool $canCreateAnother = false;
+
+    public static bool $formActionsAreSticky = true;
+
+    /** "Guardar", como en todas las ventanas de alta: aquí decía "Crear". */
+    protected function getCreateFormAction(): Action
+    {
+        return parent::getCreateFormAction()->label('Guardar');
+    }
 
     /** @param  array<string, mixed>  $data */
     protected function mutateFormDataBeforeCreate(array $data): array
@@ -32,7 +41,7 @@ class CreateDoctor extends CreateRecord
             ->success()
             ->title('Doctor guardado')
             ->body($missing === []
-                ? 'Cuando su ficha esté completa, enciende "Aparece en la web".'
+                ? 'Cuando su ficha esté completa, elige en "Dónde aparece" si sale en la página web.'
                 : 'Para poder agendarle falta '.implode(' y ', $missing).'. Agrégalo aquí abajo.');
     }
 

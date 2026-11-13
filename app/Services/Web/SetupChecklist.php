@@ -54,7 +54,7 @@ final class SetupChecklist
                 'key' => 'treatments',
                 'title' => 'Quién atiende cada tratamiento de la reserva',
                 'why' => $unattended->isEmpty()
-                    ? 'Todo lo que se reserva por la web tiene quién lo atienda.'
+                    ? 'Todo lo que se reserva en línea tiene quién lo atienda.'
                     : self::joinNames($unattended).($unattended->count() === 1 ? ' no aparece' : ' no aparecen').' en la reserva: marca qué doctor lo atiende.',
                 'done' => $unattended->isEmpty(),
                 'url' => TreatmentResource::getUrl('index'),

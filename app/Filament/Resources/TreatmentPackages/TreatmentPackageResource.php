@@ -2,6 +2,7 @@
 
 namespace App\Filament\Resources\TreatmentPackages;
 
+use App\Filament\Concerns\HasSettingsMenuGroup;
 use App\Filament\Concerns\HasSpanishLabels;
 use App\Filament\Forms\PaymentTermsFields;
 use App\Filament\Resources\TreatmentPackages\Pages\ManageTreatmentPackages;
@@ -11,6 +12,8 @@ use App\Models\TreatmentPackageItem;
 use App\Services\Clinical\TreatmentPlanService;
 use App\Support\Money;
 use BackedEnum;
+use Filament\Actions\ActionGroup;
+use Filament\Actions\DeleteAction;
 use Filament\Actions\EditAction;
 use Filament\Forms\Components\Repeater;
 use Filament\Forms\Components\Repeater\TableColumn;
@@ -39,7 +42,7 @@ use Illuminate\Database\Eloquent\Model;
 /** Paquetes que arma el doctor: qué incluye, a qué precio y cómo se puede pagar. */
 class TreatmentPackageResource extends Resource
 {
-    use HasSpanishLabels;
+    use HasSettingsMenuGroup, HasSpanishLabels;
 
     protected static ?string $slug = 'paquetes';
 
@@ -51,9 +54,14 @@ class TreatmentPackageResource extends Resource
 
     protected static ?string $navigationParentItem = 'Configuración';
 
-    protected static ?int $navigationSort = 2;
+    protected static ?int $navigationSort = 3;
 
     protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedGift;
+
+    public static function settingsMenuGroup(): string
+    {
+        return 'Catálogo';
+    }
 
     public static function form(Schema $schema): Schema
     {
@@ -69,15 +77,9 @@ class TreatmentPackageResource extends Resource
                         ->columnSpan(['md' => 2]),
                     Toggle::make('is_active')
                         ->label('Se ofrece')
-                        ->helperText('Desactívalo cuando ya no se ofrezca; los planes que lo usan no cambian.')
-                        ->default(true),
-                    TextInput::make('duration_months')
-                        ->label('Duración')
-                        ->suffix('meses')
-                        ->integer()
-                        ->minValue(1)
-                        ->maxValue(60)
-                        ->helperText('Cuánto dura el tratamiento (ortodoncia: 18). Sale en el presupuesto.'),
+                        ->helperText('Apágalo cuando ya no se ofrezca; los planes que lo usan no cambian.')
+                        ->default(true)
+                        ->inline(false),
                 ]),
                 Repeater::make('items')
                     ->label('Qué incluye')
@@ -149,11 +151,19 @@ class TreatmentPackageResource extends Resource
                             };
                         })
                         ->hintColor(fn (Get $get) => (self::savings($get) ?? 0) < 0 ? 'warning' : 'success'),
-                    Toggle::make('for_two')
-                        ->label('2x1')
-                        ->helperText('Con el mismo pago se atiende otra persona: un familiar o alguien que trae el paciente.')
-                        ->default(false),
+                    // Con su nombre completo: en Tratamientos "duración" son los minutos de la cita; aquí, los meses que dura todo.
+                    TextInput::make('duration_months')
+                        ->label('Duración del tratamiento')
+                        ->suffix('meses')
+                        ->integer()
+                        ->minValue(1)
+                        ->maxValue(60)
+                        ->helperText('Opcional (ortodoncia: 18). Sale en el presupuesto.'),
                 ]),
+                Toggle::make('for_two')
+                    ->label('2x1')
+                    ->helperText('Con el mismo pago se atiende otra persona: un familiar o alguien que trae el paciente.')
+                    ->default(false),
                 Section::make('Cómo se puede pagar')
                     ->compact()
                     ->schema([
@@ -232,10 +242,19 @@ class TreatmentPackageResource extends Resource
             ])
             ->recordActions([
                 EditAction::make()
-                    ->modalHeading('Paquete')
+                    ->modalHeading('Editar paquete')
                     ->modalWidth(Width::FourExtraLarge)
                     ->successNotificationTitle('Paquete guardado. Los planes que ya lo usan no cambian.'),
+                // La misma regla que en Tratamientos y Doctores: lo que nunca se usó se puede borrar (los de prueba);
+                // lo que ya está en un plan solo se apaga con "Se ofrece".
+                ActionGroup::make([
+                    DeleteAction::make()
+                        ->authorizationNotification()
+                        ->modalDescription('Solo se borra un paquete que nunca se usó en un plan. Los demás se apagan con "Se ofrece".')
+                        ->successNotificationTitle('Paquete borrado'),
+                ]),
             ])
+            ->defaultPaginationPageOption(25)
             ->emptyStateHeading('Todavía no hay paquetes')
             ->emptyStateDescription('Junta varios tratamientos, ponles un precio y elige cómo se puede pagar.');
     }

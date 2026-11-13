@@ -3,13 +3,18 @@
 namespace App\Filament\Resources\Doctors\Schemas;
 
 use App\Enums\UserRole;
+use App\Enums\WebPresence;
+use App\Filament\Forms\ColorSwatches;
 use App\Filament\Forms\WebPhotoUpload;
+use App\Filament\Forms\WeeklySchedule;
+use App\Filament\Resources\ScheduleBlocks\ScheduleBlockResource;
 use App\Models\Doctor;
 use App\Models\User;
 use Closure;
 use Filament\Actions\Action;
 use Filament\Forms\Components\CheckboxList;
-use Filament\Forms\Components\ColorPicker;
+use Filament\Forms\Components\Hidden;
+use Filament\Forms\Components\Radio;
 use Filament\Forms\Components\Repeater;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\Textarea;
@@ -24,9 +29,11 @@ use Filament\Schemas\Components\Utilities\Get;
 use Filament\Schemas\Components\Utilities\Set;
 use Filament\Schemas\Schema;
 use Filament\Support\Enums\FontWeight;
+use Filament\Support\Enums\Size;
 use Filament\Support\Icons\Heroicon;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Arr;
+use Illuminate\Support\HtmlString;
 use Illuminate\Support\Str;
 use Illuminate\Validation\Rules\Password;
 
@@ -38,10 +45,13 @@ class DoctorForm
 
     private const ACCESS_NONE = 'none';
 
-    /** Colores que se distinguen bien entre sí en la agenda. */
-    private const AGENDA_COLORS = ['#0ea5e9', '#10b981', '#f59e0b', '#8b5cf6', '#ec4899', '#14b8a6', '#f97316', '#64748b'];
+    /** Colores que se distinguen bien entre sí en la agenda, con el nombre con que se eligen. */
+    private const AGENDA_COLORS = [
+        '#0ea5e9' => 'Celeste', '#10b981' => 'Verde', '#f59e0b' => 'Ámbar', '#8b5cf6' => 'Violeta',
+        '#ec4899' => 'Rosa', '#14b8a6' => 'Turquesa', '#f97316' => 'Naranja', '#64748b' => 'Gris',
+    ];
 
-    public const WEEKDAYS = [1 => 'Lunes', 2 => 'Martes', 3 => 'Miércoles', 4 => 'Jueves', 5 => 'Viernes', 6 => 'Sábado', 7 => 'Domingo'];
+    public const WEEKDAYS = WeeklySchedule::DAYS;
 
     /**
      * "Copiar este día a otros": arma el lunes (mañana y tarde) y lo repite en los días que se marquen, en vez
@@ -52,10 +62,11 @@ class DoctorForm
         $weekdayOf = fn (array $arguments, Repeater $component): int => (int) ($component->getRawItemState($arguments['item'])['weekday'] ?? 0);
 
         return Action::make('copyDay')
-            ->label('Copiar este día a otros')
-            ->tooltip('Copiar este día a otros')
+            ->label('Copiar a otros días')
             ->icon(Heroicon::OutlinedDocumentDuplicate)
             ->color('gray')
+            ->link()
+            ->size(Size::Small)
             ->modalHeading(fn (array $arguments, Repeater $component) => 'Copiar el horario del '.Str::lower(self::WEEKDAYS[$weekdayOf($arguments, $component)] ?? 'día'))
             ->modalDescription('Todos sus tramos pasan a los días que marques y reemplazan lo que esos días tenían.')
             ->modalSubmitActionLabel('Copiar')
@@ -103,6 +114,7 @@ class DoctorForm
      */
     public static function withAccess(array $data, array $raw): array
     {
+        $data = self::withPresence($data);
         $data['user_id'] = match ($raw['access'] ?? null) {
             self::ACCESS_NEW => User::create([
                 'name' => $data['name'],
@@ -119,6 +131,26 @@ class DoctorForm
     }
 
     /**
+     * Lo elegido en "Dónde aparece" pasa a lo que el sistema guarda: si sale en el equipo de la web y si recibe
+     * las reservas en línea.
+     *
+     * @param  array<string, mixed>  $data
+     * @return array<string, mixed>
+     */
+    public static function withPresence(array $data): array
+    {
+        $presence = WebPresence::tryFrom((string) Arr::pull($data, 'presence'));
+
+        return $presence === null ? $data : [...$data, 'is_public' => $presence->isPublic(), 'accepts_online_booking' => $presence->isBookable()];
+    }
+
+    /** Lo marcado en "Dónde aparece" mientras se llena la ficha. */
+    private static function presenceOf(Get $get): WebPresence
+    {
+        return WebPresence::tryFrom((string) $get('presence')) ?? WebPresence::Clinic;
+    }
+
+    /**
      * El primer par de tramos del mismo día que se cruzan o se repiten, dicho para corregirlo:
      * "El lunes tiene dos tramos que se cruzan: 09:00–13:00 y 12:00–16:00…". Null si ninguno se cruza.
      *
@@ -126,7 +158,8 @@ class DoctorForm
      */
     public static function overlappingRanges(array $ranges): ?string
     {
-        $clock = fn (mixed $time): string => substr((string) $time, 0, 5);
+        // La hora llega como "09:00", "09:00:00" o, recién elegida en pantalla, con la fecha delante ("2026-11-13 09:00:00").
+        $clock = fn (mixed $time): string => preg_match('/(\d{1,2}:\d{2})(:\d{2})?$/', trim((string) $time), $found) ? str_pad($found[1], 5, '0', STR_PAD_LEFT) : '';
         $byDay = collect($ranges)
             ->filter(fn (mixed $range) => is_array($range) && filled($range['weekday'] ?? null) && filled($range['starts_at'] ?? null) && filled($range['ends_at'] ?? null))
             ->groupBy(fn (array $range) => (int) $range['weekday']);
@@ -178,7 +211,7 @@ class DoctorForm
     {
         $used = Doctor::withTrashed()->pluck('agenda_color')->map(fn (?string $color) => strtolower((string) $color))->all();
 
-        return collect(self::AGENDA_COLORS)->first(fn (string $color) => ! in_array($color, $used, true)) ?? self::AGENDA_COLORS[0];
+        return collect(array_keys(self::AGENDA_COLORS))->first(fn (string $color) => ! in_array($color, $used, true)) ?? array_key_first(self::AGENDA_COLORS);
     }
 
     public static function configure(Schema $schema): Schema
@@ -201,12 +234,6 @@ class DoctorForm
                             ->maxLength(100)
                             ->live(onBlur: true)
                             ->afterStateUpdated(fn (Set $set, ?string $state, string $operation) => $operation === 'create' ? $set('slug', Str::slug($state)) : null),
-                        TextInput::make('slug')
-                            ->label('Dirección en la web')
-                            ->prefix('/equipo#')
-                            ->required()
-                            ->alphaDash()
-                            ->unique(ignoreRecord: true),
                         TextInput::make('specialty')
                             ->label('Especialidad')
                             ->placeholder('Odontología general'),
@@ -214,11 +241,59 @@ class DoctorForm
                             ->label('COP'),
                         TextInput::make('rne_number')
                             ->label('RNE (especialista)'),
-                        // Sin color elegido no se podía guardar: viene uno que todavía no usa otro doctor.
-                        ColorPicker::make('agenda_color')
+                        // Ocho botones con nombre en vez de un código como "#0ea5e9". Viene uno que todavía no usa otro doctor.
+                        ColorSwatches::make('agenda_color')
                             ->label('Color en la agenda')
+                            ->swatches(self::AGENDA_COLORS)
                             ->default(fn () => self::unusedColor())
-                            ->required(),
+                            ->required()
+                            ->helperText('Con este color salen sus citas en la agenda.')
+                            ->columnSpanFull(),
+                        Toggle::make('is_active')
+                            ->label('Activo')
+                            ->default(true)
+                            ->live()
+                            ->helperText(fn (Get $get, ?Doctor $record) => $record && ! $get('is_active') ? self::deactivationWarning($record) : null)
+                            ->columnSpanFull(),
+                    ]),
+                // Todo lo de la web en un solo bloque, con una sola pregunta en vez de dos interruptores que se pisaban
+                // ("Aparece en la web" y "Recibe reservas desde la web").
+                Section::make('Página web')
+                    ->columns(2)
+                    ->schema([
+                        // Un doctor nuevo nace fuera de la web: recién guardado no tiene foto, horario ni tratamientos,
+                        // y así salía en la página del equipo. Se cambia cuando su ficha está completa.
+                        Radio::make('presence')
+                            ->label('Dónde aparece')
+                            ->options(fn (?Doctor $record) => collect(WebPresence::choices($record?->webPresence()))
+                                ->mapWithKeys(fn (WebPresence $presence) => [$presence->value => $presence->getLabel()])
+                                ->all())
+                            ->descriptions([
+                                WebPresence::Clinic->value => 'Atiende y se le agenda desde el panel. No sale en la página web.',
+                                WebPresence::Web->value => 'Sale en el equipo de la página web. Sus citas se dan desde el panel.',
+                                WebPresence::Booking->value => 'Además, los pacientes pueden reservar con él o ella desde la web.',
+                                WebPresence::BookingOnly->value => 'Como estaba: recibe reservas de la web, pero no sale en el equipo.',
+                            ])
+                            ->default(WebPresence::Clinic->value)
+                            ->afterStateHydrated(fn (Radio $component, ?Doctor $record) => $record ? $component->state($record->webPresence()->value) : null)
+                            ->required()
+                            ->live()
+                            ->helperText(fn (Get $get, string $operation) => match (true) {
+                                ! $get('is_active') => new HtmlString('<span class="help-warning">Está inactivo: no aparece en ningún lado. Al activarlo, vuelve a aparecer así.</span>'),
+                                $operation === 'create' => 'Pásalo a la página web cuando su ficha esté completa: foto, horario y tratamientos.',
+                                default => null,
+                            })
+                            ->columnSpanFull(),
+                        // La dirección sale sola del nombre: solo se muestra a quien aparece en la web.
+                        TextInput::make('slug')
+                            ->label('Dirección en la web')
+                            ->prefix('/equipo#')
+                            ->required()
+                            ->alphaDash()
+                            ->unique(ignoreRecord: true)
+                            ->helperText('Sale sola del nombre. Cámbiala solo si quieres otra.')
+                            ->visible(fn (Get $get) => self::presenceOf($get) !== WebPresence::Clinic)
+                            ->columnSpanFull(),
                         WebPhotoUpload::make('photo_path', 'equipo')
                             ->label('Foto para la web')
                             ->avatar()
@@ -235,20 +310,6 @@ class DoctorForm
                             ->placeholder("Cirujano dentista, Universidad …\nEspecialidad en …")
                             ->helperText('Una línea por estudio.')
                             ->columnSpanFull(),
-                        // Un doctor nuevo nace fuera de la web: recién guardado no tiene foto, horario ni tratamientos,
-                        // y así salía en la página del equipo. Se enciende cuando su ficha está completa.
-                        Toggle::make('accepts_online_booking')
-                            ->label('Recibe reservas desde la web')
-                            ->default(false),
-                        Toggle::make('is_public')
-                            ->label('Aparece en la web')
-                            ->default(false)
-                            ->helperText(fn (string $operation) => $operation === 'create' ? 'Enciende estas dos opciones cuando su ficha esté completa: foto, horario y tratamientos.' : null),
-                        Toggle::make('is_active')
-                            ->label('Activo')
-                            ->default(true)
-                            ->live()
-                            ->helperText(fn (Get $get, ?Doctor $record) => $record && ! $get('is_active') ? self::deactivationWarning($record) : null),
                     ]),
                 // Un solo alta: el doctor y su usuario para entrar al panel, sin ir antes a Usuarios.
                 Section::make('Acceso al panel')
@@ -298,23 +359,31 @@ class DoctorForm
                             ->dehydratedWhenHidden(),
                     ]),
                 Section::make('Horario de atención')
-                    ->description('Puedes poner varios tramos por día (por ejemplo, mañana y tarde): el almuerzo es el espacio entre uno y otro. Cursos, vacaciones y feriados van en "Bloqueos de horario".')
+                    ->description('Una fila por día. Puedes poner varios tramos (por ejemplo, mañana y tarde): el almuerzo es el espacio entre uno y otro. Se guarda con "Guardar cambios".')
+                    // Cursos, vacaciones y feriados no van aquí: se llega a los bloqueos de este doctor con un enlace.
+                    ->headerActions([
+                        Action::make('blocks')
+                            ->label('Vacaciones, permisos y feriados')
+                            ->link()
+                            ->icon(Heroicon::OutlinedArrowTopRightOnSquare)
+                            ->url(fn (?Doctor $record) => $record ? ScheduleBlockResource::urlForDoctor($record) : ScheduleBlockResource::getUrl('index'))
+                            ->visible(fn () => ScheduleBlockResource::canAccess()),
+                    ])
                     ->schema([
-                        Repeater::make('schedules')
+                        WeeklySchedule::make('schedules')
                             ->hiddenLabel()
                             ->relationship(modifyQueryUsing: fn (Builder $query) => $query->orderBy('weekday')->orderBy('starts_at'))
-                            ->columns(3)
                             ->schema([
-                                Select::make('weekday')
-                                    ->label('Día')
-                                    ->options(self::WEEKDAYS)
+                                Hidden::make('weekday')
                                     ->required(),
                                 TimePicker::make('starts_at')
                                     ->label('Desde')
+                                    ->hiddenLabel()
                                     ->seconds(false)
                                     ->required(),
                                 TimePicker::make('ends_at')
                                     ->label('Hasta')
+                                    ->hiddenLabel()
                                     ->seconds(false)
                                     ->after('starts_at')
                                     ->required(),
@@ -326,10 +395,8 @@ class DoctorForm
                                 }
                             })
                             ->defaultItems(0)
-                            ->addActionLabel('Agregar tramo')
                             ->reorderable(false)
-                            ->extraItemActions([self::copyDayAction()])
-                            ->itemLabel(fn (array $state) => self::WEEKDAYS[$state['weekday'] ?? 0] ?? null),
+                            ->extraItemActions([self::copyDayAction()]),
                     ]),
             ]);
     }

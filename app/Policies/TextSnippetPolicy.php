@@ -5,6 +5,7 @@ namespace App\Policies;
 use App\Enums\SnippetStatus;
 use App\Models\TextSnippet;
 use App\Models\User;
+use Illuminate\Auth\Access\Response;
 
 /** Opciones rápidas: el administrador maneja las compartidas y cada doctor las suyas. */
 class TextSnippetPolicy
@@ -29,9 +30,20 @@ class TextSnippetPolicy
         return $this->manages($user, $model);
     }
 
-    public function delete(User $user, TextSnippet $model): bool
+    /** Lo que nunca se usó se puede borrar; lo que ya se usó en una historia se archiva. */
+    public function delete(User $user, TextSnippet $model): Response|bool
     {
-        return $this->manages($user, $model);
+        if (! $this->manages($user, $model)) {
+            return false;
+        }
+
+        return $model->hasHistory() ? Response::deny('Esta opción ya se usó en historias. Para que deje de ofrecerse, archívala.') : true;
+    }
+
+    /** Archivar o volver a usar: quien la maneja, y no mientras espera como propuesta. */
+    public function archive(User $user, TextSnippet $model): bool
+    {
+        return $this->manages($user, $model) && $model->status !== SnippetStatus::Proposed;
     }
 
     /** El administrador convierte en compartida una opción que un doctor propuso. */

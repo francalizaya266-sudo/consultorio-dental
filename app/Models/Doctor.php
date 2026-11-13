@@ -3,7 +3,9 @@
 namespace App\Models;
 
 use App\Enums\AppointmentStatus;
+use App\Enums\WebPresence;
 use App\Models\Concerns\Auditable;
+use App\Models\Concerns\HasWebSlug;
 use App\Services\Agenda\LearnedDurations;
 use Database\Factories\DoctorFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
@@ -21,7 +23,7 @@ use Illuminate\Database\Eloquent\SoftDeletes;
 class Doctor extends Model
 {
     /** @use HasFactory<DoctorFactory> */
-    use Auditable, HasFactory, SoftDeletes;
+    use Auditable, HasFactory, HasWebSlug, SoftDeletes;
 
     protected function casts(): array
     {
@@ -64,6 +66,12 @@ class Doctor extends Model
     public function appointmentsToAttend(): HasMany
     {
         return $this->appointments()->whereIn('status', AppointmentStatus::open())->where('starts_at', '>=', today());
+    }
+
+    /** Dónde aparece: solo en el consultorio, también en la página web o también recibiendo reservas en línea. */
+    public function webPresence(): WebPresence
+    {
+        return WebPresence::fromFlags((bool) $this->is_public, (bool) $this->accepts_online_booking);
     }
 
     /** Ya atendió o tiene citas: su nombre sale en la agenda y en las historias, así que no se elimina. */

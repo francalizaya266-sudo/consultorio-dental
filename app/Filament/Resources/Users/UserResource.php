@@ -3,10 +3,13 @@
 namespace App\Filament\Resources\Users;
 
 use App\Enums\UserRole;
+use App\Filament\Concerns\HasSettingsMenuGroup;
 use App\Filament\Concerns\HasSpanishLabels;
 use App\Filament\Resources\Users\Pages\ManageUsers;
 use App\Models\User;
 use BackedEnum;
+use Filament\Actions\ActionGroup;
+use Filament\Actions\DeleteAction;
 use Filament\Actions\EditAction;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\TextInput;
@@ -24,7 +27,7 @@ use Illuminate\Validation\Rules\Password;
 /** Personas que entran al panel. Nadie se borra: se desactiva para conservar el historial. */
 class UserResource extends Resource
 {
-    use HasSpanishLabels;
+    use HasSettingsMenuGroup, HasSpanishLabels;
 
     protected static ?string $slug = 'usuarios';
 
@@ -36,9 +39,14 @@ class UserResource extends Resource
 
     protected static ?string $navigationParentItem = 'Configuración';
 
-    protected static ?int $navigationSort = 4;
+    protected static ?int $navigationSort = 5;
 
     protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedUserCircle;
+
+    public static function settingsMenuGroup(): string
+    {
+        return 'Equipo';
+    }
 
     public static function form(Schema $schema): Schema
     {
@@ -72,9 +80,6 @@ class UserResource extends Resource
                         UserRole::Doctor => 'Solo su agenda, sus pacientes y la historia clínica.',
                         default => null,
                     }),
-                TextInput::make('phone')
-                    ->label('Celular')
-                    ->tel(),
                 Toggle::make('is_dentist')
                     ->label('Es odontólogo (puede ver historias clínicas)')
                     ->visible(fn (Get $get) => in_array($get('role'), [UserRole::Admin, UserRole::Admin->value], true)),
@@ -113,8 +118,9 @@ class UserResource extends Resource
                     ->label('Último ingreso')
                     ->since()
                     ->placeholder('Nunca'),
+                // Con el mismo nombre que en la ficha: en la lista decía "Activo" y en la ficha "Puede entrar al panel".
                 ToggleColumn::make('is_active')
-                    ->label('Activo')
+                    ->label('Puede entrar al panel')
                     ->disabled(fn (User $record) => self::isMe($record))
                     ->afterStateUpdated(fn (User $record, mixed $state) => Notification::make()
                         ->success()
@@ -122,8 +128,18 @@ class UserResource extends Resource
                         ->send()),
             ])
             ->defaultSort('name')
+            ->defaultPaginationPageOption(25)
             ->recordActions([
-                EditAction::make(),
+                EditAction::make()
+                    ->successNotificationTitle('Usuario guardado'),
+                // La misma regla que en el resto de Configuración: se borra solo a quien se registró por error y nunca
+                // entró; a los demás se les quita el acceso.
+                ActionGroup::make([
+                    DeleteAction::make()
+                        ->authorizationNotification()
+                        ->modalDescription('Solo se borra a quien nunca entró al panel. A los demás se les apaga "Puede entrar al panel".')
+                        ->successNotificationTitle('Usuario borrado'),
+                ])->visible(fn (User $record) => ! self::isMe($record)),
             ]);
     }
 

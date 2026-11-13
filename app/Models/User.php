@@ -44,6 +44,12 @@ class User extends Authenticatable implements FilamentUser
         return $this->hasOne(Doctor::class);
     }
 
+    /** Ya entró al panel o tiene ficha de doctor: lo que hizo lleva su nombre, así que no se borra; se le quita el acceso. */
+    public function hasHistory(): bool
+    {
+        return $this->last_login_at !== null || $this->doctor()->exists();
+    }
+
     public function canAccessPanel(Panel $panel): bool
     {
         return $this->is_active;
