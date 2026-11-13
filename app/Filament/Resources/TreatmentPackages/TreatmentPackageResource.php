@@ -39,7 +39,7 @@ use Filament\Tables\Table;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 
-/** Paquetes que arma el doctor: qué incluye, a qué precio y cómo se puede pagar. */
+/** Paquetes: qué incluye cada uno, a qué precio y cómo se puede pagar. Los arma el administrador; los doctores los ven. */
 class TreatmentPackageResource extends Resource
 {
     use HasSettingsMenuGroup, HasSpanishLabels;
@@ -171,7 +171,8 @@ class TreatmentPackageResource extends Resource
                             Toggle::make('allows_upfront')
                                 ->label('Pago único')
                                 ->default(true)
-                                ->live(),
+                                ->live()
+                                ->afterStateUpdated(fn (Get $get, Set $set) => self::syncPerSession($get, $set)),
                             TextInput::make('upfront_discount')
                                 ->label('Descuento si paga todo junto')
                                 ->prefix('S/')
@@ -184,10 +185,23 @@ class TreatmentPackageResource extends Resource
                         ]),
                         Toggle::make('allows_installments')
                             ->label('En cuotas')
-                            ->live(),
+                            ->live()
+                            ->afterStateUpdated(fn (Get $get, Set $set) => self::syncPerSession($get, $set)),
                         Grid::make(['default' => 1, 'md' => 3])
                             ->visible(fn (Get $get) => (bool) $get('allows_installments'))
                             ->schema(PaymentTermsFields::make(fn (Get $get) => (float) $get('price'))),
+                        // Antes se entendía sola al apagar las otras dos y nada lo decía. No se guarda aparte: es
+                        // lo que queda cuando el paquete no tiene pago único ni cuotas.
+                        Toggle::make('per_session')
+                            ->label('Por sesión')
+                            ->helperText('El paciente paga lo de cada sesión al terminarla. Va sola: al marcarla se apagan el pago único y las cuotas.')
+                            ->afterStateHydrated(fn (Toggle $component, Get $get) => $component->state(! $get('allows_upfront') && ! $get('allows_installments')))
+                            ->live()
+                            ->afterStateUpdated(function (Set $set, ?bool $state): void {
+                                $set('allows_upfront', ! $state);
+                                $set('allows_installments', false);
+                            })
+                            ->dehydrated(false),
                         Text::make(fn (Get $get) => self::paymentSummary($get))
                             ->weight(FontWeight::Bold),
                     ]),
@@ -228,6 +242,7 @@ class TreatmentPackageResource extends Resource
                     ->wrap(),
                 ToggleColumn::make('is_active')
                     ->label('Se ofrece')
+                    ->disabled(fn (TreatmentPackage $record) => ! auth()->user()->can('update', $record))
                     ->afterStateUpdated(fn (TreatmentPackage $record, mixed $state) => Notification::make()
                         ->success()
                         ->title('"'.$record->name.'" '.($state ? 'se ofrece de nuevo' : 'ya no se ofrece'))
@@ -264,6 +279,12 @@ class TreatmentPackageResource extends Resource
         return [
             'index' => ManageTreatmentPackages::route('/'),
         ];
+    }
+
+    /** "Por sesión" queda marcada cuando no hay pago único ni cuotas, y se apaga al encender cualquiera de las dos. */
+    private static function syncPerSession(Get $get, Set $set): void
+    {
+        $set('per_session', ! $get('allows_upfront') && ! $get('allows_installments'));
     }
 
     /** @param  array<array-key, array<string, mixed>>  $items */

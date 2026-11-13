@@ -2,7 +2,9 @@
 
 namespace App\Filament\Forms;
 
+use Carbon\CarbonImmutable;
 use Filament\Actions\Action;
+use Filament\Forms\Components\DatePicker;
 use Filament\Forms\Components\Repeater;
 use Filament\Schemas\Schema;
 use Filament\Support\Enums\Size;
@@ -26,7 +28,93 @@ class WeeklySchedule extends Repeater
 
         $this->registerActions([
             fn (WeeklySchedule $component): Action => $component->getAddRangeAction(),
+            fn (WeeklySchedule $component): Action => $component->getSeasonAction(),
         ]);
+    }
+
+    /**
+     * El calendario de cada tramo: le pone las fechas entre las que vale (horario de verano). La agenda, la web y
+     * los reportes ya respetaban esas fechas, pero ninguna pantalla dejaba ponerlas.
+     */
+    public function getSeasonAction(): Action
+    {
+        return Action::make('season')
+            ->label('Solo por una temporada')
+            ->icon(Heroicon::OutlinedCalendarDays)
+            ->iconButton()
+            ->color(fn (array $arguments, WeeklySchedule $component) => $component->seasonOf((string) ($arguments['item'] ?? '')) === null ? 'gray' : 'primary')
+            ->size(Size::Small)
+            ->tooltip('Solo por una temporada')
+            ->modalHeading('Tramo solo por una temporada')
+            ->modalDescription('Para un horario que vale solo unas fechas, como el de verano: fuera de ellas, este tramo no cuenta. Deja las dos fechas vacías para que valga todo el año.')
+            ->modalSubmitActionLabel('Listo')
+            ->modalWidth('md')
+            ->fillForm(fn (array $arguments, WeeklySchedule $component) => [
+                'valid_from' => self::dateOnly($component->getRawItemState((string) $arguments['item'])['valid_from'] ?? null),
+                'valid_until' => self::dateOnly($component->getRawItemState((string) $arguments['item'])['valid_until'] ?? null),
+            ])
+            ->schema([
+                DatePicker::make('valid_from')
+                    ->label('Vale desde')
+                    ->native(false)
+                    ->displayFormat('d/m/Y')
+                    ->firstDayOfWeek(1)
+                    ->closeOnDateSelection(),
+                DatePicker::make('valid_until')
+                    ->label('Vale hasta')
+                    ->native(false)
+                    ->displayFormat('d/m/Y')
+                    ->firstDayOfWeek(1)
+                    ->closeOnDateSelection()
+                    ->afterOrEqual('valid_from')
+                    ->validationMessages(['after_or_equal' => 'Tiene que ser el mismo día o después de "Vale desde".']),
+            ])
+            ->action(function (array $arguments, array $data, WeeklySchedule $component): void {
+                $items = $component->getRawState() ?? [];
+                $key = (string) ($arguments['item'] ?? '');
+
+                if (! isset($items[$key])) {
+                    return;
+                }
+
+                $items[$key]['valid_from'] = self::dateOnly($data['valid_from'] ?? null);
+                $items[$key]['valid_until'] = self::dateOnly($data['valid_until'] ?? null);
+
+                $component->rawState($items);
+                $component->callAfterStateUpdated();
+            });
+    }
+
+    /** "Solo del 15/12/2026 al 15/03/2027" si el tramo vale por una temporada; null si vale todo el año. */
+    public function seasonOf(string $itemKey): ?string
+    {
+        $item = $this->getRawState()[$itemKey] ?? [];
+
+        return self::seasonInWords($item['valid_from'] ?? null, $item['valid_until'] ?? null);
+    }
+
+    /** Las fechas entre las que vale un tramo, dichas en palabras; null si vale todo el año. */
+    public static function seasonInWords(mixed $validFrom, mixed $validUntil): ?string
+    {
+        $day = fn (?string $date): string => CarbonImmutable::parse($date)->format('d/m/Y');
+        [$from, $until] = [self::dateOnly($validFrom), self::dateOnly($validUntil)];
+
+        return match (true) {
+            $from !== null && $until !== null => 'Solo del '.$day($from).' al '.$day($until),
+            $from !== null => 'Solo desde el '.$day($from),
+            $until !== null => 'Solo hasta el '.$day($until),
+            default => null,
+        };
+    }
+
+    /** La fecha sola ("2026-12-15"), venga como la guarda la base, como la escribe el selector o vacía. */
+    public static function dateOnly(mixed $date): ?string
+    {
+        if (blank($date)) {
+            return null;
+        }
+
+        return CarbonImmutable::parse((string) $date)->setTimezone(config('app.timezone'))->toDateString();
     }
 
     /** "Agregar tramo" en la fila de un día: el tramo nace en ese día, con un horario propuesto para corregir. */
@@ -92,6 +180,8 @@ class WeeklySchedule extends Repeater
             'days' => self::DAYS,
             'itemsByDay' => $this->itemsByDay($this->getItems()),
             'addRange' => $this->getAction('addRange'),
+            'season' => $this->getAction('season'),
+            'seasons' => collect(array_keys($this->getItems()))->mapWithKeys(fn (int|string $key) => [(string) $key => $this->seasonOf((string) $key)])->filter()->all(),
             'delete' => $this->getAction($this->getDeleteActionName()),
             'extraItemActions' => $this->getExtraItemActions(),
             'isDisabled' => $this->isDisabled(),

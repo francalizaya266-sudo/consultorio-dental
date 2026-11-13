@@ -29,10 +29,10 @@ class SetTemporaryPassword extends Command
         $password = Str::password(12, symbols: false);
 
         // La clave se guarda cifrada (cast "hashed") y el "recuérdame" de antes deja de servir.
-        $user->forceFill(['password' => $password, 'remember_token' => Str::random(60)])->save();
+        $user->forceFill(['password' => $password, 'must_change_password' => true, 'remember_token' => Str::random(60)])->save();
 
         $this->info("Contraseña temporal de {$user->name}: {$password}");
-        $this->line('Que la cambie al entrar, en Mi perfil.');
+        $this->line('Al entrar con ella, el panel le pide elegir la suya.');
 
         if (! $user->is_active) {
             $this->warn('Ojo: este usuario tiene apagado "Puede entrar al panel", así que todavía no podrá entrar.');

@@ -134,7 +134,7 @@ class FilesBackupTest extends TestCase
 
         $this->assertSame('Todavía no se ha descargado ninguna copia de los datos y hay radiografías, fotos o firmas sin descargar desde hace 1 semana', $copies->due());
 
-        $copies->recordDatabaseDownload($ana);
+        $copies->recordDatabaseDownload($ana, 'respaldo_2026-10-15_030000.sql.gz');
         $this->assertSame('Hay radiografías, fotos o firmas sin descargar desde hace 1 semana', $copies->due());
 
         app(FilesBackup::class)->download(FilesBackup::PENDING, 1, $ana);

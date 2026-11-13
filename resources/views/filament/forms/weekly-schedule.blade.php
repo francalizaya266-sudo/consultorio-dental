@@ -12,8 +12,13 @@
                         {!! $item->toHtml() !!}
 
                         @if (! $isDisabled)
+                            {!! $season(['item' => $itemKey])->toHtml() !!}
                             {!! $delete(['item' => $itemKey])->toHtml() !!}
                         @endif
+
+                        @isset($seasons[$itemKey])
+                            <div class="week-range-season">{{ $seasons[$itemKey] }}</div>
+                        @endisset
                     </div>
                 @empty
                     <span class="week-day-closed">No atiende</span>

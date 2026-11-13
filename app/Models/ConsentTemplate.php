@@ -18,7 +18,7 @@ class ConsentTemplate extends Model
     {
         static::updating(function (ConsentTemplate $template) {
             if ($template->isDirty('body')) {
-                $template->version = $template->getOriginal('version') + 1;
+                $template->version = ($template->getOriginal('version') ?? 1) + 1;
             }
         });
     }

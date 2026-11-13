@@ -85,7 +85,7 @@ class DoctorForm
                 $items = collect($component->getRawState() ?? []);
                 $source = $items->filter(fn (array $item) => (int) ($item['weekday'] ?? 0) === $weekday)->values();
                 $copies = collect($days)
-                    ->flatMap(fn (int $day) => $source->map(fn (array $item) => ['weekday' => $day, 'starts_at' => $item['starts_at'] ?? null, 'ends_at' => $item['ends_at'] ?? null]))
+                    ->flatMap(fn (int $day) => $source->map(fn (array $item) => ['weekday' => $day, ...Arr::only($item, ['starts_at', 'ends_at', 'valid_from', 'valid_until'])]))
                     ->mapWithKeys(fn (array $item) => [$component->generateUuid() ?? (string) Str::uuid() => $item]);
 
                 $component->rawState($items
@@ -120,6 +120,8 @@ class DoctorForm
                 'name' => $data['name'],
                 'email' => $raw['access_email'],
                 'password' => $raw['access_password'],
+                // Se la puso el administrador: al entrar, el doctor elige la suya.
+                'must_change_password' => true,
                 'role' => UserRole::Doctor,
                 'is_active' => true,
             ])->getKey(),
@@ -128,6 +130,23 @@ class DoctorForm
         };
 
         return $data;
+    }
+
+    /**
+     * "Puede entrar al panel", apagado o encendido en la ficha del doctor, pasa a su usuario. Nadie se quita el
+     * acceso a sí mismo, y si en la misma guardada se le cambió de usuario, no se toca ninguno.
+     *
+     * @param  array<string, mixed>  $raw  El formulario completo, con lo del acceso.
+     */
+    public static function applyPanelAccess(Doctor $doctor, array $raw): void
+    {
+        $user = $doctor->user()->first();
+
+        if ($user === null || $user->is(auth()->user()) || ! array_key_exists('can_enter', $raw) || (int) ($raw['user_id'] ?? 0) !== $user->getKey()) {
+            return;
+        }
+
+        $user->update(['is_active' => (bool) $raw['can_enter']]);
     }
 
     /**
@@ -152,7 +171,8 @@ class DoctorForm
 
     /**
      * El primer par de tramos del mismo día que se cruzan o se repiten, dicho para corregirlo:
-     * "El lunes tiene dos tramos que se cruzan: 09:00–13:00 y 12:00–16:00…". Null si ninguno se cruza.
+     * "El lunes tiene dos tramos que se cruzan: 09:00–13:00 y 12:00–16:00…". Null si ninguno se cruza. Los que
+     * valen en temporadas distintas no se cruzan.
      *
      * @param  array<array-key, array<string, mixed>>  $ranges  Los tramos del formulario.
      */
@@ -164,17 +184,23 @@ class DoctorForm
             ->filter(fn (mixed $range) => is_array($range) && filled($range['weekday'] ?? null) && filled($range['starts_at'] ?? null) && filled($range['ends_at'] ?? null))
             ->groupBy(fn (array $range) => (int) $range['weekday']);
 
+        // Dos tramos solo chocan si alguna fecha cae en los dos: el de verano y el del resto del año pueden convivir.
+        $together = fn (array $one, array $other): bool => (WeeklySchedule::dateOnly($one['valid_from'] ?? null) ?? '0000-00-00') <= (WeeklySchedule::dateOnly($other['valid_until'] ?? null) ?? '9999-12-31')
+            && (WeeklySchedule::dateOnly($other['valid_from'] ?? null) ?? '0000-00-00') <= (WeeklySchedule::dateOnly($one['valid_until'] ?? null) ?? '9999-12-31');
+
         foreach ($byDay as $weekday => $day) {
-            $previous = null;
+            $sorted = $day->sortBy(fn (array $range) => $clock($range['starts_at']))->values();
 
-            foreach ($day->sortBy(fn (array $range) => $clock($range['starts_at']))->values() as $range) {
-                if ($previous !== null && $clock($range['starts_at']) < $clock($previous['ends_at'])) {
-                    return 'El '.Str::lower(self::WEEKDAYS[$weekday] ?? 'día').' tiene dos tramos que se cruzan: '
-                        .$clock($previous['starts_at']).'–'.$clock($previous['ends_at']).' y '.$clock($range['starts_at']).'–'.$clock($range['ends_at'])
-                        .'. Deja uno solo o cámbiales la hora.';
+            foreach ($sorted as $index => $range) {
+                foreach ($sorted->slice(0, $index) as $earlier) {
+                    if ($clock($range['starts_at']) < $clock($earlier['ends_at']) && $together($earlier, $range)) {
+                        $seasonal = filled($earlier['valid_from'] ?? null) || filled($earlier['valid_until'] ?? null) || filled($range['valid_from'] ?? null) || filled($range['valid_until'] ?? null);
+
+                        return 'El '.Str::lower(self::WEEKDAYS[$weekday] ?? 'día').' tiene dos tramos que se cruzan: '
+                            .$clock($earlier['starts_at']).'–'.$clock($earlier['ends_at']).' y '.$clock($range['starts_at']).'–'.$clock($range['ends_at'])
+                            .($seasonal ? '. Deja uno solo, cámbiales la hora o ponles temporadas que no coincidan.' : '. Deja uno solo o cámbiales la hora.');
+                    }
                 }
-
-                $previous = $previous !== null && $clock($previous['ends_at']) > $clock($range['ends_at']) ? $previous : $range;
             }
         }
 
@@ -327,6 +353,17 @@ class DoctorForm
                             ->live()
                             ->dehydrated(false)
                             ->columnSpanFull(),
+                        // Quitarle el acceso sin ir a Usuarios: es el mismo interruptor que tiene su usuario.
+                        Toggle::make('can_enter')
+                            ->label('Puede entrar al panel')
+                            ->helperText(fn (?Doctor $record) => $record?->user_id === auth()->id()
+                                ? 'Es tu propio usuario: no puedes quitarte el acceso.'
+                                : 'Apagado, ya no entra con su correo y su contraseña. Sigue como doctor en la agenda: para que no se le den citas, apaga "Activo".')
+                            ->afterStateHydrated(fn (Toggle $component, ?Doctor $record) => $component->state((bool) $record?->user()->value('is_active')))
+                            ->disabled(fn (?Doctor $record) => $record?->user_id === auth()->id())
+                            ->visible(fn (?Doctor $record, Get $get) => $record?->user_id !== null && (int) $get('user_id') === $record->user_id)
+                            ->dehydrated(false)
+                            ->columnSpanFull(),
                         TextInput::make('access_email')
                             ->label('Correo para entrar')
                             ->email()
@@ -341,7 +378,7 @@ class DoctorForm
                             ->minLength(8)
                             ->rule(Password::default())
                             ->required()
-                            ->helperText('Mínimo 8 caracteres, con letras y números. Después la cambia en "Mi perfil".')
+                            ->helperText('Mínimo 8 caracteres, con letras y números. Es solo para su primer ingreso: al entrar, el panel le pide elegir la suya.')
                             ->visible(fn (Get $get) => $get('access') === self::ACCESS_NEW)
                             ->dehydrated(false),
                         Select::make('user_id')
@@ -359,7 +396,7 @@ class DoctorForm
                             ->dehydratedWhenHidden(),
                     ]),
                 Section::make('Horario de atención')
-                    ->description('Una fila por día. Puedes poner varios tramos (por ejemplo, mañana y tarde): el almuerzo es el espacio entre uno y otro. Se guarda con "Guardar cambios".')
+                    ->description('Una fila por día. Puedes poner varios tramos (por ejemplo, mañana y tarde): el almuerzo es el espacio entre uno y otro. Con el calendario de cada tramo se le pone una temporada, como el horario de verano. Se guarda con "Guardar cambios".')
                     // Cursos, vacaciones y feriados no van aquí: se llega a los bloqueos de este doctor con un enlace.
                     ->headerActions([
                         Action::make('blocks')
@@ -376,6 +413,11 @@ class DoctorForm
                             ->schema([
                                 Hidden::make('weekday')
                                     ->required(),
+                                // Solo por una temporada (horario de verano): se ponen con el botón del calendario de cada tramo.
+                                Hidden::make('valid_from')
+                                    ->afterStateHydrated(fn (Hidden $component, mixed $state) => $component->state(WeeklySchedule::dateOnly($state))),
+                                Hidden::make('valid_until')
+                                    ->afterStateHydrated(fn (Hidden $component, mixed $state) => $component->state(WeeklySchedule::dateOnly($state))),
                                 TimePicker::make('starts_at')
                                     ->label('Desde')
                                     ->hiddenLabel()

@@ -1141,12 +1141,14 @@ button.pt-chip { transition: transform 160ms ease-out; }
 .backup-row { display: flex; flex-wrap: wrap; gap: .25rem 1rem; align-items: center; justify-content: space-between; padding: .75rem 0; border-bottom: 1px solid var(--gray-200); }
 .backup-row:last-child { border-bottom: 0; }
 .dark .backup-row { border-color: rgb(255 255 255 / .08); }
+.backup-actions { display: flex; align-items: center; gap: .5rem; }
 .backup-date { font-weight: 600; color: var(--gray-950); }
 .dark .backup-date { color: #fff; }
 .backup-meta { font-size: .8rem; color: var(--gray-500); }
 .backup-note { margin-top: .75rem; display: grid; gap: .35rem; }
 .backup-help { font-size: .875rem; color: var(--gray-600); display: grid; gap: .5rem; }
 .dark .backup-help { color: var(--gray-400); }
+.backup-steps { list-style: decimal; padding-left: 1.25rem; display: grid; gap: .5rem; }
 
 /* ---------- "Hoy": el dashboard ---------- */
 
@@ -1956,7 +1958,10 @@ a.ap-visit:hover { background: var(--gray-50); }
 .week-day-name { font-size: .875rem; font-weight: 600; color: var(--gray-950); }
 .week-day-ranges { display: flex; flex-wrap: wrap; align-items: center; gap: .5rem 1.25rem; min-height: 2.25rem; }
 .week-day-closed { font-size: .875rem; color: var(--gray-500); }
-.week-range { display: flex; align-items: flex-start; gap: .25rem; }
+.week-range { display: flex; flex-wrap: wrap; align-items: flex-start; gap: .25rem; }
+/* Un tramo que vale solo por una temporada lo dice debajo de sus horas. */
+.week-range-season { flex-basis: 100%; font-size: .75rem; font-weight: 600; color: var(--primary-700); }
+.dark .week-range-season { color: var(--primary-300); }
 .week-range > .fi-sc { display: grid; grid-template-columns: 6.25rem 6.25rem; gap: .35rem; }
 .week-range .fi-fo-field-label-ctn, .week-range .fi-fo-field-label-col { display: none; }
 .week-range .fi-input { padding-block: .35rem; }

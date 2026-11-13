@@ -2,6 +2,7 @@
 
 namespace App\Providers\Filament;
 
+use App\Filament\Pages\Auth\EditProfile;
 use App\Filament\Pages\Auth\RequestPasswordReset;
 use App\Filament\Pages\Backups;
 use App\Filament\Pages\Dashboard;
@@ -29,6 +30,7 @@ use App\Http\Controllers\Reports\AgendaDayController;
 use App\Http\Controllers\Reports\CashClosingController;
 use App\Http\Controllers\Reports\EarningsExportController;
 use App\Http\Middleware\KeepRemindersUpToDate;
+use App\Http\Middleware\RequireOwnPassword;
 use App\Models\Setting;
 use App\Services\Backup\FilesBackup;
 use App\Services\Web\ClinicInfo;
@@ -145,8 +147,9 @@ class AdminPanelProvider extends PanelProvider
             ->login()
             // "¿Olvidaste tu contraseña?": el enlace llega por correo cuando el hosting ya tiene uno configurado.
             ->passwordReset(RequestPasswordReset::class)
-            // "Mi perfil" en el menú del usuario: cada uno cambia su propia clave sin pedírsela al administrador.
-            ->profile(isSimple: false)
+            // "Mi perfil" en el menú del usuario: cada uno cambia su propia clave sin pedírsela al administrador,
+            // y cada doctor, además, cómo sale en la página web.
+            ->profile(EditProfile::class, isSimple: false)
             ->brandName(fn () => Setting::get('clinic.name'))
             // Con logo subido en la puesta a punto de la web, el panel lo muestra; si no, el diente de la web junto al nombre.
             ->brandLogo(fn () => app(ClinicInfo::class)->logoUrl() ?? view('filament.brand', ['name' => Setting::get('clinic.name')]))
@@ -212,6 +215,8 @@ class AdminPanelProvider extends PanelProvider
             ])
             ->authMiddleware([
                 Authenticate::class,
+                // Con una contraseña que le puso otra persona, primero elige la suya.
+                RequireOwnPassword::class,
                 KeepRemindersUpToDate::class,
             ])
             ->authenticatedRoutes(function () {

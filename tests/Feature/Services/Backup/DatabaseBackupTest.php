@@ -51,6 +51,17 @@ class DatabaseBackupTest extends TestCase
         $this->assertSame('80.50', Charge::query()->first()->amount);
     }
 
+    public function test_a_mysql_copy_says_its_encoding_so_another_program_does_not_break_the_accents(): void
+    {
+        $this->assertSame("SET NAMES utf8mb4;\n", DatabaseBackup::encodingLine('mysql', 'utf8mb4'));
+        $this->assertSame("SET NAMES utf8mb4;\n", DatabaseBackup::encodingLine('mariadb', null));
+        // En SQLite esa orden no existe y rompería la restauración: la copia no la lleva.
+        $this->assertSame('', DatabaseBackup::encodingLine('sqlite', null));
+
+        $name = app(DatabaseBackup::class)->create();
+        $this->assertStringNotContainsString('SET NAMES', gzdecode(Storage::disk('local')->get($name)));
+    }
+
     public function test_only_the_last_copies_are_kept(): void
     {
         config(['consultorio.backups.keep' => 3]);

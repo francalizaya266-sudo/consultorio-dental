@@ -28,7 +28,10 @@ class EditDoctor extends EditRecord
     /** @param  array<string, mixed>  $data */
     protected function mutateFormDataBeforeSave(array $data): array
     {
-        return DoctorForm::withAccess($data, $this->form->getRawState());
+        $raw = $this->form->getRawState();
+        DoctorForm::applyPanelAccess($this->getRecord(), $raw);
+
+        return DoctorForm::withAccess($data, $raw);
     }
 
     /** Antes de guardar: las citas que ya estaban fuera del horario (sobrecupos, "otra hora"). De esas no se avisa. */

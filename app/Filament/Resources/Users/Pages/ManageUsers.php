@@ -27,6 +27,7 @@ class ManageUsers extends ManageRecords
             CreateAction::make()
                 ->label('Nuevo usuario')
                 ->modalDescription('Para administración o recepción. Un doctor se crea en Doctores, junto con su acceso.')
+                ->mutateDataUsing(fn (array $data) => UserResource::withTemporaryPassword($data))
                 ->successNotificationTitle('Usuario guardado')
                 ->createAnother(false),
         ];

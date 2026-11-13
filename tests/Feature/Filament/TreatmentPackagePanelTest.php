@@ -11,6 +11,7 @@ use App\Models\Patient;
 use App\Models\Treatment;
 use App\Models\TreatmentPackage;
 use App\Models\TreatmentPlan;
+use App\Models\User;
 use App\Services\Clinical\ConsultationService;
 use Filament\Actions\Testing\TestAction;
 use Filament\Forms\Components\Repeater;
@@ -36,12 +37,12 @@ class TreatmentPackagePanelTest extends TestCase
         $this->control = Treatment::factory()->create(['name' => 'Control de ortodoncia', 'price_from' => 140]);
     }
 
-    public function test_the_doctor_sets_prices_and_builds_a_package_with_its_monthly_amount(): void
+    public function test_the_administrator_sets_prices_and_builds_a_package_with_its_monthly_amount(): void
     {
-        $doctor = $this->doctorOffering($this->brackets, $this->control);
-        $this->actingAs($doctor->user);
+        $this->doctorOffering($this->brackets, $this->control);
+        $this->actingAs($admin = User::factory()->admin()->create());
 
-        // El doctor sube el precio del control y crea un tratamiento nuevo.
+        // El administrador sube el precio del control y crea un tratamiento nuevo.
         Livewire::test(ManageTreatments::class)
             ->callAction(TestAction::make('edit')->table($this->control), data: ['price_from' => 150])
             ->assertHasNoActionErrors()
@@ -81,7 +82,7 @@ class TreatmentPackagePanelTest extends TestCase
             ->assertSee(['Ortodoncia completa', 'Colocación de brackets · Control de ortodoncia × 18', 'Ahorra S/ 300.00']);
 
         $package = TreatmentPackage::sole();
-        $this->assertSame(['4900.00', 17, '250.00', $doctor->user->id], [$package->price, $package->installments, $package->monthly_amount, $package->created_by_user_id]);
+        $this->assertSame(['4900.00', 17, '250.00', $admin->id], [$package->price, $package->installments, $package->monthly_amount, $package->created_by_user_id]);
         $this->assertSame([[$this->brackets->id, 1, 1], [$this->control->id, 18, 18]], $package->items->map(fn ($item) => [$item->treatment_id, $item->quantity, $item->sessions_planned])->all());
     }
 
@@ -91,7 +92,8 @@ class TreatmentPackagePanelTest extends TestCase
         $package->items()->create(['treatment_id' => $this->brackets->id, 'quantity' => 1, 'sessions_planned' => 1, 'sort_order' => 0]);
         $package->items()->create(['treatment_id' => $this->control->id, 'quantity' => 18, 'sessions_planned' => 18, 'sort_order' => 1]);
         $this->control->update(['is_active' => false]);
-        $this->actingAs($this->doctorOffering($this->brackets)->user);
+        $this->doctorOffering($this->brackets);
+        $this->actingAs(User::factory()->admin()->create());
 
         // El tratamiento apagado sigue con su nombre en el paquete, y el paquete se puede guardar.
         Livewire::test(ManageTreatmentPackages::class)
@@ -118,7 +120,8 @@ class TreatmentPackagePanelTest extends TestCase
 
     public function test_a_package_that_costs_more_than_its_parts_says_so_instead_of_promising_savings(): void
     {
-        $this->actingAs($this->doctorOffering($this->brackets, $this->control)->user);
+        $this->doctorOffering($this->brackets, $this->control);
+        $this->actingAs(User::factory()->admin()->create());
         Repeater::fake();
 
         Livewire::test(ManageTreatmentPackages::class)
@@ -140,7 +143,8 @@ class TreatmentPackagePanelTest extends TestCase
     public function test_switching_a_package_off_says_the_plans_that_use_it_stay(): void
     {
         $package = TreatmentPackage::factory()->create(['name' => 'Ortodoncia completa']);
-        $this->actingAs($this->doctorOffering($this->brackets)->user);
+        $this->doctorOffering($this->brackets);
+        $this->actingAs(User::factory()->admin()->create());
 
         Livewire::test(ManageTreatmentPackages::class)
             ->call('updateTableColumnState', 'is_active', (string) $package->id, false)
@@ -153,6 +157,22 @@ class TreatmentPackagePanelTest extends TestCase
             ->call('updateTableColumnState', 'is_active', (string) $package->id, true)
             ->assertNotified('"Ortodoncia completa" se ofrece de nuevo');
         $this->assertTrue($package->fresh()->is_active);
+    }
+
+    public function test_a_doctor_sees_the_packages_to_offer_them_but_does_not_change_them(): void
+    {
+        $package = TreatmentPackage::factory()->create(['name' => 'Ortodoncia completa', 'price' => 4900]);
+        $this->actingAs($this->doctorOffering($this->brackets)->user);
+
+        Livewire::test(ManageTreatmentPackages::class)
+            ->assertCanSeeTableRecords([$package])
+            ->assertActionHidden('create')
+            ->assertActionHidden(TestAction::make('edit')->table($package))
+            // Tampoco con el interruptor de la lista.
+            ->call('updateTableColumnState', 'is_active', (string) $package->id, false)
+            ->assertNotNotified('"Ortodoncia completa" ya no se ofrece');
+
+        $this->assertSame([true, '4900.00'], [$package->fresh()->is_active, $package->fresh()->price]);
     }
 
     public function test_a_plan_built_from_a_package_arrives_at_signing_with_the_package_terms(): void

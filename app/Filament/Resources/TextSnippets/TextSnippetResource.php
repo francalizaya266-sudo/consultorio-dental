@@ -10,6 +10,7 @@ use App\Filament\Resources\TextSnippets\Pages\ManageTextSnippets;
 use App\Models\TextSnippet;
 use App\Models\User;
 use BackedEnum;
+use Carbon\CarbonImmutable;
 use Closure;
 use Filament\Actions\Action;
 use Filament\Actions\ActionGroup;
@@ -125,6 +126,19 @@ class TextSnippetResource extends Resource
                     ->label('Dónde')
                     ->badge()
                     ->color('gray'),
+                // Cuántas veces se eligió al escribir historias, entre todos: para saber cuáles sirven y cuáles
+                // se pueden archivar. Se puede ordenar por esta columna.
+                TextColumn::make('times_used')
+                    ->label('Veces usada')
+                    ->formatStateUsing(fn (mixed $state) => match ((int) $state) {
+                        0 => 'Nunca',
+                        1 => '1 vez',
+                        default => (int) $state.' veces',
+                    })
+                    ->default(0)
+                    ->color(fn (mixed $state) => (int) $state === 0 ? 'gray' : null)
+                    ->description(fn (TextSnippet $record) => $record->last_used_at ? 'La última, '.CarbonImmutable::parse($record->last_used_at)->diffForHumans() : null)
+                    ->sortable(),
             ])
             ->defaultSort('label')
             ->filters([
@@ -249,6 +263,8 @@ class TextSnippetResource extends Resource
 
         return parent::getEloquentQuery()
             ->with('user')
+            ->withSum('usages as times_used', 'count')
+            ->withMax('usages as last_used_at', 'last_used_at')
             ->where(fn (Builder $q) => $q
                 ->whereNull('user_id')
                 ->orWhere('user_id', $user->getKey())
