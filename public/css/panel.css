@@ -1144,6 +1144,7 @@ button.pt-chip { transition: transform 160ms ease-out; }
 .backup-date { font-weight: 600; color: var(--gray-950); }
 .dark .backup-date { color: #fff; }
 .backup-meta { font-size: .8rem; color: var(--gray-500); }
+.backup-note { margin-top: .75rem; display: grid; gap: .35rem; }
 .backup-help { font-size: .875rem; color: var(--gray-600); display: grid; gap: .5rem; }
 .dark .backup-help { color: var(--gray-400); }
 

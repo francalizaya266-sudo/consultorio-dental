@@ -85,6 +85,76 @@ class TreatmentPackagePanelTest extends TestCase
         $this->assertSame([[$this->brackets->id, 1, 1], [$this->control->id, 18, 18]], $package->items->map(fn ($item) => [$item->treatment_id, $item->quantity, $item->sessions_planned])->all());
     }
 
+    public function test_a_package_keeps_working_after_one_of_its_treatments_stops_being_offered(): void
+    {
+        $package = TreatmentPackage::factory()->create(['name' => 'Ortodoncia completa', 'price' => 4900]);
+        $package->items()->create(['treatment_id' => $this->brackets->id, 'quantity' => 1, 'sessions_planned' => 1, 'sort_order' => 0]);
+        $package->items()->create(['treatment_id' => $this->control->id, 'quantity' => 18, 'sessions_planned' => 18, 'sort_order' => 1]);
+        $this->control->update(['is_active' => false]);
+        $this->actingAs($this->doctorOffering($this->brackets)->user);
+
+        // El tratamiento apagado sigue con su nombre en el paquete, y el paquete se puede guardar.
+        Livewire::test(ManageTreatmentPackages::class)
+            ->mountAction(TestAction::make('edit')->table($package))
+            ->assertMountedActionModalSee(['Control de ortodoncia', '(inactivo)'])
+            ->fillForm(['price' => 4700])
+            ->callMountedAction()
+            ->assertHasNoActionErrors();
+
+        $this->assertSame('4700.00', $package->fresh()->price);
+        $this->assertSame([$this->brackets->id, $this->control->id], $package->items()->pluck('treatment_id')->all());
+
+        // Pero a un paquete nuevo ya no se le puede agregar.
+        Repeater::fake();
+
+        Livewire::test(ManageTreatmentPackages::class)
+            ->mountAction('create')
+            ->fillForm(['name' => 'Controles sueltos', 'items' => [['treatment_id' => $this->control->id, 'quantity' => 6, 'sessions_planned' => 6]], 'price' => 700])
+            ->callMountedAction()
+            ->assertHasActionErrors();
+
+        $this->assertSame(1, TreatmentPackage::query()->count());
+    }
+
+    public function test_a_package_that_costs_more_than_its_parts_says_so_instead_of_promising_savings(): void
+    {
+        $this->actingAs($this->doctorOffering($this->brackets, $this->control)->user);
+        Repeater::fake();
+
+        Livewire::test(ManageTreatmentPackages::class)
+            ->mountAction('create')
+            ->fillForm([
+                'name' => 'Ortodoncia completa',
+                'items' => [['treatment_id' => $this->brackets->id, 'quantity' => 1, 'sessions_planned' => 1]],
+                'price' => 2600,
+            ])
+            ->assertMountedActionModalSee('Cuesta S/ 100.00 más que por separado')
+            ->assertMountedActionModalDontSee('Ahorra')
+            // Recién encendido "En cuotas" no hay nada mal todavía: se pide el dato que falta.
+            ->fillForm(['allows_installments' => true])
+            ->assertMountedActionModalSee('En cuotas: pon el número de cuotas o la cuota mensual para ver cómo queda.')
+            ->fillForm(['price' => 2500])
+            ->assertMountedActionModalDontSee(['Cuesta', 'Ahorra']);
+    }
+
+    public function test_switching_a_package_off_says_the_plans_that_use_it_stay(): void
+    {
+        $package = TreatmentPackage::factory()->create(['name' => 'Ortodoncia completa']);
+        $this->actingAs($this->doctorOffering($this->brackets)->user);
+
+        Livewire::test(ManageTreatmentPackages::class)
+            ->call('updateTableColumnState', 'is_active', (string) $package->id, false)
+            ->assertNotified('"Ortodoncia completa" ya no se ofrece');
+        $this->assertFalse($package->fresh()->is_active);
+
+        // La lista abre con los que se ofrecen: el apagado se busca quitando ese filtro.
+        Livewire::test(ManageTreatmentPackages::class)
+            ->removeTableFilter('is_active')
+            ->call('updateTableColumnState', 'is_active', (string) $package->id, true)
+            ->assertNotified('"Ortodoncia completa" se ofrece de nuevo');
+        $this->assertTrue($package->fresh()->is_active);
+    }
+
     public function test_a_plan_built_from_a_package_arrives_at_signing_with_the_package_terms(): void
     {
         $this->control->update(['price_from' => 150]);

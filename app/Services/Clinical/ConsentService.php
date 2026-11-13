@@ -14,6 +14,7 @@ use App\Models\Treatment;
 use App\Models\User;
 use App\Support\Signatures;
 use Carbon\CarbonInterface;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
@@ -57,15 +58,43 @@ final class ConsentService
             ->exists();
     }
 
-    /** La plantilla del tratamiento o, si no tiene, la general. */
+    /**
+     * El texto que se propone al firmar: el del tratamiento o, si no tiene, el general. Con varios en uso para lo
+     * mismo, el que se escribió o se corrigió último (antes ganaba el de más versiones, y uno nuevo nunca salía).
+     */
     public function templateFor(?Treatment $treatment): ?ConsentTemplate
     {
         return ConsentTemplate::query()
             ->where('is_active', true)
             ->where(fn ($query) => $query->whereNull('treatment_id')->when($treatment, fn ($q) => $q->orWhere('treatment_id', $treatment->getKey())))
             ->orderByRaw('treatment_id is null')
-            ->latest('version')
+            ->latest('updated_at')
+            ->latest('id')
             ->first();
+    }
+
+    /**
+     * Para la lista de textos: con varios en uso para el mismo tratamiento (o varios generales), cuál es el que
+     * se propone primero al firmar. Null si es el único, o si no está en uso.
+     */
+    public function isProposedFirst(ConsentTemplate $template): ?bool
+    {
+        if (! $template->is_active) {
+            return null;
+        }
+
+        $sameUse = ConsentTemplate::query()
+            ->where('is_active', true)
+            ->when(
+                $template->treatment_id,
+                fn (Builder $query, int $treatmentId) => $query->where('treatment_id', $treatmentId),
+                fn (Builder $query) => $query->whereNull('treatment_id'),
+            )
+            ->latest('updated_at')
+            ->latest('id')
+            ->pluck('id');
+
+        return $sameUse->count() > 1 ? $sameUse->first() === $template->getKey() : null;
     }
 
     /**

@@ -11,6 +11,7 @@ use Illuminate\Auth\Events\Login;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Facades\Event;
 use Illuminate\Support\ServiceProvider;
+use Illuminate\Validation\Rules\Password;
 
 class AppServiceProvider extends ServiceProvider
 {
@@ -35,6 +36,10 @@ class AppServiceProvider extends ServiceProvider
 
         // En desarrollo, avisar de consultas N+1 y atributos inexistentes.
         Model::shouldBeStrict(! $this->app->isProduction());
+
+        // Una sola regla para toda contraseña del panel (usuarios, doctores, "Mi perfil" y recuperación):
+        // "12345678" o "password" ya no pasan.
+        Password::defaults(fn () => Password::min(8)->letters()->numbers());
 
         Event::listen(Login::class, fn (Login $event) => $event->user->forceFill(['last_login_at' => now()])->saveQuietly());
 

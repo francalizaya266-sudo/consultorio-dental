@@ -24,6 +24,7 @@ use Filament\Forms\Components\MarkdownEditor;
 use Filament\Forms\Components\Textarea;
 use Filament\Forms\Components\TextInput;
 use Filament\Forms\Components\Toggle;
+use Filament\Notifications\Notification;
 use Filament\Resources\Resource;
 use Filament\Schemas\Components\Fieldset;
 use Filament\Schemas\Components\Section;
@@ -172,22 +173,22 @@ class TreatmentResource extends Resource
                     ]),
                 Fieldset::make('Opciones')
                     ->columns(2)
+                    ->columnSpanFull()
                     ->schema([
-                        Toggle::make('online_bookable')
-                            ->label('Se reserva en la web como primera cita')
-                            ->helperText('Solo evaluaciones o tratamientos simples.')
-                            ->live(),
-                        // Sin un doctor que lo atienda y reserve por la web, no aparece en la reserva: se pregunta aquí mismo.
+                        // Sin un doctor que lo atienda, el tratamiento no se puede agendar: se pregunta siempre, y
+                        // uno nuevo viene con todos los doctores activos marcados.
                         CheckboxList::make('doctors')
                             ->label('¿Quién lo atiende?')
                             ->relationship('doctors', 'name', modifyQueryUsing: fn (Builder $query) => $query->active()->orderBy('sort_order'))
                             ->getOptionLabelFromRecordUsing(fn (Doctor $doctor) => $doctor->name.($doctor->accepts_online_booking ? '' : ' (no recibe reservas por la web)'))
-                            ->helperText(fn (Get $get) => Doctor::query()->active()->where('accepts_online_booking', true)->whereKey($get('doctors') ?? [])->exists()
-                                ? 'Aparece en la reserva de la web con los doctores marcados que reciben reservas por la web.'
-                                : new HtmlString('<span class="help-warning">Así no aparece en la reserva: marca al menos un doctor que reciba reservas por la web.</span>'))
+                            ->default(fn () => Doctor::query()->active()->pluck('id')->all())
+                            ->helperText(fn (Get $get) => self::whoAttendsHelp($get('doctors') ?? [], (bool) $get('online_bookable')))
                             ->live()
-                            ->visible(fn (Get $get) => (bool) $get('online_bookable'))
                             ->columnSpanFull(),
+                        Toggle::make('online_bookable')
+                            ->label('Se reserva en la web como primera cita')
+                            ->helperText('Solo evaluaciones o tratamientos simples.')
+                            ->live(),
                         Toggle::make('is_evaluation')
                             ->label('Es una evaluación'),
                         Toggle::make('show_price')
@@ -201,6 +202,24 @@ class TreatmentResource extends Resource
                             ->default(true),
                     ]),
             ]);
+    }
+
+    /**
+     * Bajo "¿Quién lo atiende?": qué pasa con lo marcado. Sin nadie no se puede agendar; y si se reserva en la
+     * web, hace falta alguno que reciba reservas por la web.
+     *
+     * @param  array<int, int|string>  $doctorIds
+     */
+    private static function whoAttendsHelp(array $doctorIds, bool $onlineBookable): string|HtmlString
+    {
+        $chosen = Doctor::query()->active()->whereKey($doctorIds)->pluck('accepts_online_booking');
+
+        return match (true) {
+            $chosen->isEmpty() => new HtmlString('<span class="help-warning">Así no se puede agendar: marca al menos un doctor.</span>'),
+            ! $onlineBookable => 'Al agendar este tratamiento se ofrecen solo los doctores marcados.',
+            $chosen->contains(true) => 'Aparece en la reserva de la web con los doctores marcados que reciben reservas por la web.',
+            default => new HtmlString('<span class="help-warning">Así no aparece en la reserva de la web: marca al menos un doctor que reciba reservas por la web.</span>'),
+        };
     }
 
     /** El tipo de tratamiento según el nombre que hay en pantalla. */
@@ -232,7 +251,10 @@ class TreatmentResource extends Resource
                 TextColumn::make('name')
                     ->label('Tratamiento')
                     ->searchable()
-                    ->description(fn (Treatment $record) => $record->sessionsText())
+                    // Activo pero sin doctor que lo atienda: en "Nueva cita" no habría con quién agendarlo, y se avisa.
+                    ->description(fn (Treatment $record) => $record->is_active && ! $record->has_doctor
+                        ? new HtmlString(trim(e((string) $record->sessionsText()).' <span class="help-warning">Nadie lo atiende: no se puede agendar. Edítalo y marca quién lo atiende.</span>'))
+                        : $record->sessionsText())
                     ->wrap(),
                 TextColumn::make('duration_minutes')
                     ->label('Duración')
@@ -266,7 +288,12 @@ class TreatmentResource extends Resource
                     ->placeholder('Sin receta')
                     ->visible(fn () => Supply::query()->exists()),
                 ToggleColumn::make('is_active')
-                    ->label('Activo'),
+                    ->label('Activo')
+                    ->afterStateUpdated(fn (Treatment $record, mixed $state) => Notification::make()
+                        ->success()
+                        ->title('"'.$record->name.'" '.($state ? 'vuelve a ofrecerse' : 'ya no se ofrece'))
+                        ->body($state ? null : 'Ya no sale al agendar ni en la web. Las citas ya dadas y los paquetes que lo incluyen siguen igual.')
+                        ->send()),
             ])
             ->reorderable('sort_order')
             ->defaultSort('sort_order')
@@ -274,7 +301,10 @@ class TreatmentResource extends Resource
                 TrashedFilter::make(),
             ])
             ->modifyQueryUsing(fn (Builder $query) => $query->with('supplies')
-                ->withExists(['doctors as has_web_doctor' => fn (Builder $doctors) => $doctors->active()->where('accepts_online_booking', true)]))
+                ->withExists([
+                    'doctors as has_doctor' => fn (Builder $doctors) => $doctors->active(),
+                    'doctors as has_web_doctor' => fn (Builder $doctors) => $doctors->active()->where('accepts_online_booking', true),
+                ]))
             ->recordActions([
                 TreatmentRecipeAction::make(),
                 EditAction::make()->iconButton()->tooltip('Editar'),

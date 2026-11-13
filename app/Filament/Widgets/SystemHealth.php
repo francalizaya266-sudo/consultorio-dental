@@ -7,11 +7,13 @@ use App\Filament\Resources\WhatsappMessages\WhatsappMessageResource;
 use App\Models\User;
 use App\Models\WhatsappMessage;
 use App\Services\Backup\DatabaseBackup;
+use App\Services\Backup\OffsiteCopies;
 use Filament\Widgets\Widget;
 
 /**
  * Solo aparece si algo anda mal y nadie lo vería: las copias de seguridad dejaron de hacerse
- * (la tarea programada del hosting no corre) o la API de WhatsApp no pudo enviar avisos.
+ * (la tarea programada del hosting no corre), pasó una semana sin bajarlas para guardarlas fuera
+ * del hosting, o la API de WhatsApp no pudo enviar avisos.
  */
 class SystemHealth extends Widget
 {
@@ -46,6 +48,17 @@ class SystemHealth extends Widget
             $issues[] = [
                 'heading' => $latest ? 'La última copia de seguridad es de '.$latest->diffForHumans() : 'Todavía no hay copias de seguridad',
                 'description' => 'Se crean solas cada madrugada y la última no se creó. Entra a "Ver copias", toca "Crear copia ahora" y avisa a quien te ayuda con el hosting.',
+                'url' => Backups::canAccess() ? Backups::getUrl() : null,
+                'link' => 'Ver copias',
+            ];
+        }
+
+        $due = app(OffsiteCopies::class)->due();
+
+        if ($due !== null) {
+            $issues[] = [
+                'heading' => 'Toca descargar la copia de seguridad de esta semana',
+                'description' => $due.'. Descárgalas y guárdalas fuera del sistema, por ejemplo en el Google Drive del consultorio.',
                 'url' => Backups::canAccess() ? Backups::getUrl() : null,
                 'link' => 'Ver copias',
             ];

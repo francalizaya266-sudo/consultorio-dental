@@ -27,6 +27,7 @@ use Filament\Forms\Components\ToggleButtons;
 use Filament\Schemas\Components\Component;
 use Filament\Schemas\Components\Utilities\Get;
 use Filament\Schemas\Components\Utilities\Set;
+use Illuminate\Support\HtmlString;
 
 /**
  * Campos para elegir doctor, día y un horario libre según la agenda inteligente.
@@ -217,6 +218,10 @@ final class SlotPicker
                 ->orderBy('sort_order')
                 ->pluck('name', 'id'))
             ->default(fn () => $moving?->doctor_id ?? $ownDoctorId ?? (request()->integer('doctor') ?: null) ?? self::onlyActiveDoctorId())
+            // Tratamiento que ningún doctor activo atiende: la lista sale vacía, y se dice por qué y dónde se arregla.
+            ->helperText(fn (Get $get) => self::nobodyAttends($moving?->treatment_id ?? $get('treatment_id'))
+                ? new HtmlString('<span class="help-warning">Ningún doctor atiende este tratamiento. Márcalo en Configuración › Tratamientos › "¿Quién lo atiende?".</span>')
+                : null)
             ->disabled($ownDoctorId !== null)
             ->dehydrated()
             ->required()
@@ -316,6 +321,13 @@ final class SlotPicker
         return $order
             ? 'Ojo: "'.$order->description.'" llega del laboratorio el '.$order->due_on->translatedFormat('D j M').'. Si esta cita es para colocarlo, agéndala desde ese día.'
             : null;
+    }
+
+    /** El tratamiento elegido no lo atiende ningún doctor activo: no hay con quién agendarlo. */
+    private static function nobodyAttends(mixed $treatmentId): bool
+    {
+        return filled($treatmentId)
+            && Doctor::query()->active()->whereHas('treatments', fn ($treatments) => $treatments->whereKey($treatmentId))->doesntExist();
     }
 
     /** Si el consultorio tiene un solo doctor activo, ya viene elegido. */

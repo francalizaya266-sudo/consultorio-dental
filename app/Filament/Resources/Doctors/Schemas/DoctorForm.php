@@ -6,6 +6,7 @@ use App\Enums\UserRole;
 use App\Filament\Forms\WebPhotoUpload;
 use App\Models\Doctor;
 use App\Models\User;
+use Closure;
 use Filament\Actions\Action;
 use Filament\Forms\Components\CheckboxList;
 use Filament\Forms\Components\ColorPicker;
@@ -18,13 +19,16 @@ use Filament\Forms\Components\Toggle;
 use Filament\Forms\Components\ToggleButtons;
 use Filament\Notifications\Notification;
 use Filament\Schemas\Components\Section;
+use Filament\Schemas\Components\Text;
 use Filament\Schemas\Components\Utilities\Get;
 use Filament\Schemas\Components\Utilities\Set;
 use Filament\Schemas\Schema;
+use Filament\Support\Enums\FontWeight;
 use Filament\Support\Icons\Heroicon;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Arr;
 use Illuminate\Support\Str;
+use Illuminate\Validation\Rules\Password;
 
 class DoctorForm
 {
@@ -114,6 +118,61 @@ class DoctorForm
         return $data;
     }
 
+    /**
+     * El primer par de tramos del mismo día que se cruzan o se repiten, dicho para corregirlo:
+     * "El lunes tiene dos tramos que se cruzan: 09:00–13:00 y 12:00–16:00…". Null si ninguno se cruza.
+     *
+     * @param  array<array-key, array<string, mixed>>  $ranges  Los tramos del formulario.
+     */
+    public static function overlappingRanges(array $ranges): ?string
+    {
+        $clock = fn (mixed $time): string => substr((string) $time, 0, 5);
+        $byDay = collect($ranges)
+            ->filter(fn (mixed $range) => is_array($range) && filled($range['weekday'] ?? null) && filled($range['starts_at'] ?? null) && filled($range['ends_at'] ?? null))
+            ->groupBy(fn (array $range) => (int) $range['weekday']);
+
+        foreach ($byDay as $weekday => $day) {
+            $previous = null;
+
+            foreach ($day->sortBy(fn (array $range) => $clock($range['starts_at']))->values() as $range) {
+                if ($previous !== null && $clock($range['starts_at']) < $clock($previous['ends_at'])) {
+                    return 'El '.Str::lower(self::WEEKDAYS[$weekday] ?? 'día').' tiene dos tramos que se cruzan: '
+                        .$clock($previous['starts_at']).'–'.$clock($previous['ends_at']).' y '.$clock($range['starts_at']).'–'.$clock($range['ends_at'])
+                        .'. Deja uno solo o cámbiales la hora.';
+                }
+
+                $previous = $previous !== null && $clock($previous['ends_at']) > $clock($range['ends_at']) ? $previous : $range;
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * Lo que le falta a un doctor para que se le pueda agendar: "su horario" y "los tratamientos que realiza".
+     *
+     * @return list<string>
+     */
+    public static function missingToAttend(Doctor $doctor): array
+    {
+        return array_values(array_filter([
+            $doctor->schedules()->exists() ? null : 'su horario',
+            $doctor->treatments()->exists() ? null : 'los tratamientos que realiza',
+        ]));
+    }
+
+    /** Lo que pasa al desactivar a un doctor, con las citas que le quedan por atender. */
+    public static function deactivationWarning(Doctor $doctor): string
+    {
+        $pending = $doctor->appointmentsToAttend()->count();
+
+        return 'Deja de aparecer en la web y ya no se le pueden dar citas nuevas. '.match (true) {
+            $pending === 0 => 'No tiene citas por atender.',
+            $pending === 1 => 'Tiene 1 cita por atender: sigue en la agenda hasta que se atienda, se cambie o se cancele.',
+            default => "Tiene {$pending} citas por atender: siguen en la agenda hasta que se atiendan, se cambien o se cancelen.",
+        };
+    }
+
     /** El primer color de la agenda que ningún doctor usa todavía, para distinguirlos de un vistazo. */
     private static function unusedColor(): string
     {
@@ -127,6 +186,11 @@ class DoctorForm
         return $schema
             ->columns(1)
             ->components([
+                // Mientras le falte horario o tratamientos no se le puede dar citas: se dice arriba de su ficha.
+                Text::make(fn (?Doctor $record) => 'Todavía no se le puede agendar: falta '.implode(' y ', $record ? self::missingToAttend($record) : []).'.')
+                    ->color('warning')
+                    ->weight(FontWeight::Medium)
+                    ->visible(fn (?Doctor $record) => $record !== null && self::missingToAttend($record) !== []),
                 Section::make('Perfil')
                     ->columns(2)
                     ->schema([
@@ -171,15 +235,20 @@ class DoctorForm
                             ->placeholder("Cirujano dentista, Universidad …\nEspecialidad en …")
                             ->helperText('Una línea por estudio.')
                             ->columnSpanFull(),
+                        // Un doctor nuevo nace fuera de la web: recién guardado no tiene foto, horario ni tratamientos,
+                        // y así salía en la página del equipo. Se enciende cuando su ficha está completa.
                         Toggle::make('accepts_online_booking')
                             ->label('Recibe reservas desde la web')
-                            ->default(true),
+                            ->default(false),
                         Toggle::make('is_public')
                             ->label('Aparece en la web')
-                            ->default(true),
+                            ->default(false)
+                            ->helperText(fn (string $operation) => $operation === 'create' ? 'Enciende estas dos opciones cuando su ficha esté completa: foto, horario y tratamientos.' : null),
                         Toggle::make('is_active')
                             ->label('Activo')
-                            ->default(true),
+                            ->default(true)
+                            ->live()
+                            ->helperText(fn (Get $get, ?Doctor $record) => $record && ! $get('is_active') ? self::deactivationWarning($record) : null),
                     ]),
                 // Un solo alta: el doctor y su usuario para entrar al panel, sin ir antes a Usuarios.
                 Section::make('Acceso al panel')
@@ -209,8 +278,9 @@ class DoctorForm
                             ->password()
                             ->revealable()
                             ->minLength(8)
+                            ->rule(Password::default())
                             ->required()
-                            ->helperText('Después la cambia en "Mi perfil".')
+                            ->helperText('Mínimo 8 caracteres, con letras y números. Después la cambia en "Mi perfil".')
                             ->visible(fn (Get $get) => $get('access') === self::ACCESS_NEW)
                             ->dehydrated(false),
                         Select::make('user_id')
@@ -249,6 +319,12 @@ class DoctorForm
                                     ->after('starts_at')
                                     ->required(),
                             ])
+                            // Dos tramos del mismo día no se pueden cruzar: la agenda ofrecía la misma hora dos veces.
+                            ->rule(fn () => function (string $attribute, mixed $value, Closure $fail): void {
+                                if (($overlap = self::overlappingRanges(is_array($value) ? $value : [])) !== null) {
+                                    $fail($overlap);
+                                }
+                            })
                             ->defaultItems(0)
                             ->addActionLabel('Agregar tramo')
                             ->reorderable(false)

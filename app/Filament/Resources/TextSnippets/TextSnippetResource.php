@@ -9,6 +9,7 @@ use App\Filament\Resources\TextSnippets\Pages\ManageTextSnippets;
 use App\Models\TextSnippet;
 use App\Models\User;
 use BackedEnum;
+use Closure;
 use Filament\Actions\Action;
 use Filament\Actions\ActionGroup;
 use Filament\Actions\DeleteAction;
@@ -19,6 +20,7 @@ use Filament\Forms\Components\TextInput;
 use Filament\Forms\Components\Toggle;
 use Filament\Notifications\Notification;
 use Filament\Resources\Resource;
+use Filament\Schemas\Components\Utilities\Get;
 use Filament\Schemas\Schema;
 use Filament\Support\Icons\Heroicon;
 use Filament\Tables\Columns\TextColumn;
@@ -66,6 +68,13 @@ class TextSnippetResource extends Resource
                     ->placeholder('limp')
                     ->alphaDash()
                     ->maxLength(20)
+                    // Dos opciones con el mismo atajo: solo una se completaba al escribirlo. Se compara entre las
+                    // del equipo o entre las propias; una propia sí puede repetir el atajo de una del equipo (gana la propia).
+                    ->rule(fn (Get $get, ?TextSnippet $record) => function (string $attribute, mixed $value, Closure $fail) use ($get, $record): void {
+                        if (self::shortcutIsTaken((string) $value, self::savesAsShared($get('shared'), $record), $record)) {
+                            $fail('Ya hay otra opción con el atajo /'.$value.'. Usa uno distinto.');
+                        }
+                    })
                     ->helperText('Escribe /atajo en la historia y se completa el texto.'),
                 Select::make('field')
                     ->label('Dónde aparece')
@@ -152,6 +161,22 @@ class TextSnippetResource extends Resource
                     DeleteAction::make(),
                 ]),
             ]);
+    }
+
+    /** Si al guardar la opción queda para todo el equipo (solo el administrador puede) o solo para quien la guarda. */
+    private static function savesAsShared(mixed $shared, ?TextSnippet $record): bool
+    {
+        return auth()->user()->isAdmin() && (bool) ($shared ?? $record?->isShared() ?? false);
+    }
+
+    /** Otra opción del mismo dueño (el equipo, o quien guarda) ya usa ese atajo, sin mirar mayúsculas. */
+    private static function shortcutIsTaken(string $shortcut, bool $shared, ?TextSnippet $record): bool
+    {
+        return TextSnippet::query()
+            ->when($record, fn (Builder $query) => $query->whereKeyNot($record->getKey()))
+            ->whereRaw('lower(shortcut) = ?', [mb_strtolower($shortcut)])
+            ->where(fn (Builder $query) => $shared ? $query->whereNull('user_id') : $query->where('user_id', auth()->id()))
+            ->exists();
     }
 
     /** "Solo tuya", "Propuesta" o "Propuesta de Ana"; nada si es del equipo y está activa. */

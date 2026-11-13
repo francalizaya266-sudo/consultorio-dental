@@ -316,6 +316,30 @@ class AvailabilityService
     }
 
     /**
+     * Citas por atender del doctor que caen fuera de su horario semanal: lo que queda descolgado si se le quita
+     * un día o se le acorta un tramo (y también los sobrecupos y lo agendado con "otra hora").
+     *
+     * @return Collection<int, Appointment>
+     */
+    public function outsideSchedule(Doctor $doctor): Collection
+    {
+        $ranges = [];
+
+        return $doctor->appointments()
+            ->upcoming()
+            ->orderBy('starts_at')
+            ->get()
+            ->toBase()
+            ->reject(function (Appointment $appointment) use ($doctor, &$ranges) {
+                $day = $appointment->starts_at->toDateString();
+                $ranges[$day] ??= $this->workingRanges($doctor, $appointment->starts_at);
+
+                return $ranges[$day]->contains(fn (array $range) => $appointment->starts_at->gte($range['start']) && $appointment->ends_at->lte($range['end']));
+            })
+            ->values();
+    }
+
+    /**
      * Tramos de atención del doctor ese día, según su horario semanal.
      *
      * @return Collection<int, array{start: CarbonImmutable, end: CarbonImmutable}>
@@ -333,7 +357,19 @@ class AvailabilityService
             ->map(fn (DoctorSchedule $s) => [
                 'start' => $day->setTimeFromTimeString($s->starts_at),
                 'end' => $day->setTimeFromTimeString($s->ends_at),
-            ]);
+            ])
+            // Dos tramos que se cruzan o se tocan son uno solo: si no, la misma hora se ofrecía dos veces y el
+            // día contaba más minutos abiertos de los que tiene.
+            ->reduce(function (Collection $merged, array $range) {
+                $last = $merged->last();
+
+                if ($last !== null && $range['start']->lte($last['end'])) {
+                    $merged->pop();
+                    $range = ['start' => $last['start'], 'end' => $last['end']->max($range['end'])];
+                }
+
+                return $merged->push($range);
+            }, collect());
     }
 
     /** @return Collection<int, Appointment> */

@@ -4,6 +4,7 @@ namespace Tests\Feature\Services\Agenda;
 
 use App\Enums\ScheduleBlockType;
 use App\Models\Appointment;
+use App\Models\Doctor;
 use App\Models\ScheduleBlock;
 use App\Models\Treatment;
 use App\Services\Agenda\AvailabilityService;
@@ -93,6 +94,46 @@ class AvailabilityServiceTest extends TestCase
 
         $this->assertSame('11:00', $labels[0]);
         $this->assertSame('12:30', end($labels));
+    }
+
+    public function test_ranges_that_overlap_or_touch_count_as_one_stretch(): void
+    {
+        $monday = $this->freezeMonday();
+        $treatment = Treatment::factory()->create(['duration_minutes' => 60, 'buffer_minutes' => 0]);
+        // Un horario que quedó cruzado (9–13 y 12–16) y un tramo pegado al anterior (16–17).
+        $doctor = Doctor::factory()->withSchedule([['09:00', '13:00'], ['12:00', '16:00'], ['16:00', '17:00']], [1])->create();
+        $doctor->treatments()->attach($treatment);
+        $availability = app(AvailabilityService::class);
+
+        $this->assertSame(
+            [['09:00', '17:00']],
+            $availability->workingRanges($doctor, $monday)->map(fn (array $range) => [$range['start']->format('H:i'), $range['end']->format('H:i')])->all(),
+        );
+
+        // Cada hora se ofrece una sola vez, y una cita puede pasar de un tramo al siguiente.
+        $labels = $this->labels($availability->slotsFor($doctor, $treatment, $monday));
+        $this->assertSame(array_unique($labels), $labels);
+        $this->assertContains('12:30', $labels);
+        $this->assertContains('15:30', $labels);
+        $this->assertSame('16:00', end($labels));
+    }
+
+    public function test_finds_the_upcoming_appointments_that_fall_outside_the_weekly_schedule(): void
+    {
+        $this->freezeMonday();
+        $treatment = Treatment::factory()->create();
+        $doctor = $this->doctorOffering($treatment);
+        Appointment::factory()->for($doctor)->for($treatment)->at('2026-11-03 10:00')->create();
+        $late = Appointment::factory()->for($doctor)->for($treatment)->at('2026-11-03 18:45')->create();
+        $sunday = Appointment::factory()->for($doctor)->for($treatment)->at('2026-11-08 10:00')->create();
+        // Las canceladas y las que ya pasaron no cuentan.
+        Appointment::factory()->for($doctor)->for($treatment)->at('2026-11-15 10:00')->cancelled()->create();
+        Appointment::factory()->for($doctor)->for($treatment)->at('2026-11-01 10:00')->create();
+
+        $outside = app(AvailabilityService::class)->outsideSchedule($doctor);
+
+        // La de las 18:45 termina después del cierre de las 19:00; la del domingo cae en un día que no atiende.
+        $this->assertSame([$late->id, $sunday->id], $outside->map(fn (Appointment $appointment) => $appointment->id)->all());
     }
 
     public function test_returns_nothing_on_a_day_the_doctor_does_not_work(): void

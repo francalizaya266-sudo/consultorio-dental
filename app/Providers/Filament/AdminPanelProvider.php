@@ -20,6 +20,7 @@ use App\Filament\Resources\Users\UserResource;
 use App\Filament\Support\InitialsAvatarProvider;
 use App\Filament\Support\MobileBar;
 use App\Http\Controllers\Backup\BackupDownloadController;
+use App\Http\Controllers\Backup\BackupFilesDownloadController;
 use App\Http\Controllers\Billing\PaymentReceiptController;
 use App\Http\Controllers\Clinical\ClinicalFileController;
 use App\Http\Controllers\Clinical\PrintController;
@@ -28,6 +29,7 @@ use App\Http\Controllers\Reports\CashClosingController;
 use App\Http\Controllers\Reports\EarningsExportController;
 use App\Http\Middleware\KeepRemindersUpToDate;
 use App\Models\Setting;
+use App\Services\Backup\FilesBackup;
 use App\Services\Web\ClinicInfo;
 use Filament\Actions\CreateAction;
 use Filament\Forms\Components\DatePicker;
@@ -221,6 +223,10 @@ class AdminPanelProvider extends PanelProvider
                 Route::get('imprimir/constancia/{payment}', [PaymentReceiptController::class, 'show'])->name('print.receipt');
                 Route::post('imprimir/constancia/{payment}/whatsapp', [PaymentReceiptController::class, 'whatsapp'])->name('print.receipt.whatsapp');
                 Route::get('copias-de-seguridad/{file}', BackupDownloadController::class)->name('backups.download');
+                Route::get('copias-de-seguridad/archivos/{batch}/{part}', BackupFilesDownloadController::class)
+                    ->whereIn('batch', FilesBackup::BATCHES)
+                    ->whereNumber('part')
+                    ->name('backups.files.download');
             });
     }
 

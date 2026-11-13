@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Enums\AppointmentStatus;
 use App\Models\Concerns\Auditable;
 use App\Services\Agenda\LearnedDurations;
 use Database\Factories\DoctorFactory;
@@ -54,6 +55,15 @@ class Doctor extends Model
     public function appointments(): HasMany
     {
         return $this->hasMany(Appointment::class);
+    }
+
+    /**
+     * Citas de hoy en adelante que todavía esperan atención. Si el doctor deja de atender, siguen en la agenda
+     * hasta que se atiendan, se cambien o se cancelen: no pueden desaparecer.
+     */
+    public function appointmentsToAttend(): HasMany
+    {
+        return $this->appointments()->whereIn('status', AppointmentStatus::open())->where('starts_at', '>=', today());
     }
 
     /** Ya atendió o tiene citas: su nombre sale en la agenda y en las historias, así que no se elimina. */

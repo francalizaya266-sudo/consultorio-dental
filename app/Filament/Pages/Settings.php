@@ -5,12 +5,15 @@ namespace App\Filament\Pages;
 use App\Filament\Pages\Concerns\EditsSettings;
 use App\Support\Phone;
 use BackedEnum;
+use Closure;
+use Filament\Forms\Components\Select;
 use Filament\Forms\Components\TextInput;
 use Filament\Forms\Components\Toggle;
 use Filament\Pages\Page;
 use Filament\Schemas\Components\Section;
 use Filament\Schemas\Components\Tabs;
 use Filament\Schemas\Components\Tabs\Tab;
+use Filament\Schemas\Components\Utilities\Get;
 use Filament\Schemas\Schema;
 use Filament\Support\Icons\Heroicon;
 
@@ -23,6 +26,9 @@ use Filament\Support\Icons\Heroicon;
 class Settings extends Page
 {
     use EditsSettings;
+
+    /** Cada cuántos minutos se pueden ofrecer horarios: valores que caen en horas redondas. */
+    public const SLOT_STEPS = [5, 10, 15, 20, 30, 60];
 
     protected static ?string $title = 'Ajustes';
 
@@ -93,10 +99,15 @@ class Settings extends Page
                                                 }
                                             }),
                                         TextInput::make('clinic.phone')
-                                            ->label('Teléfono fijo'),
+                                            ->label('Teléfono fijo')
+                                            ->tel()
+                                            ->maxLength(20)
+                                            // Sale en la web ("Llamar al …") y en las hojas impresas: solo números y los signos de un teléfono.
+                                            ->regex('/^[+(]?[0-9][0-9 ()\-]{5,18}$/')
+                                            ->validationMessages(['regex' => 'Escribe solo el número, por ejemplo 051 321456.']),
                                         TextInput::make('clinic.address')
                                             ->label('Dirección')
-                                            ->helperText('Sale en los avisos como {direccion}, en la web y en el mapa.'),
+                                            ->helperText('Sale en la web, en el mapa y en las hojas impresas. En los textos de aviso se pone con {direccion}.'),
                                         TextInput::make('clinic.district')
                                             ->label('Distrito o ciudad')
                                             ->placeholder('Juliaca')
@@ -124,19 +135,33 @@ class Settings extends Page
                                     ->schema([
                                         self::minutes('agenda.buffer_minutes', 'Limpieza y esterilización entre citas', 0, 60)
                                             ->helperText('Cada tratamiento puede tener su propio tiempo.'),
-                                        self::minutes('agenda.slot_step_minutes', 'Cada cuánto se ofrecen horarios', 5, 60)
+                                        // Una lista en vez de un número libre: con "cada 7 minutos" los horarios salían a horas raras.
+                                        Select::make('agenda.slot_step_minutes')
+                                            ->label('Cada cuánto se ofrecen horarios')
+                                            ->options(collect(self::SLOT_STEPS)->mapWithKeys(fn (int $minutes) => [$minutes => "Cada {$minutes} min"])->all())
+                                            ->required()
                                             ->helperText('Cuando no hay citas cerca. Los horarios pegados a otras citas se ofrecen primero.'),
                                     ]),
                                 Section::make('Reservas y cambios desde la web')
                                     ->columns(2)
                                     ->schema([
-                                        self::minutes('booking.min_lead_minutes', 'Anticipación mínima para reservar', 0, 2880),
+                                        // Cada casilla vale sola, pero juntas pueden dejar la web sin horarios o sin forma de
+                                        // cambiar una cita: se comparan con los días que se puede reservar hacia adelante.
+                                        self::minutes('booking.min_lead_minutes', 'Anticipación mínima para reservar', 0, 2880)
+                                            ->rule(fn (Get $get) => self::lessThanTheHorizon($get, 60, 'Así la web no ofrece ningún horario: la anticipación mínima es mayor que los días que se puede reservar hacia adelante.')),
                                         self::number('booking.horizon_days', 'Hasta cuántos días adelante se puede reservar', 1, 180, 'días'),
                                         self::number('booking.max_web_appointments_per_patient', 'Citas web futuras por paciente', 1, 10, 'citas'),
-                                        self::number('booking.max_web_appointments_per_phone', 'Citas web futuras por celular (toda la familia)', 1, 30, 'citas'),
+                                        self::number('booking.max_web_appointments_per_phone', 'Citas web futuras por celular (toda la familia)', 1, 30, 'citas')
+                                            ->rule(fn (Get $get) => function (string $attribute, mixed $value, Closure $fail) use ($get): void {
+                                                if ((int) $value < (int) $get('booking.max_web_appointments_per_patient')) {
+                                                    $fail('Debe ser igual o mayor que las citas por paciente: el celular cuenta las de toda la familia.');
+                                                }
+                                            }),
                                         self::number('booking.self_reschedule_min_hours', 'Cambio automático si faltan más de', 1, 168, 'horas')
-                                            ->helperText('Con menos tiempo, el paciente propone horarios y ustedes aprueban.'),
-                                        self::number('booking.self_cancel_min_hours', 'El paciente puede cancelar solo hasta', 0, 168, 'horas antes'),
+                                            ->helperText('Con menos tiempo, el paciente propone horarios y ustedes aprueban.')
+                                            ->rule(fn (Get $get) => self::lessThanTheHorizon($get, 1, 'Así ningún paciente puede cambiar su cita solo: son más horas que las que se puede reservar hacia adelante.')),
+                                        self::number('booking.self_cancel_min_hours', 'El paciente puede cancelar solo hasta', 0, 168, 'horas antes')
+                                            ->rule(fn (Get $get) => self::lessThanTheHorizon($get, 1, 'Así ningún paciente puede cancelar solo: son más horas que las que se puede reservar hacia adelante.')),
                                         self::number('booking.max_reschedule_options', 'Horarios que puede proponer el paciente', 1, 5, 'opciones'),
                                     ]),
                             ]),
@@ -161,6 +186,20 @@ class Settings extends Page
                     ]),
             ])
             ->statePath('data');
+    }
+
+    /**
+     * Regla para un tiempo que debe caber dentro de lo que se puede reservar hacia adelante.
+     *
+     * @param  int  $unitsPerHour  En qué viene el valor: 60 si son minutos, 1 si son horas.
+     */
+    private static function lessThanTheHorizon(Get $get, int $unitsPerHour, string $message): Closure
+    {
+        return function (string $attribute, mixed $value, Closure $fail) use ($get, $unitsPerHour, $message): void {
+            if ((int) $value >= (int) $get('booking.horizon_days') * 24 * $unitsPerHour) {
+                $fail($message);
+            }
+        };
     }
 
     private static function number(string $key, string $label, int $min, int $max, string $suffix): TextInput
