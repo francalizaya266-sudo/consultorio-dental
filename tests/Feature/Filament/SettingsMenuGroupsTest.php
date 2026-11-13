@@ -30,6 +30,7 @@ class SettingsMenuGroupsTest extends TestCase
         $this->assertSame([
             'Consultorio: Ajustes',
             'Consultorio: Copias de seguridad',
+            'Consultorio: Historial de cambios',
             'Catálogo: Tratamientos',
             'Catálogo: Paquetes',
             'Equipo: Doctores',

@@ -39,7 +39,7 @@ class UserResource extends Resource
 
     protected static ?string $navigationParentItem = 'Configuración';
 
-    protected static ?int $navigationSort = 5;
+    protected static ?int $navigationSort = 6;
 
     protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedUserCircle;
 

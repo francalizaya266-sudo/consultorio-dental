@@ -33,7 +33,7 @@ class DoctorResource extends Resource
 
     protected static ?string $navigationParentItem = 'Configuración';
 
-    protected static ?int $navigationSort = 4;
+    protected static ?int $navigationSort = 5;
 
     protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedIdentification;
 

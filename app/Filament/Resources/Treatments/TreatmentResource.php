@@ -24,6 +24,7 @@ use Filament\Actions\RestoreAction;
 use Filament\Forms\Components\CheckboxList;
 use Filament\Forms\Components\MarkdownEditor;
 use Filament\Forms\Components\Radio;
+use Filament\Forms\Components\Select;
 use Filament\Forms\Components\Textarea;
 use Filament\Forms\Components\TextInput;
 use Filament\Forms\Components\Toggle;
@@ -58,7 +59,7 @@ class TreatmentResource extends Resource
 
     protected static ?string $navigationParentItem = 'Configuración';
 
-    protected static ?int $navigationSort = 2;
+    protected static ?int $navigationSort = 3;
 
     protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedSparkles;
 
@@ -118,8 +119,12 @@ class TreatmentResource extends Resource
                             ->helperText(fn (Get $get) => self::whoAttendsHelp($get('doctors') ?? [], self::presenceOf($get)->isBookable()))
                             ->live()
                             ->columnSpanFull(),
+                        // No tenía ninguna ayuda y cambia cómo se comporta la primera cita.
                         Toggle::make('is_evaluation')
-                            ->label('Es una evaluación'),
+                            ->label('Es una evaluación')
+                            ->live()
+                            ->helperText('Márcalo solo en la cita de revisión y diagnóstico. En la web va primero y es lo que se ofrece reservar cuando un tratamiento no se reserva en línea. En la historia, esa atención se abre como evaluación: motivo, examen y plan.')
+                            ->columnSpanFull(),
                     ]),
                 Section::make('Precio')
                     ->columnSpanFull()
@@ -143,6 +148,16 @@ class TreatmentResource extends Resource
                     ->columnSpanFull()
                     ->columns(2)
                     ->schema([
+                        // Era una regla escondida: el tipo salía del nombre y, si el nombre no llevaba una de las
+                        // palabras esperadas, no se aplicaba nada y nadie se enteraba.
+                        Select::make('kind')
+                            ->label('Tipo de tratamiento')
+                            ->options(self::kinds())
+                            ->placeholder(fn (Get $get) => 'Según el nombre: '.TreatmentKind::fromName($get('name'))->getLabel())
+                            ->live()
+                            ->visible(fn (Get $get) => ! $get('is_evaluation'))
+                            ->helperText('De esto depende cada cuánto toca control, qué riesgos se revisan en el consentimiento, qué se anota en la atención y los textos que se sugieren aquí abajo. Sin elegir, el sistema lo deduce del nombre.')
+                            ->columnSpanFull(),
                         TextInput::make('checkup_months')
                             ->label('Vuelve a control cada')
                             ->suffix('meses')
@@ -151,7 +166,7 @@ class TreatmentResource extends Resource
                             ->minValue(1)
                             ->maxValue(36)
                             ->placeholder(fn (Get $get) => (string) self::kindOf($get)->checkupMonths())
-                            ->helperText('Pasado ese tiempo sin cita, el paciente sale en "Les toca control". Vacío = lo usual para este tratamiento.'),
+                            ->helperText('Pasado ese tiempo sin cita, el paciente sale en "Les toca control". Vacío = lo usual para su tipo.'),
                         TextInput::make('next_session_days')
                             ->label('Sesión siguiente a los')
                             ->suffix('días')
@@ -160,7 +175,7 @@ class TreatmentResource extends Resource
                             ->minValue(1)
                             ->maxValue(365)
                             ->placeholder(fn (Get $get) => (string) self::kindOf($get)->nextSessionDays())
-                            ->helperText('La fecha que se propone al programar la sesión que sigue. Vacío = lo usual para este tratamiento.'),
+                            ->helperText('La fecha que se propone al programar la sesión que sigue. Vacío = lo usual para su tipo.'),
                         Textarea::make('before_instructions')
                             ->label('Antes de venir')
                             ->rows(2)
@@ -299,10 +314,35 @@ class TreatmentResource extends Resource
         };
     }
 
-    /** El tipo de tratamiento según el nombre que hay en pantalla. */
+    /** El tipo de tratamiento con lo que hay en pantalla: el elegido o, sin elegir, el que sale del nombre. */
     private static function kindOf(Get $get): TreatmentKind
     {
-        return TreatmentKind::for(new Treatment(['name' => (string) $get('name'), 'is_evaluation' => (bool) $get('is_evaluation')]));
+        return TreatmentKind::for(new Treatment(['name' => (string) $get('name'), 'kind' => TreatmentKind::tryFrom((string) $get('kind')), 'is_evaluation' => (bool) $get('is_evaluation')]));
+    }
+
+    /**
+     * Los tipos que se pueden elegir. "Evaluación" no va en la lista: se marca con su interruptor.
+     *
+     * @return array<string, string>
+     */
+    private static function kinds(): array
+    {
+        return collect(TreatmentKind::cases())
+            ->reject(fn (TreatmentKind $kind) => $kind === TreatmentKind::Evaluation)
+            ->mapWithKeys(fn (TreatmentKind $kind) => [$kind->value => $kind->getLabel()])
+            ->all();
+    }
+
+    /** En la lista, quién lo atiende: los doctores activos marcados en su ficha. */
+    private static function whoAttends(Treatment $record): ?string
+    {
+        $attending = $record->doctors->where('is_active', true)->sortBy('sort_order')->pluck('name');
+
+        return match (true) {
+            $attending->isEmpty() => null,
+            $attending->count() > 1 && $attending->count() === Doctor::query()->active()->count() => 'Todos los doctores',
+            default => $attending->join(', ', ' y '),
+        };
     }
 
     /**
@@ -329,9 +369,15 @@ class TreatmentResource extends Resource
                     ->label('Tratamiento')
                     ->searchable()
                     // Activo pero sin doctor que lo atienda: en "Nueva cita" no habría con quién agendarlo, y se avisa.
+                    // Su tipo, que antes no se veía en ningún lado, y las sesiones que suele llevar.
                     ->description(fn (Treatment $record) => $record->is_active && ! $record->has_doctor
-                        ? new HtmlString(trim(e((string) $record->sessionsText()).' <span class="help-warning">Nadie lo atiende: no se puede agendar. Edítalo y marca quién lo atiende.</span>'))
-                        : $record->sessionsText())
+                        ? new HtmlString(e(self::typeAndSessions($record)).' <span class="help-warning">Nadie lo atiende: no se puede agendar. Edítalo y marca quién lo atiende.</span>')
+                        : self::typeAndSessions($record))
+                    ->wrap(),
+                TextColumn::make('attended_by')
+                    ->label('Quién lo atiende')
+                    ->state(fn (Treatment $record) => self::whoAttends($record))
+                    ->placeholder('Nadie')
                     ->wrap(),
                 // El tiempo que de verdad se usa y de dónde viene: la limpieza propia o la general, y los doctores
                 // a los que se les reserva otra duración.
@@ -398,6 +444,27 @@ class TreatmentResource extends Resource
                     ->successNotificationTitle('Tratamiento guardado'),
                 // Borrar va en el menú para que la fila entre entera. Con citas o cobros no se borra: avisa que se apaga "Activo".
                 ActionGroup::make([
+                    // Para uno parecido a otro que ya está: ahorra volver a llenar toda la ficha.
+                    Action::make('duplicate')
+                        ->label('Duplicar')
+                        ->icon(Heroicon::OutlinedDocumentDuplicate)
+                        ->visible(fn (Treatment $record) => ! $record->trashed() && auth()->user()->can('create', Treatment::class))
+                        ->modalHeading(fn (Treatment $record) => 'Duplicar "'.$record->name.'"')
+                        ->modalDescription('La copia lleva los mismos tiempos, precio, seguimiento, doctores y materiales. Queda solo para el consultorio: después eliges en su ficha dónde aparece.')
+                        ->modalWidth('md')
+                        ->schema([
+                            TextInput::make('name')
+                                ->label('Nombre del nuevo tratamiento')
+                                ->default(fn (Treatment $record) => $record->name.' (copia)')
+                                ->required()
+                                ->maxLength(100),
+                        ])
+                        ->modalSubmitActionLabel('Duplicar')
+                        ->action(function (Treatment $record, array $data): void {
+                            $copy = $record->duplicateAs($data['name']);
+
+                            Notification::make()->success()->title('Tratamiento duplicado')->body('"'.$copy->name.'" quedó solo para el consultorio. Revisa su ficha y elige dónde aparece.')->send();
+                        }),
                     DeleteAction::make()
                         ->authorizationNotification()
                         ->modalDescription('Solo se borra lo que nunca se usó. Lo que ya tiene citas, cobros o está en un paquete se apaga con "Activo". Se puede restaurar.')
@@ -406,6 +473,12 @@ class TreatmentResource extends Resource
                         ->successNotificationTitle('Tratamiento restaurado'),
                 ]),
             ]);
+    }
+
+    /** "Limpieza · 1 sesión": el tipo de tratamiento y, si lo dice su ficha, las sesiones que suele llevar. */
+    private static function typeAndSessions(Treatment $record): string
+    {
+        return collect([TreatmentKind::for($record)->getLabel(), $record->sessionsText()])->filter()->implode(' · ');
     }
 
     /** Activo y marcado para la reserva en línea, pero sin un doctor que la reciba: en la web no se puede reservar. */

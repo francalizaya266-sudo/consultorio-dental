@@ -5,6 +5,7 @@ namespace App\Console\Commands;
 use App\Enums\MessageTemplateKey;
 use App\Enums\PlanPaymentMode;
 use App\Enums\TreatmentPlanStatus;
+use App\Models\Setting;
 use App\Models\TreatmentPlanInstallment;
 use App\Services\Clinical\TreatmentPlanService;
 use Illuminate\Console\Attributes\Description;
@@ -17,7 +18,7 @@ class PrepareInstallmentReminders extends Command
 {
     public function handle(TreatmentPlanService $plans): int
     {
-        $days = (int) config('consultorio.defaults.reminders.installment_days_before', 3);
+        $days = (int) Setting::get('reminders.installment_days_before', 3);
 
         // Las cuotas mensuales (la inicial se paga al firmar) que aún no se cargaron ni se avisaron.
         $installments = TreatmentPlanInstallment::query()

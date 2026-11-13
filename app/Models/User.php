@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use App\Enums\UserRole;
+use App\Models\Concerns\Auditable;
 use Database\Factories\UserFactory;
 use Filament\Models\Contracts\FilamentUser;
 use Filament\Panel;
@@ -19,7 +20,17 @@ use Illuminate\Notifications\Notifiable;
 class User extends Authenticatable implements FilamentUser
 {
     /** @use HasFactory<UserFactory> */
-    use HasFactory, Notifiable;
+    use Auditable, HasFactory, Notifiable;
+
+    protected static function booted(): void
+    {
+        // La contraseña nunca se guarda en el historial, pero sí que alguien la cambió.
+        static::updated(function (User $user): void {
+            if ($user->wasChanged('password')) {
+                $user->auditEvent('password_changed');
+            }
+        });
+    }
 
     /**
      * Get the attributes that should be cast.
