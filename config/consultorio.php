@@ -101,6 +101,8 @@ return [
     'backups' => [
         // Copias diarias de la base de datos que se guardan en storage/app/private/respaldos.
         'keep' => (int) env('BACKUPS_KEEP', 14),
+        // Tamaño máximo de cada .zip de radiografías, fotos y firmas: si hay más, se baja en partes.
+        'files_part_mb' => (int) env('BACKUPS_FILES_PART_MB', 200),
     ],
 
     'whatsapp' => [

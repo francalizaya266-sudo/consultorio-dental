@@ -46,8 +46,13 @@ class TreatmentsRelationManager extends RelationManager
             ])
             ->defaultSort('sort_order')
             ->headerActions([
+                // Con las palabras del consultorio: decía "Vincular tratamiento" y "Vincular y vincular otro".
                 AttachAction::make()
                     ->label('Agregar tratamiento')
+                    ->modalHeading('Agregar tratamientos que realiza')
+                    ->modalSubmitActionLabel('Agregar')
+                    ->attachAnother(false)
+                    ->successNotificationTitle('Tratamientos agregados')
                     ->preloadRecordSelect()
                     ->multiple()
                     ->schema(fn (AttachAction $action) => [
@@ -57,8 +62,15 @@ class TreatmentsRelationManager extends RelationManager
             ])
             ->recordActions([
                 EditAction::make()->label('Duración'),
-                DetachAction::make()->label('Quitar'),
-            ]);
+                DetachAction::make()
+                    ->label('Quitar')
+                    ->modalHeading(fn (Treatment $record) => '¿Quitar '.$record->name.'?')
+                    ->modalDescription('Ya no se le podrá agendar este tratamiento. Las citas ya dadas siguen igual.')
+                    ->modalSubmitActionLabel('Quitar')
+                    ->successNotificationTitle('Tratamiento quitado'),
+            ])
+            ->emptyStateHeading('Todavía no realiza ningún tratamiento')
+            ->emptyStateDescription('Sin tratamientos no se le puede agendar. Agrega los que realiza.');
     }
 
     /** De dónde sale lo que se reserva: la propia, lo que suele tardar (con cuántas atenciones) o la general. */

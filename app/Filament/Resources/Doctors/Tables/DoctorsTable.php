@@ -5,7 +5,9 @@ namespace App\Filament\Resources\Doctors\Tables;
 use App\Filament\Resources\Doctors\Schemas\DoctorForm;
 use App\Models\Doctor;
 use App\Models\DoctorSchedule;
+use Filament\Actions\Contracts\HasActions;
 use Filament\Actions\EditAction;
+use Filament\Notifications\Notification;
 use Filament\Tables\Columns\ColorColumn;
 use Filament\Tables\Columns\IconColumn;
 use Filament\Tables\Columns\TextColumn;
@@ -13,6 +15,7 @@ use Filament\Tables\Columns\ToggleColumn;
 use Filament\Tables\Filters\TrashedFilter;
 use Filament\Tables\Table;
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Support\HtmlString;
 
 class DoctorsTable
 {
@@ -27,7 +30,11 @@ class DoctorsTable
                 TextColumn::make('name')
                     ->label('Doctor')
                     ->searchable()
-                    ->description(fn (Doctor $record) => $record->specialty),
+                    // Activo pero sin horario o sin tratamientos: no se le puede dar citas, y se avisa en la lista.
+                    ->description(fn (Doctor $record) => $record->is_active && ($record->schedules->isEmpty() || $record->treatments_count === 0)
+                        ? new HtmlString(trim(e((string) $record->specialty).' <span class="help-warning">No se le puede agendar: falta '
+                            .implode(' y ', array_filter([$record->schedules->isEmpty() ? 'su horario' : null, $record->treatments_count === 0 ? 'sus tratamientos' : null])).'.</span>'))
+                        : $record->specialty),
                 TextColumn::make('user.email')
                     ->label('Usuario')
                     ->placeholder('Sin usuario')
@@ -49,8 +56,20 @@ class DoctorsTable
                 IconColumn::make('accepts_online_booking')
                     ->label('Reserva web')
                     ->boolean(),
+                // Desactivar lo saca de la agenda y de la web: antes se pregunta y se dice cuántas citas le quedan.
                 ToggleColumn::make('is_active')
-                    ->label('Activo'),
+                    ->label('Activo')
+                    ->updateStateUsing(function (Doctor $record, mixed $state, HasActions $livewire): void {
+                        if (! $state) {
+                            $livewire->mountAction('deactivate', ['doctor' => $record->getKey()]);
+
+                            return;
+                        }
+
+                        $record->update(['is_active' => true]);
+
+                        Notification::make()->success()->title($record->name.' vuelve a atender')->body('Ya se le pueden dar citas.')->send();
+                    }),
             ])
             ->reorderable('sort_order')
             ->defaultSort('sort_order')

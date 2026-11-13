@@ -282,6 +282,36 @@ class PatientsAndSetupPanelTest extends TestCase
         $this->assertSame(SnippetStatus::Active, $mine->fresh()->status);
     }
 
+    public function test_two_options_of_the_same_owner_cannot_share_a_shortcut(): void
+    {
+        $doctor = Doctor::factory()->create()->user;
+        $admin = User::factory()->admin(isDentist: true)->create();
+        TextSnippet::create(['field' => 'procedures', 'label' => 'Limpieza del equipo', 'body' => 'Profilaxis.', 'shortcut' => 'limp']);
+        $mine = TextSnippet::create(['user_id' => $doctor->id, 'field' => 'procedures', 'label' => 'Mi limpieza', 'body' => 'Profilaxis con ultrasonido.', 'shortcut' => 'milimp']);
+
+        // Entre las del equipo no se repite, tampoco cambiando mayúsculas.
+        $this->actingAs($admin);
+        Livewire::test(ManageTextSnippets::class)
+            ->callAction('create', ['label' => 'Otra limpieza', 'body' => 'Destartraje.', 'field' => 'procedures', 'shared' => true, 'shortcut' => 'LIMP'])
+            ->assertHasActionErrors(['shortcut']);
+
+        // Entre las propias tampoco; pero una propia sí puede llevar el atajo de una del equipo.
+        $this->actingAs($doctor);
+        Livewire::test(ManageTextSnippets::class)
+            ->callAction('create', ['label' => 'Otra mía', 'body' => 'Pulido.', 'field' => 'procedures', 'shortcut' => 'milimp'])
+            ->assertHasActionErrors(['shortcut']);
+        Livewire::test(ManageTextSnippets::class)
+            ->callAction('create', ['label' => 'Mi versión', 'body' => 'Pulido.', 'field' => 'procedures', 'shortcut' => 'limp'])
+            ->assertHasNoActionErrors();
+
+        // Guardar una opción sin cambiarle el atajo no choca consigo misma.
+        Livewire::test(ManageTextSnippets::class)
+            ->callAction(TestAction::make('edit')->table($mine), ['body' => 'Profilaxis con ultrasonido y pulido.'])
+            ->assertHasNoActionErrors();
+
+        $this->assertSame(['limp', 'milimp'], TextSnippet::query()->where('user_id', $doctor->id)->orderBy('shortcut')->pluck('shortcut')->all());
+    }
+
     public function test_the_admin_changes_booking_limits_from_settings(): void
     {
         $this->actingAs(User::factory()->admin()->create());

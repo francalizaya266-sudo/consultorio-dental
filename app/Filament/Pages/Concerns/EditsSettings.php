@@ -7,6 +7,7 @@ use App\Models\User;
 use App\Support\Phone;
 use Filament\Actions\Action;
 use Filament\Notifications\Notification;
+use Filament\Pages\Concerns\HasUnsavedDataChangesAlert;
 use Filament\Schemas\Components\Actions;
 use Filament\Schemas\Components\EmbeddedSchema;
 use Filament\Schemas\Components\Form;
@@ -19,6 +20,9 @@ use Illuminate\Support\Arr;
  */
 trait EditsSettings
 {
+    // Como en la ficha del doctor: si se sale con cambios sin guardar, el navegador pregunta antes.
+    use HasUnsavedDataChangesAlert;
+
     /** @var array<string, mixed>|null */
     public ?array $data = [];
 
@@ -45,6 +49,7 @@ trait EditsSettings
         }
 
         $this->form->fill($state);
+        $this->rememberData();
     }
 
     public function content(Schema $schema): Schema
@@ -78,6 +83,8 @@ trait EditsSettings
                 default => filled($value) ? (string) $value : null,
             });
         }
+
+        $this->rememberData();
 
         Notification::make()->success()->title($this->savedMessage())->send();
     }

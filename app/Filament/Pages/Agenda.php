@@ -132,7 +132,7 @@ class Agenda extends Page
     {
         $this->date = $this->safeDate($this->date)->toDateString();
         $this->mode = in_array($this->mode, ['day', 'week', 'list'], true) ? $this->mode : 'day';
-        $this->doctor = $this->managesAll() ? ($this->doctor ?? $this->doctors()->first()?->getKey()) : $this->ownDoctorId();
+        $this->doctor = $this->managesAll() ? ($this->doctor ?? ($this->activeDoctors()->first() ?? $this->doctors()->first())?->getKey()) : $this->ownDoctorId();
         $this->returnTo = $this->defaultAction === 'createAppointment' ? self::screenBefore() : null;
 
         if (! request()->has('mode')) {
@@ -519,7 +519,7 @@ class Agenda extends Page
             'to' => $to,
             'scale' => self::SCALE,
             'hours' => range(intdiv($from, 60), intdiv($to - 1, 60)),
-            'doctors' => $this->managesAll() ? $this->doctors()->pluck('name', 'id') : collect(),
+            'doctors' => $this->managesAll() ? $this->doctors()->mapWithKeys(fn (Doctor $doctor) => [$doctor->getKey() => $doctor->name.($doctor->is_active ? '' : ' (ya no atiende)')]) : collect(),
             'wholeClinic' => $this->wholeClinic(),
             // En la semana de todo el consultorio, quién es quién: el color de cada doctor.
             'doctorKey' => $this->wholeClinic()
@@ -620,10 +620,16 @@ class Agenda extends Page
         ];
     }
 
-    /** @return Collection<int, Doctor> */
+    /** @return Collection<int, Doctor> Solo los que atienden: a quien ya no atiende no se le buscan huecos. */
     private function railDoctors(): Collection
     {
-        return $this->mode === 'week' && ! $this->wholeClinic() ? $this->doctors()->where('id', $this->weekDoctor()?->getKey())->values() : $this->doctors();
+        return $this->mode === 'week' && ! $this->wholeClinic() ? $this->activeDoctors()->where('id', $this->weekDoctor()?->getKey())->values() : $this->activeDoctors();
+    }
+
+    /** @return Collection<int, Doctor> */
+    private function activeDoctors(): Collection
+    {
+        return $this->doctors()->filter(fn (Doctor $doctor) => $doctor->is_active)->values();
     }
 
     /**
@@ -744,8 +750,9 @@ class Agenda extends Page
                 ];
             }
 
-            if ($day->gte(today())) {
-                $doctorModel = $this->doctors()->firstWhere('id', $column['doctorId']);
+            $doctorModel = $this->activeDoctors()->firstWhere('id', $column['doctorId']);
+
+            if ($day->gte(today()) && $doctorModel !== null) {
 
                 foreach (app(AvailabilityService::class)->dayGaps($doctorModel, $day, $day->isToday() ? now() : null)['gaps'] as $gap) {
                     $minutes = (int) $gap['start']->diffInMinutes($gap['end']);
@@ -794,7 +801,7 @@ class Agenda extends Page
     private function weekStrip(): array
     {
         $start = $this->weekStart();
-        $load = app(GapFinder::class)->occupancy($this->doctors(), $start, $start->addDays(6));
+        $load = app(GapFinder::class)->occupancy($this->activeDoctors(), $start, $start->addDays(6));
         $letters = ['L', 'M', 'X', 'J', 'V', 'S', 'D'];
 
         return collect(range(0, 6))
@@ -888,8 +895,9 @@ class Agenda extends Page
                 ->filter(fn (array $t) => $t[0] !== null)
             : $this->doctors()->map(fn (Doctor $d) => [$d, $this->day()]);
 
+        // En la semana no van los días sin atención ni citas; y quien ya no atiende solo ocupa columna el día que tiene citas.
         return $targets->map(fn (array $target) => $this->column(...$target))
-            ->reject(fn (array $column) => $this->mode === 'week' && $column['working'] === [] && $column['appointments'] === [])
+            ->reject(fn (array $column) => ($this->mode === 'week' || ! $column['attending']) && $column['working'] === [] && $column['appointments'] === [])
             ->values()
             ->all();
     }
@@ -910,7 +918,7 @@ class Agenda extends Page
     {
         $doctors = $this->doctors();
         $start = $this->weekStart();
-        $load = app(GapFinder::class)->occupancy($doctors, $start, $start->addDays(6));
+        $load = app(GapFinder::class)->occupancy($this->activeDoctors(), $start, $start->addDays(6));
 
         return collect(range(0, 6))
             ->map(function (int $i) use ($doctors, $start, $load) {
@@ -943,7 +951,7 @@ class Agenda extends Page
                     'color' => '#1e4f91',
                     'initials' => '',
                     'doctorId' => 0,
-                    'treatments' => $doctors->flatMap(fn (Doctor $doctor) => $doctor->treatments->modelKeys())->unique()->values()->all(),
+                    'treatments' => $this->activeDoctors()->flatMap(fn (Doctor $doctor) => $doctor->treatments->modelKeys())->unique()->values()->all(),
                     'working' => self::mergedRanges($present->flatMap(fn (array $column) => $column['working'])->all()),
                     'blocks' => ScheduleBlock::query()
                         ->whereNull('doctor_id')
@@ -1038,14 +1046,18 @@ class Agenda extends Page
             ...$this->dayHeading($day),
             'key' => $doctor->getKey().'|'.$day->toDateString(),
             'title' => $this->mode === 'week' && ! $this->wholeClinic() ? ucfirst($day->translatedFormat('D j')) : $doctor->name,
-            'subtitle' => $this->mode === 'week' ? null : $doctor->specialty,
+            'subtitle' => $this->mode === 'week' ? null : ($doctor->is_active ? $doctor->specialty : 'Ya no atiende: solo sus citas pendientes'),
             'color' => $doctor->agenda_color ?: '#1e4f91',
             'initials' => self::initials($doctor->name),
             'doctorId' => $doctor->getKey(),
+            'attending' => $doctor->is_active,
             'treatments' => $doctor->treatments->modelKeys(),
-            'working' => app(AvailabilityService::class)->workingRanges($doctor, $day)
-                ->map(fn (array $r) => ['start' => $this->minuteOf($r['start']), 'end' => $this->minuteOf($r['end'])])
-                ->all(),
+            // Quien ya no atiende no tiene horario abierto: su columna muestra solo las citas que le quedan.
+            'working' => $doctor->is_active
+                ? app(AvailabilityService::class)->workingRanges($doctor, $day)
+                    ->map(fn (array $r) => ['start' => $this->minuteOf($r['start']), 'end' => $this->minuteOf($r['end'])])
+                    ->all()
+                : [],
             'blocks' => [
                 ...$blocks->map(fn (ScheduleBlock $block) => $this->blockCard($block, $day)),
                 // Lo ofrecido a alguien de la lista de espera queda apartado mientras responde.
@@ -1222,11 +1234,16 @@ class Agenda extends Page
         ];
     }
 
-    /** @return Collection<int, Doctor> */
+    /**
+     * Los doctores activos y, además, quien ya no atiende pero todavía tiene citas por atender: esas citas no
+     * pueden desaparecer de la agenda. A este último no se le ofrecen horarios nuevos.
+     *
+     * @return Collection<int, Doctor>
+     */
     private function doctors(): Collection
     {
         return once(fn () => Doctor::query()
-            ->active()
+            ->where(fn (Builder $q) => $q->active()->orWhereHas('appointmentsToAttend'))
             ->with('treatments')
             ->when(! $this->managesAll(), fn (Builder $q) => $q->whereKey($this->ownDoctorId() ?? 0))
             ->orderBy('sort_order')

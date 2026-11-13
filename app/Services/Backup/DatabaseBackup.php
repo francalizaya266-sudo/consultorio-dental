@@ -12,7 +12,7 @@ use RuntimeException;
 /**
  * Copia de seguridad de la base de datos en un solo archivo .sql.gz, sin mysqldump (muchos hostings
  * compartidos no lo permiten). Se restaura con `php artisan respaldo:restaurar` o importándola en phpMyAdmin.
- * Las radiografías, fotos y firmas están en disco, no aquí: van en la copia de archivos del hosting.
+ * Las radiografías, fotos y firmas están en disco, no aquí: se bajan aparte con FilesBackup.
  */
 final class DatabaseBackup
 {
@@ -148,6 +148,11 @@ final class DatabaseBackup
     public function latestAt(): ?CarbonImmutable
     {
         return $this->list()[0]['created_at'] ?? null;
+    }
+
+    public function oldestAt(): ?CarbonImmutable
+    {
+        return collect($this->list())->last()['created_at'] ?? null;
     }
 
     /** No hay copias, o la última tiene más de un día y medio: la tarea programada del hosting no está corriendo. */

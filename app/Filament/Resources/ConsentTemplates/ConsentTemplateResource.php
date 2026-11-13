@@ -10,10 +10,12 @@ use App\Services\Clinical\ConsentService;
 use BackedEnum;
 use Filament\Actions\CreateAction;
 use Filament\Actions\EditAction;
+use Filament\Actions\ViewAction;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\Textarea;
 use Filament\Forms\Components\TextInput;
 use Filament\Forms\Components\Toggle;
+use Filament\Notifications\Notification;
 use Filament\Resources\Resource;
 use Filament\Schemas\Schema;
 use Filament\Support\Icons\Heroicon;
@@ -70,9 +72,16 @@ class ConsentTemplateResource extends Resource
             ->stackedOnMobile()
             ->modifyQueryUsing(fn ($query) => $query->with('treatment'))
             ->columns([
+                // Con dos textos en uso para lo mismo, se dice cuál se propone al firmar y cuál hay que elegir a mano.
                 TextColumn::make('name')
                     ->label('Nombre')
-                    ->weight('medium'),
+                    ->weight('medium')
+                    ->description(fn (ConsentTemplate $record) => match (app(ConsentService::class)->isProposedFirst($record)) {
+                        true => 'Hay otro en uso para lo mismo: al firmar se propone este, el más reciente.',
+                        false => 'Hay otro más reciente en uso para lo mismo: este solo sale si se elige al firmar.',
+                        null => null,
+                    })
+                    ->wrap(),
                 TextColumn::make('treatment.name')
                     ->label('Tratamiento')
                     ->placeholder('General'),
@@ -81,12 +90,22 @@ class ConsentTemplateResource extends Resource
                     ->prefix('v'),
                 ToggleColumn::make('is_active')
                     ->label('En uso')
-                    ->disabled(fn () => ! auth()->user()->isAdmin()),
+                    ->disabled(fn () => ! auth()->user()->isAdmin())
+                    ->afterStateUpdated(fn (ConsentTemplate $record, mixed $state) => Notification::make()
+                        ->success()
+                        ->title('"'.$record->name.'" '.($state ? 'queda en uso' : 'ya no se usa'))
+                        ->body($state ? null : 'Los consentimientos ya firmados no cambian.')
+                        ->send()),
             ])
             ->headerActions([
                 CreateAction::make()->label('Nuevo texto')->createAnother(false),
             ])
             ->recordActions([
+                // Los doctores no redactan los textos, pero los firman con el paciente: pueden leerlos.
+                ViewAction::make()
+                    ->label('Ver')
+                    ->modalHeading(fn (ConsentTemplate $record) => $record->name)
+                    ->visible(fn (ConsentTemplate $record) => ! auth()->user()->can('update', $record)),
                 EditAction::make(),
             ])
             ->paginated(false);

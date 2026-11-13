@@ -59,6 +59,7 @@ class DashboardPanelTest extends TestCase
         parent::setUp();
 
         Storage::fake('local');
+        Storage::fake('web');
         $this->freezeMonday();
     }
 
