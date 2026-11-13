@@ -4,6 +4,7 @@ namespace Tests\Feature\Filament;
 
 use App\Enums\TreatmentPlanStatus;
 use App\Filament\Pages\Agenda;
+use App\Filament\Pages\Auth\EditProfile;
 use App\Filament\Pages\Backups;
 use App\Filament\Pages\Dashboard;
 use App\Filament\Pages\Earnings;
@@ -43,7 +44,6 @@ use App\Models\Treatment;
 use App\Models\TreatmentPlan;
 use App\Models\User;
 use Database\Seeders\CatalogSeeder;
-use Filament\Auth\Pages\EditProfile;
 use Filament\Facades\Filament;
 use Illuminate\Foundation\Testing\LazilyRefreshDatabase;
 use Illuminate\Support\Facades\Hash;

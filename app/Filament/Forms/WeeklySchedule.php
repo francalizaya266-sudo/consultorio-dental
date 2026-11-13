@@ -83,8 +83,15 @@ class WeeklySchedule extends Repeater
     public function seasonOf(string $itemKey): ?string
     {
         $item = $this->getRawState()[$itemKey] ?? [];
+
+        return self::seasonInWords($item['valid_from'] ?? null, $item['valid_until'] ?? null);
+    }
+
+    /** Las fechas entre las que vale un tramo, dichas en palabras; null si vale todo el año. */
+    public static function seasonInWords(mixed $validFrom, mixed $validUntil): ?string
+    {
         $day = fn (?string $date): string => CarbonImmutable::parse($date)->format('d/m/Y');
-        [$from, $until] = [self::dateOnly($item['valid_from'] ?? null), self::dateOnly($item['valid_until'] ?? null)];
+        [$from, $until] = [self::dateOnly($validFrom), self::dateOnly($validUntil)];
 
         return match (true) {
             $from !== null && $until !== null => 'Solo del '.$day($from).' al '.$day($until),
