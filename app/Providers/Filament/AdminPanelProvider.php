@@ -29,6 +29,7 @@ use App\Http\Controllers\Reports\AgendaDayController;
 use App\Http\Controllers\Reports\CashClosingController;
 use App\Http\Controllers\Reports\EarningsExportController;
 use App\Http\Middleware\KeepRemindersUpToDate;
+use App\Http\Middleware\RequireOwnPassword;
 use App\Models\Setting;
 use App\Services\Backup\FilesBackup;
 use App\Services\Web\ClinicInfo;
@@ -212,6 +213,8 @@ class AdminPanelProvider extends PanelProvider
             ])
             ->authMiddleware([
                 Authenticate::class,
+                // Con una contraseña que le puso otra persona, primero elige la suya.
+                RequireOwnPassword::class,
                 KeepRemindersUpToDate::class,
             ])
             ->authenticatedRoutes(function () {

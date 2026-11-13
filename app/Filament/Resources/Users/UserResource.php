@@ -11,7 +11,7 @@ use BackedEnum;
 use Filament\Actions\ActionGroup;
 use Filament\Actions\DeleteAction;
 use Filament\Actions\EditAction;
-use Filament\Forms\Components\Select;
+use Filament\Forms\Components\Radio;
 use Filament\Forms\Components\TextInput;
 use Filament\Forms\Components\Toggle;
 use Filament\Notifications\Notification;
@@ -62,7 +62,9 @@ class UserResource extends Resource
                     ->email()
                     ->required()
                     ->unique(ignoreRecord: true),
-                Select::make('role')
+                // Los tres roles a la vista, cada uno con lo que puede ver y hacer: antes había que elegir uno para leer
+                // su explicación, o probar.
+                Radio::make('role')
                     ->label('Rol')
                     // Un doctor se crea en Doctores, con su ficha y su acceso: aquí no se puede volver doctor a nadie
                     // (quedaría sin agenda). Quien ya es doctor conserva su rol.
@@ -70,16 +72,16 @@ class UserResource extends Resource
                         ->reject(fn (UserRole $role) => $role === UserRole::Doctor && ! $record?->isDoctor())
                         ->mapWithKeys(fn (UserRole $role) => [$role->value => $role->getLabel()])
                         ->all())
+                    ->descriptions([
+                        UserRole::Admin->value => 'Todo el panel: agenda, pacientes, caja, reportes, inventario y Configuración. La historia clínica, solo si además es odontólogo.',
+                        UserRole::Reception->value => 'La agenda de todos los doctores, los pacientes, los avisos, los cobros y la caja. No ve la historia clínica, los reportes ni Configuración.',
+                        UserRole::Doctor->value => 'Su agenda, sus pacientes y la historia clínica: atiende, arma planes y receta. No ve la caja del consultorio.',
+                    ])
                     ->required()
                     // Nadie se cambia el rol a sí mismo: un administrador podría quedarse fuera de Configuración.
                     ->disabled(fn (?User $record) => self::isMe($record))
                     ->live()
-                    ->helperText(fn (Get $get) => match ($get('role') instanceof UserRole ? $get('role') : UserRole::tryFrom((string) $get('role'))) {
-                        UserRole::Admin => 'Todo el panel. Ve lo clínico solo si es odontólogo.',
-                        UserRole::Reception => 'Agenda de todos, pacientes, avisos y caja. No ve lo clínico.',
-                        UserRole::Doctor => 'Solo su agenda, sus pacientes y la historia clínica.',
-                        default => null,
-                    }),
+                    ->columnSpanFull(),
                 Toggle::make('is_dentist')
                     ->label('Es odontólogo (puede ver historias clínicas)')
                     ->visible(fn (Get $get) => in_array($get('role'), [UserRole::Admin, UserRole::Admin->value], true)),
@@ -97,7 +99,12 @@ class UserResource extends Resource
                     ->rule(Password::default())
                     ->required(fn (string $operation) => $operation === 'create')
                     ->dehydrated(fn (?string $state) => filled($state))
-                    ->helperText(fn (string $operation) => 'Mínimo 8 caracteres, con letras y números.'.($operation === 'edit' ? ' Déjala vacía para no cambiarla.' : '')),
+                    // Quien la escribe aquí la conoce: por eso vale solo para entrar una vez.
+                    ->helperText(fn (string $operation, ?User $record) => 'Mínimo 8 caracteres, con letras y números.'.match (true) {
+                        $operation === 'create' => ' Es solo para su primer ingreso: al entrar, el panel le pide elegir la suya.',
+                        self::isMe($record) => ' Déjala vacía para no cambiarla.',
+                        default => ' Déjala vacía para no cambiarla. Si le pones una nueva, al entrar el panel le pide elegir la suya.',
+                    }),
             ]);
     }
 
@@ -109,7 +116,7 @@ class UserResource extends Resource
                 TextColumn::make('name')
                     ->label('Nombre')
                     ->searchable()
-                    ->description(fn (User $record) => $record->email),
+                    ->description(fn (User $record) => $record->email.($record->must_change_password ? ' · Todavía no eligió su contraseña' : '')),
                 TextColumn::make('role')
                     ->label('Rol')
                     ->badge()
@@ -131,6 +138,7 @@ class UserResource extends Resource
             ->defaultPaginationPageOption(25)
             ->recordActions([
                 EditAction::make()
+                    ->mutateDataUsing(fn (array $data, User $record) => self::withTemporaryPassword($data, $record))
                     ->successNotificationTitle('Usuario guardado'),
                 // La misma regla que en el resto de Configuración: se borra solo a quien se registró por error y nunca
                 // entró; a los demás se les quita el acceso.
@@ -141,6 +149,18 @@ class UserResource extends Resource
                         ->successNotificationTitle('Usuario borrado'),
                 ])->visible(fn (User $record) => ! self::isMe($record)),
             ]);
+    }
+
+    /**
+     * Una contraseña puesta por otra persona es temporal: quien la recibe elige la suya al entrar. La que cada
+     * uno se pone a sí mismo ya es la suya.
+     *
+     * @param  array<string, mixed>  $data
+     * @return array<string, mixed>
+     */
+    public static function withTemporaryPassword(array $data, ?User $record = null): array
+    {
+        return filled($data['password'] ?? null) && ! self::isMe($record) ? [...$data, 'must_change_password' => true] : $data;
     }
 
     /** La ficha es la de quien está usando el panel. */

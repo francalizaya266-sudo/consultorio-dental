@@ -8,6 +8,7 @@ use App\Services\Web\ClinicInfo;
 use Carbon\Carbon;
 use Carbon\CarbonImmutable;
 use Illuminate\Auth\Events\Login;
+use Illuminate\Auth\Events\PasswordReset;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Facades\Event;
 use Illuminate\Support\ServiceProvider;
@@ -42,6 +43,9 @@ class AppServiceProvider extends ServiceProvider
         Password::defaults(fn () => Password::min(8)->letters()->numbers());
 
         Event::listen(Login::class, fn (Login $event) => $event->user->forceFill(['last_login_at' => now()])->saveQuietly());
+
+        // Quien pone su contraseña con el enlace del correo ya la eligió: no se le vuelve a pedir al entrar.
+        Event::listen(PasswordReset::class, fn (PasswordReset $event) => $event->user->forceFill(['must_change_password' => false])->saveQuietly());
 
         // Lo que guarda una persona lo ven las demás en pocos segundos, sin recargar.
         TodayPulse::watch();
