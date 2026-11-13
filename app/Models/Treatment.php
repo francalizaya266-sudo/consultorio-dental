@@ -17,9 +17,11 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\SoftDeletes;
+use Illuminate\Support\Arr;
+use Illuminate\Support\Facades\DB;
 
 /** Tratamiento o tipo de cita, con duración y precio referencial. */
-#[Fillable(['name', 'slug', 'summary', 'description', 'price_from', 'show_price', 'duration_minutes', 'buffer_minutes', 'sessions_label', 'checkup_months', 'next_session_days', 'before_instructions', 'aftercare', 'is_evaluation', 'online_bookable', 'is_public', 'image_path', 'seo_title', 'seo_description', 'sort_order', 'is_active'])]
+#[Fillable(['name', 'slug', 'kind', 'summary', 'description', 'price_from', 'show_price', 'duration_minutes', 'buffer_minutes', 'sessions_label', 'checkup_months', 'next_session_days', 'before_instructions', 'aftercare', 'is_evaluation', 'online_bookable', 'is_public', 'image_path', 'seo_title', 'seo_description', 'sort_order', 'is_active'])]
 class Treatment extends Model
 {
     /** @use HasFactory<TreatmentFactory> */
@@ -28,6 +30,7 @@ class Treatment extends Model
     protected function casts(): array
     {
         return [
+            'kind' => TreatmentKind::class,
             'price_from' => 'decimal:2',
             'checkup_months' => 'integer',
             'next_session_days' => 'integer',
@@ -72,6 +75,28 @@ class Treatment extends Model
             ->filter()
             ->values()
             ->all();
+    }
+
+    /**
+     * Una copia con otro nombre, para no volver a llenar toda la ficha: mismos tiempos, precio, seguimiento, doctores
+     * y materiales. Queda solo para el consultorio hasta que se elija dónde aparece, y lo de su página web no se copia.
+     */
+    public function duplicateAs(string $name): self
+    {
+        return DB::transaction(function () use ($name): self {
+            $copy = static::create([
+                ...Arr::except($this->only($this->getFillable()), ['slug', 'summary', 'description', 'image_path', 'seo_title', 'seo_description']),
+                'name' => $name,
+                'is_public' => false,
+                'online_bookable' => false,
+                'is_active' => true,
+            ]);
+
+            $copy->doctors()->attach($this->doctors()->active()->get()->mapWithKeys(fn (Doctor $doctor) => [$doctor->getKey() => ['duration_minutes' => $doctor->pivot->duration_minutes]])->all());
+            $copy->supplies()->attach($this->supplies()->get()->mapWithKeys(fn (Supply $supply) => [$supply->getKey() => ['quantity' => $supply->pivot->quantity]])->all());
+
+            return $copy;
+        });
     }
 
     public function appointments(): HasMany
@@ -141,13 +166,13 @@ class Treatment extends Model
         };
     }
 
-    /** Cada cuántos meses vuelve a control si esto fue lo último que se le hizo: lo que diga su ficha o, si no dice, lo usual según su nombre. */
+    /** Cada cuántos meses vuelve a control si esto fue lo último que se le hizo: lo que diga su ficha o, si no dice, lo usual para su tipo. */
     public function checkupMonths(): int
     {
         return $this->checkup_months ?: TreatmentKind::for($this)->checkupMonths();
     }
 
-    /** A cuántos días se agenda la sesión siguiente: lo que diga su ficha o, si no dice, lo usual según su nombre. */
+    /** A cuántos días se agenda la sesión siguiente: lo que diga su ficha o, si no dice, lo usual para su tipo. */
     public function nextSessionDays(): int
     {
         return $this->next_session_days ?: TreatmentKind::for($this)->nextSessionDays();

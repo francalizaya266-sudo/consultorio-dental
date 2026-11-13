@@ -4,6 +4,8 @@
 @php
     $info = app(\App\Services\Web\ClinicInfo::class);
     $clinic = $info->name();
+    $logo = $info->logoUrl();
+    $legal = $info->legalLine();
     $contact = collect([
         $info->fullAddress(),
         $info->whatsapp() ? 'WhatsApp '.\App\Support\Phone::display($info->whatsapp()) : null,
@@ -27,6 +29,8 @@
         .sheet { background: #fff; margin: 24px auto; padding: 14mm; max-width: {{ $size === 'A5' ? '148mm' : '210mm' }}; min-height: {{ $size === 'A5' ? '210mm' : '297mm' }}; box-shadow: 0 4px 24px rgb(15 23 42 / .12); display: flex; flex-direction: column; }
         header { display: flex; justify-content: space-between; gap: 16px; border-bottom: 2px solid var(--brand); padding-bottom: 10px; margin-bottom: 14px; }
         .clinic { font-size: 1.25rem; font-weight: 800; color: var(--brand); }
+        .clinic-block { display: flex; align-items: center; gap: 12px; }
+        .clinic-logo { max-height: 56px; max-width: 140px; object-fit: contain; }
         .muted { color: var(--muted); font-size: .85rem; }
         .nowrap { white-space: nowrap; }
         .doctor { text-align: right; }
@@ -79,16 +83,25 @@
 </div>
 <div class="sheet">
     <header>
-        <div>
-            <div class="clinic">{{ $clinic }}</div>
-            @if ($contact->isNotEmpty())
-                {{-- Si no entra en una línea, se corta entre un dato y otro: nunca a mitad del WhatsApp. --}}
-                <div class="muted">
-                    @foreach ($contact as $part)
-                        <span class="nowrap">{{ $part }}</span>@unless ($loop->last) · @endunless
-                    @endforeach
-                </div>
+        {{-- El logo del consultorio (el de Página web) va junto al nombre; la razón social y el RUC, debajo. --}}
+        <div class="clinic-block">
+            @if ($logo)
+                <img class="clinic-logo" src="{{ $logo }}" alt="">
             @endif
+            <div>
+                <div class="clinic">{{ $clinic }}</div>
+                @if ($legal)
+                    <div class="muted">{{ $legal }}</div>
+                @endif
+                @if ($contact->isNotEmpty())
+                    {{-- Si no entra en una línea, se corta entre un dato y otro: nunca a mitad del WhatsApp. --}}
+                    <div class="muted">
+                        @foreach ($contact as $part)
+                            <span class="nowrap">{{ $part }}</span>@unless ($loop->last) · @endunless
+                        @endforeach
+                    </div>
+                @endif
+            </div>
         </div>
         @if ($doctor)
         <div class="doctor">

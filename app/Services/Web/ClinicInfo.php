@@ -21,6 +21,14 @@ final class ClinicInfo
         return (string) Setting::get('clinic.name');
     }
 
+    /** "Vega Implant S.A.C. · RUC 20601234567", para las hojas impresas. Null si no se llenó ninguno de los dos. */
+    public function legalLine(): ?string
+    {
+        $ruc = $this->text('clinic.ruc');
+
+        return collect([$this->text('clinic.legal_name'), $ruc ? 'RUC '.$ruc : null])->filter()->implode(' · ') ?: null;
+    }
+
     public function district(): ?string
     {
         return $this->text('clinic.district');

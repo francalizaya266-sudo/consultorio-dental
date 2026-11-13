@@ -6,8 +6,9 @@ use App\Models\Treatment;
 use Illuminate\Support\Str;
 
 /**
- * Qué clase de trabajo es un tratamiento, elegida por su nombre (no hay que configurarla): decide qué datos
- * propios se anotan en la evolución y qué riesgos se revisan antes de empezar.
+ * Qué clase de trabajo es un tratamiento: decide qué datos propios se anotan en la evolución, qué riesgos se
+ * revisan antes de empezar y cada cuánto toca control. Se elige en la ficha del tratamiento; si no se elige,
+ * sale de su nombre.
  */
 enum TreatmentKind: string
 {
@@ -43,8 +44,19 @@ enum TreatmentKind: string
             return self::Evaluation;
         }
 
+        // Lo elegido en la ficha manda sobre lo que diga el nombre.
+        if ($treatment->kind !== null) {
+            return $treatment->kind;
+        }
+
+        return self::fromName($treatment->name);
+    }
+
+    /** El tipo que sale del nombre cuando en la ficha no se eligió ninguno: "Profilaxis" es una limpieza. */
+    public static function fromName(?string $name): self
+    {
         // Solo el nombre: es lo que el consultorio ve y corrige (el slug puede quedar de un nombre anterior).
-        $text = self::words($treatment->name);
+        $text = self::words((string) $name);
 
         foreach (self::KEYWORDS as $kind => $words) {
             foreach ($words as $word) {
@@ -55,6 +67,22 @@ enum TreatmentKind: string
         }
 
         return self::Other;
+    }
+
+    /** El tipo como se lee en la ficha del tratamiento. */
+    public function getLabel(): string
+    {
+        return match ($this) {
+            self::Evaluation => 'Evaluación',
+            self::Orthodontics => 'Ortodoncia',
+            self::Implant => 'Implante',
+            self::RootCanal => 'Endodoncia',
+            self::Extraction => 'Extracción o cirugía',
+            self::Whitening => 'Blanqueamiento',
+            self::Cleaning => 'Limpieza',
+            self::Filling => 'Curación o resina',
+            self::Other => 'Otro',
+        };
     }
 
     /** Cita de control: "Control de ortodoncia", "Control post extracción". */
@@ -117,7 +145,7 @@ enum TreatmentKind: string
     public static function treatmentsByCheckupMonths(): array
     {
         return Treatment::withTrashed()
-            ->get(['id', 'name', 'is_evaluation', 'checkup_months'])
+            ->get(['id', 'name', 'kind', 'is_evaluation', 'checkup_months'])
             ->toBase()
             ->groupBy(fn (Treatment $treatment) => $treatment->checkupMonths())
             ->except(self::Other->checkupMonths())

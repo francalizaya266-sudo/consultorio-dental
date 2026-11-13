@@ -7,6 +7,7 @@ use App\Filament\Pages\Backups;
 use App\Filament\Pages\Dashboard;
 use App\Filament\Pages\Settings;
 use App\Filament\Pages\WebSetup;
+use App\Filament\Resources\AuditLogs\AuditLogResource;
 use App\Filament\Resources\Campaigns\CampaignResource;
 use App\Filament\Resources\ConsentTemplates\ConsentTemplateResource;
 use App\Filament\Resources\Doctors\DoctorResource;
@@ -60,11 +61,12 @@ class AdminPanelProvider extends PanelProvider
 {
     /**
      * @var list<class-string> Páginas y secciones que van dentro de "Configuración", en el orden del menú:
-     *                         Consultorio (Ajustes, Copias), Catálogo (Tratamientos, Paquetes), Equipo (Doctores, Usuarios) y Textos.
+     *                         Consultorio (Ajustes, Copias, Historial), Catálogo (Tratamientos, Paquetes), Equipo (Doctores, Usuarios) y Textos.
      */
     private const SETTINGS = [
         Settings::class,
         Backups::class,
+        AuditLogResource::class,
         TreatmentResource::class,
         TreatmentPackageResource::class,
         DoctorResource::class,

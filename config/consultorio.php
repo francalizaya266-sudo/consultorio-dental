@@ -16,6 +16,9 @@ return [
             'district' => 'Juliaca',
             // Sale al pie de las recetas.
             'slogan' => 'Tu sonrisa, nuestra pasión',
+            // Razón social y RUC: salen en las hojas impresas, bajo el nombre.
+            'legal_name' => null,
+            'ruc' => null,
             'phone' => null,
             'email' => null,
             // Enlace de Google Maps del consultorio ("Cómo llegar") y de sus opiniones en Google.
@@ -63,7 +66,7 @@ return [
             'max_reschedule_options' => 3,
         ],
 
-        // Horas fijas del cron (se leen al arrancar, por eso vienen del .env y no del panel).
+        // Las horas de los avisos. Se cambian en Ajustes › Avisos; lo del .env es solo el valor con que nacen.
         'reminders' => [
             // Desde qué hora del día anterior (el último en que se atiende antes de la cita) queda listo el recordatorio.
             'day_before_at' => env('REMINDERS_AT', '09:00'),

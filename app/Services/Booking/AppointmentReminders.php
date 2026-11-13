@@ -10,6 +10,7 @@ use App\Filament\Resources\Appointments\AppointmentResource;
 use App\Models\Appointment;
 use App\Models\DoctorSchedule;
 use App\Models\ScheduleBlock;
+use App\Models\Setting;
 use App\Models\WhatsappMessage;
 use App\Services\StaffAlerts;
 use App\Services\WhatsApp\WhatsAppOutbox;
@@ -184,13 +185,13 @@ class AppointmentReminders
     private function remindAt(Appointment $appointment): CarbonImmutable
     {
         return $this->dayBefore($appointment->starts_at)
-            ->setTimeFromTimeString(config('consultorio.defaults.reminders.day_before_at', '09:00'));
+            ->setTimeFromTimeString((string) Setting::get('reminders.day_before_at', '09:00'));
     }
 
     private function flagAt(Appointment $appointment): CarbonImmutable
     {
         return $this->dayBefore($appointment->starts_at)
-            ->setTimeFromTimeString(config('consultorio.defaults.reminders.flag_unconfirmed_at', '16:00'));
+            ->setTimeFromTimeString((string) Setting::get('reminders.flag_unconfirmed_at', '16:00'));
     }
 
     /**
@@ -213,7 +214,7 @@ class AppointmentReminders
     private function isOpen(CarbonImmutable $day): bool
     {
         return $this->openDays[$day->toDateString()] ??= (function () use ($day): bool {
-            $at = $day->setTimeFromTimeString(config('consultorio.defaults.reminders.day_before_at', '09:00'));
+            $at = $day->setTimeFromTimeString((string) Setting::get('reminders.day_before_at', '09:00'));
 
             return DoctorSchedule::query()->validOn($day)->whereHas('doctor', fn (Builder $query) => $query->active())->exists()
                 && ! ScheduleBlock::query()->whereNull('doctor_id')->where('starts_at', '<=', $at)->where('ends_at', '>', $at)->exists();

@@ -1,5 +1,6 @@
 <?php
 
+use App\Models\Setting;
 use Illuminate\Support\Facades\Schedule;
 
 /*
@@ -7,12 +8,12 @@ use Illuminate\Support\Facades\Schedule;
 | * * * * * php /ruta/al/proyecto/artisan schedule:run >> /dev/null 2>&1
 */
 
-// Cada pasada prepara lo que ya toca (desde REMINDERS_AT del día anterior a la cita): si una se pierde, la siguiente lo pone al día.
+// Cada pasada prepara lo que ya toca (desde la hora de Ajustes › Avisos, el día anterior a la cita): si una se pierde, la siguiente lo pone al día.
 Schedule::command('citas:preparar-recordatorios')
     ->everyFifteenMinutes()
     ->withoutOverlapping();
 
-// Igual con las citas que a la tarde (FLAG_UNCONFIRMED_AT) del día anterior siguen sin confirmar.
+// Igual con las citas que a la tarde (la hora de Ajustes › Avisos) del día anterior siguen sin confirmar.
 Schedule::command('citas:marcar-sin-confirmar')
     ->everyFifteenMinutes()
     ->withoutOverlapping();
@@ -22,9 +23,11 @@ Schedule::command('cuotas:cargar')
     ->dailyAt('06:00')
     ->withoutOverlapping();
 
-// Unos días antes de cada cuota, su aviso queda listo en la bandeja de WhatsApp.
+// Unos días antes de cada cuota, su aviso queda listo en la bandeja de WhatsApp: desde la hora de los recordatorios
+// (Ajustes › Avisos). Cada pasada prepara solo lo que falta, así que una hora cambiada en el panel vale sin reiniciar nada.
 Schedule::command('cuotas:preparar-avisos')
-    ->dailyAt(config('consultorio.defaults.reminders.day_before_at', '09:00'))
+    ->everyFifteenMinutes()
+    ->when(fn () => now()->gte(today()->setTimeFromTimeString((string) Setting::get('reminders.day_before_at', '09:00'))))
     ->withoutOverlapping();
 
 // Lo ofrecido a la lista de espera que nadie confirmó a tiempo vuelve a quedar libre (y se sugiere al siguiente).
