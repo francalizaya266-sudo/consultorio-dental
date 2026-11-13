@@ -6,7 +6,7 @@ use App\Models\TreatmentPackage;
 use App\Models\User;
 use Illuminate\Auth\Access\Response;
 
-/** Paquetes: los arman el administrador y los doctores. Borrar, solo el administrador y solo lo que nunca se usó. */
+/** Paquetes: los arma y les pone precio el administrador; los doctores los ven para ofrecerlos en un plan. Borrar, solo lo que nunca se usó. */
 class TreatmentPackagePolicy
 {
     public function viewAny(User $user): bool
@@ -21,12 +21,12 @@ class TreatmentPackagePolicy
 
     public function create(User $user): bool
     {
-        return $user->isAdmin() || $user->isDoctor();
+        return $user->isAdmin();
     }
 
     public function update(User $user, TreatmentPackage $model): bool
     {
-        return $user->isAdmin() || $user->isDoctor();
+        return $user->isAdmin();
     }
 
     /** Solo el administrador, y solo lo registrado por error: lo que ya está en un plan se conserva. */

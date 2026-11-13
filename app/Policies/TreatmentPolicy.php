@@ -6,7 +6,10 @@ use App\Models\Treatment;
 use App\Models\User;
 use Illuminate\Auth\Access\Response;
 
-/** Tratamientos, precios y duraciones: los configuran el administrador y los doctores; quitarlos u ordenarlos, solo el administrador. */
+/**
+ * Tratamientos: qué se ofrece, a qué precio y dónde aparece lo decide el administrador. Los doctores abren cada
+ * ficha para ajustar lo clínico (duración, seguimiento e indicaciones); el formulario les deja solo esos datos.
+ */
 class TreatmentPolicy
 {
     public function viewAny(User $user): bool
@@ -21,7 +24,7 @@ class TreatmentPolicy
 
     public function create(User $user): bool
     {
-        return $user->isAdmin() || $user->isDoctor();
+        return $user->isAdmin();
     }
 
     public function update(User $user, Treatment $model): bool

@@ -58,9 +58,17 @@ class SetupDeleteRulesTest extends TestCase
         $package = TreatmentPackage::factory()->create();
         $this->actingAs(Doctor::factory()->create()->user);
 
+        // El doctor ve los paquetes para ofrecerlos: ni los cambia ni los borra.
+        Livewire::test(ManageTreatmentPackages::class)
+            ->assertCanSeeTableRecords([$package])
+            ->assertActionHidden(TestAction::make('edit')->table($package))
+            ->assertActionHidden(TestAction::make('delete')->table($package));
+
+        $this->actingAs(User::factory()->admin()->create());
+
         Livewire::test(ManageTreatmentPackages::class)
             ->assertActionVisible(TestAction::make('edit')->table($package))
-            ->assertActionHidden(TestAction::make('delete')->table($package));
+            ->assertActionVisible(TestAction::make('delete')->table($package));
     }
 
     public function test_the_package_form_names_its_fields_like_the_rest_of_the_catalogue(): void

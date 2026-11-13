@@ -78,12 +78,14 @@ class TreatmentResource extends Resource
                     ->required()
                     ->maxLength(100)
                     ->live(onBlur: true)
+                    ->disabled(fn () => ! self::decidesTheOffer())
                     ->afterStateUpdated(fn (Set $set, ?string $state, string $operation) => $operation === 'create' ? $set('slug', Str::slug($state)) : null),
                 Toggle::make('is_active')
                     ->label('Activo')
                     ->default(true)
                     ->inline(false)
                     ->live()
+                    ->disabled(fn () => ! self::decidesTheOffer())
                     ->helperText('Apagado, ya no sale al agendar ni en la web. Las citas ya dadas siguen igual.'),
                 // Cuatro bloques, cada uno con un tema: antes los datos de la agenda, del precio y de la web iban mezclados.
                 Section::make('Agenda')
@@ -118,11 +120,13 @@ class TreatmentResource extends Resource
                             ->default(fn () => Doctor::query()->active()->pluck('id')->all())
                             ->helperText(fn (Get $get) => self::whoAttendsHelp($get('doctors') ?? [], self::presenceOf($get)->isBookable()))
                             ->live()
+                            ->disabled(fn () => ! self::decidesTheOffer())
                             ->columnSpanFull(),
                         // No tenía ninguna ayuda y cambia cómo se comporta la primera cita.
                         Toggle::make('is_evaluation')
                             ->label('Es una evaluación')
                             ->live()
+                            ->disabled(fn () => ! self::decidesTheOffer())
                             ->helperText('Márcalo solo en la cita de revisión y diagnóstico. En la web va primero y es lo que se ofrece reservar cuando un tratamiento no se reserva en línea. En la historia, esa atención se abre como evaluación: motivo, examen y plan.')
                             ->columnSpanFull(),
                     ]),
@@ -136,6 +140,7 @@ class TreatmentResource extends Resource
                             ->prefix('S/')
                             ->numeric()
                             ->minValue(0)
+                            ->disabled(fn () => ! self::decidesTheOffer())
                             ->helperText('El que proponen los presupuestos y suman los paquetes. En la web sale como "desde S/ …".'),
                         TextInput::make('sessions_label')
                             ->label('Sesiones que suele llevar')
@@ -198,6 +203,7 @@ class TreatmentResource extends Resource
                 Section::make('Página web')
                     ->columnSpanFull()
                     ->columns(2)
+                    ->disabled(fn () => ! self::decidesTheOffer())
                     ->schema([
                         Radio::make('presence')
                             ->label('Dónde aparece')
@@ -261,6 +267,15 @@ class TreatmentResource extends Resource
                             ]),
                     ]),
             ]);
+    }
+
+    /**
+     * Qué se ofrece, a qué precio, con quién y dónde aparece lo decide el administrador. Un doctor abre la ficha para
+     * ajustar lo clínico: la duración, la limpieza, las sesiones, el tipo, el seguimiento y las indicaciones.
+     */
+    private static function decidesTheOffer(): bool
+    {
+        return (bool) auth()->user()?->isAdmin();
     }
 
     /**
@@ -418,6 +433,7 @@ class TreatmentResource extends Resource
                     ->visible(fn () => Supply::query()->exists()),
                 ToggleColumn::make('is_active')
                     ->label('Activo')
+                    ->disabled(fn () => ! self::decidesTheOffer())
                     ->afterStateUpdated(fn (Treatment $record, mixed $state) => Notification::make()
                         ->success()
                         ->title('"'.$record->name.'" '.($state ? 'vuelve a ofrecerse' : 'ya no se ofrece'))
@@ -441,6 +457,7 @@ class TreatmentResource extends Resource
                     ->iconButton()
                     ->tooltip('Editar')
                     ->mutateDataUsing(fn (array $data) => self::withPresence($data))
+                    ->modalDescription(fn () => self::decidesTheOffer() ? null : 'Puedes cambiar la duración, la limpieza, las sesiones, el tipo, el seguimiento y las indicaciones. El nombre, el precio, quién lo atiende y dónde aparece los cambia el administrador.')
                     ->successNotificationTitle('Tratamiento guardado'),
                 // Borrar va en el menú para que la fila entre entera. Con citas o cobros no se borra: avisa que se apaga "Activo".
                 ActionGroup::make([

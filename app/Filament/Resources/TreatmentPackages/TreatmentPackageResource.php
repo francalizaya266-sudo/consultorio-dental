@@ -39,7 +39,7 @@ use Filament\Tables\Table;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 
-/** Paquetes que arma el doctor: qué incluye, a qué precio y cómo se puede pagar. */
+/** Paquetes: qué incluye cada uno, a qué precio y cómo se puede pagar. Los arma el administrador; los doctores los ven. */
 class TreatmentPackageResource extends Resource
 {
     use HasSettingsMenuGroup, HasSpanishLabels;
@@ -242,6 +242,7 @@ class TreatmentPackageResource extends Resource
                     ->wrap(),
                 ToggleColumn::make('is_active')
                     ->label('Se ofrece')
+                    ->disabled(fn (TreatmentPackage $record) => ! auth()->user()->can('update', $record))
                     ->afterStateUpdated(fn (TreatmentPackage $record, mixed $state) => Notification::make()
                         ->success()
                         ->title('"'.$record->name.'" '.($state ? 'se ofrece de nuevo' : 'ya no se ofrece'))
