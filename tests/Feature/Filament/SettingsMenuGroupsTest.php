@@ -24,8 +24,8 @@ class SettingsMenuGroupsTest extends TestCase
 
     public function test_configuracion_goes_in_four_named_groups(): void
     {
-        // Las copias de seguridad llevan la historia clínica: las ve la administradora que también atiende.
-        $this->actingAs(User::factory()->admin(isDentist: true)->create());
+        // Cualquier administrador ve las copias de seguridad, aunque no atienda pacientes (descargarlas es otra cosa).
+        $this->actingAs(User::factory()->admin(isDentist: false)->create());
 
         $this->assertSame([
             'Consultorio: Ajustes',

@@ -2,6 +2,7 @@
 
 namespace App\Services\Backup;
 
+use App\Models\AuditLog;
 use App\Models\Setting;
 use App\Models\User;
 use Carbon\CarbonImmutable;
@@ -14,13 +15,44 @@ final class OffsiteCopies
 {
     public const REMIND_AFTER_DAYS = 7;
 
+    /** Como queda en el historial de cambios que alguien bajó o borró una copia. */
+    public const DOWNLOADED = 'backup_downloaded';
+
+    public const DELETED = 'backup_deleted';
+
     private const SETTING = 'backups.database_download';
 
     public function __construct(private DatabaseBackup $database, private FilesBackup $files) {}
 
-    public function recordDatabaseDownload(?User $by): void
+    public function recordDatabaseDownload(?User $by, string $file): void
     {
         Setting::set(self::SETTING, ['at' => now()->getTimestamp(), 'by' => $by?->name]);
+
+        $this->note(self::DOWNLOADED, $file);
+    }
+
+    /** Una copia trae los datos de todos los pacientes: en el historial de cambios queda quién bajó o borró cada una. */
+    public function note(string $event, string $file): void
+    {
+        Setting::noteEvent(self::SETTING, $event, ['file' => $file]);
+    }
+
+    /**
+     * La última vez que se bajó cada copia de los datos.
+     *
+     * @param  list<string>  $files
+     * @return array<string, array{at: CarbonImmutable, by: string|null}>
+     */
+    public function lastDownloadOfEach(array $files): array
+    {
+        return AuditLog::query()
+            ->where('event', self::DOWNLOADED)
+            ->whereIn('new_values->file', $files)
+            ->with('user')
+            ->oldest('id')
+            ->get()
+            ->mapWithKeys(fn (AuditLog $log) => [$log->new_values['file'] => ['at' => $log->created_at->toImmutable(), 'by' => $log->user?->name]])
+            ->all();
     }
 
     /** @return array{at: CarbonImmutable, by: string|null}|null */

@@ -51,6 +51,7 @@ final class DatabaseBackup
         $write = fn (string $sql) => gzwrite($file, $sql);
         $write('-- Copia de seguridad de '.Setting::get('clinic.name').' · '.now()->format('d/m/Y H:i')."\n");
         $write('-- Restaurar: php artisan respaldo:restaurar '.basename($name).", o importar en phpMyAdmin.\n\n");
+        $write(self::encodingLine($this->connection->getDriverName(), $this->connection->getConfig('charset')));
         $write(implode('', $this->foreignKeyChecks(false))."\n");
 
         foreach ($this->tables() as $table) {
@@ -167,6 +168,26 @@ final class DatabaseBackup
     public static function isBackupName(string $file): bool
     {
         return preg_match('/^respaldo_\d{4}-\d{2}-\d{2}_\d{6}\.sql\.gz$/', $file) === 1;
+    }
+
+    /**
+     * En MySQL, la copia empieza diciendo en qué codificación está el archivo. Sin esa línea, quien la importa con
+     * otro programa (la consola de MySQL, el panel de algunos hostings) la lee como latin1 y daña cada tilde y cada ñ.
+     */
+    public static function encodingLine(string $driver, ?string $charset): string
+    {
+        return in_array($driver, ['mysql', 'mariadb'], true) ? 'SET NAMES '.($charset ?: 'utf8mb4').";\n" : '';
+    }
+
+    /**
+     * Borra una copia guardada. La más reciente se queda siempre: es la que protege al consultorio hoy.
+     * Devuelve false si no se borró nada.
+     */
+    public function delete(string $file): bool
+    {
+        $older = array_slice(array_column($this->list(), 'file'), 1);
+
+        return in_array($file, $older, true) && Storage::disk('local')->delete(self::DIRECTORY.'/'.$file);
     }
 
     private function prune(): void

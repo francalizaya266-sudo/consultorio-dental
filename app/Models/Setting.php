@@ -52,6 +52,17 @@ class Setting extends Model
     }
 
     /**
+     * Deja en el historial algo que alguien hizo y que no cambia ningún ajuste, como descargar o borrar una copia
+     * de seguridad. Queda anotado junto al ajuste $key.
+     *
+     * @param  array<string, mixed>  $facts
+     */
+    public static function noteEvent(string $key, string $event, array $facts): void
+    {
+        static::query()->firstOrCreate(['key' => $key], ['value' => null])->writeChange($event, [], $facts);
+    }
+
+    /**
      * El historial guarda cada ajuste con su valor de antes y el de después, ya leídos (120, no "120").
      * La primera vez que se guarda una hoja se crean todos sus ajustes a la vez: de esos cuenta solo el que quedó
      * distinto del valor con que viene el sistema.

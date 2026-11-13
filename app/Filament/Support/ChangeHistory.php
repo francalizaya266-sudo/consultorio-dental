@@ -16,8 +16,11 @@ use App\Models\Setting;
 use App\Models\Treatment;
 use App\Models\TreatmentPackage;
 use App\Models\User;
+use App\Services\Backup\DatabaseBackup;
+use App\Services\Backup\OffsiteCopies;
 use App\Support\Money;
 use Carbon\CarbonImmutable;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Str;
 use Throwable;
 
@@ -37,6 +40,15 @@ final class ChangeHistory
         TreatmentPackage::class => 'Paquetes',
         ConsentTemplate::class => 'Textos de consentimiento',
         MessageTemplate::class => 'Textos de aviso',
+    ];
+
+    /** Las copias de seguridad no cambian ningún dato, pero cada una trae los de todos los pacientes: queda quién la bajó o la borró. */
+    public const BACKUPS = 'Copias de seguridad';
+
+    /** @var array<string, string> */
+    private const BACKUP_EVENTS = [
+        OffsiteCopies::DOWNLOADED => 'Se descargó',
+        OffsiteCopies::DELETED => 'Se borró del sistema',
     ];
 
     /** @var array<string, string> Cada ajuste (de Ajustes y de la puesta a punto de la página web) con su nombre en pantalla. */
@@ -204,7 +216,23 @@ final class ChangeHistory
     /** La sección de Configuración donde se hizo el cambio. */
     public static function section(AuditLog $log): string
     {
-        return self::SECTIONS[$log->auditable_type] ?? 'Otros';
+        return self::isAboutBackups($log) ? self::BACKUPS : (self::SECTIONS[$log->auditable_type] ?? 'Otros');
+    }
+
+    /** @return list<string> Las secciones por las que se puede filtrar el historial. */
+    public static function sections(): array
+    {
+        return [...array_values(array_unique(self::SECTIONS)), self::BACKUPS];
+    }
+
+    /** Deja solo los cambios de una sección. Las copias de seguridad se anotan junto a un ajuste, pero son sección aparte. */
+    public static function onlySection(Builder $query, string $section): Builder
+    {
+        if ($section === self::BACKUPS) {
+            return $query->whereIn('event', array_keys(self::BACKUP_EVENTS));
+        }
+
+        return $query->whereIn('auditable_type', self::classesOf($section))->whereNotIn('event', array_keys(self::BACKUP_EVENTS));
     }
 
     /**
@@ -222,6 +250,10 @@ final class ChangeHistory
     {
         $record = $log->auditable;
         $values = ($log->new_values ?? []) + ($log->old_values ?? []);
+
+        if (self::isAboutBackups($log)) {
+            return self::backupName((string) ($values['file'] ?? ''));
+        }
 
         if ($log->auditable_type === Setting::class) {
             $key = (string) ($record?->key ?? $values['key'] ?? '');
@@ -257,6 +289,7 @@ final class ChangeHistory
             'deleted' => $schedule ? 'Se quitó el tramo '.self::range($log->old_values ?? []) : 'Se borró',
             'restored' => 'Se restauró',
             'password_changed' => 'Se cambió su contraseña',
+            OffsiteCopies::DOWNLOADED, OffsiteCopies::DELETED => self::BACKUP_EVENTS[$log->event],
             default => self::changesInWords($log),
         };
     }
@@ -283,6 +316,10 @@ final class ChangeHistory
      */
     public static function changes(AuditLog $log): array
     {
+        if (self::isAboutBackups($log)) {
+            return [];
+        }
+
         $old = $log->old_values ?? [];
         $new = $log->new_values ?? [];
         $setting = $log->auditable_type === Setting::class;
@@ -311,6 +348,21 @@ final class ChangeHistory
         }
 
         return $changes;
+    }
+
+    private static function isAboutBackups(AuditLog $log): bool
+    {
+        return isset(self::BACKUP_EVENTS[$log->event]);
+    }
+
+    /** "Copia de los datos del 23/10/2026 03:00", o el .zip de las radiografías, fotos y firmas con su nombre. */
+    private static function backupName(string $file): string
+    {
+        if (DatabaseBackup::isBackupName($file)) {
+            return 'Copia de los datos del '.CarbonImmutable::createFromFormat('Y-m-d_His', substr($file, 9, 17))->format('d/m/Y H:i');
+        }
+
+        return 'Radiografías, fotos, documentos y firmas'.($file !== '' ? ' ('.$file.')' : '');
     }
 
     /**

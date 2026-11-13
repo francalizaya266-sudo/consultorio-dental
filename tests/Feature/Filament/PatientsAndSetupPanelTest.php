@@ -44,7 +44,7 @@ use App\Models\User;
 use App\Models\WhatsappMessage;
 use App\Services\Web\PublicImages;
 use Filament\Actions\Testing\TestAction;
-use Filament\Forms\Components\Select;
+use Filament\Forms\Components\Radio;
 use Illuminate\Foundation\Testing\LazilyRefreshDatabase;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Hash;
@@ -509,7 +509,7 @@ class PatientsAndSetupPanelTest extends TestCase
         Livewire::test(ManageUsers::class)
             ->assertActionHasUrl('newDoctor', DoctorResource::getUrl('create'))
             ->mountAction('create')
-            ->assertFormFieldExists('role', 'mountedActionSchema0', fn (Select $field) => ! array_key_exists(UserRole::Doctor->value, $field->getOptions()));
+            ->assertFormFieldExists('role', 'mountedActionSchema0', fn (Radio $field) => ! array_key_exists(UserRole::Doctor->value, $field->getOptions()));
     }
 
     public function test_patients_away_for_six_months_can_be_listed_to_call_them_back(): void

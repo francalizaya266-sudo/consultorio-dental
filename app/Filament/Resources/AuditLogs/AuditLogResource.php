@@ -20,7 +20,7 @@ use Illuminate\Database\Eloquent\Relations\MorphTo;
 
 /**
  * Historial de cambios de Configuración: quién cambió qué y cuándo, en Ajustes, la página web, usuarios, doctores,
- * tratamientos, paquetes y textos. Solo se lee.
+ * tratamientos, paquetes y textos, y quién descargó o borró cada copia de seguridad. Solo se lee.
  */
 class AuditLogResource extends Resource
 {
@@ -80,10 +80,10 @@ class AuditLogResource extends Resource
             ->filters([
                 SelectFilter::make('section')
                     ->label('Dónde')
-                    ->options(fn () => array_combine($sections = array_values(array_unique(ChangeHistory::SECTIONS)), $sections))
+                    ->options(fn () => array_combine(ChangeHistory::sections(), ChangeHistory::sections()))
                     ->query(fn (Builder $query, array $data) => $query->when(
                         $data['value'] ?? null,
-                        fn (Builder $query, string $section) => $query->whereIn('auditable_type', ChangeHistory::classesOf($section)),
+                        fn (Builder $query, string $section) => ChangeHistory::onlySection($query, $section),
                     )),
                 SelectFilter::make('user_id')
                     ->label('Quién')

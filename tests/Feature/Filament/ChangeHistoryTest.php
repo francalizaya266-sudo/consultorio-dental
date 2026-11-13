@@ -82,12 +82,17 @@ class ChangeHistoryTest extends TestCase
 
         $logs = AuditLog::query()->where('auditable_type', User::class)->where('auditable_id', $rosa->id)->oldest('id')->get();
         $this->assertSame(['created', 'updated', 'password_changed'], $logs->pluck('event')->all());
-        $this->assertStringNotContainsString('password', (string) json_encode($logs->map->only(['old_values', 'new_values'])));
+        // Queda que la tiene que cambiar al entrar, pero no la contraseña: ni la escrita ni la guardada.
+        $kept = $logs->flatMap(fn (AuditLog $log) => [...($log->old_values ?? []), ...($log->new_values ?? [])]);
+        $this->assertArrayNotHasKey('password', $kept->all());
+        $this->assertStringNotContainsString('Secreta-2026', (string) json_encode($logs->map->only(['old_values', 'new_values'])));
+        $this->assertStringNotContainsString($rosa->fresh()->password, (string) json_encode($logs->map->only(['old_values', 'new_values'])));
 
         Livewire::test(ManageAuditLogs::class)
             ->assertTableColumnStateSet('section', 'Usuarios', $logs[1])
             ->assertTableColumnStateSet('subject', 'Rosa Quispe', $logs[1])
-            ->assertTableColumnStateSet('summary', 'Rol: Recepción → Administrador', $logs[1])
+            // La contraseña que le puso el administrador es temporal: al entrar elige la suya.
+            ->assertTableColumnStateSet('summary', 'Rol: Recepción → Administrador · Tiene que elegir su contraseña al entrar: No → Sí', $logs[1])
             ->assertTableColumnStateSet('summary', 'Se cambió su contraseña', $logs[2])
             ->assertTableColumnStateSet('summary', 'Se creó', $logs[0]);
     }
