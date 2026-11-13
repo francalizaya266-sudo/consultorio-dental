@@ -132,8 +132,34 @@ final class ConsentService
      */
     public function render(string $body, Patient $patient, array $signer, ?Doctor $doctor, ?Treatment $treatment, CarbonInterface $date): string
     {
-        $risks = TreatmentRisks::forConsent($patient, TreatmentKind::for($treatment));
+        return $this->fill($body, $patient->full_name, $signer, $doctor?->name, $treatment?->name, $date, TreatmentRisks::forConsent($patient, TreatmentKind::for($treatment)));
+    }
 
+    /**
+     * Cómo queda un texto con datos de ejemplo, para revisarlo antes de guardarlo: lo que va entre llaves ya
+     * reemplazado y un riesgo de muestra donde irían los del paciente.
+     */
+    public function preview(string $body, ?Treatment $treatment = null): string
+    {
+        return $this->fill(
+            $body,
+            'María Quispe Mamani',
+            ['signer_name' => 'María Quispe Mamani', 'signer_document' => '45678912', 'signer_relationship' => PatientRelationship::Self],
+            Doctor::query()->active()->orderBy('sort_order')->value('name') ?? 'Dra. Ana Torres',
+            $treatment?->name,
+            today(),
+            ['Por la diabetes, la herida puede tardar más en sanar y hay más riesgo de infección.'],
+        );
+    }
+
+    /**
+     * El texto con cada dato en su lugar.
+     *
+     * @param  array<string, mixed>  $signer
+     * @param  list<string>  $risks
+     */
+    private function fill(string $body, string $patientName, array $signer, ?string $doctorName, ?string $treatmentName, CarbonInterface $date, array $risks): string
+    {
         if ($risks !== [] && ! str_contains($body, '{riesgos}')) {
             $paragraphs = preg_split("/\R\s*\R/", trim($body));
             $dated = collect($paragraphs)->search(fn (string $paragraph) => str_contains($paragraph, '{fecha}'));
@@ -146,14 +172,14 @@ final class ConsentService
             : (PatientRelationship::tryFrom((string) ($signer['signer_relationship'] ?? '')) ?? PatientRelationship::Self);
 
         $text = strtr($body, [
-            '{paciente}' => $patient->full_name,
+            '{paciente}' => $patientName,
             '{firmante}' => filled($signer['signer_name'] ?? null) ? $signer['signer_name'] : '________________',
             '{documento}' => filled($signer['signer_document'] ?? null) ? 'documento N.º '.$signer['signer_document'] : 'documento N.º ________',
             '{calidad}' => $relationship === PatientRelationship::Self
                 ? 'en mi calidad de paciente'
                 : 'en mi calidad de '.mb_strtolower($relationship->getLabel()).' del paciente',
-            '{doctor}' => $doctor?->name ?? 'el doctor tratante',
-            '{tratamiento}' => $treatment ? mb_strtolower($treatment->name) : 'el tratamiento indicado',
+            '{doctor}' => $doctorName ?? 'el doctor tratante',
+            '{tratamiento}' => $treatmentName !== null ? mb_strtolower($treatmentName) : 'el tratamiento indicado',
             '{fecha}' => $date->translatedFormat('j \d\e F \d\e Y'),
             '{ciudad}' => (string) (Setting::get('clinic.district') ?: '________'),
             '{riesgos}' => $risks === [] ? '' : "Por los antecedentes del paciente, se me explicó además que:\n".collect($risks)->map(fn (string $risk) => '• '.$risk)->implode("\n"),
