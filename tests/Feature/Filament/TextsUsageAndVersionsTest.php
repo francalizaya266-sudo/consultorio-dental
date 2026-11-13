@@ -68,7 +68,8 @@ class TextsUsageAndVersionsTest extends TestCase
             ->setActionData(['name' => 'Cirugía', 'body' => "Yo, {firmante}, con {documento}, {calidad}, autorizo a {doctor} a realizar {tratamiento} a {paciente}.\n\n{ciudad}, {fecha}."])
             ->assertMountedActionModalSee([
                 'Así queda al firmar',
-                'Yo, María Quispe Mamani, con documento N.º 45678912, en mi calidad de paciente, autorizo a Dra. Ana Torres a realizar el tratamiento indicado a María Quispe Mamani.',
+                // Un texto general se firma con el tratamiento de cada paciente: el ejemplo lleva uno.
+                'Yo, María Quispe Mamani, con documento N.º 45678912, en mi calidad de paciente, autorizo a Dra. Ana Torres a realizar extracción de una muela a María Quispe Mamani.',
                 // Los riesgos del paciente van solos antes de la fecha, aunque el texto no los nombre.
                 'Por los antecedentes del paciente, se me explicó además que:',
                 'Juliaca, 2 de noviembre de 2026.',

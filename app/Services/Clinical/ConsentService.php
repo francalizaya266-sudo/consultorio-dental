@@ -146,7 +146,8 @@ final class ConsentService
             'María Quispe Mamani',
             ['signer_name' => 'María Quispe Mamani', 'signer_document' => '45678912', 'signer_relationship' => PatientRelationship::Self],
             Doctor::query()->active()->orderBy('sort_order')->value('name') ?? 'Dra. Ana Torres',
-            $treatment?->name,
+            // Un texto general se firma con el tratamiento de ese paciente: el ejemplo lleva uno.
+            $treatment?->name ?? 'Extracción de una muela',
             today(),
             ['Por la diabetes, la herida puede tardar más en sanar y hay más riesgo de infección.'],
         );

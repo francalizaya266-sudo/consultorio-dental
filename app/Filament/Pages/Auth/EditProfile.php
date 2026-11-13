@@ -57,6 +57,7 @@ class EditProfile extends BaseEditProfile
                     ]),
                 Section::make('Tu horario de atención')
                     ->description('Lo cambia el administrador, en Configuración › Doctores. Si no es el que haces, avísale.')
+                    ->inlineLabel(false)
                     ->visible(fn () => $this->doctor() !== null)
                     ->schema([
                         TextEntry::make('schedule')

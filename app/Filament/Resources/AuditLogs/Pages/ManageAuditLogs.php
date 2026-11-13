@@ -12,6 +12,6 @@ class ManageAuditLogs extends ManageRecords
 
     public function getSubheading(): string|Htmlable|null
     {
-        return 'Quién cambió qué y cuándo en Configuración y en la página web. Las contraseñas nunca se guardan aquí: solo queda que se cambiaron.';
+        return 'Quién cambió qué y cuándo en Configuración y en la página web, y quién descargó o borró cada copia de seguridad. Las contraseñas nunca se guardan aquí: solo queda que se cambiaron.';
     }
 }

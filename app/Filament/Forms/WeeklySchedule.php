@@ -56,10 +56,16 @@ class WeeklySchedule extends Repeater
             ->schema([
                 DatePicker::make('valid_from')
                     ->label('Vale desde')
-                    ->displayFormat('d/m/Y'),
+                    ->native(false)
+                    ->displayFormat('d/m/Y')
+                    ->firstDayOfWeek(1)
+                    ->closeOnDateSelection(),
                 DatePicker::make('valid_until')
                     ->label('Vale hasta')
+                    ->native(false)
                     ->displayFormat('d/m/Y')
+                    ->firstDayOfWeek(1)
+                    ->closeOnDateSelection()
                     ->afterOrEqual('valid_from')
                     ->validationMessages(['after_or_equal' => 'Tiene que ser el mismo día o después de "Vale desde".']),
             ])

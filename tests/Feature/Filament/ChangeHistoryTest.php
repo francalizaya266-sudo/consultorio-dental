@@ -172,7 +172,7 @@ class ChangeHistoryTest extends TestCase
         $this->actingAs(Doctor::factory()->create()->user)->get($history)->assertForbidden();
 
         $admin = User::factory()->admin()->create();
-        $this->actingAs($admin)->get($history)->assertOk()->assertSee('Quién cambió qué y cuándo en Configuración y en la página web.');
+        $this->actingAs($admin)->get($history)->assertOk()->assertSee('Quién cambió qué y cuándo en Configuración y en la página web, y quién descargó o borró cada copia de seguridad.');
 
         $this->assertFalse($admin->can('create', AuditLog::class));
         $this->assertFalse($admin->can('update', $log));
