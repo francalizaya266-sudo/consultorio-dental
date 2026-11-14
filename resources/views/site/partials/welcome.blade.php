@@ -3,11 +3,8 @@
     Sin montos ni pagos: eso sigue en Mi cuenta, después de verificar por WhatsApp.
 --}}
 @php
-    use App\Enums\AppointmentStatus;
     use App\Enums\PatientRelationship;
-    use App\Support\Dates;
 
-    $policy = app(\App\Services\Booking\PatientChangePolicy::class);
     $isSelf = fn ($patient) => $patient->relationship === PatientRelationship::Self;
     $askedHealth = [];
     $nothing = $welcome['appointments']->isEmpty() && $welcome['sessions']->isEmpty() && $welcome['checkups']->isEmpty();
@@ -23,29 +20,14 @@
     @else
         <div class="welcome-cards">
             @foreach ($welcome['appointments'] as $appointment)
-                @php($pending = $appointment->status === AppointmentStatus::Pending)
-                <article class="welcome-card" data-welcome="appointment">
-                    <span class="welcome-kicker">{{ $isSelf($appointment->patient) ? 'Tu próxima cita' : 'Cita de '.$welcome['names'][$appointment->patient_id] }}</span>
-                    <strong class="welcome-when">{{ Dates::day($appointment->starts_at->toImmutable()) }}, {{ Dates::time($appointment->starts_at->format('H:i')) }}</strong>
-                    <p>{{ $appointment->treatment->name }} · {{ $appointment->doctor->name }}</p>
-                    @if ($appointment->patient->medicalBackground === null && ! in_array($appointment->patient_id, $askedHealth, true))
-                        @php($askedHealth[] = $appointment->patient_id)
-                        @include('site.partials.health-ask', ['patient' => $appointment->patient])
-                    @endif
-                    @if ($policy->canChange($appointment))
-                        <div class="welcome-actions">
-                            @if ($pending)
-                                <form method="POST" action="{{ route('site.account.confirm', $appointment) }}">
-                                    @csrf
-                                    <button type="submit" class="btn small">Confirmar</button>
-                                </form>
-                            @else
-                                <span class="badge ok">Confirmada</span>
-                            @endif
-                            <a href="{{ route('site.account.change', $appointment) }}" class="btn small quiet">Cambiar horario</a>
-                        </div>
-                    @endif
-                </article>
+                @php($askHealth = $appointment->patient->medicalBackground === null && ! in_array($appointment->patient_id, $askedHealth, true))
+                @php($askedHealth[] = $appointment->patient_id)
+                @include('site.partials.appointment-card', [
+                    'name' => $isSelf($appointment->patient) ? null : $welcome['names'][$appointment->patient_id],
+                    'confirmUrl' => route('site.account.confirm', $appointment),
+                    'changeUrl' => route('site.account.change', $appointment),
+                    'askHealth' => $askHealth,
+                ])
             @endforeach
 
             @foreach ($welcome['sessions'] as ['patient' => $patient, 'done' => $done, 'total' => $total, 'doctor' => $doctor, 'requested' => $requested])

@@ -9,7 +9,6 @@ use App\Models\MagicLink;
 use App\Services\Access\MagicLinkService;
 use App\Services\Access\PatientAccess;
 use App\Services\Booking\AppointmentService;
-use App\Services\Booking\PatientChangePolicy;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\View\View;
@@ -25,7 +24,6 @@ class AppointmentLinkController extends Controller
         private readonly MagicLinkService $links,
         private readonly PatientAccess $access,
         private readonly AppointmentService $appointments,
-        private readonly PatientChangePolicy $policy,
     ) {}
 
     public function show(string $token): View
@@ -45,9 +43,6 @@ class AppointmentLinkController extends Controller
         return view('patient.appointment', [
             'token' => $token,
             'appointment' => $appointment,
-            'canChange' => $this->policy->canChange($appointment),
-            'canCancel' => $this->policy->canSelfCancel($appointment),
-            'cancelLimitHours' => $this->policy->selfCancelMinHours(),
             'pendingRequest' => $appointment->rescheduleRequests()->where('status', RescheduleRequestStatus::Pending)->with('options')->latest('id')->first(),
         ]);
     }

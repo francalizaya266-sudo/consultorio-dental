@@ -2,6 +2,7 @@
 
 namespace Tests\Feature\Livewire\Site;
 
+use App\Enums\AppointmentOrigin;
 use App\Enums\AppointmentStatus;
 use App\Enums\BookingChannel;
 use App\Enums\DiscountType;
@@ -370,6 +371,100 @@ class BookingWizardTest extends TestCase
             ->assertSee('¡Tu cita quedó reservada!');
 
         $this->assertDatabaseCount('appointments', 1);
+    }
+
+    public function test_after_booking_the_patient_is_told_what_comes_next_and_can_save_the_appointment(): void
+    {
+        $this->freezeMonday();
+        Setting::set('clinic.address', 'Jr. Apurímac 648');
+        Setting::set('clinic.district', 'Juliaca');
+        $evaluation = Treatment::factory()->evaluation()->create();
+        $this->doctorOffering($evaluation);
+
+        $wizard = Livewire::test(BookingWizard::class)
+            ->call('chooseTreatment', $evaluation->id)
+            ->call('chooseTime', '10:00')
+            ->set('phone', '987 654 321')
+            ->set('firstName', 'María')
+            ->set('lastName', 'Quispe Rojas')
+            ->set('acceptsPrivacy', true)
+            ->call('book')
+            ->assertSet('step', 4)
+            ->assertSeeHtmlInOrder([
+                'Qué sigue',
+                'Confirma tu asistencia', 'Tu cita queda por confirmar', '987 654 321',
+                'Guardar en mi calendario',
+                'Jr. Apurímac 648, Juliaca', 'Cómo llegar',
+            ]);
+
+        // El archivo del calendario es el de la cita recién reservada.
+        $this->get($wizard->instance()->calendarUrl())
+            ->assertOk()
+            ->assertSee('DTSTART:20261102T150000Z');
+    }
+
+    public function test_how_they_found_us_is_asked_once_after_booking_instead_of_in_the_form(): void
+    {
+        $this->freezeMonday();
+        $evaluation = Treatment::factory()->evaluation()->create();
+        $this->doctorOffering($evaluation);
+        $book = fn (array $query, string $time, string $phone) => Livewire::withQueryParams($query)
+            ->test(BookingWizard::class)
+            ->call('chooseTreatment', $evaluation->id)
+            ->call('chooseTime', $time)
+            ->assertDontSee('¿Cómo nos conociste?')
+            ->set('phone', $phone)
+            ->set('firstName', 'María')
+            ->set('lastName', 'Quispe Rojas')
+            ->set('acceptsPrivacy', true)
+            ->call('book')
+            ->assertSet('step', 4);
+
+        $book([], '10:00', '987 654 321')
+            ->assertSee('¿cómo nos conociste?')
+            // "Campaña" la pone el sistema cuando reserva con una promoción: no se acepta desde aquí.
+            ->call('tellOrigin', AppointmentOrigin::Campaign->value)
+            ->assertSee('¿cómo nos conociste?')
+            ->call('tellOrigin', AppointmentOrigin::Facebook->value)
+            ->assertSee('¡Gracias por contarnos!')
+            ->assertDontSee('¿cómo nos conociste?')
+            // Ya contestó: otro toque no lo cambia.
+            ->call('tellOrigin', AppointmentOrigin::Google->value);
+
+        $appointment = Appointment::with('patient')->sole();
+        $this->assertSame(AppointmentOrigin::Facebook, $appointment->origin);
+        $this->assertSame(AppointmentOrigin::Facebook, $appointment->patient->origin);
+
+        // Quien llega desde un anuncio ya trae la respuesta en el enlace: no se le pregunta.
+        $book(['origen' => 'instagram'], '11:00', '912 345 678')->assertDontSee('¿cómo nos conociste?');
+        $this->assertSame(AppointmentOrigin::Instagram, Appointment::query()->latest('id')->first()->origin);
+    }
+
+    public function test_a_family_that_already_takes_promotions_is_not_asked_again(): void
+    {
+        $this->freezeMonday();
+        $evaluation = Treatment::factory()->evaluation()->create();
+        $this->doctorOffering($evaluation);
+        $account = Account::factory()->verified()->create(['accepts_promotions' => false]);
+        Patient::factory()->for($account)->create();
+        RememberedDevice::create(['account_id' => $account->id, 'token_hash' => hash('sha256', 'celular-de-rosa'), 'expires_at' => now()->addMonth()]);
+        $atTheForm = fn () => Livewire::withCookie(DeviceService::COOKIE, 'celular-de-rosa')
+            ->test(BookingWizard::class)
+            ->call('chooseTreatment', $evaluation->id)
+            ->call('chooseTime', '10:00');
+
+        $atTheForm()->assertSee('Quiero recibir promociones por WhatsApp');
+
+        $account->update(['accepts_promotions' => true]);
+
+        $atTheForm()
+            ->assertDontSee('Quiero recibir promociones por WhatsApp')
+            ->call('book')
+            ->assertSet('step', 4)
+            // Una cita desde el celular recordado no vuelve a preguntar cómo nos conoció.
+            ->assertDontSee('¿cómo nos conociste?');
+
+        $this->assertTrue($account->fresh()->accepts_promotions);
     }
 
     public function test_each_step_has_a_name_and_the_first_one_offers_whatsapp_when_it_hurts(): void

@@ -24,6 +24,7 @@ use Carbon\CarbonImmutable;
 use Illuminate\Auth\Access\AuthorizationException;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\RateLimiter;
+use Illuminate\Support\Facades\URL;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
 use Illuminate\View\View;
@@ -89,6 +90,10 @@ class BookingWizard extends Component
 
     #[Locked]
     public ?int $appointmentId = null;
+
+    /** Ya contó cómo nos conoció, después de reservar. */
+    #[Locked]
+    public bool $toldOrigin = false;
 
     /** Doctor elegido desde su ficha en la web: se usa en cuanto elige un tratamiento que atiende. */
     #[Locked]
@@ -446,6 +451,49 @@ class BookingWizard extends Component
         return $this->device?->account->privacy_accepted_at !== null;
     }
 
+    /** Quien ya aceptó recibir promociones no vuelve a ver la casilla en cada reserva. */
+    public function promotionsAlreadyAccepted(): bool
+    {
+        return (bool) $this->device?->account->accepts_promotions;
+    }
+
+    /**
+     * "¿Cómo nos conociste?" se pregunta con la cita ya reservada, no antes: solo a quien reserva desde un
+     * celular nuevo y todavía no lo dijo (ni llegó desde un anuncio o una promoción que ya lo dice).
+     */
+    public function asksOrigin(): bool
+    {
+        $appointment = $this->appointment;
+
+        return $this->step === 4 && $appointment !== null && $this->device === null
+            && $appointment->origin === null && $appointment->patient->origin === null;
+    }
+
+    public function tellOrigin(string $origin): void
+    {
+        $origin = $this->originsToAsk()->first(fn (AppointmentOrigin $option) => $option->value === $origin);
+
+        if ($origin === null || ! $this->asksOrigin()) {
+            return;
+        }
+
+        $this->appointment->update(['origin' => $origin]);
+        $this->appointment->patient->update(['origin' => $origin]);
+        $this->toldOrigin = true;
+    }
+
+    /** @return Collection<int, AppointmentOrigin> Campaña y referido no se preguntan: los pone el sistema. */
+    public function originsToAsk(): Collection
+    {
+        return collect(AppointmentOrigin::cases())->reject(fn (AppointmentOrigin $origin) => in_array($origin, [AppointmentOrigin::Campaign, AppointmentOrigin::Referral], true))->values();
+    }
+
+    /** La cita como archivo para el calendario del celular. La dirección va firmada: solo la tiene quien reservó. */
+    public function calendarUrl(): ?string
+    {
+        return $this->appointmentId ? URL::signedRoute('site.booking.calendar', ['appointment' => $this->appointmentId], absolute: false) : null;
+    }
+
     /** Enlace para escribir al consultorio con la reserva ya contada. */
     public function whatsappUrl(): ?string
     {
@@ -476,7 +524,6 @@ class BookingWizard extends Component
     {
         return view('livewire.site.booking-wizard', [
             'relationships' => collect(PatientRelationship::cases())->reject(fn (PatientRelationship $r) => $r === PatientRelationship::Self),
-            'origins' => collect(AppointmentOrigin::cases())->reject(fn (AppointmentOrigin $o) => in_array($o, [AppointmentOrigin::Campaign, AppointmentOrigin::Referral], true)),
         ]);
     }
 }

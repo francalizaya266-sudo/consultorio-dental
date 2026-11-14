@@ -33,7 +33,9 @@ class AppointmentLinkControllerTest extends TestCase
         $this->get(route('patient.link', $token))
             ->assertOk()
             ->assertSee($appointment->patient->first_name)
-            ->assertSee('Confirmar mi asistencia');
+            ->assertSee('Confirmar asistencia')
+            // Los botones de esta página son los de la cita: sin la barra de "Reservar, WhatsApp, Llamar".
+            ->assertDontSee('class="action-bar"', false);
 
         $this->assertSame(AppointmentStatus::Pending, $appointment->fresh()->status);
         $this->assertNull($appointment->patient->account->fresh()->phone_verified_at);
@@ -74,6 +76,17 @@ class AppointmentLinkControllerTest extends TestCase
             ->assertSessionHas('error');
 
         $this->assertSame(AppointmentStatus::Pending, $appointment->fresh()->status);
+    }
+
+    public function test_too_close_to_the_appointment_the_link_explains_it_instead_of_offering_to_cancel(): void
+    {
+        $this->freezeMonday();
+        [, $token] = $this->appointmentWithLink('2026-11-02 15:00');
+
+        $this->get(route('patient.link', $token))
+            ->assertOk()
+            ->assertSee('Faltan menos de 12 horas para la cita')
+            ->assertDontSee('Sí, cancelar la cita');
     }
 
     public function test_an_expired_link_shows_a_friendly_page(): void

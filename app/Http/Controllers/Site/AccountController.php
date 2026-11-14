@@ -83,7 +83,6 @@ class AccountController extends Controller
             'plans' => $elevated ? $this->plansOf($account) : null,
             'balances' => $elevated ? $patients->mapWithKeys(fn ($patient) => [$patient->full_name => $patient->balance()])->reject(fn (float $balance) => $balance === 0.0) : null,
             'elevated' => $elevated,
-            'policy' => $this->policy,
         ]);
     }
 
