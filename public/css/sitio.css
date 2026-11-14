@@ -537,6 +537,10 @@ details.more[open] > summary::after { transform: translateY(.06em) rotate(225deg
 .hero-band.with-photo .hero-photo { aspect-ratio: 16 / 9; -webkit-mask: linear-gradient(180deg, #000 62%, transparent); mask: linear-gradient(180deg, #000 62%, transparent); }
 .hero-band.with-photo .hero { padding-top: 0; margin-top: -8px; }
 .hero.with-photo .hero-art { display: none; }
+/* Quien vuelve ve primero lo suyo: en el celular la foto no se pone delante de su tarjeta. */
+.hero-band.with-photo:has(.welcome) { padding-top: 20px; }
+.hero-band.with-photo:has(.welcome) .hero-photo { display: none; }
+.hero-band.with-photo:has(.welcome) .hero { padding-top: 12px; margin-top: 0; }
 
 /* Lo que tranquiliza antes de reservar: una tarjeta blanca montada sobre el borde de la portada. */
 .trust {
@@ -647,6 +651,7 @@ a.rating > span:last-child { text-decoration: underline; text-decoration-color: 
     .hero.with-art { grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 24px; }
     .hero.with-art .hero-art { width: clamp(220px, 34vw, 320px); margin: 0; }
     .hero-band.with-photo .hero-photo { aspect-ratio: 5 / 2; }
+    .hero-band.with-photo:has(.welcome) { padding-top: 28px; }
     .trust { padding: 18px 24px; }
 }
 @media (min-width: 900px) {
@@ -656,16 +661,31 @@ a.rating > span:last-child { text-decoration: underline; text-decoration-color: 
     .hero.with-art .hero-art { justify-self: center; width: min(100%, 440px); }
     .hero-band .welcome { margin: 0 0 44px; }
     .next-free { padding: 36px; }
-    /* La foto del consultorio llena el lado derecho de la portada y se funde con el azul; el implante queda sobre su borde. */
+    /* La foto del consultorio llena el lado derecho de la portada y se funde con el azul hacia el texto. */
     .hero-band.with-photo { padding-top: 44px; }
     .hero-band.with-photo .hero-photo {
-        position: absolute; z-index: -1; inset: 0 0 0 auto; width: 54%; aspect-ratio: auto;
-        -webkit-mask: linear-gradient(90deg, transparent 0, #000 34%); mask: linear-gradient(90deg, transparent 0, #000 34%);
+        --to-text: linear-gradient(90deg, transparent 0, rgb(0 0 0 / .32) 26%, #000 60%);
+        position: absolute; z-index: -1; inset: 0 0 0 auto; width: 54%; aspect-ratio: auto; -webkit-mask: var(--to-text); mask: var(--to-text);
     }
     .hero-band.with-photo .hero { margin-top: 0; }
-    .hero.with-photo .hero-art { display: grid; justify-self: start; width: min(100%, 320px); margin: 0 0 0 -24px; }
-    /* Sobre la foto, el círculo lleva un cristal azul para que el implante no se pierda si la foto es clara. */
-    .hero.with-photo .hero-art .ring:not(.inner):not(.ticks) { background: radial-gradient(closest-side, rgb(24 92 204 / .62), rgb(8 44 120 / .5)); }
+    /* Bajo la tarjeta de quien vuelve, la foto se queda junto al título y no crece con la franja. */
+    .hero-band.with-photo:has(.welcome) { padding-top: 44px; }
+    .hero-band.with-photo:has(.welcome) .hero-photo {
+        display: block; top: auto; height: 540px;
+        -webkit-mask: var(--to-text), linear-gradient(180deg, transparent 0, #000 24%); -webkit-mask-composite: source-in;
+        mask: var(--to-text), linear-gradient(180deg, transparent 0, #000 24%); mask-composite: intersect;
+    }
+    .hero-band.with-photo:has(.welcome) .hero { padding-top: 0; }
+    /* El implante flota donde la foto se funde, sin tapar a quien sale en ella: en pantallas anchas se arrima al texto. */
+    .hero.with-photo { gap: 24px; }
+    .hero.with-photo .hero-art { display: grid; justify-self: start; width: clamp(200px, 36vw - 150px, 380px); margin: 0 0 0 clamp(-120px, (1024px - 100vw) * .29, 0px); }
+    /* Detrás, una sombra azul para que la corona blanca no se pierda si la foto es clara. */
+    .hero.with-photo .hero-art::before { inset: -8%; background: radial-gradient(closest-side, rgb(7 30 80 / .8), rgb(8 40 104 / .46) 56%, transparent 78%); }
+    /* En lugar del círculo, una órbita de luz inclinada: su mitad de atrás pasa por detrás del implante y la de adelante, por delante. */
+    .hero.with-photo .hero-art .ring { inset: 50% -2% 19%; border-width: 3px; transform: rotate(-13deg); }
+    .hero.with-photo .hero-art .ring.inner { z-index: 2; border-color: rgb(150 220 255 / .92); box-shadow: 0 0 22px rgb(90 190 255 / .85); clip-path: inset(50% -20% -40% -20%); }
+    .hero.with-photo .hero-art .ring.ticks { display: none; }
+    .hero.with-photo .hero-art img { z-index: 1; width: 40%; }
     /* Las frases, en una sola fila con forma de píldora. */
     .trust { display: flex; max-width: 1020px; margin: -64px auto 0; padding: 20px 12px; border-radius: 999px; }
     .trust li { flex: 1 1 0; justify-content: center; padding: 2px 20px; }

@@ -153,7 +153,7 @@ return [
     'string' => ':attribute debe ser un texto.',
     'timezone' => ':attribute debe ser una zona horaria válida.',
     'unique' => 'Ya existe un registro con ese :attribute.',
-    'uploaded' => 'No se pudo subir :attribute. Inténtalo de nuevo.',
+    'uploaded' => 'No se pudo subir :attribute. Inténtalo de nuevo y, si vuelve a fallar, prueba con un archivo más liviano.',
     'uppercase' => ':attribute debe estar en mayúsculas.',
     'url' => ':attribute debe ser una dirección web válida.',
     'ulid' => ':attribute debe ser un ULID válido.',
