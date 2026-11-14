@@ -17,11 +17,17 @@
     --muted: #4a5a6e;
     /* Azul del recetario de la clínica. */
     --accent: #1e4f91;
-    --accent-press: #173e73;
     --accent-ink: #ffffff;
     /* Azul noche para las franjas que tienen que pesar: horario libre, pie. */
     --navy: #0b1f3a;
     --navy-soft: #a9bfdc;
+    /* Azul marino de los botones y de la portada; el celeste del título sobre lo oscuro; la niebla del fondo del inicio. */
+    --btn: #0e2f6b;
+    --btn-press: #0a2452;
+    --sky-ink: #86c8ff;
+    --mist: #f3f7fd;
+    --card-line: #e4ecf7;
+    --card-shadow: 0 1px 2px rgb(12 26 46 / .05), 0 14px 32px -18px rgb(14 47 107 / .3);
     --line: #dfe6ef;
     /* Curvas de movimiento: las de CSS por defecto se sienten flojas. */
     --ease-out: cubic-bezier(.23, 1, .32, 1);
@@ -66,6 +72,9 @@ a { color: var(--accent); text-underline-offset: .18em; }
 img { max-width: 100%; display: block; }
 
 :focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
+/* Sobre el azul oscuro, el marco del teclado va en blanco para que se vea. */
+:is(.hero-band, .quick, .feature, .next-free, .site-footer) :focus-visible { outline-color: #fff; }
+.hero-band .welcome :focus-visible { outline-color: var(--accent); }
 
 ::selection { background: var(--surface-strong); }
 
@@ -81,19 +90,30 @@ img { max-width: 100%; display: block; }
 
 .site-header { background: rgb(255 255 255 / .94); position: sticky; top: 0; z-index: 20; border-bottom: 1px solid var(--line); -webkit-backdrop-filter: saturate(1.4) blur(10px); backdrop-filter: saturate(1.4) blur(10px); }
 .site-header .wrap { display: flex; align-items: center; gap: 12px; min-height: 64px; max-width: calc(var(--wide) + 2 * var(--gutter)); position: relative; }
-.wordmark { display: inline-flex; align-items: center; gap: 10px; font-weight: 750; font-size: 1.125rem; letter-spacing: -.02em; color: var(--ink); text-decoration: none; margin-right: auto; line-height: 1.15; }
-.wordmark .mark { flex: none; display: grid; place-items: center; width: 34px; height: 34px; border-radius: 10px; background: var(--accent); color: #fff; }
-.wordmark .mark svg { width: 22px; height: 22px; stroke-width: 1.9; }
+/* La marca: el diente en línea, el nombre y debajo dónde atiende. */
+.wordmark { display: inline-flex; align-items: center; gap: 10px; font-weight: 800; font-size: 1.125rem; letter-spacing: -.02em; color: var(--ink); text-decoration: none; margin-right: auto; line-height: 1.15; }
+.mark { flex: none; display: grid; place-items: center; width: 40px; height: 40px; color: var(--btn); }
+.mark svg { width: 38px; height: 38px; stroke-width: 1.7; }
+.brand { display: grid; gap: 2px; white-space: nowrap; }
+.brand small { font-size: .75rem; font-weight: 500; letter-spacing: 0; line-height: 1.2; color: var(--muted); }
+/* En los celulares más angostos (320) el nombre baja a dos líneas y deja el sitio de "Menú". */
+@media (max-width: 379px) {
+    .wordmark .brand { white-space: normal; }
+    .wordmark .brand small { display: none; }
+}
 .wordmark .logo { display: block; height: 40px; width: auto; max-width: min(220px, 52vw); object-fit: contain; object-position: left center; }
-.site-nav { display: flex; align-items: center; gap: 4px; }
-.site-nav a { color: var(--muted); text-decoration: none; font-weight: 600; font-size: 1rem; padding: 8px 8px; border-radius: 999px; white-space: nowrap; transition: color .15s ease, background-color .15s ease; }
+.site-nav { display: flex; align-items: center; gap: 2px; margin-right: auto; }
+.site-nav a { position: relative; display: inline-flex; align-items: center; gap: 6px; color: var(--ink); text-decoration: none; font-weight: 600; font-size: .9375rem; padding: 10px; border-radius: 999px; white-space: nowrap; transition: color .15s ease, background-color .15s ease; }
+.site-nav a svg { width: 17px; height: 17px; flex: none; }
 .site-header .btn { white-space: nowrap; gap: 0; }
+.site-header .btn svg { margin-right: 8px; }
 @media (max-width: 479px) { .site-header .long { display: none; } }
 @media (max-width: 359px) { .action-bar .long { display: none; } }
-@media (min-width: 480px) { .site-nav a { padding: 10px 12px; } }
-.site-nav a[aria-current="page"] { background: var(--surface); color: var(--ink); }
+/* La página en la que estás: en azul y con una raya debajo. */
+.site-nav > a[aria-current="page"] { color: var(--accent); }
+.site-nav > a[aria-current="page"]::after { content: ""; position: absolute; left: 10px; right: 10px; bottom: -4px; height: 2px; border-radius: 2px; background: var(--accent); }
 
-/* En el celular, las páginas van en "Menú"; desde 960 px, a la vista. */
+/* En el celular, las páginas van en "Menú"; desde 1080 px, a la vista. */
 .site-nav { display: none; }
 .menu > summary {
     list-style: none; cursor: pointer; display: inline-flex; align-items: center; min-height: 40px; padding: 8px 16px;
@@ -108,20 +128,20 @@ img { max-width: 100%; display: block; }
 .menu-panel a { color: var(--ink); text-decoration: none; font-weight: 650; font-size: 1.25rem; letter-spacing: -.01em; padding: 12px 0; }
 .menu-panel a + a { border-top: 1px solid var(--line); }
 .menu-panel a[aria-current="page"] { color: var(--accent); }
-@media (min-width: 960px) {
+@media (min-width: 1080px) {
     .site-nav { display: flex; }
     .menu { display: none; }
 }
-/* Con una página extra a la vista (por ejemplo, Preguntas frecuentes) los enlaces no entran hasta 1200 px: mientras, queda "Menú". */
-@media (max-width: 1199px) {
+/* Con una página extra a la vista (por ejemplo, Preguntas frecuentes) los enlaces no entran hasta 1280 px: mientras, queda "Menú". */
+@media (max-width: 1279px) {
     .site-header.many .site-nav { display: none; }
     .site-header.many .menu { display: block; }
 }
 /* "Más": cuando hay varias páginas extra (Antes y después, Opiniones, Preguntas frecuentes) van en una lista corta. */
 .more-nav { position: relative; }
 .more-nav > summary {
-    list-style: none; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; color: var(--muted);
-    font-weight: 600; font-size: 1rem; padding: 10px 12px; border-radius: 999px; white-space: nowrap;
+    list-style: none; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; color: var(--ink);
+    font-weight: 600; font-size: .9375rem; padding: 10px; border-radius: 999px; white-space: nowrap;
 }
 .more-nav > summary::-webkit-details-marker { display: none; }
 .more-nav > summary::after {
@@ -129,7 +149,8 @@ img { max-width: 100%; display: block; }
     transform: rotate(45deg); transition: transform .15s ease;
 }
 .more-nav[open] > summary::after { transform: rotate(-135deg); margin-top: 3px; }
-.more-nav[open] > summary, .more-nav > summary[aria-current="page"] { background: var(--surface); color: var(--ink); }
+.more-nav[open] > summary { background: var(--surface); }
+.more-nav > summary[aria-current="page"], .more-panel a[aria-current="page"] { color: var(--accent); }
 .more-panel {
     position: absolute; right: 0; top: calc(100% + 10px); min-width: 230px; display: grid; gap: 2px; padding: 6px;
     background: var(--ground); border: 1px solid var(--line); border-radius: 16px; box-shadow: 0 18px 30px -18px rgb(12 26 46 / .35);
@@ -137,11 +158,24 @@ img { max-width: 100%; display: block; }
 .site-nav .more-panel a { border-radius: 10px; color: var(--ink); }
 
 main { padding: 24px 0 96px; flex: 1 0 auto; }
+/* El inicio empieza con la portada pegada al encabezado, sobre un fondo de niebla que se aclara al bajar. */
+main.with-hero { padding-top: 0; background: linear-gradient(180deg, var(--mist) 0, var(--mist) 45%, var(--ground) 100%) no-repeat top / 100% 2400px; }
+main.with-hero > .wrap:first-child .flash { margin: 16px 0; }
 
-.site-footer { background: var(--navy); color: #c9d6e8; padding: 64px 0 104px; margin-top: 24px; }
-.site-footer .wrap { display: grid; gap: 32px; }
-.site-footer .name { font-size: clamp(1.5rem, 4vw, 2rem); font-weight: 750; letter-spacing: -.03em; line-height: 1.05; color: #fff; margin: 0; padding-bottom: 28px; border-bottom: 1px solid rgb(255 255 255 / .12); }
-.site-footer.minimal .name { padding-bottom: 0; border-bottom: 0; }
+/* El pie, en el azul de la portada: la marca y "Reservar cita" arriba, las páginas al medio y lo legal abajo. */
+.site-footer { position: relative; isolation: isolate; overflow: hidden; background: linear-gradient(120deg, #06173a 0%, #0a2757 62%, #0e3c84 100%); color: #c9d6e8; padding: 56px 0 104px; margin-top: 24px; }
+.site-footer::before {
+    content: ""; position: absolute; z-index: -1; width: 720px; height: 720px; right: -220px; bottom: -520px; border-radius: 50%;
+    background: radial-gradient(closest-side, rgb(64 140 240 / .5), transparent);
+}
+.site-footer .wrap { display: grid; gap: 28px; }
+.footer-top { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 16px 24px; }
+.site-footer .name { display: flex; align-items: center; gap: 12px; font-size: clamp(1.25rem, 3.4vw, 1.5rem); font-weight: 800; letter-spacing: -.025em; line-height: 1.1; color: #fff; margin: 0; }
+.site-footer .mark { width: 48px; height: 48px; color: #fff; }
+.site-footer .mark svg { width: 46px; height: 46px; }
+.site-footer .brand small { font-size: .875rem; color: #c9d6e8; }
+.footer-bottom { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 4px 24px; padding-top: 20px; border-top: 1px solid rgb(255 255 255 / .14); font-size: .875rem; color: var(--navy-soft); }
+.footer-bottom a { color: #c9d6e8; }
 .site-footer a { color: #fff; }
 .site-footer p { margin: 0 0 8px; }
 .site-footer h2 { font-size: .8125rem; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: var(--navy-soft); margin: 0 0 12px; }
@@ -156,8 +190,11 @@ main { padding: 24px 0 96px; flex: 1 0 auto; }
 .site-footer a { text-decoration-color: rgb(255 255 255 / .35); }
 .site-footer .note { color: var(--navy-soft); }
 .site-footer ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
-.site-footer .socials { display: flex; flex-wrap: wrap; gap: 12px; }
-.footer-cols { display: grid; gap: 28px; }
+.site-footer ul a { text-decoration: none; }
+.site-footer .socials { display: flex; flex-wrap: wrap; gap: 10px; }
+.site-footer .socials a { display: grid; place-items: center; width: 44px; height: 44px; border-radius: 50%; background: rgb(255 255 255 / .1); transition: background-color .15s ease; }
+.site-footer .socials svg { width: 21px; height: 21px; }
+.footer-cols { display: grid; gap: 28px; padding-top: 28px; border-top: 1px solid rgb(255 255 255 / .14); }
 @media (min-width: 720px) { .footer-cols { grid-template-columns: repeat(2, 1fr); } }
 @media (min-width: 1080px) {
     .footer-cols { grid-template-columns: 1fr 1.3fr 1fr 1fr; }
@@ -165,9 +202,9 @@ main { padding: 24px 0 96px; flex: 1 0 auto; }
 }
 
 /* Pie corto donde la página ya dio la dirección, el horario y el WhatsApp: el nombre y las páginas, en una fila. */
-.site-footer.short { padding: 40px 0 48px; }
+.site-footer.short { padding: 40px 0 40px; }
 .site-footer.short .wrap { gap: 20px; }
-.site-footer.short .name { font-size: 1.5rem; letter-spacing: -.02em; padding-bottom: 20px; }
+.site-footer.short .footer-cols { padding-top: 20px; }
 .site-footer.short .footer-cols { display: block; }
 .site-footer.short nav h2 { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
 .site-footer.short ul { display: flex; flex-wrap: wrap; gap: 10px 24px; }
@@ -177,6 +214,7 @@ main { padding: 24px 0 96px; flex: 1 0 auto; }
 .site-footer.minimal { padding: 28px 0; }
 .site-footer.minimal .wrap { display: flex; flex-wrap: wrap; align-items: baseline; gap: 8px 24px; }
 .site-footer.minimal .name { font-size: 1.25rem; margin-right: auto; }
+.site-footer.minimal::before { display: none; }
 .site-footer.minimal p { margin: 0; }
 
 /* Tipografía */
@@ -195,9 +233,10 @@ h3 { font-size: 1.1rem; font-weight: 700; letter-spacing: -.01em; }
     display: inline-flex; align-items: center; justify-content: center; gap: 8px;
     min-height: 52px; padding: 12px 24px; border: 0; border-radius: 999px;
     font: 650 1.0625rem/1.2 var(--font); letter-spacing: -.005em; text-decoration: none; cursor: pointer;
-    background: var(--accent); color: var(--accent-ink);
+    background: var(--btn); color: var(--accent-ink);
     transition: background-color .15s ease, transform .16s var(--ease-out);
 }
+.btn svg { flex: none; width: 1.25em; height: 1.25em; }
 .btn:active { transform: scale(.97); }
 .btn[disabled] { opacity: .55; cursor: progress; }
 .btn.block { width: 100%; }
@@ -205,6 +244,9 @@ h3 { font-size: 1.1rem; font-weight: 700; letter-spacing: -.01em; }
 .btn.danger { background: var(--bad-bg); color: var(--bad); }
 .btn.small { min-height: 40px; padding: 8px 16px; font-size: .9375rem; }
 .btn.whatsapp { background: #128c4b; }
+/* Sobre el azul oscuro: el botón principal en blanco y el secundario solo con su borde. */
+.btn.light { background: #fff; color: var(--btn); box-shadow: 0 0 0 4px rgb(255 255 255 / .14), 0 8px 24px -8px rgb(120 190 255 / .6); }
+.btn.ghost { background: transparent; color: #fff; box-shadow: inset 0 0 0 1.5px rgb(255 255 255 / .8); }
 
 .link-btn { background: none; border: 0; padding: 4px 0; font: inherit; font-weight: 700; color: var(--accent); cursor: pointer; text-decoration: underline; text-underline-offset: .18em; }
 
@@ -430,42 +472,142 @@ details.more[open] > summary::after { transform: translateY(.06em) rotate(225deg
 
 /* Web pública: inicio y páginas de contenido */
 
-.hero { display: grid; gap: 28px; padding: 8px 0 8px; }
-.hero h1 { font-size: clamp(2.5rem, 8.6vw, 4.5rem); font-weight: 750; line-height: 1.02; letter-spacing: -.045em; max-width: 13ch; }
-.hero .lead { font-size: clamp(1.125rem, 2.2vw, 1.3125rem); line-height: 1.5; color: var(--muted); max-width: 38ch; margin: 20px 0 28px; }
+/* La portada: una franja azul noche a todo el ancho, con olas de luz y el borde de abajo en curva. */
+.hero-band {
+    position: relative; isolation: isolate; overflow: hidden; color: #fff; padding: 20px 0 84px;
+    background:
+        radial-gradient(70% 90% at 82% 36%, rgb(38 112 226 / .6), transparent 68%),
+        radial-gradient(60% 70% at -8% 104%, rgb(34 108 220 / .55), transparent 70%),
+        linear-gradient(118deg, #06173a 0%, #0a2757 52%, #0e3c84 100%);
+}
+.hero-band::before {
+    content: ""; position: absolute; z-index: -1; inset: 0; opacity: .9;
+    background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 1440 600' preserveAspectRatio='none'%3E%3Cpath fill='%233b8bf0' fill-opacity='.2' d='M0 250c120 30 190 130 320 190s300 40 420 100c60 30 90 50 120 60H0Z'/%3E%3Cpath fill='%2364b4ff' fill-opacity='.14' d='M0 360c90 10 170 80 280 120s250 30 360 120H0Z'/%3E%3Cpath fill='none' stroke='%2386c8ff' stroke-opacity='.35' stroke-width='1.5' d='M0 250c120 30 190 130 320 190s300 40 420 100'/%3E%3C/svg%3E") left bottom / 100% 100% no-repeat;
+}
+.hero-band::after {
+    content: ""; position: absolute; left: 0; right: 0; bottom: -1px; height: 56px;
+    background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 1440 80' preserveAspectRatio='none'%3E%3Cpath fill='%23f3f7fd' d='M0 80V30c160 34 330 46 540 26C780 34 930 4 1140 12c120 5 220 26 300 46v22Z'/%3E%3C/svg%3E") center / 100% 100% no-repeat;
+}
+.hero-band > .wrap { position: relative; z-index: 1; }
+/* Lo de quien vuelve va en su tarjeta clara, con el texto oscuro de siempre. */
+.hero-band .welcome { margin: 4px 0 28px; color: var(--ink); box-shadow: 0 24px 40px -24px rgb(3 12 32 / .7); }
+
+.hero { display: grid; gap: 12px; padding: 12px 0 0; }
+/* Sin las frases montadas sobre el borde (no hay reserva en línea), la portada no les guarda sitio. */
+.hero.plain { margin-bottom: -32px; }
+.hero h1 { font-size: clamp(2.375rem, 8.2vw, 4rem); font-weight: 800; line-height: 1.04; letter-spacing: -.04em; max-width: 14ch; }
+/* La segunda mitad del título, en celeste y en su propia línea. */
+.hero h1 span { display: block; color: var(--sky-ink); }
+.hero .lead { font-size: clamp(1.0625rem, 2.1vw, 1.3125rem); line-height: 1.5; color: #d9e6f9; max-width: 36ch; margin: 18px 0 26px; }
 /* Arriba del título: si el consultorio está abierto ahora. */
 .hero .eyebrow {
-    display: inline-flex; align-items: center; gap: 8px; margin: 0 0 16px; padding: 6px 14px 6px 10px; border-radius: 18px;
-    background: var(--surface); color: var(--muted); font-weight: 700; font-size: .875rem; line-height: 1.3;
+    display: inline-flex; align-items: center; gap: 10px; margin: 0 0 14px; color: var(--sky-ink);
+    font-weight: 700; font-size: .8125rem; line-height: 1.3; letter-spacing: .12em; text-transform: uppercase;
 }
-.hero .eyebrow::before { content: ""; flex: none; width: 8px; height: 8px; border-radius: 50%; background: #8a98ab; box-shadow: 0 0 0 4px rgb(138 152 171 / .2); }
-.hero .eyebrow.open { background: var(--ok-bg); color: var(--ok); }
-.hero .eyebrow.open::before { background: var(--mint); box-shadow: 0 0 0 4px rgb(15 159 136 / .18); }
-/* Tres frases que tranquilizan antes de reservar, cada una con su visto. */
-.hero .trust { display: grid; justify-content: start; gap: 8px 20px; margin: 0; padding: 0; list-style: none; color: var(--muted); font-size: .9375rem; font-weight: 600; }
-.hero .trust li { display: inline-flex; align-items: center; gap: 8px; }
-.hero .trust li::before {
-    content: ""; flex: none; width: 18px; height: 18px; border-radius: 50%;
-    background: var(--ok-bg) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%230a6b5c' stroke-width='3.2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 12.5 4 4 8-9'/%3E%3C/svg%3E") center / 12px no-repeat;
-}
-/* El diente 3D de la marca sobre una mancha celeste: en el celular acompaña a las tres frases, sin empujar hacia abajo el horario libre. */
-.hero-art { position: relative; display: grid; place-items: center; margin: 0; pointer-events: none; }
+.hero .eyebrow::before { content: ""; flex: none; width: 8px; height: 8px; border-radius: 50%; background: #9db4d6; box-shadow: 0 0 0 4px rgb(157 180 214 / .22); }
+.hero .eyebrow.open::before { background: #5ad19f; box-shadow: 0 0 0 4px rgb(90 209 159 / .25); }
+.hero .rating { color: #fff; }
+.hero .rating-stars { color: rgb(255 255 255 / .26); }
+.hero .rating-stars::after { color: #ffc24d; }
+.hero a.rating > span:last-child { text-decoration-color: rgb(255 255 255 / .45); }
+/* El implante encendido dentro de sus anillos de luz: la imagen de la marca. */
+.hero-art { position: relative; display: grid; place-items: center; justify-self: center; width: min(74vw, 300px); aspect-ratio: 1; margin: 0 0 -18px; pointer-events: none; }
 .hero-art::before {
-    content: ""; position: absolute; width: 92%; aspect-ratio: 1.12; border-radius: 47% 53% 50% 50% / 52% 48% 52% 48%;
-    background: radial-gradient(110% 110% at 28% 18%, #eaf3ff 0%, #cfe2fb 48%, #b1cff6 100%);
+    content: ""; position: absolute; inset: 2%; border-radius: 50%;
+    background: radial-gradient(closest-side, rgb(84 170 255 / .6), rgb(46 124 240 / .2) 62%, transparent 74%);
 }
-.hero-art img { position: relative; width: 100%; height: auto; filter: drop-shadow(0 14px 14px rgb(11 31 58 / .2)); }
-.hero.with-art { grid-template-columns: minmax(0, 1fr) auto; grid-template-areas: "text text" "trust art" "free free"; gap: 20px 8px; }
-.hero.with-art .hero-text { grid-area: text; }
-.hero.with-art .trust { grid-area: trust; align-self: center; }
-.hero.with-art .hero-art { grid-area: art; width: 132px; margin: -6px -4px -6px 0; }
-.hero.with-art .next-free { grid-area: free; }
-/* Sin reserva en línea no hay frases: la imagen va sola, centrada bajo el texto. */
-.hero.with-art.plain { grid-template-areas: "text text" "art art"; }
-.hero.with-art.plain .hero-art { justify-self: center; width: 200px; margin: 0; }
-/* Foto real del consultorio arriba de todo; en pantallas grandes ocupa el ancho del inicio. */
-.hero-photo { margin: 0; border-radius: 24px; overflow: hidden; background: var(--surface); aspect-ratio: 2 / 1; }
+.hero-art::after {
+    content: ""; position: absolute; left: 22%; right: 22%; bottom: 9%; height: 9%; border-radius: 50%;
+    background: radial-gradient(closest-side, rgb(150 220 255 / .85), transparent);
+}
+.hero-art .ring { position: absolute; inset: 9%; border-radius: 50%; border: 2px solid rgb(150 220 255 / .92); box-shadow: 0 0 22px rgb(90 190 255 / .85), inset 0 0 22px rgb(90 190 255 / .45); }
+.hero-art .ring.inner { inset: 17%; border: 1px solid rgb(150 220 255 / .4); box-shadow: none; }
+.hero-art .ring.ticks {
+    inset: 0; border: 0; box-shadow: none; background: repeating-conic-gradient(rgb(150 220 255 / .75) 0 .7deg, transparent .7deg 7.5deg);
+    -webkit-mask: radial-gradient(closest-side, transparent calc(100% - 8px), #000 calc(100% - 7px));
+    mask: radial-gradient(closest-side, transparent calc(100% - 8px), #000 calc(100% - 7px));
+    animation: girar 90s linear infinite;
+}
+.hero-art img { position: relative; width: 36%; height: auto; filter: drop-shadow(0 0 20px rgb(84 180 255 / .8)); }
+@keyframes girar { to { transform: rotate(1turn); } }
+/* Con la foto real del consultorio: en el celular va bajo el texto y el implante le deja el sitio. */
+.hero-photo { margin: 0; }
 .hero-photo img { width: 100%; height: 100%; object-fit: cover; }
+.hero-band.with-photo { padding-top: 0; }
+.hero-band.with-photo .hero-photo { aspect-ratio: 16 / 9; -webkit-mask: linear-gradient(180deg, #000 62%, transparent); mask: linear-gradient(180deg, #000 62%, transparent); }
+.hero-band.with-photo .hero { padding-top: 0; margin-top: -8px; }
+.hero.with-photo .hero-art { display: none; }
+
+/* Lo que tranquiliza antes de reservar: una tarjeta blanca montada sobre el borde de la portada. */
+.trust {
+    position: relative; z-index: 2; list-style: none; margin: -52px 0 0; padding: 16px; display: grid; grid-template-columns: 1fr 1fr; gap: 14px 12px;
+    background: var(--ground); border-radius: 24px; box-shadow: 0 1px 2px rgb(12 26 46 / .06), 0 20px 40px -20px rgb(14 47 107 / .45);
+    font-size: .9375rem; font-weight: 650; line-height: 1.25; color: var(--ink);
+}
+.trust li { display: flex; align-items: center; gap: 10px; min-width: 0; }
+.trust svg { flex: none; width: 26px; height: 26px; color: var(--accent); }
+.trust span { text-wrap: balance; }
+@media (max-width: 359px) { .trust { grid-template-columns: 1fr; } }
+
+/* Acceso rápido y, al lado, los tratamientos. */
+.start { display: grid; gap: 36px; margin-top: 28px; }
+.quick {
+    position: relative; isolation: isolate; overflow: hidden; display: grid; gap: 6px; align-content: start; padding: 24px 20px; border-radius: 24px; color: #fff;
+    background: radial-gradient(90% 70% at 100% 0%, rgb(46 120 232 / .55), transparent 70%), linear-gradient(160deg, #0a2553 0%, #06173a 100%);
+    box-shadow: 0 24px 40px -24px rgb(6 23 58 / .7);
+}
+/* El diente de la marca, apenas visible, en la esquina. */
+.quick::after {
+    content: ""; position: absolute; z-index: -1; right: -26px; top: 6px; width: 150px; height: 150px; opacity: .13;
+    background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='%239cc8ff'%3E%3Cpath d='M7.5 3C5 3 3.5 5 3.5 7.4c0 1.9.6 3.4 1.2 5 .7 1.8 1 3.6 1.3 5.6.2 1.7.8 3 1.8 3 1.3 0 1.6-1.6 2-3.5.3-1.4.8-2.5 2.2-2.5s1.9 1.1 2.2 2.5c.4 1.9.7 3.5 2 3.5 1 0 1.6-1.3 1.8-3 .3-2 .6-3.8 1.3-5.6.6-1.6 1.2-3.1 1.2-5C20.5 5 19 3 16.5 3c-1.8 0-2.7 1-4.5 1S9.3 3 7.5 3Z'/%3E%3C/svg%3E") center / contain no-repeat;
+}
+.quick > h2 { display: flex; align-items: center; gap: 10px; font-size: 1.5rem; font-weight: 800; letter-spacing: -.03em; }
+.quick > h2 svg { flex: none; width: 26px; height: 26px; }
+.quick > p { margin: 0 0 10px; color: #c9d9f2; }
+.quick .next-free { margin: 0 0 10px; padding: 16px; border-radius: 18px; background: rgb(255 255 255 / .08); box-shadow: inset 0 0 0 1px rgb(255 255 255 / .14); overflow: visible; }
+.quick .next-free::before { display: none; }
+.quick .next-free .when { font-size: 1.5rem; margin: 6px 0 0; }
+.quick .next-free .for { margin: 2px 0 14px; }
+.quick .next-free .free-times { margin: 0; }
+/* "Ver otros días y horarios" solo en el celular: en pantallas grandes está el botón "Reservar cita" justo debajo. */
+.quick .next-free .more { display: none; margin-top: 14px; }
+.quick .free-times a { min-height: 46px; font-size: 1rem; }
+.quick-actions { display: grid; gap: 10px; }
+.quick-actions .btn { width: 100%; min-height: 50px; padding: 10px 18px; font-size: 1rem; }
+.quick-actions .btn svg:last-child:not(:first-child) { margin-left: 2px; }
+.quick-actions .btn.ghost { box-shadow: inset 0 0 0 1.5px rgb(255 255 255 / .5); }
+
+.services .section-head { margin-bottom: 20px; }
+/* "Conocer más" baja hasta aquí: el título no queda tapado por el encabezado fijo. */
+#tratamientos { scroll-margin-top: 104px; }
+/* Una tarjeta por tratamiento: su imagen sobre un resplandor celeste, el nombre, el precio "desde" y de qué se trata. */
+.services-grid { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+.services-grid a {
+    display: grid; justify-items: center; align-content: start; gap: 4px; height: 100%; padding: 12px 12px 16px; border-radius: 20px; text-align: center;
+    background: var(--ground); border: 1px solid var(--card-line); box-shadow: var(--card-shadow); color: var(--ink); text-decoration: none;
+    transition: border-color .15s ease, box-shadow .15s ease, transform .2s var(--ease-out);
+}
+.services-grid .art { display: grid; place-items: center; width: 104px; height: 104px; background: radial-gradient(closest-side, rgb(118 180 255 / .5), rgb(160 205 255 / .22) 58%, transparent 74%); }
+.services-grid .art img { width: 100%; height: auto; }
+.services-grid .name { max-width: 100%; font-weight: 750; font-size: 1.0625rem; letter-spacing: -.02em; line-height: 1.2; text-wrap: balance; overflow-wrap: anywhere; }
+.services-grid .price { font-weight: 700; font-size: .9375rem; color: var(--accent); font-variant-numeric: tabular-nums; }
+.services-grid .desc { color: var(--muted); font-size: .875rem; line-height: 1.4; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 3; line-clamp: 3; overflow: hidden; }
+/* En los celulares más angostos (320) un nombre largo, como "Blanqueamiento", tiene que entrar en su tarjeta. */
+@media (max-width: 379px) {
+    .services-grid a { padding: 12px 8px 14px; }
+    .services-grid .name { font-size: .9375rem; }
+}
+/* De tres en tres se muestran dos filas completas; los demás están en "Ver los tratamientos". */
+@media (min-width: 560px) and (max-width: 719px) {
+    .services-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+    .services-grid li:nth-child(n + 7) { display: none; }
+}
+@media (min-width: 720px) {
+    .services .section-head { grid-template-columns: minmax(0, 1fr) auto; align-items: end; column-gap: 24px; }
+    .services .section-head > * { grid-column: 1; }
+    .services .section-head .arrow { grid-column: 2; grid-row: 2 / span 2; }
+    .services-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 16px; }
+}
 
 /* Estrellas de Google: cinco grises y encima las doradas, cortadas según el puntaje. */
 .rating { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 4px 10px; margin: -8px 0 24px; color: var(--ink); text-decoration: none; }
@@ -486,8 +628,8 @@ a.rating > span:last-child { text-decoration: underline; text-decoration-color: 
     background: radial-gradient(closest-side, rgb(64 128 214 / .55), transparent);
 }
 .next-free-head { display: grid; gap: 4px; }
-.next-free h2 { display: inline-flex; align-items: center; gap: 8px; font-size: .8125rem; letter-spacing: .08em; text-transform: uppercase; color: var(--navy-soft); font-weight: 700; }
-.next-free h2::before { content: ""; width: 8px; height: 8px; border-radius: 50%; background: #5ad19f; box-shadow: 0 0 0 4px rgb(90 209 159 / .2); }
+.next-free :is(h2, h3) { display: inline-flex; align-items: center; gap: 8px; font-size: .8125rem; letter-spacing: .08em; text-transform: uppercase; color: var(--navy-soft); font-weight: 700; }
+.next-free :is(h2, h3)::before { content: ""; width: 8px; height: 8px; border-radius: 50%; background: #5ad19f; box-shadow: 0 0 0 4px rgb(90 209 159 / .2); }
 .next-free .when { font-size: clamp(1.75rem, 5vw, 2.5rem); font-weight: 750; letter-spacing: -.035em; line-height: 1.08; margin: 8px 0 0; }
 .next-free .for { margin: 4px 0 20px; color: var(--navy-soft); }
 .free-times { list-style: none; margin: 0 0 16px; padding: 0; display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; }
@@ -499,57 +641,65 @@ a.rating > span:last-child { text-decoration: underline; text-decoration-color: 
 .free-times a:active { transform: scale(.97); }
 .next-free .more { color: #fff; font-weight: 650; text-decoration-color: rgb(255 255 255 / .4); }
 
-/* En tabletas la imagen sube al lado del texto. */
-@media (min-width: 560px) and (max-width: 899px) {
-    .hero.with-art, .hero.with-art.plain { grid-template-areas: "text art" "trust art" "free free"; gap: 20px 24px; }
-    .hero.with-art .hero-art, .hero.with-art.plain .hero-art { align-self: center; width: clamp(190px, 32vw, 280px); margin: 0; }
+/* En tabletas el implante sube al lado del texto. */
+@media (min-width: 640px) {
+    .hero-band { padding: 28px 0 96px; }
+    .hero.with-art { grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 24px; }
+    .hero.with-art .hero-art { width: clamp(220px, 34vw, 320px); margin: 0; }
+    .hero-band.with-photo .hero-photo { aspect-ratio: 5 / 2; }
+    .trust { padding: 18px 24px; }
 }
 @media (min-width: 900px) {
-    .hero { grid-template-columns: 1.35fr 1fr; align-items: center; gap: 56px; padding: 32px 0 24px; }
-    .hero .trust { display: flex; flex-wrap: wrap; margin-top: 22px; }
-    /* Con la foto del consultorio: la foto arriba, el texto a la izquierda y el horario libre a la derecha. */
-    .hero.with-photo { grid-template-areas: "photo photo" "text free" "trust free"; row-gap: 0; padding-top: 0; }
-    .hero.with-photo .hero-text { grid-area: text; align-self: end; }
-    .hero.with-photo .trust { grid-area: trust; align-self: start; }
-    .hero.with-photo .next-free { grid-area: free; }
-    /* Baja, para que el título y "Reservar cita" sigan a la vista sin bajar. */
-    .hero-photo { grid-area: photo; aspect-ratio: 4 / 1; max-height: 320px; margin-bottom: 40px; }
+    .hero-band { padding: 44px 0 112px; }
+    .hero-band::after { height: 80px; }
+    .hero, .hero.with-art { grid-template-columns: minmax(0, 1.08fr) minmax(0, .92fr); align-items: center; gap: 48px; padding: 0; }
+    .hero.with-art .hero-art { justify-self: center; width: min(100%, 440px); }
+    .hero-band .welcome { margin: 0 0 44px; }
     .next-free { padding: 36px; }
-    /* Con el diente 3D: el texto a la izquierda, la imagen a la derecha y el horario libre en una franja a lo ancho. */
-    .hero.with-art {
-        grid-template-columns: minmax(0, 1.02fr) minmax(0, 1fr); grid-template-rows: 1fr auto auto 1fr auto;
-        grid-template-areas: ". art" "text art" "trust art" ". art" "free free"; gap: 0 48px; padding: 20px 0 0;
+    /* La foto del consultorio llena el lado derecho de la portada y se funde con el azul; el implante queda sobre su borde. */
+    .hero-band.with-photo { padding-top: 44px; }
+    .hero-band.with-photo .hero-photo {
+        position: absolute; z-index: -1; inset: 0 0 0 auto; width: 54%; aspect-ratio: auto;
+        -webkit-mask: linear-gradient(90deg, transparent 0, #000 34%); mask: linear-gradient(90deg, transparent 0, #000 34%);
     }
-    .hero.with-art .trust { align-self: start; }
-    .hero.with-art.plain { grid-template-areas: ". art" "text art" "trust art" ". art"; }
-    .hero.with-art .hero-art, .hero.with-art.plain .hero-art { justify-self: stretch; width: auto; min-height: 420px; margin: 0; }
-    .hero.with-art .hero-art::before { width: min(88%, 520px); }
-    .hero.with-art .hero-art img { width: min(92%, 520px); filter: drop-shadow(0 28px 26px rgb(11 31 58 / .2)); }
-    .hero.with-art .next-free {
-        grid-template-columns: minmax(0, 1fr) minmax(0, 1.5fr); grid-template-areas: "head times" "head more";
-        align-items: center; gap: 12px 32px; margin-top: 28px; padding: 26px 32px;
-    }
-    .hero.with-art .next-free-head { grid-area: head; }
-    .hero.with-art .next-free .when { font-size: 1.75rem; margin: 6px 0 0; }
-    .hero.with-art .next-free .for { margin: 2px 0 0; }
-    .hero.with-art .next-free .free-times { grid-area: times; grid-template-columns: repeat(4, 1fr); margin: 0; }
-    .hero.with-art .next-free .more { grid-area: more; justify-self: start; }
+    .hero-band.with-photo .hero { margin-top: 0; }
+    .hero.with-photo .hero-art { display: grid; justify-self: start; width: min(100%, 320px); margin: 0 0 0 -24px; }
+    /* Sobre la foto, el círculo lleva un cristal azul para que el implante no se pierda si la foto es clara. */
+    .hero.with-photo .hero-art .ring:not(.inner):not(.ticks) { background: radial-gradient(closest-side, rgb(24 92 204 / .62), rgb(8 44 120 / .5)); }
+    /* Las frases, en una sola fila con forma de píldora. */
+    .trust { display: flex; max-width: 1020px; margin: -64px auto 0; padding: 20px 12px; border-radius: 999px; }
+    .trust li { flex: 1 1 0; justify-content: center; padding: 2px 20px; }
+    .trust li + li { border-left: 1px solid var(--line); }
+    .trust svg { width: 30px; height: 30px; }
 }
-/* Con más ancho, "Ver otros días y horarios" cabe al lado de las horas. */
-@media (min-width: 1200px) {
-    .hero.with-art .next-free { grid-template-columns: minmax(0, 1.1fr) minmax(0, 1.6fr) auto; grid-template-areas: "head times more"; }
+@media (min-width: 640px) and (max-width: 999px) {
+    .hero h1 { font-size: clamp(2.5rem, 6.2vw, 3.25rem); }
+    .quick-actions { grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); }
+    .quick-actions .btn { padding: 10px 12px; font-size: .9375rem; }
+    .quick .free-times { grid-template-columns: repeat(4, 1fr); }
+}
+@media (min-width: 1000px) {
+    .start { grid-template-columns: 344px minmax(0, 1fr); gap: 36px; align-items: start; margin-top: 40px; }
+    .quick { padding: 28px 24px; }
+}
+/* Con el acceso rápido al lado, hasta 1200 px entran tres tarjetas por fila. */
+@media (min-width: 1000px) and (max-width: 1199px) {
+    .services-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+    .services-grid li:nth-child(n + 7) { display: none; }
 }
 
 .section { margin-top: 72px; }
-.section > h2, .section-head h2, .cta-band.with-art h2 { font-size: clamp(1.875rem, 4.6vw, 2.875rem); font-weight: 750; letter-spacing: -.04em; line-height: 1.04; }
-.section-head { display: grid; gap: 12px; margin-bottom: 28px; }
+.section > h2, .section-head h2, .cta-band.with-art h2 { font-size: clamp(1.75rem, 3.8vw, 2.375rem); font-weight: 800; letter-spacing: -.035em; line-height: 1.06; }
+.section-head { display: grid; gap: 10px; margin-bottom: 28px; }
+/* Una raya azul sobre cada título de sección. */
+.section-head::before { content: ""; width: 40px; height: 3px; border-radius: 3px; background: var(--accent); }
 .section-head p { margin: 0; color: var(--muted); max-width: 60ch; }
 /* La presentación del consultorio dentro de "Quién te atiende": se lee como texto, no como nota. */
 .section-head .prose p { color: var(--ink); font-size: 1.125rem; margin: 0; }
 .section-head .prose p + p { margin-top: 12px; }
 .section > h2 { margin-bottom: 24px; }
 .section > p:last-child { margin-top: 20px; }
-@media (min-width: 900px) { .section { margin-top: 112px; } }
+@media (min-width: 900px) { .section { margin-top: 88px; } }
 /* Franja de color a todo el ancho de la pantalla, aunque el contenido siga en su columna. */
 .section.band .btn.quiet { background: var(--ground); }
 .section.band { background: var(--surface); box-shadow: 0 0 0 100vmax var(--surface); clip-path: inset(0 -100vmax); padding: 56px 0; }
@@ -563,25 +713,45 @@ a.rating > span:last-child { text-decoration: underline; text-decoration-color: 
 /* Cuando una sección abre la página (contacto), no necesita el aire de separación. */
 .wrap > .section:first-child { margin-top: 8px; }
 
-/* Reserva en tres pasos: cada paso con su imagen. */
-.how { display: grid; gap: 14px; margin: 0; padding: 0; list-style: none; counter-reset: paso; }
-.how li { display: grid; grid-template-columns: 96px 1fr; gap: 4px 16px; align-items: center; padding: 16px; border-radius: 22px; background: var(--surface); }
-.how img { grid-row: 1 / span 2; width: 96px; height: auto; filter: drop-shadow(0 10px 10px rgb(11 31 58 / .14)); }
-.how strong { align-self: end; font-size: 1.1875rem; letter-spacing: -.02em; line-height: 1.2; }
-.how strong::before { counter-increment: paso; content: counter(paso) ". "; color: var(--accent); }
-.how span { align-self: start; color: var(--muted); }
-@media (max-width: 379px) {
-    .how li { grid-template-columns: 72px 1fr; gap: 4px 14px; }
-    .how img { width: 72px; }
+/* Reserva en tres pasos: una franja celeste con el título a la izquierda y cada paso en su tarjeta numerada. */
+.how-band {
+    position: relative; overflow: hidden; display: grid; gap: 24px; padding: 28px 20px 24px; border-radius: 28px;
+    background: linear-gradient(104deg, #eef5ff 0%, #e2edff 52%, #b9d4fb 100%);
 }
-@media (min-width: 900px) {
-    .how { grid-template-columns: repeat(3, 1fr); gap: 20px; }
-    .how li { grid-template-columns: 1fr; justify-items: start; align-content: start; gap: 6px; padding: 24px 24px 26px; }
-    .how img { grid-row: auto; width: 150px; margin: -6px 0 4px -10px; }
+.how-band .section-head { margin: 0; justify-items: start; }
+.how-band .section-head .btn { margin-top: 6px; }
+.how { display: grid; gap: 18px; margin: 0; padding: 0; list-style: none; counter-reset: paso; }
+.how li {
+    position: relative; counter-increment: paso; display: grid; grid-template-columns: 76px 1fr; gap: 2px 14px; align-items: center;
+    padding: 14px 16px 14px 14px; border-radius: 20px; background: rgb(255 255 255 / .82); box-shadow: 0 1px 2px rgb(12 26 46 / .04), 0 12px 28px -18px rgb(14 47 107 / .35);
+}
+.how li::before {
+    content: counter(paso); position: absolute; left: 10px; top: -10px; width: 28px; height: 28px; border-radius: 50%; display: grid; place-items: center;
+    background: var(--btn); color: #fff; font-weight: 800; font-size: .9375rem; line-height: 1; box-shadow: 0 0 0 3px #fff;
+}
+.how img { grid-row: 1 / span 2; width: 76px; height: auto; filter: drop-shadow(0 8px 8px rgb(11 31 58 / .14)); }
+.how strong { align-self: end; font-size: 1.125rem; letter-spacing: -.02em; line-height: 1.2; }
+.how span { align-self: start; color: var(--muted); font-size: .9375rem; line-height: 1.4; }
+.how-art { display: none; }
+@media (min-width: 720px) {
+    .how-band { padding: 36px 32px 32px; }
+    .how { grid-template-columns: repeat(3, 1fr); gap: 28px; }
+    .how li { grid-template-columns: 1fr; justify-items: center; align-content: start; gap: 6px; padding: 22px 14px 20px; text-align: center; }
+    .how li::before { left: 50%; top: -14px; margin-left: -14px; }
+    .how img { grid-row: auto; width: 96px; margin: 2px 0 2px; }
+    /* Entre paso y paso, una flechita. */
+    .how li + li::after {
+        content: ""; position: absolute; left: -19px; top: 50%; width: 9px; height: 9px; margin-top: -5px;
+        border: solid var(--btn); border-width: 2px 2px 0 0; transform: rotate(45deg);
+    }
+}
+@media (min-width: 1080px) {
+    .how-band { grid-template-columns: 250px minmax(0, 1fr) 210px; align-items: center; gap: 36px; padding: 40px 20px 40px 44px; }
+    .how-art { display: block; width: 250px; max-width: none; height: auto; margin: -24px 0 -24px -24px; filter: drop-shadow(0 22px 22px rgb(11 31 58 / .22)); }
 }
 
 /* Nuestra especialidad: una franja azul noche con la imagen del tratamiento. */
-.feature { position: relative; isolation: isolate; overflow: hidden; display: grid; gap: 8px; padding: 28px 24px 0; border-radius: 28px; background: var(--navy); color: #fff; }
+.feature { position: relative; isolation: isolate; overflow: hidden; display: grid; gap: 8px; padding: 28px 24px 0; border-radius: 28px; background: linear-gradient(118deg, #06173a 0%, #0a2757 52%, #0e3c84 100%); color: #fff; }
 .feature::before {
     content: ""; position: absolute; z-index: -1; width: 520px; height: 520px; right: -160px; top: -200px; border-radius: 50%;
     background: radial-gradient(closest-side, rgb(64 128 214 / .6), transparent);
@@ -709,10 +879,10 @@ a.rating > span:last-child { text-decoration: underline; text-decoration-color: 
 
 .quotes { display: grid; gap: 16px; }
 @media (min-width: 760px) { .quotes { grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); } }
-.quote { margin: 0; background: var(--ground); border: 1px solid var(--line); border-radius: 20px; padding: 24px; display: grid; gap: 12px; align-content: start; }
+.quote { margin: 0; background: var(--ground); border: 1px solid var(--card-line); border-radius: 20px; box-shadow: var(--card-shadow); padding: 24px; display: grid; gap: 12px; align-content: start; }
 .quote .stars { margin: 0; color: var(--star); font-size: 1.25rem; letter-spacing: .08em; }
 .quote .stars .off { color: var(--surface-strong); }
-.quote blockquote { margin: 0; font-size: 1.125rem; line-height: 1.5; }
+.quote blockquote { margin: 0; font-size: 1.0625rem; font-style: italic; line-height: 1.5; }
 .quote figcaption { font-weight: 700; }
 .quote figcaption span { display: block; font-weight: 400; color: var(--muted); font-size: .9375rem; }
 
@@ -873,16 +1043,27 @@ a.chip { text-decoration: none; display: inline-flex; align-items: center; }
     /* La barra de abajo ya tiene Reservar y WhatsApp: arriba no se repiten. */
     /* Arriba, en vez del botón, los horarios libres: también son "reservar" y quedan a la vista sin bajar. */
     body:has(.action-bar) .site-header .btn,
-    body:has(.action-bar) .hero .row { display: none; }
+    body:has(.action-bar) .hero .row,
+    body:has(.action-bar) .quick-actions .in-bar,
+    body:has(.action-bar) .how-band .section-head .btn,
+    body:has(.action-bar) .footer-top .btn { display: none; }
+    body:has(.action-bar) .quick .next-free .more { display: inline-block; }
     body:has(.action-bar) .hero .lead { margin-bottom: 0; }
+    body:has(.action-bar) .hero .rating { margin: 14px 0 0; }
     body:has(.action-bar) .site-footer { padding-bottom: calc(104px + env(safe-area-inset-bottom)); }
 }
 
 /* Hover solo con mouse: en pantallas táctiles el color se quedaba pegado tras tocar */
 
 @media (hover: hover) and (pointer: fine) {
-    .site-nav a:hover { color: var(--ink); }
-    .btn:hover { background: var(--accent-press); }
+    .site-nav a:hover, .more-nav > summary:hover { color: var(--accent); }
+    .btn:hover { background: var(--btn-press); }
+    .btn.light:hover { background: #e6f0ff; }
+    .btn.ghost:hover { background: rgb(255 255 255 / .12); }
+    .services-grid a:hover { border-color: #9cc3f5; box-shadow: 0 1px 2px rgb(12 26 46 / .05), 0 20px 36px -18px rgb(14 47 107 / .45); transform: translateY(-2px); }
+    .services-grid a:hover .name { color: var(--accent); }
+    .site-footer .socials a:hover { background: rgb(255 255 255 / .22); }
+    .site-footer ul a:hover { text-decoration: underline; }
     .btn.quiet:hover { background: var(--surface-strong); }
     .btn.whatsapp:hover { background: #0f7a41; }
     .btn.danger:hover { background: #fbd0cb; }
@@ -927,6 +1108,8 @@ a.chip { text-decoration: none; display: inline-flex; align-items: center; }
     .faqs details[open] summary::after { transform: none; content: "−"; }
     .faqs details[open] > .prose, .menu[open] > .menu-panel { animation: fade .15s ease; }
     .done-art { animation: fade .2s ease both; }
+    .hero-art .ring.ticks { animation: none; }
+    .services-grid a:hover { transform: none; }
     .loading-line { animation: pulse 1.2s linear infinite; transform: none; }
 }
 

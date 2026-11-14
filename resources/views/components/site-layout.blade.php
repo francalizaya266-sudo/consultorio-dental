@@ -6,11 +6,14 @@
     minimalFooter: pie de una línea mientras se reserva, para que nada distraiga hasta terminar (el encabezado
         también queda solo con el nombre, que vuelve al inicio).
     jsonLd: datos estructurados de schema.org para Google.
+    hero (slot): franja de portada a todo el ancho de la pantalla, antes de la columna del contenido (el inicio).
 --}}
 @props(['title' => null, 'description' => null, 'noindex' => false, 'whatsappFloat' => true, 'footerContact' => true, 'minimalFooter' => false, 'wide' => false, 'image' => null, 'jsonLd' => []])
 @php
     use App\Services\Web\ClinicInfo;
     use App\Support\Phone;
+    use App\Support\SiteIcon;
+    use App\Support\TreatmentIcon;
 
     $clinic = app(ClinicInfo::class);
     $sections = $clinic->sections();
@@ -20,7 +23,11 @@
     $hours = $clinic->hours();
     $status = $hours->status(now()->toImmutable());
 
+    // Bajo el nombre, dónde atiende: lo mismo que dice el título de la página en Google.
+    $tagline = $clinic->district() ? 'Dentistas en '.$clinic->district() : null;
+
     $nav = array_filter([
+        ['Inicio', route('site.home'), 'site.home'],
         ['Tratamientos', route('site.treatments'), 'site.treatment*'],
         ['Equipo', route('site.team'), 'site.team'],
         $sections['promotions'] ? ['Promociones', route('site.promotions'), 'site.promotion*'] : null,
@@ -78,12 +85,15 @@
         @if ($logo = $clinic->logoUrl())
             <a href="{{ route('site.home') }}" class="wordmark with-logo"><img src="{{ $logo }}" alt="{{ $name }}" class="logo"></a>
         @else
-            <a href="{{ route('site.home') }}" class="wordmark"><span class="mark">{{ \App\Support\TreatmentIcon::svg('tooth') }}</span>{{ $name }}</a>
+            <a href="{{ route('site.home') }}" class="wordmark">
+                <span class="mark">{{ TreatmentIcon::svg('tooth') }}</span>
+                <span class="brand">{{ $name }}@if ($tagline)<small>{{ $tagline }}</small>@endif</span>
+            </a>
         @endif
         @unless ($minimalFooter)
         <nav class="site-nav" aria-label="Principal">
             @foreach ($nav as [$label, $url, $pattern])
-                <a href="{{ $url }}" @if (request()->routeIs($pattern)) aria-current="page" @endif>{{ $label }}</a>
+                <a href="{{ $url }}" @if (request()->routeIs($pattern)) aria-current="page" @endif>@if ($pattern === 'site.home'){{ SiteIcon::svg('home') }}@endif{{ $label }}</a>
             @endforeach
             {{-- Las demás páginas con contenido: una sola va a la vista; varias, bajo "Más". --}}
             @if (count($more) === 1)
@@ -101,7 +111,7 @@
             <a href="{{ route('site.account') }}" @if (request()->routeIs('site.account*')) aria-current="page" @endif>Mi cuenta</a>
         </nav>
         @unless (request()->routeIs('site.booking'))
-            <a href="{{ route('site.booking') }}" class="btn small">Reservar<span class="long">&nbsp;cita</span></a>
+            <a href="{{ route('site.booking') }}" class="btn small">{{ SiteIcon::svg('calendar') }}Reservar<span class="long">&nbsp;cita</span></a>
         @endunless
         <details class="menu">
             <summary aria-label="Menú">Menú</summary>
@@ -116,14 +126,20 @@
     </div>
 </header>
 
+@isset($hero)
+<main id="contenido" class="with-hero">
+    {{-- Los avisos van antes de la portada: debajo de ella quedarían fuera de la pantalla. --}}
+    @if (session('status') || session('error'))
+        <div class="wrap wide">@include('site.partials.flash')</div>
+    @endif
+    {{ $hero }}
+@else
 <main id="contenido">
+@endisset
     <div @class(['wrap', 'wide' => $wide])>
-        @if (session('status'))
-            <div class="flash ok" role="status">{{ session('status') }}</div>
-        @endif
-        @if (session('error'))
-            <div class="flash bad" role="alert">{{ session('error') }}</div>
-        @endif
+        @unless (isset($hero))
+            @include('site.partials.flash')
+        @endunless
 
         {{ $slot }}
     </div>
@@ -142,7 +158,13 @@
 @else
 <footer @class(['site-footer', 'short' => ! $footerContact])>
     <div class="wrap wide">
-        <p class="name">{{ $name }}</p>
+        <div class="footer-top">
+            <p class="name">
+                <span class="mark">{{ TreatmentIcon::svg('tooth') }}</span>
+                <span class="brand">{{ $name }}@if ($tagline)<small>{{ $tagline }}</small>@endif</span>
+            </p>
+            <a href="{{ route('site.booking') }}" class="btn ghost">{{ SiteIcon::svg('calendar') }}Reservar cita</a>
+        </div>
         <div @class(['footer-cols', 'without-hours' => $hours->isEmpty()])>
             @if ($footerContact)
                 <div>
@@ -193,16 +215,19 @@
                         <li><a href="{{ $url }}">{{ $label }}</a></li>
                     @endforeach
                     <li><a href="{{ route('site.account') }}">Mi cuenta</a></li>
-                    <li><a href="{{ route('site.privacy') }}">Política de privacidad</a></li>
                 </ul>
                 @if ($clinic->socials())
                     <p class="socials">
                         @foreach ($clinic->socials() as $network => $url)
-                            <a href="{{ $url }}" rel="noopener" target="_blank">{{ $network }}</a>
+                            <a href="{{ $url }}" rel="noopener" target="_blank" aria-label="{{ $network }}" title="{{ $network }}">{{ SiteIcon::svg(strtolower($network)) }}</a>
                         @endforeach
                     </p>
                 @endif
             </nav>
+        </div>
+        <div class="footer-bottom">
+            <p>© {{ now()->year }} {{ $name }}</p>
+            <p><a href="{{ route('site.privacy') }}">Política de privacidad</a></p>
         </div>
     </div>
 </footer>
@@ -223,7 +248,7 @@
 
 @if ($clinic->whatsappUrl() && $whatsappFloat)
     <a href="{{ $clinic->whatsappUrl() }}" class="wa-float" rel="noopener" aria-label="Escríbenos por WhatsApp">
-        <svg viewBox="0 0 32 32" fill="currentColor" aria-hidden="true"><path d="M16.02 3C8.84 3 3 8.83 3 16c0 2.29.6 4.53 1.74 6.5L3 29l6.68-1.75A12.96 12.96 0 0 0 16.02 29C23.2 29 29 23.17 29 16S23.2 3 16.02 3Zm0 23.8c-2.02 0-4-.54-5.72-1.57l-.41-.24-3.96 1.04 1.06-3.86-.27-.4A10.73 10.73 0 0 1 5.2 16c0-5.96 4.85-10.8 10.82-10.8 5.96 0 10.8 4.84 10.8 10.8 0 5.96-4.84 10.8-10.8 10.8Zm5.93-8.09c-.33-.16-1.93-.95-2.23-1.06-.3-.11-.52-.16-.73.17-.22.32-.84 1.05-1.03 1.27-.19.22-.38.24-.71.08-.33-.16-1.38-.51-2.63-1.62-.97-.87-1.63-1.94-1.82-2.27-.19-.32-.02-.5.14-.66.15-.15.33-.38.49-.57.16-.19.22-.32.33-.54.11-.22.05-.4-.03-.57-.08-.16-.73-1.76-1-2.41-.26-.63-.53-.55-.73-.56h-.62c-.22 0-.57.08-.87.4-.3.33-1.14 1.11-1.14 2.71s1.17 3.15 1.33 3.36c.16.22 2.3 3.5 5.56 4.91.78.34 1.38.54 1.86.69.78.25 1.49.21 2.05.13.63-.09 1.93-.79 2.2-1.55.27-.76.27-1.41.19-1.55-.08-.14-.3-.22-.62-.38Z"/></svg>
+        {{ SiteIcon::svg('whatsapp') }}
     </a>
 @endif
 <script>

@@ -46,7 +46,9 @@ class PublicPagesTest extends TestCase
         $this->get(route('site.home'))
             ->assertOk()
             ->assertSee('<title>'.Setting::get('clinic.name').' · Dentistas en Miraflores</title>', false)
-            ->assertSee('Atención dental sin esperas')
+            // Bajo el nombre, dónde atiende; y el título de la portada, con su segunda mitad en celeste.
+            ->assertSee('<span class="brand">'.Setting::get('clinic.name').'<small>Dentistas en Miraflores</small></span>', false)
+            ->assertSee('<h1 id="titulo">Atención dental <span>sin esperas</span></h1>', false)
             // Con 2 horas de anticipación, lo primero libre es hoy a las 10:00, y un toque lo deja elegido.
             ->assertSee('Hoy, lunes 2 de noviembre')
             ->assertSee("10:00\u{A0}a.\u{A0}m.")
@@ -79,10 +81,11 @@ class PublicPagesTest extends TestCase
             ->assertSee('<strong>4,9</strong> de 5 en Google · 87 opiniones', false)
             ->assertSee('href="https://g.page/r/consultorio/review"', false)
             ->assertSee('style="--rating: 4.9"', false)
-            // Con la foto del consultorio no va el diente 3D de la portada; cada tratamiento sí lleva su imagen.
+            // La foto del consultorio llena la portada y el implante de la marca queda sobre ella; cada tratamiento lleva su imagen.
+            ->assertSee('<div class="hero-band with-photo">', false)
             ->assertSee('<section class="hero with-photo"', false)
-            ->assertDontSee('hero-art')
-            ->assertSee('<span class="icon"><img src="'.SiteArt::url('brackets-192').'" srcset="'.SiteArt::url('brackets-192').' 192w, '.SiteArt::url('brackets').' 640w" sizes="88px" width="88" height="88" alt="" loading="lazy" decoding="async"></span>', false)
+            ->assertSee(SiteArt::url('implante-brillo'))
+            ->assertSee('<span class="art"><img src="'.SiteArt::url('brackets-192').'" srcset="'.SiteArt::url('brackets-192').' 192w, '.SiteArt::url('brackets').' 640w" sizes="112px" width="112" height="112" alt="" loading="lazy" decoding="async"></span>', false)
             // La dirección, el horario y el WhatsApp salen una vez, en "Dónde estamos": el pie solo lleva las páginas.
             ->assertSeeTextInOrder(['Dónde estamos', 'Lunes a sábado', 'El consultorio', 'Política de privacidad'])
             ->assertSee('site-footer short')
@@ -91,7 +94,7 @@ class PublicPagesTest extends TestCase
             ->assertDontSee('<h2>Escríbenos</h2>', false);
     }
 
-    public function test_without_the_clinic_photo_the_home_opens_with_the_3d_tooth_and_explains_how_to_book(): void
+    public function test_without_the_clinic_photo_the_home_opens_with_the_3d_implant_and_explains_how_to_book(): void
     {
         $this->freezeMonday();
         $this->doctorOffering(Treatment::factory()->evaluation()->create());
@@ -99,12 +102,13 @@ class PublicPagesTest extends TestCase
         // Lunes 8:00: todavía cerrado, y lo dice sobre el título sin el color de "abierto".
         $this->get(route('site.home'))
             ->assertOk()
+            ->assertSee('<div class="hero-band">', false)
             ->assertSee('<section class="hero with-art"', false)
-            ->assertSee('<img src="'.SiteArt::url('portada').'" alt="" width="900" height="820" fetchpriority="high">', false)
+            ->assertSee('<img src="'.SiteArt::url('implante-brillo').'" alt="" width="395" height="806" fetchpriority="high">', false)
             ->assertSee("<p class=\"eyebrow\">Cerrado ahora · abre hoy a las 9:00\u{A0}a.\u{A0}m.</p>", false)
             ->assertSeeInOrder(['Horarios libres de verdad', 'Confirmas por WhatsApp', 'Pagas en el consultorio', 'Próximo horario libre'])
             ->assertSeeInOrder(['Reserva en tres pasos', 'Elige día y hora', 'Confirma por WhatsApp', 'Ven a tu cita', 'Yape, Plin, tarjeta o efectivo'])
-            ->assertSee([SiteArt::url('calendario'), SiteArt::url('escudo'), SiteArt::url('sonrisa')]);
+            ->assertSee([SiteArt::url('calendario'), SiteArt::url('escudo'), SiteArt::url('sonrisa'), SiteArt::url('portada')]);
 
         $this->travelTo(CarbonImmutable::parse('2026-11-02 10:00', 'America/Lima'));
 
@@ -118,11 +122,149 @@ class PublicPagesTest extends TestCase
         $this->get(route('site.home'))
             ->assertOk()
             ->assertSee('<section class="hero with-art plain"', false)
-            ->assertSee(SiteArt::url('portada'))
+            ->assertSee(SiteArt::url('implante-brillo'))
             ->assertSee(SiteArt::url('endodoncia-192'))
+            // El acceso rápido sigue ahí, sin horarios que ofrecer.
+            ->assertSee('Acceso rápido')
+            ->assertDontSee('class="trust"', false)
             ->assertDontSee('Horarios libres de verdad')
             ->assertDontSee('Próximo horario libre')
             ->assertDontSee('Reserva en tres pasos');
+    }
+
+    public function test_the_cover_title_goes_in_two_tones_whatever_its_length(): void
+    {
+        // Con un número impar de palabras, la primera mitad se lleva la del medio.
+        Setting::set('web.headline', 'Sonrisas sanas siempre');
+
+        $this->get(route('site.home'))->assertOk()->assertSee('<h1 id="titulo">Sonrisas sanas <span>siempre</span></h1>', false);
+
+        // Una sola palabra no tiene segunda mitad que pintar.
+        Setting::set('web.headline', 'Sonríe');
+
+        $this->get(route('site.home'))->assertOk()->assertSee('<h1 id="titulo">Sonríe</h1>', false);
+    }
+
+    public function test_the_home_only_says_prices_are_in_sight_when_some_treatment_shows_one(): void
+    {
+        $this->freezeMonday();
+        $evaluation = Treatment::factory()->evaluation()->create(['show_price' => false]);
+        $this->doctorOffering($evaluation);
+
+        $this->get(route('site.home'))
+            ->assertOk()
+            ->assertSeeInOrder(['class="trust"', 'Horarios libres de verdad', 'Confirmas por WhatsApp', 'Pagas en el consultorio', 'class="start"'], false)
+            ->assertDontSee('Precios a la vista')
+            // Sin precio que mostrar, la tarjeta del tratamiento dice cuándo se sabe.
+            ->assertSee('Precio en la evaluación');
+
+        $evaluation->update(['show_price' => true, 'price_from' => 50]);
+
+        $this->get(route('site.home'))
+            ->assertOk()
+            ->assertSeeInOrder(['Pagas en el consultorio', 'Precios a la vista', 'class="start"'], false)
+            ->assertDontSee('Precio en la evaluación');
+    }
+
+    public function test_the_quick_access_offers_the_next_free_times_booking_whatsapp_and_directions(): void
+    {
+        $this->freezeMonday();
+        Setting::set('clinic.address', 'Av. Larco 123');
+        Setting::set('clinic.district', 'Miraflores');
+        $evaluation = Treatment::factory()->evaluation()->create();
+        $this->doctorOffering($evaluation);
+
+        $this->get(route('site.home'))
+            ->assertOk()
+            ->assertSeeInOrder([
+                'Acceso rápido',
+                // Dentro de la tarjeta, el horario libre lleva un título de menor nivel.
+                '<h3 id="proximos">Próximo horario libre</h3>',
+                route('site.booking', ['tratamiento' => $evaluation->slug, 'fecha' => '2026-11-02', 'hora' => '10:00']),
+                'class="quick-actions"',
+                'href="'.route('site.booking').'" class="btn light in-bar"',
+                'href="https://wa.me/51918874568?text=Hola%2C%20quisiera%20informaci%C3%B3n." class="btn ghost in-bar"',
+                'href="https://www.google.com/maps/search/?api=1&amp;query=Av.%20Larco%20123%2C%20Miraflores%2C%20Per%C3%BA" class="btn ghost"',
+                'Cómo llegar',
+                'Tratamientos y precios',
+            ], false);
+
+        // Sin WhatsApp ni dirección cargados, quedan solo los horarios y "Reservar cita".
+        Setting::set('clinic.whatsapp', null);
+        Setting::set('clinic.address', null);
+        Setting::set('clinic.district', null);
+
+        $this->get(route('site.home'))
+            ->assertOk()
+            ->assertSee('href="'.route('site.booking').'" class="btn light in-bar"', false)
+            ->assertDontSee('Escribir por WhatsApp')
+            ->assertDontSee('Cómo llegar');
+    }
+
+    public function test_the_home_shows_the_first_eight_treatments_and_links_to_the_rest(): void
+    {
+        foreach (range(1, 8) as $number) {
+            Treatment::factory()->clinicOnly()->create(['name' => "Tratamiento {$number}", 'slug' => "tratamiento-{$number}", 'sort_order' => $number, 'summary' => "Resumen {$number}."]);
+        }
+
+        // Con ocho entran todos: no hace falta mandar a nadie a otra página.
+        $this->get(route('site.home'))
+            ->assertOk()
+            ->assertSeeInOrder(['Tratamientos y precios', route('site.treatment', 'tratamiento-1'), 'Tratamiento 1', 'Resumen 1.', route('site.treatment', 'tratamiento-8'), 'Tratamiento 8'])
+            ->assertDontSee('Ver los 8 tratamientos');
+
+        Treatment::factory()->clinicOnly()->create(['name' => 'Tratamiento 9', 'slug' => 'tratamiento-9', 'sort_order' => 9]);
+
+        $this->get(route('site.home'))
+            ->assertOk()
+            ->assertSee('<a href="'.route('site.treatments').'" class="arrow">Ver los 9 tratamientos</a>', false)
+            ->assertSee(route('site.treatment', 'tratamiento-8'))
+            ->assertDontSee(route('site.treatment', 'tratamiento-9'));
+    }
+
+    public function test_on_the_home_a_notice_shows_before_the_cover(): void
+    {
+        $this->withSession(['status' => '¡Listo! La cita de Rosa quedó confirmada.'])
+            ->get(route('site.home'))
+            ->assertOk()
+            ->assertSeeInOrder(['<main id="contenido" class="with-hero">', '<div class="flash ok" role="status">¡Listo! La cita de Rosa quedó confirmada.</div>', '<div class="hero-band">'], false);
+
+        // En el resto de páginas el aviso sigue arriba del contenido, y no hay portada.
+        $this->withSession(['error' => 'Ese enlace ya venció.'])
+            ->get(route('site.team'))
+            ->assertOk()
+            ->assertSeeInOrder(['<main id="contenido">', 'Ese enlace ya venció.', 'Nuestro equipo'], false)
+            ->assertDontSee('hero-band');
+    }
+
+    public function test_the_header_and_the_footer_carry_the_brand_the_home_link_and_the_social_networks(): void
+    {
+        Setting::set('clinic.district', null);
+        Setting::set('clinic.instagram', 'https://instagram.com/consultorio');
+        Setting::set('clinic.tiktok', 'https://tiktok.com/@consultorio');
+
+        // "Inicio" va primero y marca la página en la que se está. Sin distrito, el nombre va solo.
+        $this->get(route('site.home'))
+            ->assertOk()
+            ->assertSeeInOrder(['class="site-nav"', 'href="'.route('site.home').'"', 'aria-current="page"', 'Inicio</a>', 'Tratamientos', 'class="menu"'], false)
+            ->assertSee('<span class="brand">'.Setting::get('clinic.name').'</span>', false)
+            ->assertDontSee('Dentistas en');
+
+        // El pie: la marca con "Reservar cita", las redes cargadas como íconos con su nombre, y lo legal al final.
+        $this->get(route('site.team'))
+            ->assertOk()
+            ->assertSeeInOrder(['class="site-nav"', 'Inicio</a>', 'aria-current="page"', 'Equipo</a>'], false)
+            ->assertSeeInOrder([
+                'class="footer-top"',
+                '<a href="'.route('site.booking').'" class="btn ghost">',
+                'El consultorio',
+                '<a href="https://instagram.com/consultorio" rel="noopener" target="_blank" aria-label="Instagram" title="Instagram"><svg',
+                '<a href="https://tiktok.com/@consultorio" rel="noopener" target="_blank" aria-label="TikTok" title="TikTok"><svg',
+                'class="footer-bottom"',
+                '© '.now()->year.' '.Setting::get('clinic.name'),
+                'Política de privacidad',
+            ], false)
+            ->assertDontSee('aria-label="Facebook"', false);
     }
 
     public function test_the_home_features_the_treatment_of_the_specialty_a_doctor_declares(): void
