@@ -18,12 +18,14 @@ use App\Services\Booking\AppointmentService;
 use App\Services\Booking\WebAvailability;
 use App\Services\Booking\WebBookingData;
 use App\Support\Dates;
+use App\Support\FamilyNames;
 use App\Support\Phone;
 use Carbon\CarbonImmutable;
 use Illuminate\Auth\Access\AuthorizationException;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Validation\Rule;
+use Illuminate\Validation\ValidationException;
 use Illuminate\View\View;
 use Livewire\Attributes\Computed;
 use Livewire\Attributes\Locked;
@@ -159,6 +161,13 @@ class BookingWizard extends Component
         return $this->device?->account->patients()->orderByRaw('relationship = ? desc', [PatientRelationship::Self->value])->orderBy('first_name')->get() ?? collect();
     }
 
+    /** @return array<int, string> Cómo se muestra cada familiar: dos con el mismo nombre llevan su apellido. */
+    #[Computed]
+    public function familyNames(): array
+    {
+        return FamilyNames::for($this->family);
+    }
+
     /**
      * De la familia del celular recordado, quién está en tratamiento: su doctor programa sus sesiones y
      * la web no las reserva. Se dice desde el primer paso, no al final.
@@ -228,10 +237,15 @@ class BookingWizard extends Component
         $this->step = 3;
     }
 
-    public function back(): void
+    /** Con la cita ya reservada no se vuelve al formulario: retroceder ahí la reservaría dos veces. */
+    public function back(int $steps = 1): void
     {
+        if ($this->step === 4) {
+            return;
+        }
+
         $this->error = null;
-        $this->step = max(1, $this->step - 1);
+        $this->step = max(1, $this->step - max(1, $steps));
 
         if ($this->step === 2) {
             $this->refreshDays();
@@ -245,7 +259,15 @@ class BookingWizard extends Component
         }
 
         $this->birthDate = $this->composedBirthDate();
-        $this->validate();
+
+        try {
+            $this->validate();
+        } catch (ValidationException $e) {
+            // En el celular el primer dato por corregir queda arriba, fuera de la pantalla: la vista lo trae.
+            $this->dispatch('datos-por-corregir');
+
+            throw $e;
+        }
 
         $limiter = 'reserva-web:'.request()->ip();
 
@@ -338,7 +360,11 @@ class BookingWizard extends Component
             'birthDate' => ['nullable', 'date', 'before:today', 'after:1900-01-01'],
             'origin' => ['nullable', Rule::enum(AppointmentOrigin::class)],
             'acceptsPrivacy' => [$this->privacyAlreadyAccepted() ? 'boolean' : 'accepted'],
-            'promoCode' => ['nullable', 'string', 'max:30'],
+            'promoCode' => ['nullable', 'string', 'max:30', function (string $attribute, mixed $value, \Closure $fail) {
+                if (($problem = $this->promoCodeProblem()) !== null) {
+                    $fail($problem);
+                }
+            }],
             'note' => ['nullable', 'string', 'max:300'],
         ];
     }
@@ -375,6 +401,44 @@ class BookingWizard extends Component
         }
 
         return $relationship === PatientRelationship::Self ? PatientRelationship::Other : $relationship;
+    }
+
+    /** Lo que ya corrigió deja de marcarse en rojo y de nombrarse junto al botón; al reservar se revisa de nuevo. */
+    public function updated(string $property): void
+    {
+        $this->resetErrorBag(str_starts_with($property, 'birth') ? 'birthDate' : $property);
+    }
+
+    public function updatedPromoCode(): void
+    {
+        unset($this->campaign);
+    }
+
+    /** Un código que no es de ninguna promoción vigente se avisa al escribirlo, no en el consultorio. */
+    public function promoCodeProblem(): ?string
+    {
+        return filled($this->promoCode) && $this->campaign === null
+            ? 'Ese código no existe o ya no está disponible. Corrígelo o bórralo para reservar.'
+            : null;
+    }
+
+    /**
+     * Lo que falta corregir, en palabras, para decirlo junto al botón de reservar.
+     *
+     * @return list<string>
+     */
+    public function fieldsToReview(): array
+    {
+        $names = [
+            'phone' => 'tu celular',
+            'firstName' => 'los nombres',
+            'lastName' => 'los apellidos',
+            'birthDate' => 'la fecha de nacimiento',
+            'promoCode' => 'el código de promoción',
+            'acceptsPrivacy' => 'la política de privacidad',
+        ];
+
+        return array_values(array_intersect_key($names, $this->getErrorBag()->toArray()));
     }
 
     public function privacyAlreadyAccepted(): bool

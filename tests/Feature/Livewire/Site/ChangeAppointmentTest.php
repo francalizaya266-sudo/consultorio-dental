@@ -99,4 +99,36 @@ class ChangeAppointmentTest extends TestCase
         $this->get(route('patient.link.change', $otherToken))->assertOk()->assertDontSee('Hermenegilda');
         $this->get(route('site.account.change', $appointment))->assertForbidden();
     }
+
+    public function test_the_options_chosen_are_counted_next_to_the_times_and_the_rest_lock_at_the_limit(): void
+    {
+        $this->freezeMonday();
+        [$appointment, $token] = $this->appointmentWithLink('2026-11-02 16:00');
+
+        Livewire::test(ChangeAppointment::class, ['appointment' => $appointment, 'token' => $token])
+            ->call('selectDate', '2026-11-03')
+            ->assertDontSee('de 3 horarios.')
+            ->call('pick', '09:00')
+            ->assertSee('Elegiste 1 de 3 horarios.')
+            ->assertDontSeeHtml("wire:click=\"pick('12:00')\" disabled")
+            ->call('pick', '10:00')
+            ->call('pick', '11:00')
+            ->assertSee('Ya elegiste tus 3 horarios. Quita uno para elegir otro.')
+            ->assertSeeHtml("wire:click=\"pick('12:00')\" disabled")
+            ->assertDontSeeHtml("wire:click=\"pick('11:00')\" disabled")
+            ->call('remove', '2026-11-03 11:00')
+            ->assertSee('Elegiste 2 de 3 horarios.')
+            ->assertDontSeeHtml("wire:click=\"pick('12:00')\" disabled");
+    }
+
+    public function test_moving_the_appointment_at_once_shows_no_options_counter(): void
+    {
+        $this->freezeMonday();
+        [$appointment, $token] = $this->appointmentWithLink('2026-11-04 10:00');
+
+        Livewire::test(ChangeAppointment::class, ['appointment' => $appointment, 'token' => $token])
+            ->call('pick', '11:00')
+            ->assertSet('chosen', ['2026-11-02 11:00'])
+            ->assertDontSee('horarios.');
+    }
 }

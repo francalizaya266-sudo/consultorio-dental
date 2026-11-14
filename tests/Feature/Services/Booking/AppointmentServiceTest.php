@@ -128,6 +128,20 @@ class AppointmentServiceTest extends TestCase
         $this->service()->bookFromWeb($this->webBooking($doctor, $treatment, '2026-11-03 10:00'));
     }
 
+    public function test_reuses_the_patient_when_the_name_comes_without_accents_or_with_extra_spaces(): void
+    {
+        $this->freezeMonday();
+        $treatment = Treatment::factory()->evaluation()->create();
+        $doctor = $this->doctorOffering($treatment);
+        $first = $this->service()->bookFromWeb($this->webBooking($doctor, $treatment, '2026-11-03 10:00', ['firstName' => 'María', 'lastName' => 'Quispe Huamán']));
+
+        $second = $this->service()->bookFromWeb($this->webBooking($doctor, $treatment, '2026-11-04 10:00', ['firstName' => ' maria ', 'lastName' => 'QUISPE  huaman']));
+
+        $this->assertTrue($second->patient->is($first->patient));
+        $this->assertSame('María Quispe Huamán', $second->patient->full_name);
+        $this->assertDatabaseCount('patients', 1);
+    }
+
     public function test_limits_each_patient_to_two_future_web_appointments(): void
     {
         $this->freezeMonday();
