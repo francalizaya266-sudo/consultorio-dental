@@ -496,40 +496,38 @@ details.more[open] > summary::after { transform: translateY(.06em) rotate(225deg
 /* Sin las frases montadas sobre el borde (no hay reserva en línea), la portada no les guarda sitio. */
 .hero.plain { margin-bottom: -32px; }
 .hero h1 { font-size: clamp(2.375rem, 8.2vw, 4rem); font-weight: 800; line-height: 1.04; letter-spacing: -.04em; max-width: 14ch; }
-/* La segunda mitad del título, en celeste y en su propia línea. */
-.hero h1 span { display: block; color: var(--sky-ink); }
-.hero .lead { font-size: clamp(1.0625rem, 2.1vw, 1.3125rem); line-height: 1.5; color: #d9e6f9; max-width: 36ch; margin: 18px 0 26px; }
-/* Arriba del título: si el consultorio está abierto ahora. */
-.hero .eyebrow {
-    display: inline-flex; align-items: center; gap: 10px; margin: 0 0 14px; color: var(--sky-ink);
-    font-weight: 700; font-size: .8125rem; line-height: 1.3; letter-spacing: .12em; text-transform: uppercase;
+/* La segunda mitad del título, en celeste y en su propia línea, con un trazo de pincel debajo. */
+.hero h1 span { position: relative; display: block; width: fit-content; color: var(--sky-ink); }
+.hero h1 span::after {
+    content: ""; position: absolute; left: 28%; right: -2%; bottom: -.3em; height: .24em;
+    background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 200 16' preserveAspectRatio='none'%3E%3Cpath fill='%2386c8ff' d='M2 14C50 5 128 1 198 3c-62 3-138 9-196 11Z'/%3E%3C/svg%3E") center / 100% 100% no-repeat;
 }
-.hero .eyebrow::before { content: ""; flex: none; width: 8px; height: 8px; border-radius: 50%; background: #9db4d6; box-shadow: 0 0 0 4px rgb(157 180 214 / .22); }
-.hero .eyebrow.open::before { background: #5ad19f; box-shadow: 0 0 0 4px rgb(90 209 159 / .25); }
+.hero .lead { font-size: clamp(1.0625rem, 2.1vw, 1.3125rem); line-height: 1.5; color: #d9e6f9; max-width: 36ch; margin: 24px 0 26px; }
+/* Arriba de todo: si el consultorio está abierto ahora, en una pastilla. */
+.hero .open-now {
+    display: inline-flex; align-items: center; gap: 8px; margin: 0 0 14px; padding: 5px 12px 5px 10px; border-radius: 999px;
+    background: rgb(255 255 255 / .08); box-shadow: inset 0 0 0 1px rgb(255 255 255 / .16);
+    color: #e3eeff; font-weight: 600; font-size: .8125rem; line-height: 1.3;
+}
+.hero .open-now::before { content: ""; flex: none; width: 8px; height: 8px; border-radius: 50%; background: #9db4d6; box-shadow: 0 0 0 4px rgb(157 180 214 / .22); }
+.hero .open-now.open::before { background: #5ad19f; box-shadow: 0 0 0 4px rgb(90 209 159 / .25); }
+/* Pegada al título, la frase del consultorio en mayúsculas con su raya (se cambia en Página web › Puesta a punto). */
+.hero .eyebrow {
+    display: flex; align-items: center; gap: 12px; margin: 0 0 12px; color: var(--sky-ink);
+    font-weight: 700; font-size: .8125rem; line-height: 1.3; letter-spacing: .16em; text-transform: uppercase;
+}
+.hero .eyebrow::after { content: ""; flex: 0 1 56px; min-width: 20px; height: 1px; background: currentColor; opacity: .7; }
 .hero .rating { color: #fff; }
 .hero .rating-stars { color: rgb(255 255 255 / .26); }
 .hero .rating-stars::after { color: #ffc24d; }
 .hero a.rating > span:last-child { text-decoration-color: rgb(255 255 255 / .45); }
-/* El implante encendido dentro de sus anillos de luz: la imagen de la marca. */
-.hero-art { position: relative; display: grid; place-items: center; justify-self: center; width: min(74vw, 300px); aspect-ratio: 1; margin: 0 0 -18px; pointer-events: none; }
+/* El implante con su cinta de luz en espiral: la imagen de la marca. La imagen trae la línea; el resplandor se lo da la sombra de luz. */
+.hero-art { position: relative; display: grid; place-items: center; justify-self: center; width: min(78vw, 320px); aspect-ratio: 1; margin: -4px 0 -14px; pointer-events: none; }
 .hero-art::before {
-    content: ""; position: absolute; inset: 2%; border-radius: 50%;
-    background: radial-gradient(closest-side, rgb(84 170 255 / .6), rgb(46 124 240 / .2) 62%, transparent 74%);
+    content: ""; position: absolute; inset: 4%; border-radius: 50%;
+    background: radial-gradient(closest-side, rgb(84 170 255 / .5), rgb(46 124 240 / .18) 62%, transparent 76%);
 }
-.hero-art::after {
-    content: ""; position: absolute; left: 22%; right: 22%; bottom: 9%; height: 9%; border-radius: 50%;
-    background: radial-gradient(closest-side, rgb(150 220 255 / .85), transparent);
-}
-.hero-art .ring { position: absolute; inset: 9%; border-radius: 50%; border: 2px solid rgb(150 220 255 / .92); box-shadow: 0 0 22px rgb(90 190 255 / .85), inset 0 0 22px rgb(90 190 255 / .45); }
-.hero-art .ring.inner { inset: 17%; border: 1px solid rgb(150 220 255 / .4); box-shadow: none; }
-.hero-art .ring.ticks {
-    inset: 0; border: 0; box-shadow: none; background: repeating-conic-gradient(rgb(150 220 255 / .75) 0 .7deg, transparent .7deg 7.5deg);
-    -webkit-mask: radial-gradient(closest-side, transparent calc(100% - 8px), #000 calc(100% - 7px));
-    mask: radial-gradient(closest-side, transparent calc(100% - 8px), #000 calc(100% - 7px));
-    animation: girar 90s linear infinite;
-}
-.hero-art img { position: relative; width: 36%; height: auto; filter: drop-shadow(0 0 20px rgb(84 180 255 / .8)); }
-@keyframes girar { to { transform: rotate(1turn); } }
+.hero-art img { position: relative; width: 100%; height: auto; filter: drop-shadow(0 0 2px rgb(150 220 255 / .9)) drop-shadow(0 0 7px rgb(84 180 255 / .8)) drop-shadow(0 0 20px rgb(52 138 255 / .55)); }
 /* Con la foto real del consultorio: en el celular va bajo el texto y el implante le deja el sitio. */
 .hero-photo { margin: 0; }
 .hero-photo img { width: 100%; height: 100%; object-fit: cover; }
@@ -683,11 +681,6 @@ a.rating > span:last-child { text-decoration: underline; text-decoration-color: 
     .hero.with-photo .hero-art { display: grid; justify-self: start; width: clamp(200px, 36vw - 150px, 380px); margin: 0 0 0 clamp(-120px, (1024px - 100vw) * .29, 0px); }
     /* Detrás, una sombra azul para que la corona blanca no se pierda si la foto es clara. */
     .hero.with-photo .hero-art::before { inset: -8%; background: radial-gradient(closest-side, rgb(7 30 80 / .8), rgb(8 40 104 / .46) 56%, transparent 78%); }
-    /* En lugar del círculo, una órbita de luz inclinada: su mitad de atrás pasa por detrás del implante y la de adelante, por delante. */
-    .hero.with-photo .hero-art .ring { inset: 50% -2% 19%; border-width: 3px; transform: rotate(-13deg); }
-    .hero.with-photo .hero-art .ring.inner { z-index: 2; border-color: rgb(150 220 255 / .92); box-shadow: 0 0 22px rgb(90 190 255 / .85); clip-path: inset(50% -20% -40% -20%); }
-    .hero.with-photo .hero-art .ring.ticks { display: none; }
-    .hero.with-photo .hero-art img { z-index: 1; width: 40%; }
     /* Las frases, en una sola fila con forma de píldora. */
     .trust { display: flex; max-width: 1020px; margin: -64px auto 0; padding: 20px 12px; border-radius: 999px; }
     .trust li { flex: 1 1 0; justify-content: center; padding: 2px 20px; }
@@ -1130,7 +1123,6 @@ a.chip { text-decoration: none; display: inline-flex; align-items: center; }
     .faqs details[open] summary::after { transform: none; content: "−"; }
     .faqs details[open] > .prose, .menu[open] > .menu-panel { animation: fade .15s ease; }
     .done-art { animation: fade .2s ease both; }
-    .hero-art .ring.ticks { animation: none; }
     .services-grid a:hover { transform: none; }
     .loading-line { animation: pulse 1.2s linear infinite; transform: none; }
 }

@@ -45,6 +45,8 @@ class BookingWizardTest extends TestCase
             ->assertDontSee('Endodoncia')
             ->call('chooseTreatment', $evaluation->id)
             ->assertSet('step', 2)
+            // Desde el día y la hora se vuelve a elegir: al paciente se le dice "servicio".
+            ->assertSee('← Cambiar servicio')
             // Con 2 horas de anticipación mínima, lo primero es hoy a las 10:00.
             ->assertSet('date', '2026-11-02')
             ->assertSee('10:00')

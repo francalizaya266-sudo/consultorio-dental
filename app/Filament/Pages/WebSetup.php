@@ -64,6 +64,7 @@ class WebSetup extends Page
     protected static function settingKeys(): array
     {
         return [
+            'web.tagline' => 'string',
             'web.headline' => 'string',
             'web.intro' => 'string',
             'web.about' => 'string',
@@ -114,6 +115,12 @@ class WebSetup extends Page
                     ->id('inicio')
                     ->columns(2)
                     ->schema([
+                        TextInput::make('web.tagline')
+                            ->label('Frase arriba del título')
+                            ->maxLength(40)
+                            ->placeholder('Innovación y cuidado dental')
+                            ->helperText('Sale en mayúsculas, arriba del título y junto al aviso de si está abierto, que se pone solo. Vacía = no sale.')
+                            ->columnSpanFull(),
                         TextInput::make('web.headline')
                             ->label('Título del inicio')
                             ->required()

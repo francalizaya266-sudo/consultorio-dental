@@ -143,6 +143,12 @@ final class ClinicInfo
         return $this->text('clinic.hours_note');
     }
 
+    /** La frase corta de arriba del título del inicio ("Innovación y cuidado dental"), o null si la dejaron vacía. */
+    public function tagline(): ?string
+    {
+        return $this->text('web.tagline');
+    }
+
     public function headline(): string
     {
         return $this->text('web.headline') ?? $this->name();

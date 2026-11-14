@@ -79,6 +79,7 @@ final class ChangeHistory
         DatabaseBackup::KEEP_SETTING => 'Copias de los datos que se guardan',
         'reports.doctors_see_own' => 'Cada doctor ve sus propios ingresos y gráficos',
         'reports.monthly_goal' => 'Meta de cobro del mes',
+        'web.tagline' => 'Frase arriba del título de la web',
         'web.headline' => 'Título del inicio de la web',
         'web.intro' => 'Frase bajo el título de la web',
         'web.about' => 'Sobre el consultorio',

@@ -21,7 +21,7 @@ class TreatmentController extends Controller
         return view('site.treatments.index', [
             'treatments' => $this->visible()->get(),
             'evaluation' => $availability->treatments()->firstWhere('is_evaluation', true),
-            'jsonLd' => [$structuredData->breadcrumbs(['Tratamientos' => route('site.treatments')])],
+            'jsonLd' => [$structuredData->breadcrumbs(['Servicios' => route('site.treatments')])],
         ]);
     }
 
@@ -48,7 +48,7 @@ class TreatmentController extends Controller
             'reviews' => Review::query()->published()->whereBelongsTo($treatment)->limit(3)->get(),
             'others' => $this->visible()->whereKeyNot($treatment->getKey())->limit(6)->get(),
             'jsonLd' => array_filter([
-                $structuredData->breadcrumbs(['Tratamientos' => route('site.treatments'), $treatment->name => route('site.treatment', $treatment->slug)]),
+                $structuredData->breadcrumbs(['Servicios' => route('site.treatments'), $treatment->name => route('site.treatment', $treatment->slug)]),
                 $faqs->isNotEmpty() ? $structuredData->faqPage($faqs) : null,
             ]),
         ]);
