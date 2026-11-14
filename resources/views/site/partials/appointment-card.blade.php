@@ -3,6 +3,7 @@
     mismas palabras ("Confirmar asistencia", "Cambiar horario", "Cancelar cita").
 
     name: de quién es la cita, o null si es del titular del celular ("Tu cita").
+    guest: se reservó con este número sin entrar desde el celular de la familia y nadie la confirmó: se le explica al dueño del número.
     confirmUrl, changeUrl: a dónde van los botones (con el enlace de la cita o con el celular recordado).
     cancelUrl: null donde no se ofrece cancelar (el inicio, que solo lleva lo que sigue).
     askHealth: muestra "Antes de la cita" a quien todavía no contó su salud.
@@ -20,6 +21,7 @@
     $day = Dates::day($appointment->starts_at->toImmutable());
     $hour = Dates::time($appointment->starts_at->format('H:i'));
     $cancelUrl ??= null;
+    $guest ??= false;
     $pendingRequest ??= null;
     $cancelByWhatsapp = app(ClinicInfo::class)->whatsappUrl('Hola, necesito cancelar la cita de '.$appointment->patient->full_name.' del '.mb_strtolower($day).' a las '.$hour.'.');
 @endphp
@@ -32,7 +34,18 @@
     <strong class="when">{{ $day }}, {{ $hour }}</strong>
     <p>{{ $appointment->treatment->name }} · {{ $appointment->doctor->name }}</p>
 
-    @if ($askHealth ?? false)
+    {{-- La página no pide códigos al reservar: quien recibe una cita que no esperaba tiene que poder decir que no es suya. --}}
+    @if ($guest && $status === AppointmentStatus::Pending)
+        <p class="note guest">
+            <strong>Reservaron esta cita con tu número.</strong>
+            Si es de tu familia, confirma la asistencia. Si no la reconoces,
+            @if ($cancelUrl)
+                cancela la cita.
+            @else
+                cancélala en <a href="{{ route('site.account') }}">Mi cuenta</a>.
+            @endif
+        </p>
+    @elseif ($askHealth ?? false)
         @include('site.partials.health-ask', ['patient' => $appointment->patient])
     @endif
 

@@ -293,6 +293,61 @@ class BookingWizardTest extends TestCase
         $this->assertSame(PatientRelationship::Parent, $account->patients()->where('first_name', 'Juana')->sole()->relationship);
     }
 
+    public function test_someone_who_books_with_a_familys_number_from_another_phone_is_not_offered_until_the_family_books_for_them(): void
+    {
+        $this->freezeMonday();
+        $evaluation = Treatment::factory()->evaluation()->create();
+        $this->doctorOffering($evaluation);
+        $account = Account::factory()->verified()->create(['phone' => '+51987654321']);
+        $mother = Patient::factory()->for($account)->create(['first_name' => 'Rosa']);
+        Appointment::factory()->for($mother)->at('2026-10-20 10:00')->create(['status' => AppointmentStatus::Completed]);
+        RememberedDevice::create(['account_id' => $account->id, 'token_hash' => hash('sha256', 'celular-de-rosa'), 'expires_at' => now()->addMonth()]);
+
+        // Desde otro celular, con el número de Rosa: la web no pide códigos, así que la cita se crea.
+        Livewire::test(BookingWizard::class)
+            ->call('chooseTreatment', $evaluation->id)
+            ->call('chooseTime', '10:00')
+            ->set('phone', '987 654 321')
+            ->set('firstName', 'Carlos')
+            ->set('lastName', 'Mamani Soto')
+            ->set('acceptsPrivacy', true)
+            ->call('book')
+            ->assertHasNoErrors()
+            ->assertSet('step', 4);
+
+        $carlos = $account->patients()->where('first_name', 'Carlos')->sole();
+        $this->assertFalse($carlos->appointments()->sole()->from_verified_device);
+
+        // En el celular de Rosa no aparece como familiar ni se puede elegir.
+        Livewire::withCookie(DeviceService::COOKIE, 'celular-de-rosa')
+            ->test(BookingWizard::class)
+            ->assertSet('patientId', $mother->id)
+            ->call('chooseTreatment', $evaluation->id)
+            ->call('chooseTime', '11:00')
+            ->assertSee('¿Para quién es la cita?')
+            ->assertDontSee('Carlos')
+            ->call('choosePatient', $carlos->id)
+            ->assertSet('patientId', $mother->id)
+            // Si Rosa reserva para él con su nombre, es de la familia: no se crea otro Carlos.
+            ->call('forSomeoneElse')
+            ->set('firstName', 'carlos')
+            ->set('lastName', 'Mamani  Soto')
+            ->call('book')
+            ->assertHasNoErrors()
+            ->assertSet('step', 4);
+
+        $this->assertSame(2, $carlos->appointments()->count());
+        $this->assertSame(2, $account->patients()->count());
+
+        Livewire::withCookie(DeviceService::COOKIE, 'celular-de-rosa')
+            ->test(BookingWizard::class)
+            ->call('chooseTreatment', $evaluation->id)
+            ->call('chooseTime', '12:00')
+            ->assertSee('Carlos')
+            ->call('choosePatient', $carlos->id)
+            ->assertSet('patientId', $carlos->id);
+    }
+
     public function test_missing_data_is_named_next_to_the_button_and_the_page_is_told_to_show_it(): void
     {
         $this->freezeMonday();

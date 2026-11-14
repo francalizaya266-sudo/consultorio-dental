@@ -7,6 +7,7 @@ use App\Models\Concerns\Auditable;
 use App\Support\Phone;
 use Database\Factories\AccountFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -69,6 +70,29 @@ class Account extends Model
     public function holder(): HasOne
     {
         return $this->hasOne(Patient::class)->where('relationship', PatientRelationship::Self);
+    }
+
+    /**
+     * Quienes están "por confirmar" en este celular: todas sus citas son reservas de la web hechas sin entrar desde
+     * el celular de la familia, y nadie confirmó ninguna. No cuentan como familia hasta que el dueño del número
+     * confirme una. Mientras nadie del celular tenga una cita reconocida (su primera reserva), no hay familia que
+     * cuidar: no hay nadie por confirmar.
+     *
+     * @return list<int> Los id de esos pacientes.
+     */
+    public function guestIds(): array
+    {
+        $recognized = fn (Builder $appointments) => $appointments->recognized();
+
+        if ($this->patients()->whereHas('appointments', $recognized)->doesntExist()) {
+            return [];
+        }
+
+        return $this->patients()
+            ->whereHas('appointments')
+            ->whereDoesntHave('appointments', $recognized)
+            ->pluck('id')
+            ->all();
     }
 
     public function isBlocked(): bool

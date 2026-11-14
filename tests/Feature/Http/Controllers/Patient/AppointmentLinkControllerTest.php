@@ -5,6 +5,7 @@ namespace Tests\Feature\Http\Controllers\Patient;
 use App\Enums\AppointmentStatus;
 use App\Enums\MagicLinkPurpose;
 use App\Models\Appointment;
+use App\Models\Patient;
 use App\Models\RememberedDevice;
 use App\Services\Access\DeviceService;
 use App\Services\Access\MagicLinkService;
@@ -53,6 +54,27 @@ class AppointmentLinkControllerTest extends TestCase
         $this->assertSame(AppointmentStatus::Confirmed, $appointment->fresh()->status);
         $this->assertNotNull($appointment->patient->account->fresh()->phone_verified_at);
         $this->assertSame(1, RememberedDevice::whereBelongsTo($appointment->patient->account)->count());
+    }
+
+    public function test_the_link_of_an_appointment_the_family_has_not_recognized_names_who_it_is_for_and_asks(): void
+    {
+        $this->freezeMonday();
+        [$appointment, $token] = $this->appointmentWithLink();
+        $appointment->patient->update(['first_name' => 'Carlos', 'last_name' => 'Mamani Soto']);
+        // En ese celular ya había alguien que el consultorio conoce: el enlace le llega a esa familia, no a Carlos.
+        Appointment::factory()->for(Patient::factory()->for($appointment->patient->account))->at('2026-10-20 10:00')->create(['status' => AppointmentStatus::Completed]);
+
+        $this->get(route('patient.link', $token))
+            ->assertOk()
+            ->assertSeeInOrder(['¿Reconoces esta cita?', 'Cita de Carlos Mamani', 'Por confirmar', 'Reservaron esta cita con tu número.', 'Si es de tu familia, confirma la asistencia.', 'cancela la cita.', 'Confirmar asistencia'])
+            ->assertDontSee('Hola, Carlos');
+
+        $this->post(route('patient.link.confirm', $token));
+
+        $this->get(route('patient.link', $token))
+            ->assertOk()
+            ->assertSeeInOrder(['Hola, Carlos', 'Confirmada'])
+            ->assertDontSee(['¿Reconoces esta cita?', 'Cita de Carlos', 'Reservaron esta cita con tu número.']);
     }
 
     public function test_cancelling_from_the_link_cancels_the_appointment(): void

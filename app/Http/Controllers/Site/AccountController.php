@@ -71,6 +71,8 @@ class AccountController extends Controller
         return view('site.account.home', [
             'account' => $account,
             'patients' => $patients,
+            // Quien reservó con este número desde otro celular: su cita se ve, pero no cuenta como familia todavía.
+            'guests' => $account->guestIds(),
             'upcoming' => $upcoming,
             // "Antes de tu cita": en la primera cita de quien todavía no tiene antecedentes.
             'askHealth' => $upcoming

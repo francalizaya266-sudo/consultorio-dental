@@ -7,7 +7,9 @@
     use App\Support\Money;
     use App\Support\Phone;
 
-    $holder = $patients->firstWhere('relationship', PatientRelationship::Self);
+    // La familia es quien ya está reconocido: a quien está por confirmar no se le saluda ni se le cuenta.
+    $family = $patients->reject(fn ($patient) => in_array($patient->id, $guests, true));
+    $holder = $family->firstWhere('relationship', PatientRelationship::Self);
     // Dos personas de la familia con el mismo nombre se muestran con su apellido, para saber de quién es cada cita.
     $names = FamilyNames::for($patients);
 @endphp
@@ -15,7 +17,7 @@
     <section class="stack-lg">
         <div class="stack">
             <h1>Hola{{ $holder ? ', '.$holder->first_name : '' }}</h1>
-            <p class="lead">Citas de {{ $patients->count() > 1 ? 'tu familia' : 'este celular' }} · {{ Phone::display($account->phone) }}</p>
+            <p class="lead">Citas de {{ $family->count() > 1 ? 'tu familia' : 'este celular' }} · {{ Phone::display($account->phone) }}</p>
         </div>
 
         <section class="stack" aria-labelledby="proximas">
@@ -26,7 +28,8 @@
 
             @forelse ($upcoming as $appointment)
                 @include('site.partials.appointment-card', [
-                    'name' => $appointment->patient->relationship === PatientRelationship::Self ? null : $names[$appointment->patient_id],
+                    'name' => $appointment->patient->is($holder) ? null : $names[$appointment->patient_id],
+                    'guest' => in_array((int) $appointment->patient_id, $guests, true),
                     'confirmUrl' => route('site.account.confirm', $appointment),
                     'changeUrl' => route('site.account.change', $appointment),
                     'cancelUrl' => route('site.account.cancel', $appointment),
@@ -129,7 +132,7 @@
                 @endforelse
 
                 <div class="stack" style="margin-top: 24px">
-                    @foreach ($patients as $patient)
+                    @foreach ($family as $patient)
                         <div class="panel">
                             <h3>{{ $patient->full_name }}</h3>
                             <dl class="facts" style="margin-top: 8px">

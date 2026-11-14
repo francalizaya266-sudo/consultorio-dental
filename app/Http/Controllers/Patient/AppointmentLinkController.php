@@ -43,6 +43,7 @@ class AppointmentLinkController extends Controller
         return view('patient.appointment', [
             'token' => $token,
             'appointment' => $appointment,
+            'guest' => in_array((int) $appointment->patient_id, $appointment->patient->account?->guestIds() ?? [], true),
             'pendingRequest' => $appointment->rescheduleRequests()->where('status', RescheduleRequestStatus::Pending)->with('options')->latest('id')->first(),
         ]);
     }

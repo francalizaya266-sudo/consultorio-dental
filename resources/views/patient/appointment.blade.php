@@ -2,8 +2,11 @@
 <x-site-layout title="Tu cita" :noindex="true" :whatsapp-float="false">
     <section class="stack-lg">
         <div class="stack">
-            <h1>Hola, {{ $appointment->patient->first_name }}</h1>
+            {{-- A quien está por confirmar no se le saluda por su nombre: el enlace llega al dueño del número. --}}
+            <h1>{{ $guest ? '¿Reconoces esta cita?' : 'Hola, '.$appointment->patient->first_name }}</h1>
             @include('site.partials.appointment-card', [
+                'name' => $guest ? $appointment->patient->short_name : null,
+                'guest' => $guest,
                 'confirmUrl' => route('patient.link.confirm', $token),
                 'changeUrl' => route('patient.link.change', $token),
                 'cancelUrl' => route('patient.link.cancel', $token),
