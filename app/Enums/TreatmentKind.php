@@ -153,6 +153,36 @@ enum TreatmentKind: string
             ->all();
     }
 
+    /**
+     * Los tratamientos de cada tipo, contando el que sale del nombre cuando la ficha no lo dice:
+     * ['cleaning' => [3, 8], 'orthodontics' => [2]]. El tipo no es una columna que la base de datos pueda ordenar
+     * o filtrar sola.
+     *
+     * @return array<string, list<int>>
+     */
+    public static function treatmentsByKind(): array
+    {
+        return Treatment::withTrashed()
+            ->get(['id', 'name', 'kind', 'is_evaluation'])
+            ->toBase()
+            ->groupBy(fn (Treatment $treatment) => self::for($treatment)->value)
+            ->map(fn ($treatments) => $treatments->pluck('id')->all())
+            ->all();
+    }
+
+    /**
+     * Los tipos en el orden en que se leen en una lista: por su nombre, con "Otro" al final.
+     *
+     * @return list<self>
+     */
+    public static function inReadingOrder(): array
+    {
+        return collect(self::cases())
+            ->sortBy(fn (self $kind) => [$kind === self::Other, Str::ascii($kind->getLabel())])
+            ->values()
+            ->all();
+    }
+
     /** Lo que se le suele pedir al paciente antes de venir, para proponerlo en la ficha del tratamiento. */
     public function suggestedBeforeInstructions(): ?string
     {

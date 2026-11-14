@@ -24,6 +24,9 @@ class Setting extends Model
     /** Lo que el sistema anota solo (cuándo fue la última copia de seguridad): no es un cambio hecho por alguien. */
     private const SYSTEM_STATE = 'backups.';
 
+    /** Cuántas copias se guardan sí lo decide alguien, aunque sea de las copias: queda en el historial. */
+    private const DECIDED_BY_SOMEONE = ['backups.keep'];
+
     protected function casts(): array
     {
         return ['value' => 'json'];
@@ -72,7 +75,7 @@ class Setting extends Model
      */
     protected function writeAudit(string $event, array $old, array $new): void
     {
-        if (str_starts_with((string) $this->key, self::SYSTEM_STATE)) {
+        if (str_starts_with((string) $this->key, self::SYSTEM_STATE) && ! in_array($this->key, self::DECIDED_BY_SOMEONE, true)) {
             return;
         }
 
