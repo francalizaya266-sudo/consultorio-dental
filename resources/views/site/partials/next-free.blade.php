@@ -2,10 +2,12 @@
     use App\Support\Dates;
 
     $headingLevel ??= 'h2';
+    // En la página de un tratamiento que empieza por la evaluación, el título dice para qué es el horario.
+    $title ??= 'Próximo horario libre';
 @endphp
 {{-- Los próximos horarios libres de verdad, sacados de la agenda: un toque y queda elegido. --}}
 <div class="next-free" aria-labelledby="proximos">
-    <{{ $headingLevel }} id="proximos">Próximo horario libre</{{ $headingLevel }}>
+    <{{ $headingLevel }} id="proximos">{{ $title }}</{{ $headingLevel }}>
     <p class="when">{{ Dates::relativeDay($nextFree['date'], withDate: true) }}</p>
     <p class="for">{{ $treatment->name }} · {{ $treatment->duration_minutes }} min</p>
     <ul class="free-times">

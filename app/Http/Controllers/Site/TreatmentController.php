@@ -16,10 +16,11 @@ use Illuminate\View\View;
 /** Tratamientos: la lista con duración y precio "desde", y una página por tratamiento. */
 class TreatmentController extends Controller
 {
-    public function index(StructuredData $structuredData): View
+    public function index(WebAvailability $availability, StructuredData $structuredData): View
     {
         return view('site.treatments.index', [
             'treatments' => $this->visible()->get(),
+            'evaluation' => $availability->treatments()->firstWhere('is_evaluation', true),
             'jsonLd' => [$structuredData->breadcrumbs(['Tratamientos' => route('site.treatments')])],
         ]);
     }

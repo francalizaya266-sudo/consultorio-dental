@@ -7,8 +7,8 @@
     $heroImage = $clinic->heroImageUrl();
     $googleRating = $clinic->googleRating();
 @endphp
-{{-- El horario completo ya está en "Cómo llegar y contactarnos": el pie no lo repite. --}}
-<x-site-layout :wide="true" :json-ld="$jsonLd" :image="$heroImage" :footer-hours="false">
+{{-- La dirección, el horario y el WhatsApp ya están en "Dónde estamos": el pie no los repite. --}}
+<x-site-layout :wide="true" :json-ld="$jsonLd" :image="$heroImage" :footer-contact="false">
     {{-- Quien vuelve desde su celular recordado ve primero lo suyo; quien no, la portada de siempre. --}}
     @if ($welcome)
         @include('site.partials.welcome', ['welcome' => $welcome])
@@ -74,18 +74,25 @@
         </section>
     @endif
 
+    {{-- Quién atiende y la presentación del consultorio van juntos: son la misma respuesta. --}}
     @if ($doctors->isNotEmpty())
         <section class="section band" aria-labelledby="equipo">
             <div class="section-head">
-                @if ($doctors->count() === 1)
-                    <h2 id="equipo">Quién te atiende</h2>
+                <h2 id="equipo">{{ $doctors->count() === 1 ? 'Quién te atiende' : 'Quiénes te atienden' }}</h2>
+                @if ($clinic->about())
+                    <div class="prose">{{ Markdown::paragraphs($clinic->about()) }}</div>
+                @elseif ($doctors->count() === 1)
                     <p>Con su número de colegiatura (COP) a la vista.</p>
                 @else
-                    <h2 id="equipo">Quiénes te atienden</h2>
                     <p>Cirujanos dentistas colegiados. Su número de colegiatura (COP) está a la vista.</p>
                 @endif
             </div>
             @include('site.partials.doctors', ['doctors' => $doctors, 'full' => false])
+        </section>
+    @elseif ($clinic->about())
+        <section class="section about" aria-labelledby="nosotros">
+            <h2 id="nosotros">Sobre {{ $clinic->name() }}</h2>
+            <div class="prose">{{ Markdown::paragraphs($clinic->about()) }}</div>
         </section>
     @endif
 
@@ -112,13 +119,6 @@
                     <a href="{{ $clinic->reviewsUrl() }}" class="arrow" rel="noopener" target="_blank">Vernos en Google</a>
                 @endif
             </p>
-        </section>
-    @endif
-
-    @if ($clinic->about())
-        <section class="section about" aria-labelledby="nosotros">
-            <h2 id="nosotros">Sobre {{ $clinic->name() }}</h2>
-            <div class="prose">{{ Markdown::paragraphs($clinic->about()) }}</div>
         </section>
     @endif
 

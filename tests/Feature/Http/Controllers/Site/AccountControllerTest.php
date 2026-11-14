@@ -377,6 +377,22 @@ class AccountControllerTest extends TestCase
         $this->assertSame(AppointmentStatus::Cancelled, $appointment->fresh()->status);
     }
 
+    public function test_my_account_offers_to_book_with_the_words_that_fit(): void
+    {
+        $this->rememberDevice();
+
+        // Sin citas por delante no hay "otra": el botón dice lo mismo que en el resto del sitio.
+        $this->get(route('site.account'))
+            ->assertOk()
+            ->assertSee('No tienes citas próximas.')
+            ->assertSee('>Reservar cita</a>', false)
+            ->assertDontSee('Reservar otra');
+
+        Appointment::factory()->for($this->mother)->at('2026-11-04 10:00')->create();
+
+        $this->get(route('site.account'))->assertOk()->assertSee('>Reservar otra cita</a>', false);
+    }
+
     public function test_another_familys_appointment_is_off_limits(): void
     {
         $stranger = Appointment::factory()->at('2026-11-04 10:00')->create();

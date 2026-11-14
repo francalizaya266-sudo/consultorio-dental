@@ -1,12 +1,13 @@
 {{--
     wide: páginas de contenido (inicio, tratamientos…); sin wide, columna angosta para formularios.
     whatsappFloat: false en pantallas donde el botón flotante (y, en el celular, la barra de abajo) taparía los horarios.
-    footerHours: false donde la página ya muestra el horario completo, para no repetirlo en el pie.
+    footerContact: false donde la página ya muestra la dirección, el horario y el WhatsApp ("Dónde estamos"),
+        para no repetirlos en el pie: ahí queda solo la lista de páginas.
     minimalFooter: pie de una línea mientras se reserva, para que nada distraiga hasta terminar (el encabezado
         también queda solo con el nombre, que vuelve al inicio).
     jsonLd: datos estructurados de schema.org para Google.
 --}}
-@props(['title' => null, 'description' => null, 'noindex' => false, 'whatsappFloat' => true, 'footerHours' => true, 'minimalFooter' => false, 'wide' => false, 'image' => null, 'jsonLd' => []])
+@props(['title' => null, 'description' => null, 'noindex' => false, 'whatsappFloat' => true, 'footerContact' => true, 'minimalFooter' => false, 'wide' => false, 'image' => null, 'jsonLd' => []])
 @php
     use App\Services\Web\ClinicInfo;
     use App\Support\Phone;
@@ -25,11 +26,13 @@
         $sections['promotions'] ? ['Promociones', route('site.promotions'), 'site.promotion*'] : null,
         ['Contacto', route('site.contact'), 'site.contact'],
     ]);
-    $more = array_filter([
+    $more = array_values(array_filter([
         $sections['cases'] ? ['Antes y después', route('site.cases'), 'site.cases'] : null,
         $sections['reviews'] ? ['Opiniones', route('site.reviews'), 'site.reviews'] : null,
         $sections['faq'] ? ['Preguntas frecuentes', route('site.faq'), 'site.faq'] : null,
-    ]);
+    ]));
+    // Al compartir el enlace siempre sale una imagen: la de la página, la foto del consultorio o la de la marca.
+    $shareImage = $image ?? $clinic->heroImageUrl() ?? asset('imagen-al-compartir.jpg');
 @endphp
 <!DOCTYPE html>
 <html lang="es-PE">
@@ -53,10 +56,12 @@
         <meta property="og:description" content="{{ $description }}">
     @endif
     <meta property="og:url" content="{{ url()->current() }}">
-    @if ($image)
-        <meta property="og:image" content="{{ url($image) }}">
-    @endif
+    <meta property="og:image" content="{{ url($shareImage) }}">
+    <meta name="twitter:card" content="summary_large_image">
     <meta name="theme-color" content="#ffffff">
+    <link rel="icon" href="{{ asset('favicon.ico') }}" sizes="32x32">
+    <link rel="icon" href="{{ asset('favicon.svg') }}" type="image/svg+xml">
+    <link rel="apple-touch-icon" href="{{ asset('apple-touch-icon.png') }}">
     <link rel="preload" href="{{ asset('fonts/inter-latin.woff2') }}" as="font" type="font/woff2" crossorigin>
     <link rel="stylesheet" href="{{ asset('css/sitio.css') }}?v={{ @filemtime(public_path('css/sitio.css')) }}">
     {{-- Con JavaScript, las secciones aparecen suaves al llegar a ellas; sin él, se ven de una vez. --}}
@@ -67,7 +72,8 @@
 </head>
 <body>
 <a href="#contenido" class="skip">Saltar al contenido</a>
-<header class="site-header">
+{{-- Con una página extra a la vista el menú necesita más ancho (sitio.css): hasta entonces queda el botón "Menú". --}}
+<header @class(['site-header', 'many' => (bool) $more])>
     <div class="wrap">
         @if ($logo = $clinic->logoUrl())
             <a href="{{ route('site.home') }}" class="wordmark with-logo"><img src="{{ $logo }}" alt="{{ $name }}" class="logo"></a>
@@ -79,6 +85,19 @@
             @foreach ($nav as [$label, $url, $pattern])
                 <a href="{{ $url }}" @if (request()->routeIs($pattern)) aria-current="page" @endif>{{ $label }}</a>
             @endforeach
+            {{-- Las demás páginas con contenido: una sola va a la vista; varias, bajo "Más". --}}
+            @if (count($more) === 1)
+                <a href="{{ $more[0][1] }}" @if (request()->routeIs($more[0][2])) aria-current="page" @endif>{{ $more[0][0] }}</a>
+            @elseif ($more)
+                <details class="more-nav">
+                    <summary @if (request()->routeIs(array_column($more, 2))) aria-current="page" @endif>Más</summary>
+                    <div class="more-panel">
+                        @foreach ($more as [$label, $url, $pattern])
+                            <a href="{{ $url }}" @if (request()->routeIs($pattern)) aria-current="page" @endif>{{ $label }}</a>
+                        @endforeach
+                    </div>
+                </details>
+            @endif
             <a href="{{ route('site.account') }}" @if (request()->routeIs('site.account*')) aria-current="page" @endif>Mi cuenta</a>
         </nav>
         @unless (request()->routeIs('site.booking'))
@@ -121,57 +140,52 @@
         </div>
     </footer>
 @else
-<footer class="site-footer">
+<footer @class(['site-footer', 'short' => ! $footerContact])>
     <div class="wrap wide">
         <p class="name">{{ $name }}</p>
-        <div @class(['footer-cols', 'without-hours' => ! $footerHours || $hours->isEmpty()])>
-            <div>
-                <h2>Dónde estamos</h2>
-                @if ($clinic->fullAddress())
-                    <p>{{ $clinic->fullAddress() }}</p>
-                @endif
-                @if ($clinic->directionsUrl())
-                    <p><a href="{{ $clinic->directionsUrl() }}" rel="noopener" target="_blank">Cómo llegar</a></p>
-                @endif
-            </div>
-            @if ($footerHours && ! $hours->isEmpty())
+        <div @class(['footer-cols', 'without-hours' => $hours->isEmpty()])>
+            @if ($footerContact)
                 <div>
-                    <h2>Horario</h2>
-                    @if ($status)
-                        <p @class(['status', 'open' => $hours->isOpen(now()->toImmutable())])>{{ $status }}</p>
+                    <h2>Dónde estamos</h2>
+                    @if ($clinic->fullAddress())
+                        <p>{{ $clinic->fullAddress() }}</p>
                     @endif
-                    <dl class="hours">
-                        @foreach ($hours->lines() as $line)
-                            <dt>{{ $line['days'] }}</dt>
-                            <dd>@foreach ($line['hours'] as $range)<span>{{ $range }}</span>@endforeach</dd>
-                        @endforeach
-                    </dl>
-                    @if ($clinic->hoursNote())
-                        <p class="note">{{ $clinic->hoursNote() }}</p>
+                    @if ($clinic->directionsUrl())
+                        <p><a href="{{ $clinic->directionsUrl() }}" rel="noopener" target="_blank">Cómo llegar</a></p>
                     @endif
                 </div>
-            @endif
-            <div>
-                <h2>Escríbenos</h2>
-                <p>
-                    @if ($clinic->whatsappUrl())
-                        WhatsApp: <a href="{{ $clinic->whatsappUrl() }}" rel="noopener">{{ Phone::display($clinic->whatsapp()) }}</a><br>
-                    @endif
-                    @if ($clinic->phone())
-                        Teléfono: <a href="{{ $clinic->phoneHref() }}">{{ $clinic->phone() }}</a><br>
-                    @endif
-                    @if ($clinic->email())
-                        <a href="mailto:{{ $clinic->email() }}">{{ $clinic->email() }}</a>
-                    @endif
-                </p>
-                @if ($clinic->socials())
-                    <p class="socials">
-                        @foreach ($clinic->socials() as $network => $url)
-                            <a href="{{ $url }}" rel="noopener" target="_blank">{{ $network }}</a>
-                        @endforeach
+                @unless ($hours->isEmpty())
+                    <div>
+                        <h2>Horario</h2>
+                        @if ($status)
+                            <p @class(['status', 'open' => $hours->isOpen(now()->toImmutable())])>{{ $status }}</p>
+                        @endif
+                        <dl class="hours">
+                            @foreach ($hours->lines() as $line)
+                                <dt>{{ $line['days'] }}</dt>
+                                <dd>@foreach ($line['hours'] as $range)<span>{{ $range }}</span>@endforeach</dd>
+                            @endforeach
+                        </dl>
+                        @if ($clinic->hoursNote())
+                            <p class="note">{{ $clinic->hoursNote() }}</p>
+                        @endif
+                    </div>
+                @endunless
+                <div>
+                    <h2>Escríbenos</h2>
+                    <p>
+                        @if ($clinic->whatsappUrl())
+                            WhatsApp: <a href="{{ $clinic->whatsappUrl() }}" rel="noopener">{{ Phone::display($clinic->whatsapp()) }}</a><br>
+                        @endif
+                        @if ($clinic->phone())
+                            Teléfono: <a href="{{ $clinic->phoneHref() }}">{{ $clinic->phone() }}</a><br>
+                        @endif
+                        @if ($clinic->email())
+                            <a href="mailto:{{ $clinic->email() }}">{{ $clinic->email() }}</a>
+                        @endif
                     </p>
-                @endif
-            </div>
+                </div>
+            @endif
             <nav aria-label="Más páginas">
                 <h2>El consultorio</h2>
                 <ul>
@@ -181,6 +195,13 @@
                     <li><a href="{{ route('site.account') }}">Mi cuenta</a></li>
                     <li><a href="{{ route('site.privacy') }}">Política de privacidad</a></li>
                 </ul>
+                @if ($clinic->socials())
+                    <p class="socials">
+                        @foreach ($clinic->socials() as $network => $url)
+                            <a href="{{ $url }}" rel="noopener" target="_blank">{{ $network }}</a>
+                        @endforeach
+                    </p>
+                @endif
             </nav>
         </div>
     </div>
@@ -190,7 +211,7 @@
 {{-- En el celular: barra fija abajo con lo que más se busca. En pantallas grandes queda el botón de WhatsApp. --}}
 @if ($whatsappFloat)
     <nav class="action-bar" aria-label="Acciones rápidas">
-        <a href="{{ route('site.booking') }}" class="btn">Reservar</a>
+        <a href="{{ route('site.booking') }}" class="btn">Reservar<span class="long">&nbsp;cita</span></a>
         @if ($clinic->whatsappUrl())
             <a href="{{ $clinic->whatsappUrl() }}" class="btn whatsapp" rel="noopener">WhatsApp</a>
         @endif
@@ -221,6 +242,16 @@
             });
         }, { rootMargin: '0px 0px -8% 0px' });
         sections.forEach(function (el) { seen.observe(el); });
+    })();
+    // "Menú" y "Más" se cierran al tocar fuera o con Escape.
+    (function () {
+        function close(except) {
+            document.querySelectorAll('.site-header details[open]').forEach(function (el) {
+                if (!except || !el.contains(except)) { el.removeAttribute('open'); }
+            });
+        }
+        document.addEventListener('click', function (event) { close(event.target); });
+        document.addEventListener('keydown', function (event) { if (event.key === 'Escape') { close(null); } });
     })();
 </script>
 </body>

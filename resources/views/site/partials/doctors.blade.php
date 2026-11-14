@@ -4,7 +4,12 @@
     use App\Support\Markdown;
     use Illuminate\Support\Str;
 @endphp
-{{-- full: con presentación, formación y tratamientos (página Equipo). --}}
+{{--
+    full: con presentación, formación y tratamientos (página Equipo).
+    El botón de cada doctor sirve para elegir con quién atenderse; con un solo doctor repetiría el "Reservar cita"
+    que la página ya tiene, así que fuera de Equipo solo sale cuando hay de dónde elegir.
+--}}
+@php($offerBooking = $full || $doctors->count() > 1)
 <div @class(['team', 'full' => $full])>
     @foreach ($doctors as $doctor)
         <article class="doctor" id="{{ $doctor->slug }}">
@@ -52,7 +57,7 @@
                 @elseif ($doctor->bio)
                     <p class="bio">{{ Str::limit($doctor->bio, 160) }}</p>
                 @endif
-                @if ($doctor->accepts_online_booking)
+                @if ($offerBooking && $doctor->accepts_online_booking)
                     <a href="{{ route('site.booking', ['doctor' => $doctor->slug]) }}" class="btn small quiet" aria-label="Reservar cita con {{ $doctor->name }}">Reservar cita</a>
                 @endif
             </div>
