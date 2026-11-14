@@ -378,6 +378,10 @@ details.more[open] > summary::after { transform: translateY(.06em) rotate(225deg
 .appointment .badge { flex: none; white-space: nowrap; }
 .appointment .when { font-size: 1.25rem; font-weight: 800; letter-spacing: -.01em; line-height: 1.2; }
 .appointment .note { font-size: .9375rem; padding: 10px 12px; border-radius: 12px; background: var(--ground); }
+/* La cita que la familia todavía no reconoce: en ámbar, como "Por confirmar", para que no pase como una más. */
+.appointment .note.guest { background: var(--warn-bg); color: var(--warn); }
+.appointment .note.guest strong { display: block; }
+.appointment .note.guest a { color: inherit; font-weight: 700; }
 .appointment .actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-top: 4px; }
 .appointment .actions form { margin: 0; }
 .appointment .btn.quiet { background: var(--ground); }
@@ -386,7 +390,7 @@ details.more[open] > summary::after { transform: translateY(.06em) rotate(225deg
 .appointment.solo .actions > * { flex: 1 1 100%; }
 .appointment.solo .actions .btn { width: 100%; min-height: 52px; font-size: 1rem; }
 .welcome .appointment { background: var(--ground); box-shadow: 0 1px 2px rgb(12 26 46 / .06); }
-.welcome .appointment .btn.quiet, .welcome .appointment .note { background: var(--surface); }
+.welcome .appointment .btn.quiet, .welcome .appointment .note:not(.guest) { background: var(--surface); }
 .welcome .appointment .health-ask { background: var(--surface); box-shadow: none; }
 
 .plan-card { background: var(--surface); border-radius: var(--radius); padding: 18px; display: grid; gap: 12px; }

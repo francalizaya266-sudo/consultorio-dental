@@ -6,6 +6,7 @@ use App\Enums\AppointmentStatus;
 use App\Enums\MagicLinkPurpose;
 use App\Enums\MessageStatus;
 use App\Enums\MessageTemplateKey;
+use App\Enums\PatientRelationship;
 use App\Enums\PlanItemStatus;
 use App\Enums\PlanPaymentMode;
 use App\Enums\Sex;
@@ -217,6 +218,56 @@ class AccountControllerTest extends TestCase
         $this->get(route('site.account'))->assertOk()->assertSeeInOrder([...$card, 'Cancelar cita', 'Sí, cancelar la cita']);
         // El inicio lleva solo lo que sigue: cancelar queda en Mi cuenta.
         $this->get(route('site.home'))->assertOk()->assertSeeInOrder($card)->assertDontSee('Cancelar cita');
+    }
+
+    public function test_an_appointment_booked_with_the_familys_number_from_another_phone_asks_the_family_to_recognize_it(): void
+    {
+        // Rosa ya confirmó la suya: en este celular hay una familia que cuidar.
+        Appointment::factory()->for($this->mother)->at('2026-11-04 10:00')->confirmed()->create();
+        // Alguien reservó después con el número de Rosa, desde otro celular (así crea la cita la fábrica).
+        $carlos = Patient::factory()->dependentOf($this->account, PatientRelationship::Other)->create(['first_name' => 'Carlos', 'last_name' => 'Mamani Soto']);
+        $booking = Appointment::factory()->for($carlos)->at('2026-11-06 10:00')->create();
+        $notice = 'Reservaron esta cita con tu número.';
+
+        $this->rememberDevice()
+            ->get(route('site.account'))
+            ->assertOk()
+            ->assertSeeInOrder(['Tu cita', 'Cita de Carlos', 'Por confirmar', $notice, 'Si no la reconoces', 'cancela la cita.', 'Confirmar asistencia', 'Cancelar cita']);
+
+        // En el inicio va primero, aunque sea la más lejana, y cancelar queda en Mi cuenta.
+        $this->get(route('site.home'))
+            ->assertOk()
+            ->assertSeeInOrder(['Hola, Rosa', 'Cita de Carlos', $notice, 'cancélala en', 'Mi cuenta', 'Tu cita']);
+
+        // Mientras nadie la confirme, Carlos no figura entre los datos de la familia.
+        $this->post(route('patient.link.enter', basename(app(MagicLinkService::class)->issue($this->account, MagicLinkPurpose::Access))));
+        $this->get(route('site.account'))->assertOk()->assertSee($this->mother->full_name)->assertDontSee('Carlos Mamani Soto');
+
+        $this->from(route('site.account'))->post(route('site.account.confirm', $booking))->assertSessionHas('status');
+
+        $this->get(route('site.account'))->assertOk()->assertSee('Cita de Carlos')->assertSee('Carlos Mamani Soto')->assertDontSee($notice);
+        $this->get(route('site.home'))->assertOk()->assertSeeInOrder(['Tu cita', 'Cita de Carlos'])->assertDontSee($notice);
+    }
+
+    public function test_someone_waiting_to_be_recognized_is_not_greeted_as_the_owner_of_the_phone(): void
+    {
+        // En el celular solo estaba Mateo, que ya vino a una cita; quien reservó "para mí" desde otro celular no es su titular.
+        $this->mother->delete();
+        Appointment::factory()->for($this->child)->at('2026-10-20 10:00')->create(['status' => AppointmentStatus::Completed]);
+        $carlos = Patient::factory()->for($this->account)->create(['first_name' => 'Carlos', 'relationship' => PatientRelationship::Self]);
+        Appointment::factory()->for($carlos)->at('2026-11-06 10:00')->create();
+
+        $this->rememberDevice()
+            ->get(route('site.account'))
+            ->assertOk()
+            ->assertSee('Citas de este celular')
+            ->assertSee('Cita de Carlos')
+            ->assertDontSee(['Hola, Carlos', 'Tu cita']);
+
+        $this->get(route('site.home'))
+            ->assertOk()
+            ->assertSee('Cita de Carlos')
+            ->assertDontSee(['Hola, Carlos', 'Tu cita', '¿No eres Carlos?']);
     }
 
     public function test_my_account_says_why_an_appointment_can_no_longer_be_cancelled(): void

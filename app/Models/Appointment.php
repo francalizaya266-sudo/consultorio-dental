@@ -161,6 +161,21 @@ class Appointment extends Model
                 ->where('starts_at', '<', today())));
     }
 
+    /**
+     * Citas que el consultorio o la familia reconocen: las agendó el consultorio, se reservaron desde el celular
+     * recordado de la familia, o ya se confirmaron o se atendieron. Las demás son reservas de la web hechas desde
+     * otro celular que nadie confirmó todavía.
+     */
+    #[Scope]
+    protected function recognized(Builder $query): Builder
+    {
+        return $query->where(fn (Builder $any) => $any
+            ->where('booked_via', '!=', BookingChannel::Web)
+            ->orWhere('from_verified_device', true)
+            ->orWhereNotNull('confirmed_at')
+            ->orWhereIn('status', [AppointmentStatus::Confirmed, AppointmentStatus::CheckedIn, AppointmentStatus::InProgress, AppointmentStatus::Completed]));
+    }
+
     /** "Por confirmar": citas por venir que el paciente todavía no confirma. */
     #[Scope]
     protected function awaitingConfirmation(Builder $query): Builder

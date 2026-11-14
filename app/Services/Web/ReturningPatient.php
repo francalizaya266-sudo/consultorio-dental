@@ -32,6 +32,7 @@ final class ReturningPatient
      * @return array{
      *     name: string|null,
      *     names: array<int, string>,
+     *     guests: list<int>,
      *     appointments: Collection<int, Appointment>,
      *     more: int,
      *     sessions: Collection<int, array{patient: Patient, done: int, total: int, doctor: string|null, requested: bool}>,
@@ -40,15 +41,21 @@ final class ReturningPatient
      */
     public function for(Account $account): array
     {
-        $family = $account->patients()->orderByRaw('relationship = ? desc', [PatientRelationship::Self->value])->orderBy('first_name')->get();
+        $patients = $account->patients()->orderByRaw('relationship = ? desc', [PatientRelationship::Self->value])->orderBy('first_name')->get();
+        // Quien reservó con este número desde otro celular: se muestra su cita con el aviso, pero no es familia todavía.
+        $guests = $account->guestIds();
+        $family = $patients->reject(fn (Patient $patient) => in_array($patient->getKey(), $guests, true))->values();
 
         $upcoming = Appointment::query()
-            ->whereIn('patient_id', $family->modelKeys())
+            ->whereIn('patient_id', $patients->modelKeys())
             ->where('starts_at', '>=', now())
             ->whereIn('status', AppointmentStatus::changeable())
             ->with(['patient.medicalBackground', 'doctor', 'treatment'])
             ->oldest('starts_at')
-            ->get();
+            ->get()
+            // La cita que la familia todavía no reconoce va primero: que no quede escondida en "Ver más".
+            ->sortBy(fn (Appointment $appointment) => in_array((int) $appointment->patient_id, $guests, true) ? 0 : 1)
+            ->values();
 
         $sessions = $this->sessions($family);
 
@@ -56,7 +63,8 @@ final class ReturningPatient
             // Saluda a quien tiene el celular: el titular. Si solo hay hijos registrados, sin nombre.
             'name' => $family->firstWhere('relationship', PatientRelationship::Self)?->first_name,
             // Cómo se nombra a cada familiar en las tarjetas: con apellido si otro lleva el mismo nombre.
-            'names' => FamilyNames::for($family),
+            'names' => FamilyNames::for($patients),
+            'guests' => $guests,
             'appointments' => $upcoming->take(self::APPOINTMENTS)->values(),
             'more' => max(0, $upcoming->count() - self::APPOINTMENTS),
             'sessions' => $sessions,

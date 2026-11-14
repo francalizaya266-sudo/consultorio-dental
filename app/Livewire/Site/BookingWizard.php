@@ -127,7 +127,8 @@ class BookingWizard extends Component
         }
 
         if ($device = $this->device) {
-            $this->patientId = $device->account->holder?->getKey() ?? $this->family->first()?->getKey();
+            // El titular va primero en la familia; si no hay titular, el primero de la lista.
+            $this->patientId = $this->family->first()?->getKey();
             // Desde "Te toca tu control" en el inicio: ya a nombre de quien le toca (solo si es de su familia).
             $this->choosePatient((int) request('para'));
         }
@@ -159,11 +160,22 @@ class BookingWizard extends Component
         return app(DeviceService::class)->current(request());
     }
 
-    /** @return Collection<int, Patient> Pacientes a cargo del celular recordado. */
+    /**
+     * Pacientes a cargo del celular recordado, con el titular primero. Quien reservó con este número desde otro
+     * celular no se ofrece hasta que la familia confirme su cita.
+     *
+     * @return Collection<int, Patient>
+     */
     #[Computed]
     public function family(): Collection
     {
-        return $this->device?->account->patients()->orderByRaw('relationship = ? desc', [PatientRelationship::Self->value])->orderBy('first_name')->get() ?? collect();
+        $account = $this->device?->account;
+
+        return $account?->patients()
+            ->whereKeyNot($account->guestIds())
+            ->orderByRaw('relationship = ? desc', [PatientRelationship::Self->value])
+            ->orderBy('first_name')
+            ->get() ?? collect();
     }
 
     /** @return array<int, string> Cómo se muestra cada familiar: dos con el mismo nombre llevan su apellido. */

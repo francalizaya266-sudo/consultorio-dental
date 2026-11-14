@@ -22,8 +22,10 @@
             @foreach ($welcome['appointments'] as $appointment)
                 @php($askHealth = $appointment->patient->medicalBackground === null && ! in_array($appointment->patient_id, $askedHealth, true))
                 @php($askedHealth[] = $appointment->patient_id)
+                @php($guest = in_array((int) $appointment->patient_id, $welcome['guests'], true))
                 @include('site.partials.appointment-card', [
-                    'name' => $isSelf($appointment->patient) ? null : $welcome['names'][$appointment->patient_id],
+                    'name' => $isSelf($appointment->patient) && ! $guest ? null : $welcome['names'][$appointment->patient_id],
+                    'guest' => $guest,
                     'confirmUrl' => route('site.account.confirm', $appointment),
                     'changeUrl' => route('site.account.change', $appointment),
                     'askHealth' => $askHealth,
