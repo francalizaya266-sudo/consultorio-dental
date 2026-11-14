@@ -1,5 +1,6 @@
 @php
     use App\Services\Web\ClinicInfo;
+    use App\Support\SiteArt;
 
     $district = app(ClinicInfo::class)->district();
 @endphp
@@ -16,10 +17,13 @@
         @include('site.partials.price-list', ['treatments' => $treatments])
     @endif
 
-    <section class="section cta-band">
-        <h2>¿No sabes qué necesitas?</h2>
-        <p>Empieza con una evaluación: el doctor revisa, te explica las opciones y te da el presupuesto.</p>
-        {{-- El botón dice lo que hace: con evaluación en la web va directo a ella; sin ella, a elegir. --}}
-        <a href="{{ route('site.booking', array_filter(['tratamiento' => $evaluation?->slug])) }}" class="btn">{{ $evaluation ? 'Reservar evaluación' : 'Reservar cita' }}</a>
+    <section class="section cta-band with-art">
+        <div>
+            <h2>¿No sabes qué necesitas?</h2>
+            <p>Empieza con una evaluación: el doctor revisa, te explica las opciones y te da el presupuesto.</p>
+            {{-- El botón dice lo que hace: con evaluación en la web va directo a ella; sin ella, a elegir. --}}
+            <a href="{{ route('site.booking', array_filter(['tratamiento' => $evaluation?->slug])) }}" class="btn">{{ $evaluation ? 'Reservar evaluación' : 'Reservar cita' }}</a>
+        </div>
+        <img src="{{ SiteArt::url('evaluacion') }}" alt="" width="640" height="640" loading="lazy">
     </section>
 </x-site-layout>

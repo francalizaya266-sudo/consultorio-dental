@@ -2,13 +2,13 @@
 
 namespace App\Support;
 
-use App\Models\Treatment;
 use Illuminate\Support\HtmlString;
 use Illuminate\Support\Str;
 
 /**
- * Ícono de cada tratamiento en la web, elegido solo por su nombre (no hay que configurarlo).
- * Trazos simples de 24 × 24 que toman el color del texto.
+ * Ícono de trazo de cada tipo de tratamiento, elegido solo por su nombre (no hay que configurarlo).
+ * Trazos simples de 24 × 24 que toman el color del texto. En la web, cada tratamiento lleva la imagen 3D
+ * que le corresponde a su ícono (SiteArt); el diente de trazo es la marca del encabezado y del panel.
  */
 final class TreatmentIcon
 {
@@ -41,15 +41,9 @@ final class TreatmentIcon
         'clipboard' => '<rect x="5" y="4" width="14" height="17" rx="2"/><path d="M9 3h6v3H9zM8.5 11h7M8.5 15h4.5"/>',
     ];
 
-    public static function for(Treatment $treatment): HtmlString
-    {
-        return self::svg(self::key($treatment->name.' '.$treatment->slug));
-    }
-
     public static function key(string $text): string
     {
-        // Por el comienzo de cada palabra: "encía" no debe encontrarse dentro de "urgencia".
-        $text = ' '.Str::of($text)->lower()->ascii()->replaceMatches('/[^a-z0-9]+/', ' ')->trim()->toString();
+        $text = self::words($text);
 
         foreach (self::KEYWORDS as $icon => $words) {
             foreach ($words as $word) {
@@ -60,6 +54,15 @@ final class TreatmentIcon
         }
 
         return 'tooth';
+    }
+
+    /**
+     * El texto en minúsculas, sin tildes ni signos y con un espacio antes de cada palabra. Así se busca por el
+     * comienzo de palabra: "encía" no debe encontrarse dentro de "urgencia".
+     */
+    public static function words(string $text): string
+    {
+        return ' '.Str::of($text)->lower()->ascii()->replaceMatches('/[^a-z0-9]+/', ' ')->trim()->toString();
     }
 
     public static function svg(string $key): HtmlString

@@ -11,6 +11,8 @@ use App\Models\Setting;
 use App\Models\SmileCase;
 use App\Models\Treatment;
 use App\Models\TreatmentPackage;
+use App\Support\SiteArt;
+use Carbon\CarbonImmutable;
 use Illuminate\Foundation\Testing\LazilyRefreshDatabase;
 use Illuminate\Support\Facades\Cache;
 use Livewire\Livewire;
@@ -61,7 +63,7 @@ class PublicPagesTest extends TestCase
             ->assertDontSee('Promociones');
     }
 
-    public function test_the_home_shows_the_clinic_photo_the_google_stars_and_treatment_icons(): void
+    public function test_the_home_shows_the_clinic_photo_the_google_stars_and_an_image_per_treatment(): void
     {
         $this->freezeMonday();
         Setting::set('web.hero_image', 'inicio/consultorio.jpg');
@@ -77,13 +79,102 @@ class PublicPagesTest extends TestCase
             ->assertSee('<strong>4,9</strong> de 5 en Google · 87 opiniones', false)
             ->assertSee('href="https://g.page/r/consultorio/review"', false)
             ->assertSee('style="--rating: 4.9"', false)
-            ->assertSee('<span class="icon"><svg', false)
+            // Con la foto del consultorio no va el diente 3D de la portada; cada tratamiento sí lleva su imagen.
+            ->assertSee('<section class="hero with-photo"', false)
+            ->assertDontSee('hero-art')
+            ->assertSee('<span class="icon"><img src="'.SiteArt::url('brackets-192').'" srcset="'.SiteArt::url('brackets-192').' 192w, '.SiteArt::url('brackets').' 640w" sizes="88px" width="88" height="88" alt="" loading="lazy" decoding="async"></span>', false)
             // La dirección, el horario y el WhatsApp salen una vez, en "Dónde estamos": el pie solo lleva las páginas.
             ->assertSeeTextInOrder(['Dónde estamos', 'Lunes a sábado', 'El consultorio', 'Política de privacidad'])
             ->assertSee('site-footer short')
             ->assertDontSee('<h2>Dónde estamos</h2>', false)
             ->assertDontSee('<h2>Horario</h2>', false)
             ->assertDontSee('<h2>Escríbenos</h2>', false);
+    }
+
+    public function test_without_the_clinic_photo_the_home_opens_with_the_3d_tooth_and_explains_how_to_book(): void
+    {
+        $this->freezeMonday();
+        $this->doctorOffering(Treatment::factory()->evaluation()->create());
+
+        // Lunes 8:00: todavía cerrado, y lo dice sobre el título sin el color de "abierto".
+        $this->get(route('site.home'))
+            ->assertOk()
+            ->assertSee('<section class="hero with-art"', false)
+            ->assertSee('<img src="'.SiteArt::url('portada').'" alt="" width="900" height="820" fetchpriority="high">', false)
+            ->assertSee("<p class=\"eyebrow\">Cerrado ahora · abre hoy a las 9:00\u{A0}a.\u{A0}m.</p>", false)
+            ->assertSeeInOrder(['Horarios libres de verdad', 'Confirmas por WhatsApp', 'Pagas en el consultorio', 'Próximo horario libre'])
+            ->assertSeeInOrder(['Reserva en tres pasos', 'Elige día y hora', 'Confirma por WhatsApp', 'Ven a tu cita', 'Yape, Plin, tarjeta o efectivo'])
+            ->assertSee([SiteArt::url('calendario'), SiteArt::url('escudo'), SiteArt::url('sonrisa')]);
+
+        $this->travelTo(CarbonImmutable::parse('2026-11-02 10:00', 'America/Lima'));
+
+        $this->get(route('site.home'))->assertSee('<p class="eyebrow open">Abierto ahora', false);
+    }
+
+    public function test_without_online_booking_the_home_does_not_promise_free_times_or_explain_the_steps(): void
+    {
+        Treatment::factory()->clinicOnly()->create(['name' => 'Endodoncia', 'slug' => 'endodoncia']);
+
+        $this->get(route('site.home'))
+            ->assertOk()
+            ->assertSee('<section class="hero with-art plain"', false)
+            ->assertSee(SiteArt::url('portada'))
+            ->assertSee(SiteArt::url('endodoncia-192'))
+            ->assertDontSee('Horarios libres de verdad')
+            ->assertDontSee('Próximo horario libre')
+            ->assertDontSee('Reserva en tres pasos');
+    }
+
+    public function test_the_home_features_the_treatment_of_the_specialty_a_doctor_declares(): void
+    {
+        $implant = Treatment::factory()->create(['name' => 'Implante dental', 'slug' => 'implante', 'summary' => 'Reemplaza un diente perdido.']);
+        $doctor = $this->doctorOffering($implant, Treatment::factory()->create(['name' => 'Limpieza dental', 'slug' => 'limpieza']));
+
+        // "Cirujano dentista" no es una especialidad: no se destaca nada.
+        $doctor->update(['specialty' => 'Cirujano dentista']);
+
+        $this->get(route('site.home'))->assertOk()->assertDontSee('Nuestra especialidad');
+
+        // Un implantólogo destaca el tratamiento de implantes, con su página y su imagen.
+        $doctor->update(['specialty' => 'Cirujano dentista · Implantólogo']);
+
+        $this->get(route('site.home'))
+            ->assertOk()
+            ->assertSeeInOrder([
+                'Nuestra especialidad', '<h2 id="especialidad">Implante dental</h2>', 'Reemplaza un diente perdido.',
+                '<a href="'.route('site.treatment', 'implante').'" class="btn">Conocer el tratamiento</a>',
+                '<img src="'.SiteArt::url('implante').'"', 'Quién te atiende',
+            ], false);
+
+        // Si el consultorio no publica ese tratamiento, la franja no aparece.
+        $implant->update(['is_public' => false]);
+
+        $this->get(route('site.home'))->assertOk()->assertDontSee('Nuestra especialidad');
+    }
+
+    public function test_the_home_announces_a_promotion_with_its_photo_or_with_the_smiling_tooth(): void
+    {
+        $campaign = $this->campaign();
+
+        $this->get(route('site.home'))
+            ->assertOk()
+            ->assertSee('<a href="'.route('site.promotion', 'limpieza-verano').'" class="promo-band">', false)
+            ->assertSeeInOrder(['Promoción', 'Limpieza de verano', 'Limpieza con 20% de descuento.', 'Hasta el', 'Ver la promoción'])
+            ->assertSee('<img src="'.SiteArt::url('sonrisa').'" alt="" width="450" height="410" loading="lazy" class="promo-art">', false)
+            ->assertDontSee('promo-photo');
+
+        $campaign->update(['image_path' => 'promociones/verano.jpg']);
+
+        $this->get(route('site.home'))
+            ->assertOk()
+            ->assertSee('class="promo-band with-photo"', false)
+            ->assertSee('<img src="/media/promociones/verano.jpg" alt="" loading="lazy" class="promo-photo">', false)
+            ->assertDontSee('promo-art');
+
+        // Una promoción que no va al inicio no se anuncia ahí.
+        $campaign->update(['show_on_home' => false]);
+
+        $this->get(route('site.home'))->assertOk()->assertDontSee('promo-band');
     }
 
     public function test_the_home_presents_the_clinic_and_who_attends_in_one_section(): void
@@ -238,6 +329,8 @@ class PublicPagesTest extends TestCase
         $this->get(route('site.treatment', 'endodoncia'))
             ->assertOk()
             ->assertSee('<title>Endodoncia en Juliaca · '.Setting::get('clinic.name').'</title>', false)
+            // Su imagen va arriba del nombre, y se carga de inmediato porque está a la vista.
+            ->assertSee('<span class="treatment-art"><img src="'.SiteArt::url('endodoncia-192').'" srcset="'.SiteArt::url('endodoncia-192').' 192w, '.SiteArt::url('endodoncia').' 640w" sizes="112px" width="112" height="112" alt="" decoding="async"></span>', false)
             ->assertSee('desde S/ 600')
             ->assertSee('1 – 3 sesiones')
             // Se dice antes del botón, y es el único botón de reserva de la página: el del doctor no lo repite.
@@ -343,11 +436,13 @@ class PublicPagesTest extends TestCase
 
     public function test_the_treatments_page_books_the_evaluation_when_the_web_offers_it(): void
     {
-        $this->doctorOffering(Treatment::factory()->create(['slug' => 'limpieza']));
+        $this->doctorOffering(Treatment::factory()->create(['name' => 'Limpieza dental', 'slug' => 'limpieza']));
 
-        // Sin evaluación en la web, el botón lleva a elegir y lo dice.
+        // Sin evaluación en la web, el botón lleva a elegir y lo dice. Cada tratamiento lleva su imagen, y la invitación, la de la evaluación.
         $this->get(route('site.treatments'))
             ->assertOk()
+            ->assertSee('<span class="icon"><img src="'.SiteArt::url('limpieza-192').'"', false)
+            ->assertSee('<img src="'.SiteArt::url('evaluacion').'" alt="" width="640" height="640" loading="lazy">', false)
             ->assertSee('<a href="'.route('site.booking').'" class="btn">Reservar cita</a>', false)
             ->assertDontSee('Reservar evaluación');
 
