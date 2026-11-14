@@ -1,15 +1,18 @@
 @php
     use App\Enums\PatientRelationship;
+    use App\Services\Web\ClinicInfo;
     use App\Support\CampaignText;
     use App\Support\Dates;
     use App\Support\Money;
     use App\Support\Phone;
+    use Illuminate\Support\Arr;
 @endphp
-<div class="stack-lg">
+{{-- data-treatment: con él, el paso queda en la dirección de la página y "atrás" o recargar no pierden lo elegido. --}}
+<div class="stack-lg" data-treatment="{{ $this->treatment?->slug }}">
     @if ($step < 4)
         <ol class="steps" aria-label="Paso {{ $step }} de 3">
-            @foreach ([1, 2, 3] as $n)
-                <li @class(['done' => $n <= $step])></li>
+            @foreach (['Motivo', 'Día y hora', 'Tus datos'] as $index => $name)
+                <li @class(['done' => $index < $step]) @if ($index + 1 === $step) aria-current="step" @endif>{{ $name }}</li>
             @endforeach
         </ol>
     @endif
@@ -33,8 +36,8 @@
     {{-- Paso 1: qué necesita --}}
     @if ($step === 1)
         <section class="stack" aria-labelledby="paso-1">
-            <h1 id="paso-1">¿Qué necesitas?</h1>
-            <p class="lead">Elige el motivo de tu cita. Si no estás seguro, empieza con una evaluación.</p>
+            <h1 id="paso-1" tabindex="-1">¿Qué necesitas?</h1>
+            <p class="lead">Elige el motivo de tu cita. Si lo que buscas no está aquí, empieza con una evaluación: ahí el doctor te da el diagnóstico y el presupuesto.</p>
 
             {{-- Con el celular recordado ya se sabe si está en tratamiento: se dice ahora, no al final. --}}
             @if ($current = $this->inTreatment->firstWhere('id', $patientId))
@@ -49,7 +52,7 @@
                             @if ($campaignPrice = $this->campaign?->priceFor($treatment))
                                 <span class="price"><s>{{ Money::short($treatment->price_from) }}</s> desde {{ Money::short($campaignPrice) }}</span>
                             @elseif ($treatment->show_price && $treatment->price_from)
-                                <span class="price">desde {{ Money::format($treatment->price_from) }}</span>
+                                <span class="price">desde {{ Money::short($treatment->price_from) }}</span>
                             @else
                                 <span></span>
                             @endif
@@ -61,6 +64,16 @@
                 @empty
                     <li class="panel">Por ahora no hay horarios para reservar en la web. Escríbenos por WhatsApp y te ayudamos.</li>
                 @endforelse
+                {{-- Quien tiene dolor no espera un horario de la web: se le da una salida desde el primer paso. --}}
+                @if ($urgent = app(ClinicInfo::class)->whatsappUrl('Hola, tengo dolor y necesito una cita lo antes posible.'))
+                    <li>
+                        <a href="{{ $urgent }}" class="choice urgent" rel="noopener">
+                            <strong>Tengo dolor o es urgente</strong>
+                            <span></span>
+                            <span class="meta">Escríbenos por WhatsApp y te decimos el horario más cercano.</span>
+                        </a>
+                    </li>
+                @endif
             </ul>
 
             <p class="muted small">¿Ya estás en tratamiento? Tu doctor programa tus próximas sesiones; si necesitas un cambio, escríbenos.</p>
@@ -70,14 +83,14 @@
     {{-- Paso 2: día y hora --}}
     @if ($step === 2 && $this->treatment)
         <section class="stack" aria-labelledby="paso-2">
-            <button type="button" class="link-btn" wire:click="back">← Cambiar tratamiento</button>
-            <h1 id="paso-2">Elige día y hora</h1>
+            <button type="button" class="link-btn" data-step-back>← Cambiar tratamiento</button>
+            <h1 id="paso-2" tabindex="-1">Elige día y hora</h1>
             <p class="lead">{{ $this->treatment->name }} · {{ $this->treatment->duration_minutes }} min aprox.</p>
 
             @if ($this->doctors->count() > 1)
                 <div class="stack">
                     <h2>Con quién</h2>
-                    <div class="chips" role="group" aria-label="Doctor">
+                    <div class="chips wrap" role="group" aria-label="Doctor">
                         <button type="button" class="chip" aria-pressed="{{ $doctorId === null ? 'true' : 'false' }}" wire:click="selectDoctor(null)">El primero disponible</button>
                         @foreach ($this->doctors as $doctor)
                             <button type="button" class="chip" aria-pressed="{{ $doctorId === $doctor->id ? 'true' : 'false' }}" wire:click="selectDoctor({{ $doctor->id }})">{{ $doctor->name }}</button>
@@ -86,15 +99,15 @@
                 </div>
             @endif
 
-            @include('livewire.site.partials.slot-picker', ['action' => 'chooseTime', 'selectedTimes' => []])
+            @include('livewire.site.partials.slot-picker', ['action' => 'chooseTime', 'selectedTimes' => [], 'slotsNote' => null, 'slotsFull' => false])
         </section>
     @endif
 
     {{-- Paso 3: datos --}}
     @if ($step === 3 && $this->treatment)
         <section class="stack" aria-labelledby="paso-3">
-            <button type="button" class="link-btn" wire:click="back">← Cambiar horario</button>
-            <h1 id="paso-3">Tus datos</h1>
+            <button type="button" class="link-btn" data-step-back>← Cambiar horario</button>
+            <h1 id="paso-3" tabindex="-1">Tus datos</h1>
 
             <div class="summary">
                 <p class="what">{{ $this->treatment->name }}</p>
@@ -112,9 +125,9 @@
                 @if ($this->device)
                     <div class="field">
                         <span class="label" id="para-quien">¿Para quién es la cita?</span>
-                        <div class="chips" role="group" aria-labelledby="para-quien">
+                        <div class="chips wrap" role="group" aria-labelledby="para-quien">
                             @foreach ($this->family as $person)
-                                <button type="button" class="chip" aria-pressed="{{ $patientId === $person->id ? 'true' : 'false' }}" wire:click="choosePatient({{ $person->id }})">{{ $person->first_name }}{{ $this->inTreatment->contains('id', $person->id) ? ' · en tratamiento' : '' }}</button>
+                                <button type="button" class="chip" aria-pressed="{{ $patientId === $person->id ? 'true' : 'false' }}" wire:click="choosePatient({{ $person->id }})">{{ $this->familyNames[$person->id] }}{{ $this->inTreatment->contains('id', $person->id) ? ' · en tratamiento' : '' }}</button>
                             @endforeach
                             <button type="button" class="chip" aria-pressed="{{ $patientId === null ? 'true' : 'false' }}" wire:click="forSomeoneElse">Otra persona</button>
                         </div>
@@ -213,7 +226,14 @@
                         </div>
                         <div class="field">
                             <label for="promoCode">Código de promoción</label>
-                            <input id="promoCode" class="input" style="text-transform: uppercase" maxlength="30" wire:model="promoCode">
+                            <input id="promoCode" class="input" style="text-transform: uppercase" maxlength="30" wire:model.live.blur="promoCode" aria-describedby="promoCode-status" @if ($this->promoCodeProblem()) aria-invalid="true" @endif>
+                            <span id="promoCode-status" role="status">
+                                @if ($problem = $this->promoCodeProblem())
+                                    <span class="error">{{ $problem }}</span>
+                                @elseif (filled($promoCode) && ($applied = $this->campaign))
+                                    <span class="hint ok">Código aplicado: {{ $applied->name }}.</span>
+                                @endif
+                            </span>
                         </div>
                     </div>
                 </details>
@@ -221,7 +241,7 @@
                 @unless ($this->privacyAlreadyAccepted())
                     <div class="field">
                         <label class="check">
-                            <input type="checkbox" wire:model="acceptsPrivacy">
+                            <input type="checkbox" wire:model="acceptsPrivacy" @error('acceptsPrivacy') aria-invalid="true" @enderror>
                             <span>Acepto la <a href="{{ route('site.privacy') }}" target="_blank">política de privacidad</a>: mis datos se usan solo para atenderme.</span>
                         </label>
                         @error('acceptsPrivacy') <span class="error">{{ $message }}</span> @enderror
@@ -231,6 +251,10 @@
                     <input type="checkbox" wire:model="acceptsPromotions">
                     <span>Quiero recibir promociones por WhatsApp (puedo darme de baja cuando quiera).</span>
                 </label>
+
+                @if ($errors->any())
+                    <p class="form-problems" role="alert">Para reservar, revisa {{ ($fields = $this->fieldsToReview()) ? Arr::join($fields, ', ', ' y ') : 'los datos marcados' }}.</p>
+                @endif
 
                 <button type="submit" class="btn block" wire:loading.attr="disabled" wire:target="book" @disabled($this->inTreatment->contains('id', $patientId))>
                     <span wire:loading.remove wire:target="book">Reservar cita</span>
@@ -246,7 +270,7 @@
         @php($appointment = $this->appointment)
         <section class="stack booked" aria-labelledby="listo">
             <span class="done-mark" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="m5 12.5 4.5 4.5L19 7.5"/></svg></span>
-            <h1 id="listo">¡Tu cita quedó reservada!</h1>
+            <h1 id="listo" tabindex="-1">¡Tu cita quedó reservada!</h1>
             <div class="summary">
                 <p class="what">{{ $appointment->treatment->name }}</p>
                 <p style="margin: 4px 0 0">{{ Dates::day($appointment->starts_at->toImmutable()) }}, {{ Dates::time($appointment->starts_at->format('H:i')) }}</p>
@@ -270,3 +294,82 @@
         </section>
     @endif
 </div>
+
+{{--
+    En el celular cada paso empieza arriba (antes "¡Tu cita quedó reservada!" aparecía a medias) y, si falta
+    un dato, la pantalla va al primero. El paso queda en la dirección de la página: el botón "atrás" vuelve
+    al paso anterior en vez de sacar de la reserva, y recargar no pierde el tratamiento ni el horario.
+--}}
+@script
+<script>
+    const root = $wire.$el;
+    let step = $wire.step;
+    let cameFromHistory = false;
+
+    const addressOf = (step) => {
+        const url = new URL(window.location.href);
+
+        ['tratamiento', 'fecha', 'hora'].forEach((key) => url.searchParams.delete(key));
+
+        if (step === 2 || step === 3) {
+            url.searchParams.set('tratamiento', root.dataset.treatment);
+        }
+
+        if (step === 3) {
+            url.searchParams.set('fecha', $wire.date);
+            url.searchParams.set('hora', $wire.time);
+        }
+
+        return url;
+    };
+
+    history.replaceState({ paso: step }, '');
+
+    $wire.$watch('step', (next) => requestAnimationFrame(() => {
+        if (! cameFromHistory) {
+            // "sigue": el paso anterior quedó justo detrás en el historial.
+            next > step && next < 4
+                ? history.pushState({ paso: next, sigue: true }, '', addressOf(next))
+                : history.replaceState({ paso: next }, '', addressOf(next));
+        }
+
+        cameFromHistory = false;
+        step = next;
+        window.scrollTo(0, 0);
+        root.querySelector('h1')?.focus({ preventScroll: true });
+    }));
+
+    window.addEventListener('popstate', (event) => {
+        const target = event.state?.paso;
+
+        if (! target || target === step) {
+            return;
+        }
+
+        // Con la cita ya reservada, o hacia adelante, la página se arma de nuevo desde su dirección.
+        if (step === 4 || target > step) {
+            window.location.reload();
+
+            return;
+        }
+
+        cameFromHistory = true;
+        $wire.back(step - target);
+    });
+
+    root.addEventListener('click', (event) => {
+        if (event.target.closest('[data-step-back]')) {
+            history.state?.sigue ? history.back() : $wire.back();
+        }
+    });
+
+    $wire.on('datos-por-corregir', () => requestAnimationFrame(() => {
+        const first = root.querySelector('[aria-invalid="true"]');
+
+        if (first) {
+            (first.closest('.field') ?? first).scrollIntoView({ block: 'center' });
+            first.focus({ preventScroll: true });
+        }
+    }));
+</script>
+@endscript

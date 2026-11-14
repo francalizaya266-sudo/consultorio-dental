@@ -53,6 +53,8 @@ body {
     -webkit-tap-highlight-color: transparent;
     font-feature-settings: "cv11", "ss01";
     text-rendering: optimizeLegibility;
+    /* En páginas cortas el pie va al fondo de la pantalla, no flotando a la mitad con una franja blanca debajo. */
+    min-height: 100vh; min-height: 100svh; display: flex; flex-direction: column;
 }
 
 a { color: var(--accent); text-underline-offset: .18em; }
@@ -106,7 +108,7 @@ img { max-width: 100%; display: block; }
     .menu { display: none; }
 }
 
-main { padding: 24px 0 96px; }
+main { padding: 24px 0 96px; flex: 1 0 auto; }
 
 .site-footer { background: var(--navy); color: #c9d6e8; padding: 64px 0 104px; margin-top: 24px; }
 .site-footer .wrap { display: grid; gap: 32px; }
@@ -118,6 +120,11 @@ main { padding: 24px 0 96px; }
 .site-footer .status { font-weight: 700; color: #fff; }
 .site-footer .hours { grid-template-columns: auto 1fr; }
 .site-footer .hours dt, .site-footer .hours dd span { white-space: nowrap; }
+/* En celulares angostos (320) el día y sus horas no entran en una línea y empujaban toda la página de lado. */
+@media (max-width: 379px) {
+    .site-footer .hours { grid-template-columns: 1fr; gap: 0; }
+    .site-footer .hours dd { margin-bottom: 8px; }
+}
 .site-footer a { text-decoration-color: rgb(255 255 255 / .35); }
 .site-footer .note { color: var(--navy-soft); }
 .site-footer ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
@@ -191,9 +198,12 @@ dl.facts dd { margin: 0; font-weight: 650; min-width: 0; overflow-wrap: anywhere
 
 /* Reserva: pasos */
 
+/* Cada paso con su nombre: se sabe en cuál va y cuántos faltan. */
 .steps { display: flex; gap: 6px; margin: 0 0 20px; padding: 0; list-style: none; }
-.steps li { flex: 1; height: 6px; border-radius: 999px; background: var(--surface-strong); }
-.steps li.done { background: var(--accent); }
+.steps li { flex: 1; position: relative; padding-top: 14px; font-size: .8125rem; font-weight: 600; line-height: 1.25; color: var(--muted); }
+.steps li::before { content: ""; position: absolute; inset: 0 0 auto; height: 6px; border-radius: 999px; background: var(--surface-strong); }
+.steps li.done::before { background: var(--accent); }
+.steps li[aria-current="step"] { color: var(--accent); font-weight: 700; }
 
 .choice-list { display: grid; gap: 10px; margin: 0; padding: 0; list-style: none; }
 .choice {
@@ -208,9 +218,14 @@ dl.facts dd { margin: 0; font-weight: 650; min-width: 0; overflow-wrap: anywhere
 .choice .price { font-weight: 700; white-space: nowrap; }
 .choice.featured { background: var(--ground); box-shadow: inset 0 0 0 2px var(--accent); }
 .choice.featured strong { color: var(--accent); }
+a.choice { text-decoration: none; }
+.choice.urgent { background: var(--ok-bg); }
+.choice.urgent strong { color: var(--ok); }
 
 .chips { display: flex; gap: 8px; overflow-x: auto; padding: 2px 2px 6px; margin: 0 -2px; scrollbar-width: none; }
 .chips::-webkit-scrollbar { display: none; }
+/* Donde ninguna opción puede quedar escondida a la derecha ("Otra persona"), bajan a otra línea. */
+.chips.wrap { flex-wrap: wrap; overflow: visible; }
 .chip {
     flex: none; border: 0; border-radius: 999px; padding: 10px 16px; min-height: 44px;
     background: var(--surface); color: var(--ink); font: 600 .9375rem/1.2 var(--font); cursor: pointer;
@@ -222,6 +237,10 @@ dl.facts dd { margin: 0; font-weight: 650; min-width: 0; overflow-wrap: anywhere
 
 .days { display: grid; grid-auto-flow: column; grid-auto-columns: 68px; gap: 8px; overflow-x: auto; padding: 2px 2px 8px; margin: 0 -2px; scroll-snap-type: x proximity; scrollbar-width: none; }
 .days::-webkit-scrollbar { display: none; }
+/* Con mouse no hay cómo deslizar la tira: en pantallas anchas los días van en filas, todos a la vista. */
+@media (min-width: 600px) {
+    .days { grid-auto-flow: row; grid-template-columns: repeat(6, 1fr); overflow: visible; }
+}
 .day {
     scroll-snap-align: start; border: 0; border-radius: var(--radius); padding: 10px 4px; cursor: pointer;
     background: var(--surface); color: var(--ink); font: inherit; text-align: center; line-height: 1.15;
@@ -237,6 +256,8 @@ dl.facts dd { margin: 0; font-weight: 650; min-width: 0; overflow-wrap: anywhere
     background: var(--surface); color: var(--ink); font: 700 1rem/1.2 var(--font);
 }
 .time[aria-pressed="true"] { background: var(--accent); color: var(--accent-ink); }
+.time:disabled { opacity: .45; cursor: not-allowed; }
+.times-note { margin: 0; font-weight: 650; color: var(--accent); }
 
 .summary { background: var(--surface); border-radius: var(--radius); padding: 16px 18px; }
 .summary .what { font-weight: 750; font-size: 1.125rem; }
@@ -251,6 +272,9 @@ dl.facts dd { margin: 0; font-weight: 650; min-width: 0; overflow-wrap: anywhere
 .field label, .field .label { font-weight: 650; }
 .field .hint { color: var(--muted); font-size: .9375rem; }
 .field .error { color: var(--bad); font-weight: 600; font-size: .9375rem; }
+.field .hint.ok { color: var(--ok); font-weight: 600; }
+.form-problems { margin: 0; padding: 12px 14px; border-radius: 12px; background: var(--bad-bg); color: var(--bad); font-weight: 600; }
+h1:focus { outline: none; }
 .input, select.input, textarea.input {
     width: 100%; min-height: 52px; padding: 12px 14px; font: 400 1.0625rem/1.3 var(--font); color: var(--ink);
     background: #fff; border: 2px solid var(--field-line); border-radius: 12px;

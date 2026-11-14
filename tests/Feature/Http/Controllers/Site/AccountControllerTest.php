@@ -186,6 +186,24 @@ class AccountControllerTest extends TestCase
             ->assertSet('patientId', $this->mother->id);
     }
 
+    public function test_relatives_with_the_same_first_name_show_their_surname_in_my_account_and_on_the_home_page(): void
+    {
+        $this->mother->update(['first_name' => 'María', 'last_name' => 'Quispe Huamán']);
+        $daughter = Patient::factory()->dependentOf($this->account)->create(['first_name' => 'María', 'last_name' => 'Flores Ticona']);
+        Appointment::factory()->for($this->mother)->at('2026-11-04 10:00')->create();
+        Appointment::factory()->for($daughter)->at('2026-11-05 10:00')->create();
+        Appointment::factory()->for($this->child)->at('2026-11-06 10:00')->create();
+
+        $this->rememberDevice()
+            ->get(route('site.account'))
+            ->assertOk()
+            ->assertSeeInOrder(['<strong>María Quispe</strong>', '<strong>María Flores</strong>', '<strong>Mateo</strong>'], false);
+
+        $this->get(route('site.home'))
+            ->assertOk()
+            ->assertSeeInOrder(['Tu próxima cita', 'Cita de María Flores']);
+    }
+
     public function test_asking_for_the_next_session_tells_reception_once_and_only_from_the_family_phone(): void
     {
         $reception = User::factory()->reception()->create();

@@ -1,4 +1,8 @@
-{{-- Tira de días con horarios libres y los horarios del día elegido. --}}
+{{--
+    Días con horarios libres y los horarios del día elegido.
+    slotsNote: aviso junto a los horarios (cuántos lleva elegidos al proponer un cambio).
+    slotsFull: ya eligió todos los que puede; los demás horarios no se pueden tocar hasta quitar uno.
+--}}
 @php
     use App\Support\Dates;
     use Carbon\CarbonImmutable;
@@ -26,12 +30,16 @@
 
     <div class="stack" wire:key="times-{{ $date }}-{{ $doctorId }}">
         <h2>{{ Dates::day($date) }}</h2>
+        @if ($slotsNote)
+            <p class="times-note" role="status">{{ $slotsNote }}</p>
+        @endif
         @foreach ($groups as $period => $slots)
             <div class="stack">
                 <p class="muted small">{{ $period }}</p>
                 <div class="times">
                     @foreach ($slots as $slot)
-                        <button type="button" class="time" aria-pressed="{{ in_array($date.' '.$slot['time'], $selectedTimes, true) ? 'true' : 'false' }}" wire:click="{{ $action }}('{{ $slot['time'] }}')">
+                        @php($selected = in_array($date.' '.$slot['time'], $selectedTimes, true))
+                        <button type="button" class="time" aria-pressed="{{ $selected ? 'true' : 'false' }}" wire:click="{{ $action }}('{{ $slot['time'] }}')" @disabled($slotsFull && ! $selected)>
                             {{ Dates::time($slot['time']) }}
                         </button>
                     @endforeach

@@ -104,6 +104,24 @@ class ChangeAppointment extends Component
         return (int) Setting::get('booking.max_reschedule_options', 3);
     }
 
+    public function reachedMaxOptions(): bool
+    {
+        return $this->mode !== RescheduleMode::Automatic && count($this->chosen) >= $this->maxOptions();
+    }
+
+    /** Cuántos horarios lleva de los que puede proponer: se dice junto a los horarios, que es donde está mirando. */
+    public function optionsNote(): ?string
+    {
+        $count = count($this->chosen);
+        $max = $this->maxOptions();
+
+        return match (true) {
+            $this->mode === RescheduleMode::Automatic, $count === 0 => null,
+            $count >= $max => "Ya elegiste tus {$max} horarios. Quita uno para elegir otro.",
+            default => "Elegiste {$count} de {$max} horarios.",
+        };
+    }
+
     /** Nivel 1: un horario. Nivel 2: hasta 3, se marcan y desmarcan. */
     public function pick(string $time): void
     {

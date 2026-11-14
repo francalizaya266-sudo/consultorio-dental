@@ -25,7 +25,7 @@
             @foreach ($welcome['appointments'] as $appointment)
                 @php($pending = $appointment->status === AppointmentStatus::Pending)
                 <article class="welcome-card" data-welcome="appointment">
-                    <span class="welcome-kicker">{{ $isSelf($appointment->patient) ? 'Tu próxima cita' : 'Cita de '.$appointment->patient->first_name }}</span>
+                    <span class="welcome-kicker">{{ $isSelf($appointment->patient) ? 'Tu próxima cita' : 'Cita de '.$welcome['names'][$appointment->patient_id] }}</span>
                     <strong class="welcome-when">{{ Dates::day($appointment->starts_at->toImmutable()) }}, {{ Dates::time($appointment->starts_at->format('H:i')) }}</strong>
                     <p>{{ $appointment->treatment->name }} · {{ $appointment->doctor->name }}</p>
                     @if ($appointment->patient->medicalBackground === null && ! in_array($appointment->patient_id, $askedHealth, true))
@@ -51,8 +51,8 @@
             @foreach ($welcome['sessions'] as ['patient' => $patient, 'done' => $done, 'total' => $total, 'doctor' => $doctor, 'requested' => $requested])
                 @php($left = $total - $done)
                 <article class="welcome-card" data-welcome="sessions">
-                    <span class="welcome-kicker">{{ $isSelf($patient) ? 'Tu tratamiento' : 'Tratamiento de '.$patient->first_name }}</span>
-                    <strong class="welcome-when">{{ $isSelf($patient) ? 'Te '.($left === 1 ? 'falta' : 'faltan') : 'A '.$patient->first_name.' le '.($left === 1 ? 'falta' : 'faltan') }} {{ $left }} de {{ $total }} {{ $total === 1 ? 'sesión' : 'sesiones' }}</strong>
+                    <span class="welcome-kicker">{{ $isSelf($patient) ? 'Tu tratamiento' : 'Tratamiento de '.$welcome['names'][$patient->id] }}</span>
+                    <strong class="welcome-when">{{ $isSelf($patient) ? 'Te '.($left === 1 ? 'falta' : 'faltan') : 'A '.$welcome['names'][$patient->id].' le '.($left === 1 ? 'falta' : 'faltan') }} {{ $left }} de {{ $total }} {{ $total === 1 ? 'sesión' : 'sesiones' }}</strong>
                     <div class="meter" role="img" aria-label="{{ $done }} de {{ $total }} sesiones hechas"><span style="width: {{ round($done / $total * 100) }}%"></span></div>
                     <p class="muted">{{ $doctor ? 'Con '.$doctor.'. ' : '' }}Cada sesión la programa {{ $isSelf($patient) ? 'tu' : 'su' }} doctor: pídela y te escribimos con el horario.</p>
                     <div class="welcome-actions">
@@ -70,7 +70,7 @@
 
             @foreach ($welcome['checkups'] as ['patient' => $patient, 'months' => $months, 'url' => $url])
                 <article class="welcome-card" data-welcome="checkup">
-                    <span class="welcome-kicker">{{ $isSelf($patient) ? 'Tu control' : 'Control de '.$patient->first_name }}</span>
+                    <span class="welcome-kicker">{{ $isSelf($patient) ? 'Tu control' : 'Control de '.$welcome['names'][$patient->id] }}</span>
                     <strong class="welcome-when">{{ $months }} {{ $months === 1 ? 'mes' : 'meses' }} desde {{ $isSelf($patient) ? 'tu' : 'su' }} última visita</strong>
                     <p class="muted">Ya {{ $isSelf($patient) ? 'te' : 'le' }} toca una revisión: así lo pequeño se trata antes de que duela.</p>
                     <div class="welcome-actions">

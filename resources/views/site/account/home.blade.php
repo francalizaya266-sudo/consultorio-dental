@@ -3,10 +3,13 @@
     use App\Enums\PlanItemStatus;
     use App\Support\CampaignText;
     use App\Support\Dates;
+    use App\Support\FamilyNames;
     use App\Support\Money;
     use App\Support\Phone;
 
     $holder = $patients->firstWhere('relationship', \App\Enums\PatientRelationship::Self);
+    // Dos personas de la familia con el mismo nombre se muestran con su apellido, para saber de quién es cada cita.
+    $names = FamilyNames::for($patients);
 @endphp
 <x-site-layout title="Mi cuenta" :noindex="true">
     <section class="stack-lg">
@@ -28,7 +31,7 @@
                         <span class="when">{{ Dates::day($appointment->starts_at->toImmutable()) }}, {{ Dates::time($appointment->starts_at->format('H:i')) }}</span>
                         <span @class(['badge', 'ok' => $status === AppointmentStatus::Confirmed, 'quiet' => ! in_array($status, [AppointmentStatus::Pending, AppointmentStatus::Confirmed], true)])>{{ $status->getLabel() }}</span>
                     </div>
-                    <p><strong>{{ $appointment->patient->first_name }}</strong> · {{ $appointment->treatment->name }} · {{ $appointment->doctor->name }}</p>
+                    <p><strong>{{ $names[$appointment->patient_id] }}</strong> · {{ $appointment->treatment->name }} · {{ $appointment->doctor->name }}</p>
 
                     @if (in_array($appointment->id, $askHealth, true))
                         @include('site.partials.health-ask', ['patient' => $appointment->patient])
@@ -84,7 +87,7 @@
                             <h3>{{ $plan->title ?: 'Plan de tratamiento' }}</h3>
                             <span @class(['badge', $tone])>{{ $state }}</span>
                         </div>
-                        <p class="muted">{{ $plan->patient->first_name }} · {{ $plan->doctor?->name }}</p>
+                        <p class="muted">{{ $names[$plan->patient_id] }} · {{ $plan->doctor?->name }}</p>
 
                         @if ($progress === null)
                             <p>Va incluido en el 2x1 de {{ $plan->includedIn?->patient?->first_name }}: no tiene costo.</p>
@@ -145,7 +148,7 @@
             @if ($elevated)
                 @forelse ($past as $appointment)
                     <p class="spread">
-                        <span>{{ $appointment->starts_at->format('d/m/Y') }} · <strong>{{ $appointment->patient->first_name }}</strong> · {{ $appointment->treatment->name }}</span>
+                        <span>{{ $appointment->starts_at->format('d/m/Y') }} · <strong>{{ $names[$appointment->patient_id] }}</strong> · {{ $appointment->treatment->name }}</span>
                         <span class="badge quiet">{{ $appointment->status->getLabel() }}</span>
                     </p>
                 @empty

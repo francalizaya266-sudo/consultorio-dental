@@ -42,7 +42,7 @@
                 <div class="flash bad" role="alert">{{ $error }}</div>
             @endif
 
-            @include('livewire.site.partials.slot-picker', ['action' => 'pick', 'selectedTimes' => $chosen])
+            @include('livewire.site.partials.slot-picker', ['action' => 'pick', 'selectedTimes' => $chosen, 'slotsNote' => $this->optionsNote(), 'slotsFull' => $this->reachedMaxOptions()])
 
             @if ($chosen !== [])
                 <div class="panel stack">

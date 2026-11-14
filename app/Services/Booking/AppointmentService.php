@@ -30,6 +30,7 @@ use App\Services\Inventory\InventoryService;
 use App\Services\StaffAlerts;
 use App\Services\WhatsApp\WhatsAppOutbox;
 use App\Support\Dates;
+use App\Support\FamilyNames;
 use App\Support\Phone;
 use Carbon\CarbonImmutable;
 use Carbon\CarbonInterface;
@@ -924,10 +925,11 @@ class AppointmentService
             return $account->patients()->findOrFail($data->patientId);
         }
 
-        $existing = $account->patients()
-            ->whereRaw('LOWER(first_name) = ?', [mb_strtolower(trim((string) $data->firstName))])
-            ->whereRaw('LOWER(last_name) = ?', [mb_strtolower(trim((string) $data->lastName))])
-            ->first();
+        // "Maria quispe" y "María  Quispe" son la misma persona: sin esto, cada forma de escribirlo crea otro paciente.
+        $existing = $account->patients()->get()->first(
+            fn (Patient $patient) => FamilyNames::comparable((string) $patient->first_name) === FamilyNames::comparable((string) $data->firstName)
+                && FamilyNames::comparable((string) $patient->last_name) === FamilyNames::comparable((string) $data->lastName)
+        );
 
         if ($existing) {
             return $existing;

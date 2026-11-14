@@ -11,6 +11,7 @@ use App\Models\Patient;
 use App\Models\TreatmentPlan;
 use App\Models\TreatmentPlanItem;
 use App\Services\Booking\WebAvailability;
+use App\Support\FamilyNames;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\RateLimiter;
@@ -30,6 +31,7 @@ final class ReturningPatient
     /**
      * @return array{
      *     name: string|null,
+     *     names: array<int, string>,
      *     appointments: Collection<int, Appointment>,
      *     more: int,
      *     sessions: Collection<int, array{patient: Patient, done: int, total: int, doctor: string|null, requested: bool}>,
@@ -53,6 +55,8 @@ final class ReturningPatient
         return [
             // Saluda a quien tiene el celular: el titular. Si solo hay hijos registrados, sin nombre.
             'name' => $family->firstWhere('relationship', PatientRelationship::Self)?->first_name,
+            // Cómo se nombra a cada familiar en las tarjetas: con apellido si otro lleva el mismo nombre.
+            'names' => FamilyNames::for($family),
             'appointments' => $upcoming->take(self::APPOINTMENTS)->values(),
             'more' => max(0, $upcoming->count() - self::APPOINTMENTS),
             'sessions' => $sessions,

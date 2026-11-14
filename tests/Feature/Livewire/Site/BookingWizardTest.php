@@ -14,6 +14,7 @@ use App\Models\Appointment;
 use App\Models\Campaign;
 use App\Models\Patient;
 use App\Models\RememberedDevice;
+use App\Models\Setting;
 use App\Models\Treatment;
 use App\Models\TreatmentPlan;
 use App\Models\WhatsappMessage;
@@ -288,5 +289,120 @@ class BookingWizardTest extends TestCase
             ->assertSet('step', 4);
 
         $this->assertSame(PatientRelationship::Parent, $account->patients()->where('first_name', 'Juana')->sole()->relationship);
+    }
+
+    public function test_missing_data_is_named_next_to_the_button_and_the_page_is_told_to_show_it(): void
+    {
+        $this->freezeMonday();
+        $evaluation = Treatment::factory()->evaluation()->create();
+        $this->doctorOffering($evaluation);
+
+        Livewire::test(BookingWizard::class)
+            ->call('chooseTreatment', $evaluation->id)
+            ->call('chooseTime', '10:00')
+            ->call('book')
+            ->assertDispatched('datos-por-corregir')
+            ->assertSee('Para reservar, revisa tu celular, los nombres, los apellidos y la política de privacidad.')
+            ->set('phone', '987 654 321')
+            ->set('firstName', 'María')
+            ->set('lastName', 'Quispe Rojas')
+            ->call('book')
+            ->assertSee('Para reservar, revisa la política de privacidad.');
+
+        $this->assertDatabaseCount('appointments', 0);
+    }
+
+    public function test_a_promo_code_that_does_not_exist_stops_the_booking_and_a_valid_one_is_confirmed(): void
+    {
+        $this->freezeMonday();
+        $cleaning = Treatment::factory()->create(['name' => 'Limpieza dental', 'price_from' => 150]);
+        $this->doctorOffering($cleaning);
+        $campaign = Campaign::query()->create(['name' => 'Limpieza de verano', 'slug' => 'limpieza-verano', 'promo_code' => 'VERANO30', 'treatment_id' => $cleaning->id, 'discount_type' => DiscountType::Amount, 'discount_value' => 30, 'starts_at' => now()->subDay(), 'ends_at' => now()->addMonth()]);
+
+        $wizard = Livewire::test(BookingWizard::class)
+            ->call('chooseTreatment', $cleaning->id)
+            ->call('chooseTime', '10:00')
+            ->set('phone', '987 654 321')
+            ->set('firstName', 'María')
+            ->set('lastName', 'Quispe Rojas')
+            ->set('acceptsPrivacy', true)
+            ->set('promoCode', 'SONRISA50')
+            ->assertSee('Ese código no existe o ya no está disponible. Corrígelo o bórralo para reservar.')
+            ->call('book')
+            ->assertHasErrors('promoCode')
+            ->assertSee('Para reservar, revisa el código de promoción.')
+            ->assertSet('step', 3);
+
+        $this->assertDatabaseCount('appointments', 0);
+
+        $wizard->set('promoCode', 'verano30')
+            ->assertHasNoErrors()
+            ->assertDontSee(['Ese código no existe', 'Para reservar, revisa'])
+            ->assertSee('Código aplicado: Limpieza de verano.')
+            ->call('book')
+            ->assertHasNoErrors()
+            ->assertSet('step', 4);
+
+        $this->assertTrue(Appointment::sole()->campaign->is($campaign));
+    }
+
+    public function test_going_back_two_steps_returns_to_the_start_and_a_booked_appointment_does_not_reopen(): void
+    {
+        $this->freezeMonday();
+        $evaluation = Treatment::factory()->evaluation()->create();
+        $this->doctorOffering($evaluation);
+
+        Livewire::test(BookingWizard::class)
+            ->call('chooseTreatment', $evaluation->id)
+            ->call('chooseTime', '10:00')
+            ->call('back', 2)
+            ->assertSet('step', 1)
+            ->call('chooseTreatment', $evaluation->id)
+            ->call('chooseTime', '10:00')
+            ->set('phone', '987 654 321')
+            ->set('firstName', 'María')
+            ->set('lastName', 'Quispe Rojas')
+            ->set('acceptsPrivacy', true)
+            ->call('book')
+            ->assertSet('step', 4)
+            ->call('back')
+            ->assertSet('step', 4)
+            ->assertSee('¡Tu cita quedó reservada!');
+
+        $this->assertDatabaseCount('appointments', 1);
+    }
+
+    public function test_each_step_has_a_name_and_the_first_one_offers_whatsapp_when_it_hurts(): void
+    {
+        $this->freezeMonday();
+        $evaluation = Treatment::factory()->evaluation()->create();
+        $this->doctorOffering($evaluation);
+        Setting::set('clinic.whatsapp', '912 345 678');
+
+        Livewire::test(BookingWizard::class)
+            ->assertSeeHtmlInOrder(['aria-current="step"', 'Motivo</li>', 'Día y hora</li>', 'Tus datos</li>'])
+            ->assertSee('Tengo dolor o es urgente')
+            ->assertSeeHtml('href="https://wa.me/51912345678?text=Hola%2C%20tengo%20dolor%20y%20necesito%20una%20cita%20lo%20antes%20posible."')
+            ->call('chooseTreatment', $evaluation->id)
+            ->assertSeeHtmlInOrder(['Motivo</li>', 'aria-current="step"', 'Día y hora</li>', 'Tus datos</li>'])
+            ->assertDontSee('Tengo dolor o es urgente');
+    }
+
+    public function test_relatives_with_the_same_first_name_are_told_apart_by_their_surname(): void
+    {
+        $this->freezeMonday();
+        $evaluation = Treatment::factory()->evaluation()->create();
+        $this->doctorOffering($evaluation);
+        $account = Account::factory()->verified()->create(['phone' => '+51987654321']);
+        Patient::factory()->for($account)->create(['first_name' => 'María', 'last_name' => 'Quispe Huamán']);
+        Patient::factory()->dependentOf($account)->create(['first_name' => 'Maria', 'last_name' => 'Flores Ticona']);
+        Patient::factory()->dependentOf($account)->create(['first_name' => 'Mateo', 'last_name' => 'Quispe Flores']);
+        RememberedDevice::create(['account_id' => $account->id, 'token_hash' => hash('sha256', 'celular-de-maria'), 'expires_at' => now()->addMonth()]);
+
+        Livewire::withCookie(DeviceService::COOKIE, 'celular-de-maria')
+            ->test(BookingWizard::class)
+            ->call('chooseTreatment', $evaluation->id)
+            ->call('chooseTime', '10:00')
+            ->assertSeeHtmlInOrder(['María Quispe</button>', 'Maria Flores</button>', 'Mateo</button>', 'Otra persona</button>']);
     }
 }
