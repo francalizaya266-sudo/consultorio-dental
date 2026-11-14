@@ -21,6 +21,7 @@ use App\Models\TreatmentPlan;
 use App\Models\WhatsappMessage;
 use App\Services\Access\DeviceService;
 use App\Services\WhatsApp\WhatsAppOutbox;
+use App\Support\SiteArt;
 use Illuminate\Foundation\Testing\LazilyRefreshDatabase;
 use Livewire\Livewire;
 use Tests\Concerns\CreatesAgenda;
@@ -391,6 +392,7 @@ class BookingWizardTest extends TestCase
             ->call('book')
             ->assertSet('step', 4)
             ->assertSeeHtmlInOrder([
+                '<img src="'.SiteArt::url('sonrisa').'" alt="" width="450" height="410" class="done-art">', '¡Tu cita quedó reservada!',
                 'Qué sigue',
                 'Confirma tu asistencia', 'Tu cita queda por confirmar', '987 654 321',
                 'Guardar en mi calendario',
@@ -481,6 +483,22 @@ class BookingWizardTest extends TestCase
             ->call('chooseTreatment', $evaluation->id)
             ->assertSeeHtmlInOrder(['Motivo</li>', 'aria-current="step"', 'Día y hora</li>', 'Tus datos</li>'])
             ->assertDontSee('Tengo dolor o es urgente');
+    }
+
+    public function test_each_reason_to_book_shows_its_image_its_price_and_how_long_it_takes(): void
+    {
+        $this->freezeMonday();
+        $evaluation = Treatment::factory()->evaluation()->create(['slug' => 'evaluacion', 'price_from' => 50, 'summary' => 'Revisión completa y presupuesto.']);
+        $whitening = Treatment::factory()->create(['name' => 'Blanqueamiento', 'slug' => 'blanqueamiento', 'price_from' => 450, 'duration_minutes' => 90]);
+        $this->doctorOffering($evaluation, $whitening);
+
+        Livewire::test(BookingWizard::class)
+            // Están a la vista al abrir: sus imágenes se cargan de inmediato, al tamaño en que se muestran.
+            ->assertSeeHtmlInOrder([
+                '<img src="'.SiteArt::url('evaluacion-192').'"', 'sizes="64px" width="64" height="64" alt="" decoding="async">',
+                'No sé qué necesito: evaluación', 'desde S/ 50', 'Revisión completa y presupuesto.', '30 min aprox.',
+            ])
+            ->assertSeeHtmlInOrder(['<img src="'.SiteArt::url('blanqueamiento-192').'"', 'Blanqueamiento', 'desde S/ 450', '90 min aprox.']);
     }
 
     public function test_relatives_with_the_same_first_name_are_told_apart_by_their_surname(): void

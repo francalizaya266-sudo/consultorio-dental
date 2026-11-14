@@ -5,6 +5,7 @@
     use App\Support\Dates;
     use App\Support\Money;
     use App\Support\Phone;
+    use App\Support\SiteArt;
     use Illuminate\Support\Arr;
 @endphp
 {{-- data-treatment: con él, el paso queda en la dirección de la página y "atrás" o recargar no pierden lo elegido. --}}
@@ -47,18 +48,19 @@
             <ul class="choice-list">
                 @forelse ($this->treatments as $treatment)
                     <li>
-                        <button type="button" wire:click="chooseTreatment({{ $treatment->id }})" @class(['choice', 'featured' => $treatment->is_evaluation])>
+                        {{-- Cada opción con la imagen de su tratamiento: se elige de un vistazo. --}}
+                        <button type="button" wire:click="chooseTreatment({{ $treatment->id }})" @class(['choice', 'with-art', 'featured' => $treatment->is_evaluation])>
+                            <span class="art">{{ SiteArt::treatment($treatment, 64, lazy: false) }}</span>
                             <strong>{{ $treatment->is_evaluation ? 'No sé qué necesito: '.mb_strtolower($treatment->name) : $treatment->name }}</strong>
                             @if ($campaignPrice = $this->campaign?->priceFor($treatment))
                                 <span class="price"><s>{{ Money::short($treatment->price_from) }}</s> desde {{ Money::short($campaignPrice) }}</span>
                             @elseif ($treatment->show_price && $treatment->price_from)
                                 <span class="price">desde {{ Money::short($treatment->price_from) }}</span>
-                            @else
-                                <span></span>
                             @endif
-                            <span class="meta">
-                                {{ $treatment->summary ? $treatment->summary.' · ' : '' }}{{ $treatment->duration_minutes }} min aprox.
-                            </span>
+                            @if ($treatment->summary)
+                                <span class="meta">{{ $treatment->summary }}</span>
+                            @endif
+                            <span class="minutes">{{ $treatment->duration_minutes }} min aprox.</span>
                         </button>
                     </li>
                 @empty
@@ -67,9 +69,9 @@
                 {{-- Quien tiene dolor no espera un horario de la web: se le da una salida desde el primer paso. --}}
                 @if ($urgent = app(ClinicInfo::class)->whatsappUrl('Hola, tengo dolor y necesito una cita lo antes posible.'))
                     <li>
-                        <a href="{{ $urgent }}" class="choice urgent" rel="noopener">
+                        <a href="{{ $urgent }}" class="choice with-art urgent" rel="noopener">
+                            <span class="art" aria-hidden="true"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 3.5c-4.97 0-9 3.47-9 7.75 0 2.3 1.17 4.37 3.02 5.79-.1 1.13-.5 2.3-1.3 3.2-.2.23-.03.6.28.57 1.9-.2 3.4-.9 4.5-1.7.8.2 1.63.3 2.5.3 4.97 0 9-3.47 9-7.76 0-4.28-4.03-7.75-9-7.75Z"/></svg></span>
                             <strong>Tengo dolor o es urgente</strong>
-                            <span></span>
                             <span class="meta">Escríbenos por WhatsApp y te decimos el horario más cercano.</span>
                         </a>
                     </li>
@@ -260,7 +262,8 @@
         @php($appointment = $this->appointment)
         @php($clinic = app(ClinicInfo::class))
         <section class="stack booked" aria-labelledby="listo">
-            <span class="done-mark" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="m5 12.5 4.5 4.5L19 7.5"/></svg></span>
+            {{-- La cita quedó hecha: lo dice el diente sonriente antes que el texto. --}}
+            <img src="{{ SiteArt::url('sonrisa') }}" alt="" width="450" height="410" class="done-art">
             <h1 id="listo" tabindex="-1">¡Tu cita quedó reservada!</h1>
             <div class="summary">
                 <p class="what">{{ $appointment->treatment->name }}</p>

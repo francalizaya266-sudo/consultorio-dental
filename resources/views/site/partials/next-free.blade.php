@@ -7,9 +7,11 @@
 @endphp
 {{-- Los próximos horarios libres de verdad, sacados de la agenda: un toque y queda elegido. --}}
 <div class="next-free" aria-labelledby="proximos">
-    <{{ $headingLevel }} id="proximos">{{ $title }}</{{ $headingLevel }}>
-    <p class="when">{{ Dates::relativeDay($nextFree['date'], withDate: true) }}</p>
-    <p class="for">{{ $treatment->name }} · {{ $treatment->duration_minutes }} min</p>
+    <div class="next-free-head">
+        <{{ $headingLevel }} id="proximos">{{ $title }}</{{ $headingLevel }}>
+        <p class="when">{{ Dates::relativeDay($nextFree['date'], withDate: true) }}</p>
+        <p class="for">{{ $treatment->name }} · {{ $treatment->duration_minutes }} min</p>
+    </div>
     <ul class="free-times">
         @foreach ($nextFree['times'] as $time)
             <li><a href="{{ route('site.booking', array_filter(['tratamiento' => $treatment->slug, 'fecha' => $nextFree['date'], 'hora' => $time, 'promo' => $promo ?? null])) }}">{{ Dates::time($time) }}</a></li>

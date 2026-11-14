@@ -4,6 +4,7 @@
     use App\Support\CampaignText;
     use App\Support\Markdown;
     use App\Support\Money;
+    use App\Support\SiteArt;
 
     $clinic = app(ClinicInfo::class);
     $title = $treatment->seo_title ?: $treatment->name.($clinic->district() ? ' en '.$clinic->district() : '');
@@ -17,6 +18,7 @@
     {{-- A la derecha, lo más útil: los próximos horarios libres; si no hay, la foto. --}}
     <section @class(['treatment-head', 'with-aside' => $nextFree || $treatment->image_path])>
         <div>
+            <span class="treatment-art">{{ SiteArt::treatment($treatment, 112, lazy: false) }}</span>
             <h1>{{ $treatment->name }}</h1>
             @if ($treatment->summary)
                 <p class="lead">{{ $treatment->summary }}</p>
