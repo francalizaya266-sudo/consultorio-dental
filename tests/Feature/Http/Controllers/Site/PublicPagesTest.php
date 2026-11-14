@@ -84,7 +84,8 @@ class PublicPagesTest extends TestCase
             // La foto del consultorio llena la portada y el implante de la marca queda sobre ella; cada tratamiento lleva su imagen.
             ->assertSee('<div class="hero-band with-photo">', false)
             ->assertSee('<section class="hero with-photo"', false)
-            ->assertSee(SiteArt::url('implante-brillo'))
+            // Con foto, el implante no se le hace bajar al celular, que no lo muestra: se pide solo donde se ve.
+            ->assertSee('<img src="'.SiteArt::url('implante-luz').'" alt="" width="720" height="720" loading="lazy">', false)
             ->assertSee('<span class="art"><img src="'.SiteArt::url('brackets-192').'" srcset="'.SiteArt::url('brackets-192').' 192w, '.SiteArt::url('brackets').' 640w" sizes="112px" width="112" height="112" alt="" loading="lazy" decoding="async"></span>', false)
             // La dirección, el horario y el WhatsApp salen una vez, en "Dónde estamos": el pie solo lleva las páginas.
             ->assertSeeTextInOrder(['Dónde estamos', 'Lunes a sábado', 'El consultorio', 'Política de privacidad'])
@@ -104,15 +105,41 @@ class PublicPagesTest extends TestCase
             ->assertOk()
             ->assertSee('<div class="hero-band">', false)
             ->assertSee('<section class="hero with-art"', false)
-            ->assertSee('<img src="'.SiteArt::url('implante-brillo').'" alt="" width="395" height="806" fetchpriority="high">', false)
-            ->assertSee("<p class=\"eyebrow\">Cerrado ahora · abre hoy a las 9:00\u{A0}a.\u{A0}m.</p>", false)
+            ->assertSee('<img src="'.SiteArt::url('implante-luz').'" alt="" width="720" height="720" fetchpriority="high">', false)
+            ->assertSee("<p class=\"open-now\">Cerrado ahora · abre hoy a las 9:00\u{A0}a.\u{A0}m.</p>", false)
             ->assertSeeInOrder(['Horarios libres de verdad', 'Confirmas por WhatsApp', 'Pagas en el consultorio', 'Próximo horario libre'])
             ->assertSeeInOrder(['Reserva en tres pasos', 'Elige día y hora', 'Confirma por WhatsApp', 'Ven a tu cita', 'Yape, Plin, tarjeta o efectivo'])
             ->assertSee([SiteArt::url('calendario'), SiteArt::url('escudo'), SiteArt::url('sonrisa'), SiteArt::url('portada')]);
 
         $this->travelTo(CarbonImmutable::parse('2026-11-02 10:00', 'America/Lima'));
 
-        $this->get(route('site.home'))->assertSee('<p class="eyebrow open">Abierto ahora', false);
+        $this->get(route('site.home'))->assertSee('<p class="open-now open">Abierto ahora', false);
+    }
+
+    public function test_the_phrase_above_the_cover_title_is_the_one_from_the_setup_and_can_be_left_out(): void
+    {
+        $this->freezeMonday();
+        $this->doctorOffering(Treatment::factory()->evaluation()->create());
+
+        // Sin tocar nada sale la frase con que viene el sistema, entre el aviso de si está abierto y el título.
+        $this->get(route('site.home'))
+            ->assertOk()
+            ->assertSeeInOrder(['class="open-now"', '<p class="eyebrow">Innovación y cuidado dental</p>', '<h1 id="titulo">'], false);
+
+        Setting::set('web.tagline', 'Sonrisas desde 1998');
+
+        $this->get(route('site.home'))
+            ->assertOk()
+            ->assertSee('<p class="eyebrow">Sonrisas desde 1998</p>', false)
+            ->assertDontSee('Innovación y cuidado dental');
+
+        // Vacía, no deja un renglón en blanco: el aviso de si está abierto se queda.
+        Setting::set('web.tagline', null);
+
+        $this->get(route('site.home'))
+            ->assertOk()
+            ->assertDontSee('class="eyebrow"', false)
+            ->assertSee('class="open-now"', false);
     }
 
     public function test_without_online_booking_the_home_does_not_promise_free_times_or_explain_the_steps(): void
@@ -122,7 +149,7 @@ class PublicPagesTest extends TestCase
         $this->get(route('site.home'))
             ->assertOk()
             ->assertSee('<section class="hero with-art plain"', false)
-            ->assertSee(SiteArt::url('implante-brillo'))
+            ->assertSee(SiteArt::url('implante-luz'))
             ->assertSee(SiteArt::url('endodoncia-192'))
             // El acceso rápido sigue ahí, sin horarios que ofrecer.
             ->assertSee('Acceso rápido')
@@ -186,7 +213,7 @@ class PublicPagesTest extends TestCase
                 'href="https://wa.me/51918874568?text=Hola%2C%20quisiera%20informaci%C3%B3n." class="btn ghost in-bar"',
                 'href="https://www.google.com/maps/search/?api=1&amp;query=Av.%20Larco%20123%2C%20Miraflores%2C%20Per%C3%BA" class="btn ghost"',
                 'Cómo llegar',
-                'Tratamientos y precios',
+                'Nuestros servicios',
             ], false);
 
         // Sin WhatsApp ni dirección cargados, quedan solo los horarios y "Reservar cita".
@@ -210,14 +237,14 @@ class PublicPagesTest extends TestCase
         // Con ocho entran todos: no hace falta mandar a nadie a otra página.
         $this->get(route('site.home'))
             ->assertOk()
-            ->assertSeeInOrder(['Tratamientos y precios', route('site.treatment', 'tratamiento-1'), 'Tratamiento 1', 'Resumen 1.', route('site.treatment', 'tratamiento-8'), 'Tratamiento 8'])
-            ->assertDontSee('Ver los 8 tratamientos');
+            ->assertSeeInOrder(['<h2 id="servicios">Nuestros servicios</h2>', route('site.treatment', 'tratamiento-1'), 'Tratamiento 1', 'Resumen 1.', route('site.treatment', 'tratamiento-8'), 'Tratamiento 8'], false)
+            ->assertDontSee('Ver los 8 servicios');
 
         Treatment::factory()->clinicOnly()->create(['name' => 'Tratamiento 9', 'slug' => 'tratamiento-9', 'sort_order' => 9]);
 
         $this->get(route('site.home'))
             ->assertOk()
-            ->assertSee('<a href="'.route('site.treatments').'" class="arrow">Ver los 9 tratamientos</a>', false)
+            ->assertSee('<a href="'.route('site.treatments').'" class="arrow">Ver los 9 servicios</a>', false)
             ->assertSee(route('site.treatment', 'tratamiento-8'))
             ->assertDontSee(route('site.treatment', 'tratamiento-9'));
     }
@@ -246,7 +273,7 @@ class PublicPagesTest extends TestCase
         // "Inicio" va primero y marca la página en la que se está. Sin distrito, el nombre va solo.
         $this->get(route('site.home'))
             ->assertOk()
-            ->assertSeeInOrder(['class="site-nav"', 'href="'.route('site.home').'"', 'aria-current="page"', 'Inicio</a>', 'Tratamientos', 'class="menu"'], false)
+            ->assertSeeInOrder(['class="site-nav"', 'href="'.route('site.home').'"', 'aria-current="page"', 'Inicio</a>', 'href="'.route('site.treatments').'"', 'Servicios</a>', 'class="menu"'], false)
             ->assertSee('<span class="brand">'.Setting::get('clinic.name').'</span>', false)
             ->assertDontSee('Dentistas en');
 
@@ -471,6 +498,8 @@ class PublicPagesTest extends TestCase
         $this->get(route('site.treatment', 'endodoncia'))
             ->assertOk()
             ->assertSee('<title>Endodoncia en Juliaca · '.Setting::get('clinic.name').'</title>', false)
+            // Arriba, el camino de vuelta a la lista: al paciente se le dice "servicios".
+            ->assertSee('<a href="'.route('site.treatments').'">Servicios</a></nav>', false)
             // Su imagen va arriba del nombre, y se carga de inmediato porque está a la vista.
             ->assertSee('<span class="treatment-art"><img src="'.SiteArt::url('endodoncia-192').'" srcset="'.SiteArt::url('endodoncia-192').' 192w, '.SiteArt::url('endodoncia').' 640w" sizes="112px" width="112" height="112" alt="" decoding="async"></span>', false)
             ->assertSee('desde S/ 600')
@@ -583,6 +612,8 @@ class PublicPagesTest extends TestCase
         // Sin evaluación en la web, el botón lleva a elegir y lo dice. Cada tratamiento lleva su imagen, y la invitación, la de la evaluación.
         $this->get(route('site.treatments'))
             ->assertOk()
+            // Al paciente se le habla de "servicios", en el título de la página y en el de la pestaña.
+            ->assertSee(['<title>Nuestros servicios · ', '<h1>Nuestros servicios</h1>'], false)
             ->assertSee('<span class="icon"><img src="'.SiteArt::url('limpieza-192').'"', false)
             ->assertSee('<img src="'.SiteArt::url('evaluacion').'" alt="" width="640" height="640" loading="lazy">', false)
             ->assertSee('<a href="'.route('site.booking').'" class="btn">Reservar cita</a>', false)

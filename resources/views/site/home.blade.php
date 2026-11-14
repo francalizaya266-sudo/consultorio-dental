@@ -26,8 +26,8 @@
 {{-- La dirección, el horario y el WhatsApp ya están en "Dónde estamos": el pie no los repite. --}}
 <x-site-layout :wide="true" :json-ld="$jsonLd" :image="$heroImage" :footer-contact="false">
     {{--
-        La portada, en azul noche a todo el ancho: si está abierto, qué es el consultorio y el implante 3D de la
-        marca. Con la foto real del consultorio, la foto va a la derecha. Quien vuelve desde su celular recordado
+        La portada, en azul noche a todo el ancho: si está abierto, la frase del consultorio, qué es y el implante
+        3D de la marca. Con la foto real del consultorio, la foto va a la derecha. Quien vuelve desde su celular recordado
         ve primero lo suyo, dentro de la misma franja.
     --}}
     <x-slot:hero>
@@ -45,7 +45,10 @@
                 <section @class(['hero', 'with-photo' => $heroImage, 'with-art' => ! $heroImage, 'plain' => ! $featured]) aria-labelledby="titulo">
                     <div class="hero-text">
                         @if ($status)
-                            <p @class(['eyebrow', 'open' => $clinic->hours()->isOpen(now()->toImmutable())])>{{ $status }}</p>
+                            <p @class(['open-now', 'open' => $clinic->hours()->isOpen(now()->toImmutable())])>{{ $status }}</p>
+                        @endif
+                        @if ($clinic->tagline())
+                            <p class="eyebrow">{{ $clinic->tagline() }}</p>
                         @endif
                         <h1 id="titulo">{{ implode(' ', array_slice($words, 0, $firstHalf)) }}@if (count($words) > $firstHalf) <span>{{ implode(' ', array_slice($words, $firstHalf)) }}</span>@endif</h1>
                         @if ($clinic->intro())
@@ -57,15 +60,17 @@
                         <div class="row">
                             <a href="{{ route('site.booking') }}" class="btn light">{{ SiteIcon::svg('calendar') }}Reservar cita</a>
                             @if ($treatments->isNotEmpty())
-                                <a href="#tratamientos" class="btn ghost">Conocer más{{ SiteIcon::svg('arrow-down') }}</a>
+                                <a href="#servicios" class="btn ghost">Conocer más{{ SiteIcon::svg('arrow-down') }}</a>
                             @endif
                         </div>
                     </div>
 
-                    {{-- El implante encendido dentro de sus anillos: es la imagen de la marca, con foto o sin ella. --}}
+                    {{--
+                        El implante con su cinta de luz: es la imagen de la marca, con foto o sin ella. Con foto, en el
+                        celular no se ve (sitio.css): se pide solo cuando hace falta, y lo primero en cargar es la foto.
+                    --}}
                     <figure class="hero-art">
-                        <span class="ring"></span><span class="ring inner"></span><span class="ring ticks"></span>
-                        <img src="{{ SiteArt::url('implante-brillo') }}" alt="" width="395" height="806" fetchpriority="high">
+                        <img src="{{ SiteArt::url('implante-luz') }}" alt="" width="720" height="720" {!! $heroImage ? 'loading="lazy"' : 'fetchpriority="high"' !!}>
                     </figure>
                 </section>
             </div>
@@ -83,7 +88,7 @@
     </x-slot:hero>
 
     {{--
-        Lo que más se busca, a un toque, y al lado los tratamientos con su precio "desde". En el celular, "Reservar
+        Lo que más se busca, a un toque, y al lado los servicios con su precio "desde". En el celular, "Reservar
         cita" y WhatsApp ya están siempre en la barra de abajo: aquí no se repiten (sitio.css).
     --}}
     <div class="start">
@@ -105,12 +110,12 @@
         </aside>
 
         @if ($treatments->isNotEmpty())
-            <section class="services" aria-labelledby="tratamientos">
+            <section class="services" aria-labelledby="servicios">
                 <div class="section-head">
-                    <h2 id="tratamientos">Tratamientos y precios</h2>
+                    <h2 id="servicios">Nuestros servicios</h2>
                     <p>Precios referenciales “desde”. El costo exacto te lo da el doctor en tu evaluación, antes de empezar.</p>
                     @if ($treatments->count() > $shown->count())
-                        <a href="{{ route('site.treatments') }}" class="arrow">Ver los {{ $treatments->count() }} tratamientos</a>
+                        <a href="{{ route('site.treatments') }}" class="arrow">Ver los {{ $treatments->count() }} servicios</a>
                     @endif
                 </div>
                 @include('site.partials.service-cards', ['treatments' => $shown])

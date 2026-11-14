@@ -28,7 +28,7 @@
 
     $nav = array_filter([
         ['Inicio', route('site.home'), 'site.home'],
-        ['Tratamientos', route('site.treatments'), 'site.treatment*'],
+        ['Servicios', route('site.treatments'), 'site.treatment*'],
         ['Equipo', route('site.team'), 'site.team'],
         $sections['promotions'] ? ['Promociones', route('site.promotions'), 'site.promotion*'] : null,
         ['Contacto', route('site.contact'), 'site.contact'],

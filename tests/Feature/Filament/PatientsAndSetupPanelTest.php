@@ -387,6 +387,36 @@ class PatientsAndSetupPanelTest extends TestCase
         $this->assertSame([null, null], [Setting::get('clinic.google_rating'), Setting::get('clinic.google_reviews_count')]);
     }
 
+    public function test_the_admin_changes_or_removes_the_phrase_above_the_home_title(): void
+    {
+        $this->actingAs(User::factory()->admin()->create());
+
+        // La hoja abre con la frase con que viene el sistema, y la web la muestra tal como se guarde.
+        Livewire::test(WebSetup::class)
+            ->assertSchemaStateSet(['web.tagline' => 'Innovación y cuidado dental'])
+            ->fillForm(['web' => ['tagline' => 'Más de 20 años cuidando sonrisas']])
+            ->call('save')
+            ->assertHasNoFormErrors();
+
+        $this->assertSame('Más de 20 años cuidando sonrisas', Setting::get('web.tagline'));
+        $this->get(route('site.home'))->assertSee('<p class="eyebrow">Más de 20 años cuidando sonrisas</p>', false);
+
+        // Es corta: no se deja pasar un párrafo.
+        Livewire::test(WebSetup::class)
+            ->fillForm(['web' => ['tagline' => str_repeat('a', 41)]])
+            ->call('save')
+            ->assertHasFormErrors(['web.tagline']);
+
+        // Vacía, la frase sale de la web y no vuelve la que venía con el sistema.
+        Livewire::test(WebSetup::class)
+            ->fillForm(['web' => ['tagline' => '']])
+            ->call('save')
+            ->assertHasNoFormErrors();
+
+        $this->assertNull(Setting::get('web.tagline'));
+        $this->get(route('site.home'))->assertDontSee('class="eyebrow"', false);
+    }
+
     public function test_the_browser_lightens_the_home_photo_and_sends_it_as_jpeg(): void
     {
         $this->actingAs(User::factory()->admin()->create());

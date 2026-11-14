@@ -85,7 +85,7 @@
     {{-- Paso 2: día y hora --}}
     @if ($step === 2 && $this->treatment)
         <section class="stack" aria-labelledby="paso-2">
-            <button type="button" class="link-btn" data-step-back>← Cambiar tratamiento</button>
+            <button type="button" class="link-btn" data-step-back>← Cambiar servicio</button>
             <h1 id="paso-2" tabindex="-1">Elige día y hora</h1>
             <p class="lead">{{ $this->treatment->name }} · {{ $this->treatment->duration_minutes }} min aprox.</p>
 

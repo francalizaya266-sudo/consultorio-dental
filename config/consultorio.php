@@ -36,6 +36,8 @@ return [
 
         // Textos de la página de inicio.
         'web' => [
+            // La frase corta que va arriba del título del inicio. Vacía en la puesta a punto = no sale.
+            'tagline' => 'Innovación y cuidado dental',
             'headline' => 'Atención dental sin esperas',
             'intro' => 'Evaluaciones, limpiezas, implantes y más. Elige tu horario aquí mismo y te confirmamos por WhatsApp.',
             'about' => null,

@@ -13,7 +13,7 @@
 @endphp
 <x-site-layout :title="$title" :wide="true" :json-ld="$jsonLd" :image="PublicImages::url($treatment->image_path)"
     :description="$treatment->seo_description ?: $treatment->summary">
-    <nav class="crumbs" aria-label="Estás en"><a href="{{ route('site.treatments') }}">Tratamientos</a></nav>
+    <nav class="crumbs" aria-label="Estás en"><a href="{{ route('site.treatments') }}">Servicios</a></nav>
 
     {{-- A la derecha, lo más útil: los próximos horarios libres; si no hay, la foto. --}}
     <section @class(['treatment-head', 'with-aside' => $nextFree || $treatment->image_path])>
@@ -120,7 +120,7 @@
 
     @if ($others->isNotEmpty())
         <section class="section" aria-labelledby="otros">
-            <h2 id="otros">Otros tratamientos</h2>
+            <h2 id="otros">Otros servicios</h2>
             @include('site.partials.price-list', ['treatments' => $others])
         </section>
     @endif
