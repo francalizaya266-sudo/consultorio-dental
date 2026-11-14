@@ -23,6 +23,12 @@ class PublicPagesTest extends TestCase
 {
     use CreatesAgenda, LazilyRefreshDatabase;
 
+    /** Una capa del implante de la portada tal como sale en la página: la chica para el celular y la grande para lo demás. */
+    private function coverLayer(string $name, string $loading): string
+    {
+        return '<img src="'.SiteArt::url($name.'-640').'" srcset="'.SiteArt::url($name.'-640').' 640w, '.SiteArt::url($name).' 1120w" sizes="(min-width: 900px) 440px, 320px" width="1120" height="1120" alt="" '.$loading.'>';
+    }
+
     private function campaign(array $attributes = []): Campaign
     {
         return Campaign::query()->create($attributes + [
@@ -46,9 +52,9 @@ class PublicPagesTest extends TestCase
         $this->get(route('site.home'))
             ->assertOk()
             ->assertSee('<title>'.Setting::get('clinic.name').' · Dentistas en Miraflores</title>', false)
-            // Bajo el nombre, dónde atiende; y el título de la portada, con su segunda mitad en celeste.
+            // Bajo el nombre, dónde atiende; y el título de la portada, con su segunda mitad en celeste y en cursiva.
             ->assertSee('<span class="brand">'.Setting::get('clinic.name').'<small>Dentistas en Miraflores</small></span>', false)
-            ->assertSee('<h1 id="titulo">Atención dental <span>sin esperas</span></h1>', false)
+            ->assertSee('<h1 id="titulo">Atención dental <em>sin esperas</em></h1>', false)
             // Con 2 horas de anticipación, lo primero libre es hoy a las 10:00, y un toque lo deja elegido.
             ->assertSee('Hoy, lunes 2 de noviembre')
             ->assertSee("10:00\u{A0}a.\u{A0}m.")
@@ -84,9 +90,11 @@ class PublicPagesTest extends TestCase
             // La foto del consultorio llena la portada y el implante de la marca queda sobre ella; cada tratamiento lleva su imagen.
             ->assertSee('<div class="hero-band with-photo">', false)
             ->assertSee('<section class="hero with-photo"', false)
-            // Con foto, el implante no se le hace bajar al celular, que no lo muestra: se pide solo donde se ve.
-            ->assertSee('<img src="'.SiteArt::url('implante-luz').'" alt="" width="720" height="720" loading="lazy">', false)
-            ->assertSee('<span class="art"><img src="'.SiteArt::url('brackets-192').'" srcset="'.SiteArt::url('brackets-192').' 192w, '.SiteArt::url('brackets').' 640w" sizes="112px" width="112" height="112" alt="" loading="lazy" decoding="async"></span>', false)
+            // Con foto, el implante no se le hace bajar al celular, que no lo muestra: sus dos capas se piden solo donde se ven.
+            ->assertSee($this->coverLayer('implante-portada', 'loading="lazy"'), false)
+            ->assertSee($this->coverLayer('implante-portada-luz', 'loading="lazy"'), false)
+            // Cada tratamiento lleva su imagen en tres tamaños: cada pantalla baja el que le queda justo.
+            ->assertSee('<span class="art"><img src="'.SiteArt::url('brackets-192').'" srcset="'.SiteArt::url('brackets-192').' 192w, '.SiteArt::url('brackets-320').' 320w, '.SiteArt::url('brackets').' 640w" sizes="128px" width="128" height="128" alt="" loading="lazy" decoding="async"></span>', false)
             // La dirección, el horario y el WhatsApp salen una vez, en "Dónde estamos": el pie solo lleva las páginas.
             ->assertSeeTextInOrder(['Dónde estamos', 'Lunes a sábado', 'El consultorio', 'Política de privacidad'])
             ->assertSee('site-footer short')
@@ -105,7 +113,8 @@ class PublicPagesTest extends TestCase
             ->assertOk()
             ->assertSee('<div class="hero-band">', false)
             ->assertSee('<section class="hero with-art"', false)
-            ->assertSee('<img src="'.SiteArt::url('implante-luz').'" alt="" width="720" height="720" fetchpriority="high">', false)
+            // Sin foto, el implante es lo primero que se ve: el implante y, encima, su cinta de luz.
+            ->assertSeeInOrder([$this->coverLayer('implante-portada', 'fetchpriority="high"'), $this->coverLayer('implante-portada-luz', 'fetchpriority="high"')], false)
             ->assertSee("<p class=\"open-now\">Cerrado ahora · abre hoy a las 9:00\u{A0}a.\u{A0}m.</p>", false)
             ->assertSeeInOrder(['Horarios libres de verdad', 'Confirmas por WhatsApp', 'Pagas en el consultorio', 'Próximo horario libre'])
             ->assertSeeInOrder(['Reserva en tres pasos', 'Elige día y hora', 'Confirma por WhatsApp', 'Ven a tu cita', 'Yape, Plin, tarjeta o efectivo'])
@@ -149,7 +158,7 @@ class PublicPagesTest extends TestCase
         $this->get(route('site.home'))
             ->assertOk()
             ->assertSee('<section class="hero with-art plain"', false)
-            ->assertSee(SiteArt::url('implante-luz'))
+            ->assertSee(SiteArt::url('implante-portada'))
             ->assertSee(SiteArt::url('endodoncia-192'))
             // El acceso rápido sigue ahí, sin horarios que ofrecer.
             ->assertSee('Acceso rápido')
@@ -164,12 +173,29 @@ class PublicPagesTest extends TestCase
         // Con un número impar de palabras, la primera mitad se lleva la del medio.
         Setting::set('web.headline', 'Sonrisas sanas siempre');
 
-        $this->get(route('site.home'))->assertOk()->assertSee('<h1 id="titulo">Sonrisas sanas <span>siempre</span></h1>', false);
+        $this->get(route('site.home'))->assertOk()->assertSee('<h1 id="titulo">Sonrisas sanas <em>siempre</em></h1>', false);
 
         // Una sola palabra no tiene segunda mitad que pintar.
         Setting::set('web.headline', 'Sonríe');
 
         $this->get(route('site.home'))->assertOk()->assertSee('<h1 id="titulo">Sonríe</h1>', false);
+    }
+
+    public function test_what_follows_the_comma_in_the_first_half_of_the_cover_title_goes_in_thin_letters(): void
+    {
+        Setting::set('web.headline', 'Tu sonrisa, nuestra mayor prioridad');
+
+        $this->get(route('site.home'))->assertOk()->assertSee('<h1 id="titulo">Tu sonrisa, <span>nuestra</span> <em>mayor prioridad</em></h1>', false);
+
+        // Si la coma cierra la primera mitad, no queda nada que adelgazar.
+        Setting::set('web.headline', 'Tu sonrisa, siempre sana');
+
+        $this->get(route('site.home'))->assertOk()->assertSee('<h1 id="titulo">Tu sonrisa, <em>siempre sana</em></h1>', false);
+
+        // La coma de la segunda mitad no cambia nada: esa parte va entera en celeste.
+        Setting::set('web.headline', 'Sonrisas sanas, siempre');
+
+        $this->get(route('site.home'))->assertOk()->assertSee('<h1 id="titulo">Sonrisas sanas, <em>siempre</em></h1>', false);
     }
 
     public function test_the_home_only_says_prices_are_in_sight_when_some_treatment_shows_one(): void
@@ -501,7 +527,7 @@ class PublicPagesTest extends TestCase
             // Arriba, el camino de vuelta a la lista: al paciente se le dice "servicios".
             ->assertSee('<a href="'.route('site.treatments').'">Servicios</a></nav>', false)
             // Su imagen va arriba del nombre, y se carga de inmediato porque está a la vista.
-            ->assertSee('<span class="treatment-art"><img src="'.SiteArt::url('endodoncia-192').'" srcset="'.SiteArt::url('endodoncia-192').' 192w, '.SiteArt::url('endodoncia').' 640w" sizes="112px" width="112" height="112" alt="" decoding="async"></span>', false)
+            ->assertSee('<span class="treatment-art"><img src="'.SiteArt::url('endodoncia-192').'" srcset="'.SiteArt::url('endodoncia-192').' 192w, '.SiteArt::url('endodoncia-320').' 320w, '.SiteArt::url('endodoncia').' 640w" sizes="112px" width="112" height="112" alt="" decoding="async"></span>', false)
             ->assertSee('desde S/ 600')
             ->assertSee('1 – 3 sesiones')
             // Se dice antes del botón, y es el único botón de reserva de la página: el del doctor no lo repite.

@@ -12,7 +12,7 @@ use Illuminate\Support\HtmlString;
 final class SiteArt
 {
     /** Sube cuando se reemplaza alguna imagen: el celular las guarda un mes. */
-    private const VERSION = 1;
+    private const VERSION = 2;
 
     /** @var array<string, string> Ícono del tratamiento (TreatmentIcon) → su imagen. */
     private const BY_ICON = [
@@ -72,6 +72,7 @@ final class SiteArt
 
     /**
      * La imagen de un tratamiento lista para la página, al tamaño en que se muestra (en píxeles de CSS).
+     * Va en tres tamaños y cada pantalla baja el que le queda justo: así se ve nítida sin pesar de más.
      * Es un adorno junto al nombre: va sin texto alternativo.
      */
     public static function treatment(Treatment $treatment, int $size, bool $lazy = true): HtmlString
@@ -79,11 +80,27 @@ final class SiteArt
         $key = self::keyFor($treatment);
 
         return new HtmlString(sprintf(
-            '<img src="%1$s" srcset="%1$s 192w, %2$s 640w" sizes="%3$dpx" width="%3$d" height="%3$d" alt=""%4$s decoding="async">',
+            '<img src="%1$s" srcset="%1$s 192w, %2$s 320w, %3$s 640w" sizes="%4$dpx" width="%4$d" height="%4$d" alt=""%5$s decoding="async">',
             e(self::url($key.'-192')),
+            e(self::url($key.'-320')),
             e(self::url($key)),
             $size,
             $lazy ? ' loading="lazy"' : '',
+        ));
+    }
+
+    /**
+     * Una capa del implante de la portada ("implante-portada" o su cinta de luz, "implante-portada-luz"), en dos
+     * tamaños: el celular baja la chica. Con foto en la portada el implante solo se ve en pantallas anchas: ahí
+     * se pide cuando hace falta, y lo primero en cargar es la foto.
+     */
+    public static function coverLayer(string $name, bool $lazy): HtmlString
+    {
+        return new HtmlString(sprintf(
+            '<img src="%1$s" srcset="%1$s 640w, %2$s 1120w" sizes="(min-width: 900px) 440px, 320px" width="1120" height="1120" alt=""%3$s>',
+            e(self::url($name.'-640')),
+            e(self::url($name)),
+            $lazy ? ' loading="lazy"' : ' fetchpriority="high"',
         ));
     }
 }
