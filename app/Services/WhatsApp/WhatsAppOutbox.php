@@ -238,7 +238,7 @@ class WhatsAppOutbox
             'hora' => $appointment->starts_at->format('g:i a'),
             'doctor' => $appointment->doctor->name,
             'tratamiento' => mb_strtolower($appointment->treatment->name),
-            // "Precio con la campaña …: desde S/ 120 (normal desde S/ 150). Pagas en el consultorio con …", o nada.
+            // "Precio con la promoción …: desde S/ 120 (normal desde S/ 150). Pagas en el consultorio con …", o nada.
             'precio' => ($price = CampaignText::price($appointment->treatment, $appointment->campaign)) ? $price.' '.CampaignText::HOW_TO_PAY : '',
             'consultorio' => (string) Setting::get('clinic.name'),
             'direccion' => (string) Setting::get('clinic.address'),

@@ -7,7 +7,8 @@
     use App\Support\Money;
 
     $clinic = app(ClinicInfo::class);
-    $discount = CampaignText::discount($campaign);
+    // Si el nombre ya dice el descuento ("Blanqueamiento 20% de descuento"), no se repite debajo.
+    $discount = CampaignText::discountBesideName($campaign);
     $package = CampaignText::package($campaign);
     $campaignPrice = $campaign->treatment ? $campaign->priceFor($campaign->treatment) : null;
     // Un tratamiento que no se reserva solo empieza por la evaluación, y la promoción va con ella.
@@ -20,7 +21,7 @@
     ]));
 @endphp
 <x-site-layout :title="$campaign->name" :wide="true" :json-ld="$jsonLd" :image="PublicImages::url($campaign->image_path)"
-    :description="$campaign->summary ?: ($discount ? $discount.' · '.CampaignText::until($campaign) : null)">
+    :description="$campaign->summary ?: (CampaignText::discount($campaign) ? CampaignText::discount($campaign).' · '.CampaignText::until($campaign) : null)">
     <nav class="crumbs" aria-label="Estás en"><a href="{{ route('site.promotions') }}">Promociones</a></nav>
 
     <article @class(['promo-page', 'with-image' => $campaign->image_path])>
@@ -85,9 +86,9 @@
                     <p>{{ $campaign->treatment->name }} se programa después de una evaluación: reservas la evaluación y la promoción queda guardada para tu tratamiento.</p>
                 @endif
                 <div class="row">
-                    <a href="{{ $bookingUrl }}" class="btn">{{ $byEvaluation ? 'Reservar evaluación con la promoción' : 'Reservar con esta promoción' }}</a>
+                    <a href="{{ $bookingUrl }}" class="btn">{{ $byEvaluation ? 'Reservar evaluación con la promoción' : 'Reservar con la promoción' }}</a>
                     @if ($clinic->whatsappUrl())
-                        <a href="{{ $clinic->whatsappUrl($campaign->whatsapp_text ?: 'Hola, quiero la promoción "'.$campaign->name.'".') }}" class="btn quiet" rel="noopener">Preguntar por WhatsApp</a>
+                        <a href="{{ $clinic->whatsappUrl($campaign->whatsapp_text ?: 'Hola, quiero la promoción "'.$campaign->name.'".') }}" class="btn quiet" rel="noopener">Escribir por WhatsApp</a>
                     @endif
                 </div>
             @else

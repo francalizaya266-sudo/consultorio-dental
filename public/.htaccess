@@ -23,3 +23,12 @@
     RewriteCond %{REQUEST_FILENAME} !-f
     RewriteRule ^ index.php [L]
 </IfModule>
+
+# Lo que no cambia entre visitas (la letra, los estilos, los íconos y las fotos) se guarda un mes en el celular
+# del paciente, para que la página abra más rápido la segunda vez. Los estilos llevan su versión en la dirección
+# (?v=...), así que un cambio se ve al instante. Solo toca archivos reales: las páginas siempre salen al día.
+<IfModule mod_headers.c>
+    <FilesMatch "\.(woff2|css|js|png|jpe?g|webp|svg|ico)$">
+        Header set Cache-Control "public, max-age=2592000"
+    </FilesMatch>
+</IfModule>

@@ -34,7 +34,7 @@
                     </div>
                 @endif
                 <div>
-                    <dt>{{ $campaign ? 'Precio con la campaña' : 'Precio' }}</dt>
+                    <dt>{{ $campaign ? 'Precio con la promoción' : 'Precio' }}</dt>
                     <dd>
                         @if ($campaign)
                             <s class="was">{{ $treatment->webPrice() }}</s>
@@ -47,26 +47,30 @@
             </dl>
 
             @if ($campaign)
-                <p class="promo-note">Campaña <a href="{{ route('site.promotion', $campaign->slug) }}">{{ $campaign->name }}</a> · {{ mb_strtolower(CampaignText::until($campaign)) }}.</p>
+                <p class="promo-note">Promoción <a href="{{ route('site.promotion', $campaign->slug) }}">{{ $campaign->name }}</a> · {{ mb_strtolower(CampaignText::until($campaign)) }}.</p>
             @endif
 
+            {{-- Lo que no se reserva solo empieza por la evaluación: se dice antes del botón, no en letra chica después. --}}
+            @unless ($direct)
+                <div class="starts-with">
+                    <strong>Empieza con una evaluación</strong>
+                    <p>El doctor revisa tu caso, te da el presupuesto y agenda las sesiones contigo.</p>
+                </div>
+            @endunless
             <div class="row">
                 @if ($bookAs)
-                    <a href="{{ route('site.booking', array_filter(['tratamiento' => $bookAs->slug, 'promo' => $direct ? $campaign?->slug : null])) }}" class="btn">{{ $direct ? ($campaign ? 'Reservar con la campaña' : 'Reservar cita') : 'Reservar evaluación' }}</a>
+                    <a href="{{ route('site.booking', array_filter(['tratamiento' => $bookAs->slug, 'promo' => $direct ? $campaign?->slug : null])) }}" class="btn">{{ $direct ? ($campaign ? 'Reservar con la promoción' : 'Reservar cita') : 'Reservar evaluación' }}</a>
                 @endif
                 @if ($clinic->whatsappUrl())
-                    <a href="{{ $clinic->whatsappUrl('Hola, quisiera información sobre '.mb_strtolower($treatment->name).'.') }}" class="btn quiet" rel="noopener">Preguntar por WhatsApp</a>
+                    <a href="{{ $clinic->whatsappUrl('Hola, quisiera información sobre '.mb_strtolower($treatment->name).'.') }}" class="btn quiet" rel="noopener">Escribir por WhatsApp</a>
                 @endif
             </div>
-            @unless ($direct)
-                <p class="muted small">Este tratamiento se programa después de una evaluación: el doctor revisa tu caso, te da el presupuesto y agenda las sesiones contigo.</p>
-            @endunless
             @if ($treatment->webPrice())
                 <p class="muted small">{{ CampaignText::HOW_TO_PAY }}</p>
             @endif
         </div>
         @if ($nextFree)
-            @include('site.partials.next-free', ['treatment' => $bookAs, 'nextFree' => $nextFree, 'promo' => $direct ? $campaign?->slug : null])
+            @include('site.partials.next-free', ['treatment' => $bookAs, 'nextFree' => $nextFree, 'promo' => $direct ? $campaign?->slug : null, 'title' => $direct ? null : 'Próximo horario para tu evaluación'])
         @elseif ($treatment->image_path)
             <img src="{{ PublicImages::url($treatment->image_path) }}" alt="{{ $treatment->name }}" class="treatment-photo">
         @endif

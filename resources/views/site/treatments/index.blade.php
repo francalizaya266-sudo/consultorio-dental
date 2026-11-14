@@ -19,6 +19,7 @@
     <section class="section cta-band">
         <h2>¿No sabes qué necesitas?</h2>
         <p>Empieza con una evaluación: el doctor revisa, te explica las opciones y te da el presupuesto.</p>
-        <a href="{{ route('site.booking') }}" class="btn">Reservar evaluación</a>
+        {{-- El botón dice lo que hace: con evaluación en la web va directo a ella; sin ella, a elegir. --}}
+        <a href="{{ route('site.booking', array_filter(['tratamiento' => $evaluation?->slug])) }}" class="btn">{{ $evaluation ? 'Reservar evaluación' : 'Reservar cita' }}</a>
     </section>
 </x-site-layout>

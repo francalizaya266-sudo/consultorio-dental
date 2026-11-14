@@ -301,7 +301,7 @@
 
             @if (! $this->device && ($url = $this->whatsappUrl()))
                 <p>¿Quieres adelantarte? Escríbenos y te respondemos con tu enlace.</p>
-                <a href="{{ $url }}" class="btn whatsapp block" rel="noopener">Escribir al consultorio por WhatsApp</a>
+                <a href="{{ $url }}" class="btn whatsapp block" rel="noopener">Escribir por WhatsApp</a>
             @endif
 
             <a href="{{ route('site.booking') }}" class="btn quiet block">Reservar otra cita</a>

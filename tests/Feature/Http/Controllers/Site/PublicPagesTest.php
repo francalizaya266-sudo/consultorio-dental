@@ -12,6 +12,7 @@ use App\Models\SmileCase;
 use App\Models\Treatment;
 use App\Models\TreatmentPackage;
 use Illuminate\Foundation\Testing\LazilyRefreshDatabase;
+use Illuminate\Support\Facades\Cache;
 use Livewire\Livewire;
 use Tests\Concerns\CreatesAgenda;
 use Tests\TestCase;
@@ -77,9 +78,83 @@ class PublicPagesTest extends TestCase
             ->assertSee('href="https://g.page/r/consultorio/review"', false)
             ->assertSee('style="--rating: 4.9"', false)
             ->assertSee('<span class="icon"><svg', false)
-            // El horario completo sale una vez, en "Cómo llegar y contactarnos", no también en el pie.
-            ->assertSeeTextInOrder(['Cómo llegar y contactarnos', 'Lunes a sábado', 'Dónde estamos', 'Escríbenos'])
-            ->assertDontSee('<h2>Horario</h2>', false);
+            // La dirección, el horario y el WhatsApp salen una vez, en "Dónde estamos": el pie solo lleva las páginas.
+            ->assertSeeTextInOrder(['Dónde estamos', 'Lunes a sábado', 'El consultorio', 'Política de privacidad'])
+            ->assertSee('site-footer short')
+            ->assertDontSee('<h2>Dónde estamos</h2>', false)
+            ->assertDontSee('<h2>Horario</h2>', false)
+            ->assertDontSee('<h2>Escríbenos</h2>', false);
+    }
+
+    public function test_the_home_presents_the_clinic_and_who_attends_in_one_section(): void
+    {
+        Setting::set('web.about', 'Atendemos a toda la familia desde 2015.');
+
+        // Sin doctores publicados, la presentación va sola.
+        $this->get(route('site.home'))
+            ->assertOk()
+            ->assertSeeInOrder(['Sobre '.Setting::get('clinic.name'), 'Atendemos a toda la familia desde 2015.'])
+            ->assertDontSee('Quién te atiende');
+
+        // Con un doctor, van juntos, y su botón no repite el "Reservar cita" de la página.
+        $doctor = $this->doctorOffering(Treatment::factory()->create());
+
+        $this->get(route('site.home'))
+            ->assertOk()
+            ->assertSeeInOrder(['Quién te atiende', 'Atendemos a toda la familia desde 2015.', $doctor->name])
+            ->assertDontSee('Sobre '.Setting::get('clinic.name'))
+            ->assertDontSee('Con su número de colegiatura (COP) a la vista.')
+            ->assertDontSee(route('site.booking', ['doctor' => $doctor->slug]));
+
+        // Con varios doctores, el botón de cada uno sirve para elegir con quién atenderse.
+        $other = $this->doctorOffering(Treatment::factory()->create());
+
+        $this->get(route('site.home'))
+            ->assertOk()
+            ->assertSee('Quiénes te atienden')
+            ->assertSee([route('site.booking', ['doctor' => $doctor->slug]), route('site.booking', ['doctor' => $other->slug])]);
+    }
+
+    public function test_the_tab_icon_and_the_image_when_sharing_are_always_there(): void
+    {
+        $treatment = Treatment::factory()->create(['slug' => 'limpieza', 'image_path' => 'tratamientos/limpieza.jpg']);
+        Treatment::factory()->create(['slug' => 'resina']);
+
+        foreach (['favicon.ico', 'favicon.svg', 'apple-touch-icon.png', 'imagen-al-compartir.jpg'] as $file) {
+            $this->assertGreaterThan(0, filesize(public_path($file)), $file);
+        }
+
+        // Sin foto propia, la página se comparte con la imagen de la marca.
+        $this->get(route('site.treatment', 'resina'))
+            ->assertOk()
+            ->assertSee('<link rel="icon" href="'.asset('favicon.svg').'" type="image/svg+xml">', false)
+            ->assertSee('<link rel="apple-touch-icon" href="'.asset('apple-touch-icon.png').'">', false)
+            ->assertSee('<meta property="og:image" content="'.asset('imagen-al-compartir.jpg').'">', false);
+
+        // Con la foto del consultorio subida, esa; y la foto propia de la página le gana a las dos.
+        Setting::set('web.hero_image', 'inicio/consultorio.jpg');
+
+        $this->get(route('site.treatment', 'resina'))->assertSee('<meta property="og:image" content="'.url('/media/inicio/consultorio.jpg').'">', false);
+        $this->get(route('site.treatment', $treatment->slug))->assertSee('<meta property="og:image" content="'.url('/media/tratamientos/limpieza.jpg').'">', false);
+    }
+
+    public function test_the_computer_menu_shows_the_extra_pages_that_have_content(): void
+    {
+        // Solo preguntas: van a la vista, entre Contacto y Mi cuenta.
+        Faq::factory()->create();
+
+        $this->get(route('site.home'))
+            ->assertOk()
+            ->assertSeeInOrder(['class="site-nav"', 'Contacto', route('site.faq'), 'Preguntas frecuentes', 'Mi cuenta', 'class="menu"'], false)
+            ->assertDontSee('more-nav');
+
+        // Varias páginas extra: bajo "Más", para que el menú no se desborde.
+        Cache::forget('web.secciones');
+        Review::factory()->create();
+
+        $this->get(route('site.faq'))
+            ->assertOk()
+            ->assertSeeInOrder(['class="site-nav"', 'class="more-nav"', 'aria-current="page"', 'Más</summary>', route('site.reviews'), route('site.faq'), 'Mi cuenta', 'class="menu"'], false);
     }
 
     public function test_without_photo_or_score_the_home_shows_no_empty_frame_or_stars(): void
@@ -165,10 +240,12 @@ class PublicPagesTest extends TestCase
             ->assertSee('<title>Endodoncia en Juliaca · '.Setting::get('clinic.name').'</title>', false)
             ->assertSee('desde S/ 600')
             ->assertSee('1 – 3 sesiones')
-            ->assertSee('Reservar evaluación')
+            // Se dice antes del botón, y es el único botón de reserva de la página: el del doctor no lo repite.
+            ->assertSeeInOrder(['Empieza con una evaluación', 'Reservar evaluación'])
             ->assertSee(route('site.booking', ['tratamiento' => $evaluation->slug]))
-            ->assertSee('Este tratamiento se programa después de una evaluación')
-            // Los próximos horarios son de la evaluación, no del tratamiento.
+            ->assertDontSee(route('site.booking', ['doctor' => $endodontics->doctors->first()->slug]))
+            // Los próximos horarios son de la evaluación, no del tratamiento, y el título lo dice.
+            ->assertSee('Próximo horario para tu evaluación')
             ->assertSee(route('site.booking', ['tratamiento' => $evaluation->slug, 'fecha' => '2026-11-02', 'hora' => '10:00']))
             ->assertSee('<strong>anestesia local</strong>', false)
             ->assertDontSee('<script>alert(1)</script>', false)
@@ -220,21 +297,66 @@ class PublicPagesTest extends TestCase
 
         $this->get(route('site.treatment', 'limpieza-dental'))
             ->assertOk()
-            ->assertSeeInOrder(['Precio con la campaña', 'desde S/ 150', 'desde S/ 120'])
-            ->assertSeeInOrder(['Campaña', 'Limpieza de verano', '· hasta el 2 de diciembre.'])
-            ->assertSee(['Reservar con la campaña', route('site.booking', ['tratamiento' => 'limpieza-dental', 'promo' => 'limpieza-verano'])])
+            ->assertSeeInOrder(['Precio con la promoción', 'desde S/ 150', 'desde S/ 120'])
+            ->assertSeeInOrder(['Promoción', 'Limpieza de verano', '· hasta el 2 de diciembre.'])
+            ->assertSee(['Reservar con la promoción', route('site.booking', ['tratamiento' => 'limpieza-dental', 'promo' => 'limpieza-verano'])])
+            // Al paciente siempre se le dice "promoción"; "campaña" es la palabra del panel.
+            ->assertDontSee('campaña')
+            ->assertDontSee('Próximo horario para tu evaluación')
             ->assertSee('Pagas en el consultorio con Yape, Plin, tarjeta o efectivo.');
 
         // Otro tratamiento no tiene la campaña.
         $this->get(route('site.treatment', 'blanqueamiento'))
             ->assertOk()
-            ->assertDontSee('Precio con la campaña')
+            ->assertDontSee('Precio con la promoción')
             ->assertSee(route('site.booking', ['tratamiento' => 'blanqueamiento']));
 
         $this->get(route('site.promotion', 'limpieza-verano'))
             ->assertOk()
             ->assertSeeInOrder(['Precio normal desde S/ 150', 'desde S/ 120', 'Pagas en el consultorio con Yape, Plin, tarjeta o efectivo.'])
-            ->assertSee(route('site.booking', ['tratamiento' => 'limpieza-dental', 'promo' => 'limpieza-verano', 'origen' => 'campaign']));
+            ->assertSee(['Reservar con la promoción', route('site.booking', ['tratamiento' => 'limpieza-dental', 'promo' => 'limpieza-verano', 'origen' => 'campaign'])])
+            ->assertSee("20\u{00A0}% de descuento");
+    }
+
+    public function test_a_promotion_whose_name_already_says_the_discount_does_not_repeat_it(): void
+    {
+        $this->campaign(['name' => 'Blanqueamiento 20% de descuento', 'slug' => 'blanqueamiento-20', 'summary' => null, 'discount_type' => DiscountType::Percent, 'discount_value' => 20]);
+        $this->campaign(['name' => 'Limpieza a S/ 50', 'slug' => 'limpieza-50', 'summary' => null, 'discount_type' => DiscountType::Amount, 'discount_value' => 50]);
+        $this->campaign(['name' => 'S/ 50 de descuento en resinas', 'slug' => 'resinas-50', 'summary' => null, 'discount_type' => DiscountType::Amount, 'discount_value' => 50]);
+
+        $this->get(route('site.promotion', 'blanqueamiento-20'))
+            ->assertOk()
+            ->assertSee('Blanqueamiento 20% de descuento')
+            ->assertDontSee('discount-big')
+            // Quien comparte el enlace sí ve el descuento en la descripción.
+            ->assertSee("<meta name=\"description\" content=\"20\u{00A0}% de descuento · Hasta el", false);
+
+        // Un monto en el nombre puede ser el precio y no el descuento: solo se quita si el nombre dice "descuento".
+        $this->get(route('site.promotion', 'limpieza-50'))->assertOk()->assertSee('<p class="discount-big">S/ 50 de descuento</p>', false);
+        $this->get(route('site.promotion', 'resinas-50'))->assertOk()->assertDontSee('discount-big');
+
+        $this->get(route('site.promotions'))
+            ->assertOk()
+            ->assertSee('<span class="discount">S/ 50 de descuento</span>', false)
+            ->assertDontSee("20\u{00A0}% de descuento");
+    }
+
+    public function test_the_treatments_page_books_the_evaluation_when_the_web_offers_it(): void
+    {
+        $this->doctorOffering(Treatment::factory()->create(['slug' => 'limpieza']));
+
+        // Sin evaluación en la web, el botón lleva a elegir y lo dice.
+        $this->get(route('site.treatments'))
+            ->assertOk()
+            ->assertSee('<a href="'.route('site.booking').'" class="btn">Reservar cita</a>', false)
+            ->assertDontSee('Reservar evaluación');
+
+        $evaluation = Treatment::factory()->evaluation()->create();
+        $this->doctorOffering($evaluation);
+
+        $this->get(route('site.treatments'))
+            ->assertOk()
+            ->assertSee('<a href="'.route('site.booking', ['tratamiento' => $evaluation->slug]).'" class="btn">Reservar evaluación</a>', false);
     }
 
     public function test_a_promotion_for_a_treatment_that_is_not_booked_online_books_the_evaluation_with_it(): void
@@ -285,6 +407,7 @@ class PublicPagesTest extends TestCase
         $treatment = Treatment::factory()->create(['name' => 'Limpieza dental']);
         $doctor = $this->doctorOffering($treatment);
         $doctor->update(['bio' => 'Atiendo a toda la familia.', 'education' => "Universidad de San Martín de Porres\nDiplomado en odontopediatría"]);
+        Setting::set('clinic.email', 'citas@consultorio.test');
 
         $this->get(route('site.team'))
             ->assertOk()
@@ -297,8 +420,14 @@ class PublicPagesTest extends TestCase
         $this->get(route('site.contact'))
             ->assertOk()
             ->assertSee('Av. Larco 123, Miraflores')
+            ->assertSee('<h1 id="contacto">Contacto</h1>', false)
             ->assertSee('Lunes a sábado')
             ->assertSee("3:00\u{A0}p.\u{A0}m. – 7:00\u{A0}p.\u{A0}m.")
+            // "Cómo llegar" sale una vez, bajo el mapa, y el pie no repite la dirección.
+            ->assertSeeInOrder(['class="map"', '>Cómo llegar</a>'], false)
+            ->assertDontSee('<h2>Dónde estamos</h2>', false)
+            // El correo, que antes solo estaba en el pie, no se pierde.
+            ->assertSee('href="mailto:citas@consultorio.test"', false)
             ->assertSee('https://wa.me/51918874568', false)
             ->assertSee('"@type":"Dentist"', false)
             ->assertSee('"addressLocality":"Miraflores"', false);

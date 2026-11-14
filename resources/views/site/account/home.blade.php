@@ -21,7 +21,7 @@
         <section class="stack" aria-labelledby="proximas">
             <div class="spread">
                 <h2 id="proximas">Próximas citas</h2>
-                <a href="{{ route('site.booking') }}" class="btn small">Reservar otra</a>
+                <a href="{{ route('site.booking') }}" class="btn small">{{ $upcoming->isEmpty() ? 'Reservar cita' : 'Reservar otra cita' }}</a>
             </div>
 
             @forelse ($upcoming as $appointment)

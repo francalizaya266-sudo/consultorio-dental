@@ -177,7 +177,7 @@ class BookingWizardTest extends TestCase
             ->assertSeeHtml('<span class="price"><s>S/ 150</s> desde S/ 120</span>')
             ->call('chooseTreatment', $cleaning->id)
             ->call('chooseTime', '10:00')
-            ->assertSee('Precio con la campaña Limpieza de verano: desde S/ 120 (normal desde S/ 150).')
+            ->assertSee('Precio con la promoción Limpieza de verano: desde S/ 120 (normal desde S/ 150).')
             ->assertSee('No se cobra nada ahora. Pagas en el consultorio con Yape, Plin, tarjeta o efectivo.')
             ->set('phone', '987 654 321')
             ->set('firstName', 'María')
@@ -185,12 +185,12 @@ class BookingWizardTest extends TestCase
             ->set('acceptsPrivacy', true)
             ->call('book')
             ->assertSet('step', 4)
-            ->assertSee('Precio con la campaña Limpieza de verano: desde S/ 120 (normal desde S/ 150). Pagas en el consultorio con Yape, Plin, tarjeta o efectivo.');
+            ->assertSee('Precio con la promoción Limpieza de verano: desde S/ 120 (normal desde S/ 150). Pagas en el consultorio con Yape, Plin, tarjeta o efectivo.');
 
         $this->assertTrue(Appointment::sole()->campaign->is($campaign));
 
         $confirmation = app(WhatsAppOutbox::class)->render(WhatsappMessage::where('template_key', MessageTemplateKey::BookingConfirmation)->sole());
-        $this->assertStringContainsString("a las 10:00 am con {$cleaning->doctors->first()->name}.\nPrecio con la campaña Limpieza de verano: desde S/ 120 (normal desde S/ 150). Pagas en el consultorio con Yape, Plin, tarjeta o efectivo.\n\nConfirma tu asistencia", $confirmation);
+        $this->assertStringContainsString("a las 10:00 am con {$cleaning->doctors->first()->name}.\nPrecio con la promoción Limpieza de verano: desde S/ 120 (normal desde S/ 150). Pagas en el consultorio con Yape, Plin, tarjeta o efectivo.\n\nConfirma tu asistencia", $confirmation);
     }
 
     public function test_someone_in_treatment_is_told_at_the_first_step_and_can_still_book_for_the_family(): void

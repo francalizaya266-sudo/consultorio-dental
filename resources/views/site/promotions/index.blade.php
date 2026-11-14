@@ -19,7 +19,7 @@
                     @endif
                     <span class="body">
                         <strong>{{ $campaign->name }}</strong>
-                        @if ($discount = CampaignText::discount($campaign))
+                        @if ($discount = CampaignText::discountBesideName($campaign))
                             <span class="discount">{{ $discount }}</span>
                         @endif
                         @if ($campaign->summary)
