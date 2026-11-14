@@ -10,9 +10,15 @@
     $heroImage = $clinic->heroImageUrl();
     $googleRating = $clinic->googleRating();
     $status = $clinic->hours()->status(now()->toImmutable());
-    // El título en dos tonos, como la marca: la segunda mitad va en celeste.
+    // El título en dos tonos, como la marca: la segunda mitad va en celeste y en cursiva. Si la primera mitad
+    // trae una coma, lo que le sigue va en letra delgada: "Tu sonrisa," fuerte y "nuestra" delgada.
     $words = preg_split('/\s+/', $clinic->headline(), flags: PREG_SPLIT_NO_EMPTY);
     $firstHalf = (int) ceil(count($words) / 2);
+    $titleStart = implode(' ', array_slice($words, 0, $firstHalf));
+    $comma = mb_strpos($titleStart, ',');
+    $titleStrong = $comma === false ? $titleStart : mb_substr($titleStart, 0, $comma + 1);
+    $titleThin = $comma === false ? '' : trim(mb_substr($titleStart, $comma + 1));
+    $titleAccent = implode(' ', array_slice($words, $firstHalf));
     // Lo que tranquiliza antes de reservar. Sin reserva en línea no se promete nada de eso.
     $trust = $featured ? array_filter([
         ['calendar-check', 'Horarios libres de verdad'],
@@ -50,7 +56,7 @@
                         @if ($clinic->tagline())
                             <p class="eyebrow">{{ $clinic->tagline() }}</p>
                         @endif
-                        <h1 id="titulo">{{ implode(' ', array_slice($words, 0, $firstHalf)) }}@if (count($words) > $firstHalf) <span>{{ implode(' ', array_slice($words, $firstHalf)) }}</span>@endif</h1>
+                        <h1 id="titulo">{{ $titleStrong }}@if ($titleThin !== '') <span>{{ $titleThin }}</span>@endif@if ($titleAccent !== '') <em>{{ $titleAccent }}</em>@endif</h1>
                         @if ($clinic->intro())
                             <p class="lead">{{ $clinic->intro() }}</p>
                         @endif
@@ -66,11 +72,13 @@
                     </div>
 
                     {{--
-                        El implante con su cinta de luz: es la imagen de la marca, con foto o sin ella. Con foto, en el
-                        celular no se ve (sitio.css): se pide solo cuando hace falta, y lo primero en cargar es la foto.
+                        El implante con su cinta de luz: es la imagen de la marca, con foto o sin ella. Va en dos capas,
+                        el implante de bordes limpios y encima la cinta, que es la que lleva el resplandor (sitio.css).
+                        Con foto, en el celular no se ve: se pide solo cuando hace falta, y lo primero en cargar es la foto.
                     --}}
                     <figure class="hero-art">
-                        <img src="{{ SiteArt::url('implante-luz') }}" alt="" width="720" height="720" {!! $heroImage ? 'loading="lazy"' : 'fetchpriority="high"' !!}>
+                        {{ SiteArt::coverLayer('implante-portada', lazy: (bool) $heroImage) }}
+                        {{ SiteArt::coverLayer('implante-portada-luz', lazy: (bool) $heroImage) }}
                     </figure>
                 </section>
             </div>

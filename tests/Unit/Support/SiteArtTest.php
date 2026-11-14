@@ -55,13 +55,24 @@ class SiteArtTest extends TestCase
         $this->assertSame($image, SiteArt::specialty($specialty));
     }
 
-    public function test_every_image_a_treatment_can_get_is_in_the_site_in_both_sizes(): void
+    public function test_every_image_a_treatment_can_get_is_in_the_site_in_its_three_sizes(): void
     {
         $folder = dirname(__DIR__, 3).'/public/img/3d/';
 
         foreach (['diente', 'evaluacion', 'limpieza', 'blanqueamiento', 'resina', 'extraccion', 'brackets', 'control', 'implante', 'endodoncia', 'corona', 'encia', 'ninos'] as $image) {
             $this->assertFileExists($folder.$image.'.webp');
+            $this->assertFileExists($folder.$image.'-320.webp');
             $this->assertFileExists($folder.$image.'-192.webp');
+        }
+    }
+
+    public function test_both_layers_of_the_cover_implant_are_in_the_site_in_their_two_sizes(): void
+    {
+        $folder = dirname(__DIR__, 3).'/public/img/3d/';
+
+        foreach (['implante-portada', 'implante-portada-luz'] as $layer) {
+            $this->assertFileExists($folder.$layer.'.webp');
+            $this->assertFileExists($folder.$layer.'-640.webp');
         }
     }
 }

@@ -3,7 +3,7 @@
     @foreach ($treatments as $treatment)
         <li>
             <a href="{{ route('site.treatment', $treatment->slug) }}">
-                <span class="art">{{ \App\Support\SiteArt::treatment($treatment, 112) }}</span>
+                <span class="art">{{ \App\Support\SiteArt::treatment($treatment, 128) }}</span>
                 <span class="name">{{ $treatment->name }}</span>
                 <span class="price">{{ $treatment->webPrice() ?? 'Precio en la evaluación' }}</span>
                 @if ($treatment->summary)

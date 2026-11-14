@@ -8,6 +8,10 @@
     font-family: "Inter"; font-style: normal; font-weight: 100 900; font-display: swap;
     src: url("../fonts/inter-latin.woff2") format("woff2-variations"), url("../fonts/inter-latin.woff2") format("woff2");
 }
+/* Poppins (licencia SIL Open Font 1.1): la letra de los títulos. Delgada, fuerte y fuerte en cursiva. */
+@font-face { font-family: "Poppins"; font-style: normal; font-weight: 400; font-display: swap; src: url("../fonts/poppins-latin-400.woff2") format("woff2"); }
+@font-face { font-family: "Poppins"; font-style: normal; font-weight: 700; font-display: swap; src: url("../fonts/poppins-latin-700.woff2") format("woff2"); }
+@font-face { font-family: "Poppins"; font-style: italic; font-weight: 700; font-display: swap; src: url("../fonts/poppins-latin-700-italic.woff2") format("woff2"); }
 
 :root {
     --ground: #ffffff;
@@ -25,6 +29,7 @@
     --btn: #0e2f6b;
     --btn-press: #0a2452;
     --sky-ink: #86c8ff;
+    --sky-vivid: #66bbff;
     --mist: #f3f7fd;
     --card-line: #e4ecf7;
     --card-shadow: 0 1px 2px rgb(12 26 46 / .05), 0 14px 32px -18px rgb(14 47 107 / .3);
@@ -49,6 +54,7 @@
     --star: #b86e00;
     --radius: 14px;
     --font: "Inter", system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    --display: "Poppins", var(--font);
 }
 
 *, *::before, *::after { box-sizing: border-box; }
@@ -178,7 +184,7 @@ main.with-hero > .wrap:first-child .flash { margin: 16px 0; }
 .footer-bottom a { color: #c9d6e8; }
 .site-footer a { color: #fff; }
 .site-footer p { margin: 0 0 8px; }
-.site-footer h2 { font-size: .8125rem; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: var(--navy-soft); margin: 0 0 12px; }
+.site-footer h2 { font-family: var(--font); font-size: .8125rem; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: var(--navy-soft); margin: 0 0 12px; }
 .site-footer .status { font-weight: 700; color: #fff; }
 .site-footer .hours { grid-template-columns: auto 1fr; }
 .site-footer .hours dt, .site-footer .hours dd span { white-space: nowrap; }
@@ -220,6 +226,8 @@ main.with-hero > .wrap:first-child .flash { margin: 16px 0; }
 /* Tipografía */
 
 h1, h2, h3 { line-height: 1.1; letter-spacing: -.02em; margin: 0; }
+/* Los títulos van en Poppins, más redonda y abierta que la letra del texto: por eso no se aprietan tanto. */
+h1, h2 { font-family: var(--display); overflow-wrap: break-word; }
 h1 { font-size: clamp(1.9rem, 6.5vw, 2.75rem); font-weight: 750; text-wrap: balance; }
 h2 { font-size: 1.35rem; font-weight: 700; text-wrap: balance; }
 h3 { font-size: 1.1rem; font-weight: 700; letter-spacing: -.01em; }
@@ -446,7 +454,7 @@ details.more[open] > summary::after { transform: translateY(.06em) rotate(225deg
 /* Inicio para quien vuelve: lo suyo arriba (su cita, sus sesiones, su control), cada cosa con su botón. */
 .welcome { margin: 8px 0 48px; padding: 16px; border-radius: 24px; background: var(--surface); display: grid; gap: 16px; }
 .welcome-head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; }
-.welcome-head h2 { margin: 0; font-size: clamp(1.625rem, 4vw, 2.125rem); font-weight: 750; letter-spacing: -.035em; line-height: 1.1; }
+.welcome-head h2 { margin: 0; font-size: clamp(1.5rem, 3.6vw, 1.875rem); font-weight: 750; letter-spacing: -.025em; line-height: 1.15; }
 .welcome-cards { display: grid; gap: 12px; }
 .welcome-card { background: var(--ground); border-radius: var(--radius); padding: 18px; display: grid; gap: 8px; align-content: start; box-shadow: 0 1px 2px rgb(12 26 46 / .06); }
 .welcome-card p { margin: 0; }
@@ -476,9 +484,9 @@ details.more[open] > summary::after { transform: translateY(.06em) rotate(225deg
 .hero-band {
     position: relative; isolation: isolate; overflow: hidden; color: #fff; padding: 20px 0 84px;
     background:
-        radial-gradient(70% 90% at 82% 36%, rgb(38 112 226 / .6), transparent 68%),
-        radial-gradient(60% 70% at -8% 104%, rgb(34 108 220 / .55), transparent 70%),
-        linear-gradient(118deg, #06173a 0%, #0a2757 52%, #0e3c84 100%);
+        radial-gradient(70% 90% at 82% 36%, rgb(52 138 255 / .62), transparent 68%),
+        radial-gradient(60% 70% at -8% 104%, rgb(40 126 248 / .6), transparent 70%),
+        linear-gradient(118deg, #071c4c 0%, #0a3078 52%, #114fb4 100%);
 }
 .hero-band::before {
     content: ""; position: absolute; z-index: -1; inset: 0; opacity: .9;
@@ -495,14 +503,16 @@ details.more[open] > summary::after { transform: translateY(.06em) rotate(225deg
 .hero { display: grid; gap: 12px; padding: 12px 0 0; }
 /* Sin las frases montadas sobre el borde (no hay reserva en línea), la portada no les guarda sitio. */
 .hero.plain { margin-bottom: -32px; }
-.hero h1 { font-size: clamp(2.375rem, 8.2vw, 4rem); font-weight: 800; line-height: 1.04; letter-spacing: -.04em; max-width: 14ch; }
-/* La segunda mitad del título, en celeste y en su propia línea, con un trazo de pincel debajo. */
-.hero h1 span { position: relative; display: block; width: fit-content; color: var(--sky-ink); }
-.hero h1 span::after {
-    content: ""; position: absolute; left: 28%; right: -2%; bottom: -.3em; height: .24em;
-    background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 200 16' preserveAspectRatio='none'%3E%3Cpath fill='%2386c8ff' d='M2 14C50 5 128 1 198 3c-62 3-138 9-196 11Z'/%3E%3C/svg%3E") center / 100% 100% no-repeat;
+.hero h1 { font-size: clamp(1.875rem, 8vw, 3.25rem); font-weight: 700; line-height: 1.12; letter-spacing: -.025em; }
+/* Lo que sigue a la coma, en letra delgada. */
+.hero h1 span { font-weight: 400; }
+/* La segunda mitad del título, en celeste, en cursiva y en su propia línea, con un trazo de pincel debajo. */
+.hero h1 em { position: relative; display: block; width: fit-content; color: var(--sky-vivid); font-style: italic; }
+.hero h1 em::after {
+    content: ""; position: absolute; left: 28%; right: -2%; bottom: -.22em; height: .2em;
+    background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 200 16' preserveAspectRatio='none'%3E%3Cpath fill='%2366bbff' d='M2 14C50 5 128 1 198 3c-62 3-138 9-196 11Z'/%3E%3C/svg%3E") center / 100% 100% no-repeat;
 }
-.hero .lead { font-size: clamp(1.0625rem, 2.1vw, 1.3125rem); line-height: 1.5; color: #d9e6f9; max-width: 36ch; margin: 24px 0 26px; }
+.hero .lead { font-family: var(--display); font-size: clamp(1rem, 1.9vw, 1.1875rem); line-height: 1.6; color: #f1f6ff; max-width: 40ch; margin: 24px 0 26px; }
 /* Arriba de todo: si el consultorio está abierto ahora, en una pastilla. */
 .hero .open-now {
     display: inline-flex; align-items: center; gap: 8px; margin: 0 0 14px; padding: 5px 12px 5px 10px; border-radius: 999px;
@@ -513,21 +523,24 @@ details.more[open] > summary::after { transform: translateY(.06em) rotate(225deg
 .hero .open-now.open::before { background: #5ad19f; box-shadow: 0 0 0 4px rgb(90 209 159 / .25); }
 /* Pegada al título, la frase del consultorio en mayúsculas con su raya (se cambia en Página web › Puesta a punto). */
 .hero .eyebrow {
-    display: flex; align-items: center; gap: 12px; margin: 0 0 12px; color: var(--sky-ink);
-    font-weight: 700; font-size: .8125rem; line-height: 1.3; letter-spacing: .16em; text-transform: uppercase;
+    display: flex; align-items: center; gap: 14px; margin: 0 0 14px; color: var(--sky-vivid);
+    font: 400 .75rem/1.4 var(--display); letter-spacing: clamp(.14em, .55vw, .3em); text-transform: uppercase;
 }
-.hero .eyebrow::after { content: ""; flex: 0 1 56px; min-width: 20px; height: 1px; background: currentColor; opacity: .7; }
+.hero .eyebrow::after { content: ""; flex: 0 1 72px; min-width: 20px; height: 1px; background: currentColor; opacity: .8; }
+/* En los celulares más angostos (320) la frase tiene que entrar en una línea. */
+@media (max-width: 379px) { .hero .eyebrow { font-size: .6875rem; letter-spacing: .1em; gap: 10px; } }
 .hero .rating { color: #fff; }
 .hero .rating-stars { color: rgb(255 255 255 / .26); }
 .hero .rating-stars::after { color: #ffc24d; }
 .hero a.rating > span:last-child { text-decoration-color: rgb(255 255 255 / .45); }
-/* El implante con su cinta de luz en espiral: la imagen de la marca. La imagen trae la línea; el resplandor se lo da la sombra de luz. */
+/* El implante con su cinta de luz en espiral: la imagen de la marca. Son dos capas, una sobre otra: el implante, de bordes limpios, y la cinta, que es la única que lleva resplandor. */
 .hero-art { position: relative; display: grid; place-items: center; justify-self: center; width: min(78vw, 320px); aspect-ratio: 1; margin: -4px 0 -14px; pointer-events: none; }
 .hero-art::before {
     content: ""; position: absolute; inset: 4%; border-radius: 50%;
-    background: radial-gradient(closest-side, rgb(84 170 255 / .5), rgb(46 124 240 / .18) 62%, transparent 76%);
+    background: radial-gradient(closest-side, rgb(84 176 255 / .55), rgb(46 132 248 / .2) 62%, transparent 76%);
 }
-.hero-art img { position: relative; width: 100%; height: auto; filter: drop-shadow(0 0 2px rgb(150 220 255 / .9)) drop-shadow(0 0 7px rgb(84 180 255 / .8)) drop-shadow(0 0 20px rgb(52 138 255 / .55)); }
+.hero-art img { position: relative; grid-area: 1 / 1; width: 100%; height: auto; }
+.hero-art img + img { filter: drop-shadow(0 0 1.5px rgb(96 196 255)) drop-shadow(0 0 6px rgb(56 164 255 / .95)) drop-shadow(0 0 18px rgb(40 130 255 / .7)); }
 /* Con la foto real del consultorio: en el celular va bajo el texto y el implante le deja el sitio. */
 .hero-photo { margin: 0; }
 .hero-photo img { width: 100%; height: 100%; object-fit: cover; }
@@ -563,7 +576,7 @@ details.more[open] > summary::after { transform: translateY(.06em) rotate(225deg
     content: ""; position: absolute; z-index: -1; right: -26px; top: 6px; width: 150px; height: 150px; opacity: .13;
     background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='%239cc8ff'%3E%3Cpath d='M7.5 3C5 3 3.5 5 3.5 7.4c0 1.9.6 3.4 1.2 5 .7 1.8 1 3.6 1.3 5.6.2 1.7.8 3 1.8 3 1.3 0 1.6-1.6 2-3.5.3-1.4.8-2.5 2.2-2.5s1.9 1.1 2.2 2.5c.4 1.9.7 3.5 2 3.5 1 0 1.6-1.3 1.8-3 .3-2 .6-3.8 1.3-5.6.6-1.6 1.2-3.1 1.2-5C20.5 5 19 3 16.5 3c-1.8 0-2.7 1-4.5 1S9.3 3 7.5 3Z'/%3E%3C/svg%3E") center / contain no-repeat;
 }
-.quick > h2 { display: flex; align-items: center; gap: 10px; font-size: 1.5rem; font-weight: 800; letter-spacing: -.03em; }
+.quick > h2 { display: flex; align-items: center; gap: 10px; font-size: 1.375rem; font-weight: 800; letter-spacing: -.02em; }
 .quick > h2 svg { flex: none; width: 26px; height: 26px; }
 .quick > p { margin: 0 0 10px; color: #c9d9f2; }
 .quick .next-free { margin: 0 0 10px; padding: 16px; border-radius: 18px; background: rgb(255 255 255 / .08); box-shadow: inset 0 0 0 1px rgb(255 255 255 / .14); overflow: visible; }
@@ -589,10 +602,10 @@ details.more[open] > summary::after { transform: translateY(.06em) rotate(225deg
     background: linear-gradient(180deg, #eef5ff 0, var(--ground) 58%); border: 1px solid var(--card-line); box-shadow: var(--card-shadow); color: var(--ink); text-decoration: none;
     transition: border-color .15s ease, box-shadow .15s ease, transform .2s var(--ease-out);
 }
-.services-grid .art { display: grid; place-items: center; width: 104px; height: 104px; background: radial-gradient(closest-side, rgb(58 146 255 / .62), rgb(104 182 255 / .4) 42%, rgb(150 208 255 / .16) 68%, transparent 80%); }
+.services-grid .art { display: grid; place-items: center; width: 112px; height: 112px; background: radial-gradient(closest-side, rgb(58 146 255 / .62), rgb(104 182 255 / .4) 42%, rgb(150 208 255 / .16) 68%, transparent 80%); }
 .services-grid .art img { width: 100%; height: auto; }
 /* La imagen de cada tratamiento lleva una luz azul que sigue su contorno: igual en el inicio, el tarifario, su página y la reserva. */
-:is(.services-grid .art, .price-list .icon, .treatment-art, .choice.with-art .art) img { filter: drop-shadow(0 0 2px rgb(64 156 255 / .95)) drop-shadow(0 0 9px rgb(52 138 255 / .7)); }
+:is(.services-grid .art, .price-list .icon, .treatment-art, .choice.with-art .art) img { filter: drop-shadow(0 2px 9px rgb(40 130 255 / .62)); }
 .services-grid .name { max-width: 100%; font-weight: 750; font-size: 1.0625rem; letter-spacing: -.02em; line-height: 1.2; text-wrap: balance; overflow-wrap: anywhere; }
 .services-grid .price { font-weight: 700; font-size: .9375rem; color: var(--accent); font-variant-numeric: tabular-nums; }
 .services-grid .desc { color: var(--muted); font-size: .875rem; line-height: 1.4; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 3; line-clamp: 3; overflow: hidden; }
@@ -632,7 +645,7 @@ a.rating > span:last-child { text-decoration: underline; text-decoration-color: 
     background: radial-gradient(closest-side, rgb(64 128 214 / .55), transparent);
 }
 .next-free-head { display: grid; gap: 4px; }
-.next-free :is(h2, h3) { display: inline-flex; align-items: center; gap: 8px; font-size: .8125rem; letter-spacing: .08em; text-transform: uppercase; color: var(--navy-soft); font-weight: 700; }
+.next-free :is(h2, h3) { font-family: var(--font); display: inline-flex; align-items: center; gap: 8px; font-size: .8125rem; letter-spacing: .08em; text-transform: uppercase; color: var(--navy-soft); font-weight: 700; }
 .next-free :is(h2, h3)::before { content: ""; width: 8px; height: 8px; border-radius: 50%; background: #5ad19f; box-shadow: 0 0 0 4px rgb(90 209 159 / .2); }
 .next-free .when { font-size: clamp(1.75rem, 5vw, 2.5rem); font-weight: 750; letter-spacing: -.035em; line-height: 1.08; margin: 8px 0 0; }
 .next-free .for { margin: 4px 0 20px; color: var(--navy-soft); }
@@ -658,14 +671,21 @@ a.rating > span:last-child { text-decoration: underline; text-decoration-color: 
     .hero-band { padding: 44px 0 112px; }
     .hero-band::after { height: 80px; }
     .hero, .hero.with-art { grid-template-columns: minmax(0, 1.08fr) minmax(0, .92fr); align-items: center; gap: 48px; padding: 0; }
+    /* El título entra en dos líneas al lado de la imagen. */
+    .hero h1 { font-size: clamp(2.25rem, 4.2vw, 3.25rem); }
     .hero.with-art .hero-art { justify-self: center; width: min(100%, 440px); }
     .hero-band .welcome { margin: 0 0 44px; }
     .next-free { padding: 36px; }
     /* La foto del consultorio llena el lado derecho de la portada y se funde con el azul hacia el texto. */
     .hero-band.with-photo { padding-top: 44px; }
     .hero-band.with-photo .hero-photo {
-        --to-text: linear-gradient(90deg, transparent 0, rgb(0 0 0 / .32) 26%, #000 60%);
-        position: absolute; z-index: -1; inset: 0 0 0 auto; width: 54%; aspect-ratio: auto; -webkit-mask: var(--to-text); mask: var(--to-text);
+        --to-text: linear-gradient(90deg, transparent 0, rgb(0 0 0 / .55) 20%, #000 46%);
+        position: absolute; z-index: -1; inset: 0 0 0 auto; width: 58%; aspect-ratio: auto; -webkit-mask: var(--to-text); mask: var(--to-text);
+    }
+    /* Sobre la foto, un velo azul que se va aclarando: el consultorio se ve a través del azul y el texto sigue leyéndose. */
+    .hero-band.with-photo .hero-photo::after {
+        content: ""; position: absolute; inset: 0;
+        background: linear-gradient(90deg, rgb(10 48 120 / .78) 0, rgb(14 66 150 / .5) 26%, rgb(24 92 190 / .16) 48%, transparent 62%);
     }
     .hero-band.with-photo .hero { margin-top: 0; }
     /* Bajo la tarjeta de quien vuelve, la foto se queda junto al título y no crece con la franja. */
@@ -678,17 +698,17 @@ a.rating > span:last-child { text-decoration: underline; text-decoration-color: 
     .hero-band.with-photo:has(.welcome) .hero { padding-top: 0; }
     /* El implante flota donde la foto se funde, sin tapar a quien sale en ella: en pantallas anchas se arrima al texto. */
     .hero.with-photo { gap: 24px; }
-    .hero.with-photo .hero-art { display: grid; justify-self: start; width: clamp(200px, 36vw - 150px, 380px); margin: 0 0 0 clamp(-120px, (1024px - 100vw) * .29, 0px); }
-    /* Detrás, una sombra azul para que la corona blanca no se pierda si la foto es clara. */
-    .hero.with-photo .hero-art::before { inset: -8%; background: radial-gradient(closest-side, rgb(7 30 80 / .8), rgb(8 40 104 / .46) 56%, transparent 78%); }
+    .hero.with-photo .hero-art { display: grid; justify-self: start; width: clamp(200px, 36vw - 150px, 340px); margin: 0 0 0 clamp(-165px, 141.7px - 21.3vw, -50px); }
+    /* Detrás, una sombra azul suave para que la corona blanca no se pierda si la foto es clara. */
+    .hero.with-photo .hero-art::before { inset: -6%; background: radial-gradient(closest-side, rgb(9 44 116 / .5), rgb(11 54 134 / .26) 56%, transparent 78%); }
     /* Las frases, en una sola fila con forma de píldora. */
     .trust { display: flex; max-width: 1020px; margin: -64px auto 0; padding: 20px 12px; border-radius: 999px; }
     .trust li { flex: 1 1 0; justify-content: center; padding: 2px 20px; }
     .trust li + li { border-left: 1px solid var(--line); }
     .trust svg { width: 30px; height: 30px; }
 }
+@media (min-width: 640px) and (max-width: 899px) { .hero h1 { font-size: clamp(2.25rem, 5.4vw, 3rem); } }
 @media (min-width: 640px) and (max-width: 999px) {
-    .hero h1 { font-size: clamp(2.5rem, 6.2vw, 3.25rem); }
     .quick-actions { grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); }
     .quick-actions .btn { padding: 10px 12px; font-size: .9375rem; }
     .quick .free-times { grid-template-columns: repeat(4, 1fr); }
@@ -696,6 +716,7 @@ a.rating > span:last-child { text-decoration: underline; text-decoration-color: 
 @media (min-width: 1000px) {
     .start { grid-template-columns: 344px minmax(0, 1fr); gap: 36px; align-items: start; margin-top: 40px; }
     .quick { padding: 28px 24px; }
+    .services-grid .art { width: 128px; height: 128px; }
 }
 /* Con el acceso rápido al lado, hasta 1200 px entran tres tarjetas por fila. */
 @media (min-width: 1000px) and (max-width: 1199px) {
@@ -704,7 +725,7 @@ a.rating > span:last-child { text-decoration: underline; text-decoration-color: 
 }
 
 .section { margin-top: 72px; }
-.section > h2, .section-head h2, .cta-band.with-art h2 { font-size: clamp(1.75rem, 3.8vw, 2.375rem); font-weight: 800; letter-spacing: -.035em; line-height: 1.06; }
+.section > h2, .section-head h2, .cta-band.with-art h2 { font-size: clamp(1.625rem, 3.5vw, 2.125rem); font-weight: 800; letter-spacing: -.025em; line-height: 1.14; }
 .section-head { display: grid; gap: 10px; margin-bottom: 28px; }
 /* Una raya azul sobre cada título de sección. */
 .section-head::before { content: ""; width: 40px; height: 3px; border-radius: 3px; background: var(--accent); }
@@ -774,7 +795,7 @@ a.rating > span:last-child { text-decoration: underline; text-decoration-color: 
 .feature > div { display: grid; gap: 8px; justify-items: start; }
 .feature p { margin: 0; }
 .feature .kicker { font-size: .8125rem; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: var(--navy-soft); }
-.feature h2 { font-size: clamp(1.875rem, 4.6vw, 2.875rem); font-weight: 750; letter-spacing: -.04em; line-height: 1.04; max-width: 14ch; }
+.feature h2 { font-size: clamp(1.75rem, 4.2vw, 2.5rem); font-weight: 750; letter-spacing: -.025em; line-height: 1.12; max-width: 15ch; }
 .feature h2 + p { margin: 6px 0 12px; color: #c9d6e8; max-width: 44ch; }
 .feature .btn { background: #fff; color: var(--ink); }
 .feature img { justify-self: center; width: 240px; height: auto; margin: 0 0 -20px; filter: drop-shadow(0 24px 24px rgb(0 0 0 / .35)); }
@@ -788,7 +809,7 @@ a.rating > span:last-child { text-decoration: underline; text-decoration-color: 
 }
 
 .page-head { margin: 8px 0 32px; }
-.page-head h1 { font-size: clamp(2.25rem, 7vw, 3.75rem); font-weight: 750; letter-spacing: -.045em; line-height: 1.02; }
+.page-head h1 { font-size: clamp(2rem, 6.4vw, 3.25rem); font-weight: 750; letter-spacing: -.025em; line-height: 1.1; }
 .page-head .lead { max-width: 52ch; color: var(--muted); }
 
 .crumbs { margin-bottom: 12px; font-weight: 700; }
@@ -929,7 +950,7 @@ a.rating > span:last-child { text-decoration: underline; text-decoration-color: 
 
 .contact { display: grid; gap: 28px; }
 .contact-info { display: grid; gap: 12px; align-content: start; }
-.contact h1, .contact h2 { font-size: clamp(1.75rem, 4.6vw, 2.75rem); letter-spacing: -.03em; line-height: 1.05; }
+.contact h1, .contact h2 { font-size: clamp(1.625rem, 4.2vw, 2.375rem); letter-spacing: -.025em; line-height: 1.12; }
 .contact .address { font-size: 1.25rem; font-weight: 700; margin: 4px 0 0; }
 .contact .status { margin: 0; font-weight: 700; }
 .hours { display: grid; grid-template-columns: max-content 1fr; gap: 4px 16px; margin: 0; }
@@ -948,7 +969,7 @@ a.rating > span:last-child { text-decoration: underline; text-decoration-color: 
 .treatment-art { display: grid; place-items: center; width: 96px; height: 96px; margin-bottom: 18px; border-radius: 24px; background: linear-gradient(160deg, #eef4fd, #dfeafb); }
 .treatment-art img { width: 96%; height: auto; }
 @media (min-width: 900px) { .treatment-art { width: 112px; height: 112px; border-radius: 28px; } }
-.treatment-head h1 { font-size: clamp(2.25rem, 7vw, 3.75rem); letter-spacing: -.035em; line-height: 1.02; }
+.treatment-head h1 { font-size: clamp(2rem, 6.4vw, 3.25rem); letter-spacing: -.025em; line-height: 1.1; }
 .treatment-head .row { margin-top: 24px; }
 .treatment-head .muted { max-width: 52ch; }
 .treatment-photo { width: 100%; aspect-ratio: 4 / 3; object-fit: cover; border-radius: 24px; }
@@ -1014,7 +1035,7 @@ a.rating > span:last-child { text-decoration: underline; text-decoration-color: 
 .promo-card .discount, .discount-big { color: var(--accent); font-weight: 800; }
 .promo-card .until, .promo-page .until { color: var(--muted); font-weight: 600; }
 .promo-page { display: grid; gap: 28px; }
-.promo-page h1 { font-size: clamp(2.25rem, 7vw, 3.5rem); letter-spacing: -.035em; line-height: 1.02; }
+.promo-page h1 { font-size: clamp(2rem, 6.4vw, 3.125rem); letter-spacing: -.025em; line-height: 1.1; }
 .promo-image { width: 100%; border-radius: 24px; aspect-ratio: 16 / 9; object-fit: cover; }
 .discount-big { font-size: clamp(1.75rem, 5vw, 2.5rem); letter-spacing: -.02em; }
 .promo-page .code { font-size: 1.125rem; }
@@ -1138,7 +1159,7 @@ a.chip { text-decoration: none; display: inline-flex; align-items: center; }
 .error-site { padding: 24px 0 48px; }
 .error-page { min-height: 100svh; display: grid; place-items: center; padding: 24px var(--gutter); background: var(--surface); }
 .error-card { width: 100%; max-width: 32rem; padding: 32px 28px; border-radius: var(--radius); background: var(--ground); box-shadow: 0 1px 2px rgb(12 26 46 / .06), 0 8px 24px rgb(12 26 46 / .06); }
-.error-card h1 { font-size: clamp(1.75rem, 6vw, 2.25rem); letter-spacing: -.03em; line-height: 1.1; }
+.error-card h1 { font-size: clamp(1.625rem, 5.6vw, 2.125rem); letter-spacing: -.025em; line-height: 1.15; }
 .error-brand { color: var(--accent); font-weight: 700; }
 
 /* Antes de la cita: la salud en dos minutos */
