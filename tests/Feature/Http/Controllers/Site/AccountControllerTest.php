@@ -19,6 +19,7 @@ use App\Models\Doctor;
 use App\Models\Patient;
 use App\Models\Payment;
 use App\Models\RememberedDevice;
+use App\Models\Setting;
 use App\Models\Treatment;
 use App\Models\TreatmentPlan;
 use App\Models\User;
@@ -159,14 +160,14 @@ class AccountControllerTest extends TestCase
         // Lucía vino hace 7 meses y no volvió: le toca su control.
         $lucia = Patient::factory()->dependentOf($this->account)->create(['first_name' => 'Lucía', 'last_visit_at' => now()->subMonths(7)]);
 
-        $this->get(route('site.home'))->assertOk()->assertDontSee(['Hola, Rosa', 'Tu próxima cita']);
+        $this->get(route('site.home'))->assertOk()->assertDontSee(['Hola, Rosa', 'Tu cita']);
 
         $this->rememberDevice()
             ->get(route('site.home'))
             ->assertOk()
             ->assertSeeInOrder([
                 'Hola, Rosa',
-                'Tu próxima cita', 'Miércoles 4 de noviembre, 10:00', 'Limpieza dental · Dra. Vega', 'Confirmar', 'Cambiar horario',
+                'Tu cita', 'Por confirmar', 'Miércoles 4 de noviembre, 10:00', 'Limpieza dental · Dra. Vega', 'Confirmar asistencia', 'Cambiar horario',
                 'Tratamiento de Mateo', 'A Mateo le falta 1 de 3 sesiones', 'Con Dra. Vega.', 'Pedir su próxima sesión',
                 'Control de Lucía', '7 meses desde su última visita', 'Reservar su control',
                 '¿No eres Rosa?',
@@ -197,11 +198,39 @@ class AccountControllerTest extends TestCase
         $this->rememberDevice()
             ->get(route('site.account'))
             ->assertOk()
-            ->assertSeeInOrder(['<strong>María Quispe</strong>', '<strong>María Flores</strong>', '<strong>Mateo</strong>'], false);
+            ->assertSeeInOrder(['Tu cita', 'Cita de María Flores', 'Cita de Mateo']);
 
         $this->get(route('site.home'))
             ->assertOk()
-            ->assertSeeInOrder(['Tu próxima cita', 'Cita de María Flores']);
+            ->assertSeeInOrder(['Tu cita', 'Cita de María Flores']);
+    }
+
+    public function test_the_appointment_card_reads_the_same_in_my_account_on_the_home_page_and_from_the_link(): void
+    {
+        $appointment = Appointment::factory()->for($this->mother)->at('2026-11-04 10:00')->create();
+        $token = basename(app(MagicLinkService::class)->issue($this->account, MagicLinkPurpose::Appointment, $appointment));
+        $card = ['Tu cita', 'Por confirmar', 'Miércoles 4 de noviembre, 10:00', $appointment->treatment->name.' · '.$appointment->doctor->name, 'Confirmar asistencia', 'Cambiar horario'];
+
+        $this->get(route('patient.link', $token))->assertOk()->assertSeeInOrder([...$card, 'Cancelar cita', 'Sí, cancelar la cita']);
+
+        $this->rememberDevice();
+        $this->get(route('site.account'))->assertOk()->assertSeeInOrder([...$card, 'Cancelar cita', 'Sí, cancelar la cita']);
+        // El inicio lleva solo lo que sigue: cancelar queda en Mi cuenta.
+        $this->get(route('site.home'))->assertOk()->assertSeeInOrder($card)->assertDontSee('Cancelar cita');
+    }
+
+    public function test_my_account_says_why_an_appointment_can_no_longer_be_cancelled(): void
+    {
+        Setting::set('clinic.whatsapp', '912 345 678');
+        // Lunes 8:00 a. m.: faltan 7 horas, menos de las 12 que pide el consultorio.
+        Appointment::factory()->for($this->mother)->at('2026-11-02 15:00')->confirmed()->create();
+
+        $this->rememberDevice()
+            ->get(route('site.account'))
+            ->assertOk()
+            ->assertSeeInOrder(['Cambiar horario', 'Faltan menos de 12 horas para la cita', 'Escríbenos por WhatsApp'])
+            ->assertSee('https://wa.me/51912345678?text=', false)
+            ->assertDontSee('Cancelar cita');
     }
 
     public function test_asking_for_the_next_session_tells_reception_once_and_only_from_the_family_phone(): void

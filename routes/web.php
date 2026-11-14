@@ -2,6 +2,7 @@
 
 use App\Http\Controllers\Patient\AppointmentLinkController;
 use App\Http\Controllers\Site\AccountController;
+use App\Http\Controllers\Site\AppointmentCalendarController;
 use App\Http\Controllers\Site\HomeController;
 use App\Http\Controllers\Site\PageController;
 use App\Http\Controllers\Site\PromotionController;
@@ -25,6 +26,10 @@ Route::controller(PageController::class)->group(function () {
 });
 
 Route::view('reservar', 'site.booking')->name('site.booking');
+// "Guardar en mi calendario" al terminar de reservar. Firma relativa: vale igual detrás del proxy del hosting.
+Route::get('reservar/cita/{appointment}/calendario.ics', AppointmentCalendarController::class)
+    ->middleware(['signed:relative', 'throttle:30,1'])
+    ->name('site.booking.calendar');
 Route::view('privacidad', 'site.privacy')->name('site.privacy');
 Route::get('sitemap.xml', [SitemapController::class, 'sitemap'])->name('site.sitemap');
 Route::get('robots.txt', [SitemapController::class, 'robots'])->name('site.robots');

@@ -203,18 +203,6 @@
                         @endif
                         @error('birthDate') <span class="error">{{ $message }}</span> @enderror
                     </fieldset>
-
-                    @unless ($this->device)
-                        <div class="field">
-                            <label for="origin">¿Cómo nos conociste? (opcional)</label>
-                            <select id="origin" class="input" wire:model="origin">
-                                <option value="">Elige una opción</option>
-                                @foreach ($origins as $option)
-                                    <option value="{{ $option->value }}">{{ $option->getLabel() }}</option>
-                                @endforeach
-                            </select>
-                        </div>
-                    @endunless
                 @endif
 
                 <details class="more" @if (filled($promoCode) || filled($note)) open @endif>
@@ -247,10 +235,12 @@
                         @error('acceptsPrivacy') <span class="error">{{ $message }}</span> @enderror
                     </div>
                 @endunless
-                <label class="check">
-                    <input type="checkbox" wire:model="acceptsPromotions">
-                    <span>Quiero recibir promociones por WhatsApp (puedo darme de baja cuando quiera).</span>
-                </label>
+                @unless ($this->promotionsAlreadyAccepted())
+                    <label class="check">
+                        <input type="checkbox" wire:model="acceptsPromotions">
+                        <span>Quiero recibir promociones por WhatsApp (puedo darme de baja cuando quiera).</span>
+                    </label>
+                @endunless
 
                 @if ($errors->any())
                     <p class="form-problems" role="alert">Para reservar, revisa {{ ($fields = $this->fieldsToReview()) ? Arr::join($fields, ', ', ' y ') : 'los datos marcados' }}.</p>
@@ -268,6 +258,7 @@
     {{-- Paso 4: listo --}}
     @if ($step === 4 && $this->appointment)
         @php($appointment = $this->appointment)
+        @php($clinic = app(ClinicInfo::class))
         <section class="stack booked" aria-labelledby="listo">
             <span class="done-mark" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="m5 12.5 4.5 4.5L19 7.5"/></svg></span>
             <h1 id="listo" tabindex="-1">¡Tu cita quedó reservada!</h1>
@@ -280,17 +271,54 @@
                 @endif
             </div>
 
-            @if ($this->device)
-                <p class="lead">Te escribiremos por WhatsApp para recordarte la cita. También la ves en <a href="{{ route('site.account') }}">Mi cuenta</a>, donde puedes confirmarla o cambiarla.</p>
-            @else
-                <p class="lead">Te escribiremos por WhatsApp al {{ Phone::display($appointment->patient->account->phone) }} con un enlace para confirmar tu asistencia, cambiar el horario o cancelar.</p>
-                @if ($url = $this->whatsappUrl())
-                    <p>¿Quieres adelantarte? Escríbenos y te respondemos con tu enlace.</p>
-                    <a href="{{ $url }}" class="btn whatsapp block" rel="noopener">Escribir al consultorio por WhatsApp</a>
-                @endif
+            {{-- Qué sigue: la cita queda por confirmar, cómo guardarla y dónde es. --}}
+            <div class="stack">
+                <h2>Qué sigue</h2>
+                <ol class="next-steps">
+                    <li>
+                        <strong>Confirma tu asistencia.</strong>
+                        @if ($this->device)
+                            Tu cita queda por confirmar. Te escribiremos por WhatsApp para recordártela, y desde ya puedes confirmarla o cambiarla en <a href="{{ route('site.account') }}">Mi cuenta</a>.
+                        @else
+                            Tu cita queda por confirmar. Te escribiremos por WhatsApp al {{ Phone::display($appointment->patient->account->phone) }} con un enlace para confirmarla, cambiar el horario o cancelar.
+                        @endif
+                    </li>
+                    <li>
+                        <strong>Guárdala para no olvidarla.</strong>
+                        <a href="{{ $this->calendarUrl() }}">Guardar en mi calendario</a>
+                    </li>
+                    @if ($address = $clinic->fullAddress())
+                        <li>
+                            <strong>Llega unos minutos antes.</strong>
+                            Estamos en {{ $address }}.
+                            @if ($clinic->directionsUrl())
+                                <a href="{{ $clinic->directionsUrl() }}" rel="noopener" target="_blank">Cómo llegar</a>
+                            @endif
+                        </li>
+                    @endif
+                </ol>
+            </div>
+
+            @if (! $this->device && ($url = $this->whatsappUrl()))
+                <p>¿Quieres adelantarte? Escríbenos y te respondemos con tu enlace.</p>
+                <a href="{{ $url }}" class="btn whatsapp block" rel="noopener">Escribir al consultorio por WhatsApp</a>
             @endif
 
             <a href="{{ route('site.booking') }}" class="btn quiet block">Reservar otra cita</a>
+
+            {{-- Con la cita ya reservada, y solo si quiere: un toque. Antes era una pregunta más del formulario. --}}
+            @if ($this->asksOrigin())
+                <div class="panel stack origin-ask">
+                    <p class="label" id="como-nos-conociste">Una última cosa, si quieres: ¿cómo nos conociste?</p>
+                    <div class="chips wrap" role="group" aria-labelledby="como-nos-conociste">
+                        @foreach ($this->originsToAsk() as $option)
+                            <button type="button" class="chip" wire:click="tellOrigin('{{ $option->value }}')">{{ $option->getLabel() }}</button>
+                        @endforeach
+                    </div>
+                </div>
+            @elseif ($toldOrigin)
+                <p class="muted" role="status">¡Gracias por contarnos!</p>
+            @endif
         </section>
     @endif
 </div>
