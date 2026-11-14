@@ -76,6 +76,7 @@ final class ChangeHistory
         'reminders.flag_unconfirmed_at' => 'Hora en que pasa a "llamar" si no confirma',
         'reminders.installment_days_before' => 'Días antes para el aviso de una cuota',
         'plans.valid_days' => 'Un presupuesto vale por',
+        DatabaseBackup::KEEP_SETTING => 'Copias de los datos que se guardan',
         'reports.doctors_see_own' => 'Cada doctor ve sus propios ingresos y gráficos',
         'reports.monthly_goal' => 'Meta de cobro del mes',
         'web.headline' => 'Título del inicio de la web',
@@ -202,6 +203,7 @@ final class ChangeHistory
         'booking.horizon_days' => 'días',
         'plans.valid_days' => 'días',
         'reminders.installment_days_before' => 'días',
+        DatabaseBackup::KEEP_SETTING => 'copias',
         'booking.self_reschedule_min_hours' => 'horas',
         'booking.self_cancel_min_hours' => 'horas',
     ];
@@ -216,7 +218,7 @@ final class ChangeHistory
     /** La sección de Configuración donde se hizo el cambio. */
     public static function section(AuditLog $log): string
     {
-        return self::isAboutBackups($log) ? self::BACKUPS : (self::SECTIONS[$log->auditable_type] ?? 'Otros');
+        return self::isAboutBackups($log) || self::isBackupSetting($log) ? self::BACKUPS : (self::SECTIONS[$log->auditable_type] ?? 'Otros');
     }
 
     /** @return list<string> Las secciones por las que se puede filtrar el historial. */
@@ -225,14 +227,23 @@ final class ChangeHistory
         return [...array_values(array_unique(self::SECTIONS)), self::BACKUPS];
     }
 
-    /** Deja solo los cambios de una sección. Las copias de seguridad se anotan junto a un ajuste, pero son sección aparte. */
+    /**
+     * Deja solo los cambios de una sección. Lo de las copias de seguridad (quién bajó o borró una, y cuántas se
+     * guardan) se anota junto a un ajuste, pero es sección aparte.
+     */
     public static function onlySection(Builder $query, string $section): Builder
     {
+        $aboutBackups = fn (Builder $logs) => $logs
+            ->whereIn('event', array_keys(self::BACKUP_EVENTS))
+            ->orWhere(fn (Builder $kept) => $kept
+                ->where('auditable_type', Setting::class)
+                ->whereIn('auditable_id', Setting::query()->where('key', DatabaseBackup::KEEP_SETTING)->select('id')));
+
         if ($section === self::BACKUPS) {
-            return $query->whereIn('event', array_keys(self::BACKUP_EVENTS));
+            return $query->where($aboutBackups);
         }
 
-        return $query->whereIn('auditable_type', self::classesOf($section))->whereNotIn('event', array_keys(self::BACKUP_EVENTS));
+        return $query->whereIn('auditable_type', self::classesOf($section))->whereNot($aboutBackups);
     }
 
     /**
@@ -353,6 +364,12 @@ final class ChangeHistory
     private static function isAboutBackups(AuditLog $log): bool
     {
         return isset(self::BACKUP_EVENTS[$log->event]);
+    }
+
+    /** Cuántas copias se guardan es un ajuste, pero se cambia en la pantalla de copias de seguridad. */
+    private static function isBackupSetting(AuditLog $log): bool
+    {
+        return $log->auditable_type === Setting::class && $log->auditable?->key === DatabaseBackup::KEEP_SETTING;
     }
 
     /** "Copia de los datos del 23/10/2026 03:00", o el .zip de las radiografías, fotos y firmas con su nombre. */

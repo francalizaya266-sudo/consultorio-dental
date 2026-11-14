@@ -4,6 +4,7 @@ namespace App\Filament\Pages;
 
 use App\Enums\UserRole;
 use App\Filament\Concerns\HasSettingsMenuGroup;
+use App\Models\Setting;
 use App\Models\User;
 use App\Services\Backup\DatabaseBackup;
 use App\Services\Backup\FilesBackup;
@@ -13,6 +14,7 @@ use BackedEnum;
 use Carbon\CarbonImmutable;
 use Filament\Actions\Action;
 use Filament\Facades\Filament;
+use Filament\Forms\Components\TextInput;
 use Filament\Notifications\Notification;
 use Filament\Pages\Page;
 use Filament\Support\Enums\Size;
@@ -107,6 +109,51 @@ class Backups extends Page
             });
     }
 
+    /**
+     * Cuántas copias de los datos se guardan. Antes solo se cambiaba en el servidor. Al bajar el número no se borra
+     * nada en el momento: las que sobran se van con la próxima copia, y hasta entonces se puede volver atrás.
+     */
+    public function keepAction(): Action
+    {
+        return Action::make('keep')
+            ->label('Cambiar cuántas se guardan')
+            ->link()
+            ->size(Size::Small)
+            ->modalHeading('Cuántas copias de los datos se guardan')
+            ->modalDescription('Se crea una copia cada día. Con 14 puedes volver hasta dos semanas atrás; con 30, hasta un mes. Mientras más guardes, más espacio ocupan en el hosting.')
+            ->modalWidth('md')
+            ->fillForm(fn (DatabaseBackup $backup) => ['keep' => $backup->keep()])
+            ->schema([
+                TextInput::make('keep')
+                    ->label('Guardar las últimas')
+                    ->suffix('copias')
+                    ->numeric()
+                    ->integer()
+                    ->minValue(DatabaseBackup::KEEP_AT_LEAST)
+                    ->maxValue(DatabaseBackup::KEEP_AT_MOST)
+                    ->required()
+                    ->helperText('Entre '.DatabaseBackup::KEEP_AT_LEAST.' y '.DatabaseBackup::KEEP_AT_MOST.'. Si bajas el número, las copias más viejas se borran al crear la próxima copia, no ahora.'),
+            ])
+            ->modalSubmitActionLabel('Guardar')
+            ->action(function (array $data, DatabaseBackup $backup): void {
+                $keep = (int) $data['keep'];
+                Setting::set(DatabaseBackup::KEEP_SETTING, $keep);
+                $extra = count($backup->list()) - $keep;
+
+                Notification::make()
+                    ->title("Se guardarán las últimas {$keep} copias")
+                    ->body($extra > 0 ? self::extraCopies($extra) : null)
+                    ->success()
+                    ->send();
+            });
+    }
+
+    /** "Hay 4 copias de más: las más viejas se borran al crear la próxima copia." */
+    private static function extraCopies(int $extra): string
+    {
+        return ($extra === 1 ? 'Hay 1 copia de más: la más vieja se borra' : "Hay {$extra} copias de más: las más viejas se borran").' al crear la próxima copia.';
+    }
+
     /** @return array<string, mixed> */
     protected function getViewData(): array
     {
@@ -134,7 +181,8 @@ class Backups extends Page
             'whoDownloads' => self::whoDownloads(),
             'backups' => $backups,
             'stale' => $service->isStale(),
-            'keep' => (int) config('consultorio.backups.keep'),
+            'keep' => $keep = $service->keep(),
+            'extra' => count($list) > $keep ? self::extraCopies(count($list) - $keep) : null,
             'due' => $copies->due(),
             'databaseDownloaded' => $databaseDownload ? self::when($databaseDownload['at'], $databaseDownload['by']) : null,
             'pending' => self::batch(FilesBackup::PENDING, $files->pending()),

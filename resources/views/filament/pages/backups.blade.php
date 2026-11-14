@@ -32,6 +32,10 @@
     @endunless
 
     <x-filament::section heading="Copia de los datos" :description="'Pacientes, citas, historias y pagos. Se crea una cada día a las 3:00 a. m. y se guardan las últimas '.$keep.'.'">
+        <x-slot name="afterHeader">
+            {{ $this->keepAction }}
+        </x-slot>
+
         @if ($backups->isEmpty())
             <p class="backup-meta">Aún no hay copias.</p>
         @else
@@ -62,6 +66,9 @@
             <p class="backup-meta backup-note">
                 {{ $databaseDownloaded ? 'Última descarga: '.$databaseDownloaded.'.' : 'Todavía no se ha descargado ninguna.' }}
                 Quién descargó o borró cada copia queda en el historial de cambios.
+                @if ($extra)
+                    {{ $extra }}
+                @endif
             </p>
         @endif
     </x-filament::section>

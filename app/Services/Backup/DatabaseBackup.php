@@ -18,6 +18,15 @@ final class DatabaseBackup
 {
     public const DIRECTORY = 'respaldos';
 
+    /** El ajuste que dice cuántas copias se guardan. Se cambia en la pantalla de copias de seguridad. */
+    public const KEEP_SETTING = 'backups.keep';
+
+    /** Con menos de tres no se podría volver unos días atrás si el daño se nota tarde. */
+    public const KEEP_AT_LEAST = 3;
+
+    /** Tres meses de copias diarias: más que eso solo llena el disco del hosting. */
+    public const KEEP_AT_MOST = 90;
+
     /** Si la última copia es más vieja que esto, el cron del hosting no está corriendo. */
     public const STALE_AFTER_HOURS = 36;
 
@@ -190,11 +199,15 @@ final class DatabaseBackup
         return in_array($file, $older, true) && Storage::disk('local')->delete(self::DIRECTORY.'/'.$file);
     }
 
+    /** Cuántas copias se guardan: lo elegido en Copias de seguridad o, si nadie lo cambió, el valor con que nace. */
+    public function keep(): int
+    {
+        return max(1, (int) Setting::get(self::KEEP_SETTING, 14));
+    }
+
     private function prune(): void
     {
-        $keep = max(1, (int) config('consultorio.backups.keep', 14));
-
-        foreach (array_slice($this->list(), $keep) as $old) {
+        foreach (array_slice($this->list(), $this->keep()) as $old) {
             Storage::disk('local')->delete($old['name']);
         }
     }

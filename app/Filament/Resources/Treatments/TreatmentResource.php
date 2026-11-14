@@ -37,7 +37,9 @@ use Filament\Schemas\Schema;
 use Filament\Support\Icons\Heroicon;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Columns\ToggleColumn;
+use Filament\Tables\Filters\SelectFilter;
 use Filament\Tables\Filters\TrashedFilter;
+use Filament\Tables\Grouping\Group;
 use Filament\Tables\Table;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\SoftDeletingScope;
@@ -442,7 +444,25 @@ class TreatmentResource extends Resource
             ])
             ->reorderable('sort_order')
             ->defaultSort('sort_order')
+            // Con el catálogo crecido, la lista se junta por tipo (todas las de ortodoncia, todas las limpiezas) o se
+            // deja solo uno. Dentro de cada tipo sigue el orden de siempre.
+            ->groups([
+                Group::make('kind')
+                    ->label('Tipo')
+                    ->titlePrefixedWithLabel(false)
+                    ->collapsible()
+                    ->getKeyFromRecordUsing(fn (Treatment $record) => TreatmentKind::for($record)->value)
+                    ->getTitleFromRecordUsing(fn (Treatment $record) => TreatmentKind::for($record)->getLabel())
+                    ->orderQueryUsing(fn (Builder $query, string $direction) => self::orderByKind($query, $direction)),
+            ])
+            ->groupingDirectionSettingHidden()
             ->filters([
+                SelectFilter::make('kind')
+                    ->label('Tipo')
+                    ->options(fn () => self::kindsInUse())
+                    ->query(fn (Builder $query, array $data) => blank($data['value'] ?? null)
+                        ? $query
+                        : $query->whereKey(TreatmentKind::treatmentsByKind()[$data['value']] ?? [])),
                 TrashedFilter::make(),
             ])
             ->defaultPaginationPageOption(25)
@@ -490,6 +510,38 @@ class TreatmentResource extends Resource
                         ->successNotificationTitle('Tratamiento restaurado'),
                 ]),
             ]);
+    }
+
+    /**
+     * Los tipos que tiene algún tratamiento, para filtrar la lista: no se ofrece uno que no mostraría nada.
+     *
+     * @return array<string, string>
+     */
+    private static function kindsInUse(): array
+    {
+        $inUse = TreatmentKind::treatmentsByKind();
+
+        return collect(TreatmentKind::inReadingOrder())
+            ->filter(fn (TreatmentKind $kind) => isset($inUse[$kind->value]))
+            ->mapWithKeys(fn (TreatmentKind $kind) => [$kind->value => $kind->getLabel()])
+            ->all();
+    }
+
+    /**
+     * Junta la lista por tipo. Como el tipo puede salir del nombre, no hay una columna por la que ordenar: se le
+     * dice a la base de datos en qué lugar va cada tratamiento.
+     */
+    private static function orderByKind(Builder $query, string $direction): Builder
+    {
+        $byKind = TreatmentKind::treatmentsByKind();
+        $id = $query->qualifyColumn('id');
+
+        $places = collect(TreatmentKind::inReadingOrder())
+            ->filter(fn (TreatmentKind $kind) => isset($byKind[$kind->value]))
+            ->map(fn (TreatmentKind $kind, int $place) => "when {$id} in (".implode(', ', array_map(intval(...), $byKind[$kind->value])).") then {$place}")
+            ->implode(' ');
+
+        return $places === '' ? $query : $query->orderByRaw("case {$places} end ".($direction === 'desc' ? 'desc' : 'asc'));
     }
 
     /** "Limpieza · 1 sesión": el tipo de tratamiento y, si lo dice su ficha, las sesiones que suele llevar. */

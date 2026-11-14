@@ -7,6 +7,7 @@ use App\Filament\Resources\AuditLogs\Pages\ManageAuditLogs;
 use App\Filament\Widgets\SystemHealth;
 use App\Models\AuditLog;
 use App\Models\Doctor;
+use App\Models\Setting;
 use App\Models\User;
 use App\Services\Backup\DatabaseBackup;
 use App\Services\Backup\FilesBackup;
@@ -157,6 +158,75 @@ class BackupsPanelTest extends TestCase
 
         Storage::disk('local')->assertExists(['respaldos/respaldo_2026-10-23_030000.sql.gz', 'respaldos/respaldo_2026-10-22_030000.sql.gz', 'clinica/7/radiografia.jpg']);
         $this->assertSame(1, AuditLog::query()->where('event', OffsiteCopies::DELETED)->count());
+    }
+
+    public function test_an_admin_chooses_how_many_copies_are_kept_and_the_extra_ones_go_with_the_next_copy(): void
+    {
+        foreach (range(19, 23) as $day) {
+            $this->stored("respaldos/respaldo_2026-10-{$day}_030000.sql.gz", "2026-10-{$day} 03:00");
+        }
+        $this->actingAs($admin = User::factory()->admin(isDentist: false)->create(['name' => 'Carla Vega']));
+
+        Livewire::test(Backups::class)
+            ->assertSee('se guardan las últimas 14.')
+            ->assertDontSee('copias de más')
+            ->mountAction('keep')
+            ->assertMountedActionModalSee('Cuántas copias de los datos se guardan')
+            ->assertActionDataSet(['keep' => 14])
+            ->setActionData(['keep' => 3])
+            ->callMountedAction()
+            ->assertHasNoActionErrors()
+            ->assertNotified('Se guardarán las últimas 3 copias')
+            ->assertSee(['se guardan las últimas 3.', 'Hay 2 copias de más: las más viejas se borran al crear la próxima copia.']);
+
+        // Al bajar el número no se borra nada en el momento: hay tiempo de arrepentirse o de descargarlas.
+        $this->assertCount(5, app(DatabaseBackup::class)->list());
+
+        Livewire::test(Backups::class)
+            ->callAction('create')
+            ->assertNotified('Copia creada')
+            ->assertDontSee('copias de más');
+
+        $this->assertSame(
+            ['respaldo_2026-10-23_100000.sql.gz', 'respaldo_2026-10-23_030000.sql.gz', 'respaldo_2026-10-22_030000.sql.gz'],
+            array_column(app(DatabaseBackup::class)->list(), 'file'),
+        );
+
+        // Queda en el historial quién lo cambió, entre lo de las copias y no entre los ajustes.
+        $change = AuditLog::query()->where('auditable_type', Setting::class)->where('event', 'updated')->sole();
+        $this->assertSame([$admin->id, ['value' => 14], ['value' => 3]], [$change->user_id, $change->old_values, $change->new_values]);
+
+        Livewire::test(ManageAuditLogs::class)
+            ->assertTableColumnStateSet('section', 'Copias de seguridad', $change)
+            ->assertTableColumnStateSet('subject', 'Copias de los datos que se guardan', $change)
+            ->assertTableColumnStateSet('summary', '14 copias → 3 copias', $change)
+            ->filterTable('section', 'Copias de seguridad')
+            ->assertCanSeeTableRecords([$change])
+            ->filterTable('section', 'Ajustes y página web')
+            ->assertCanNotSeeTableRecords([$change]);
+    }
+
+    public function test_too_few_or_too_many_copies_are_not_accepted(): void
+    {
+        $this->actingAs(User::factory()->admin()->create());
+
+        // Con menos de tres no se podría volver unos días atrás; más de noventa solo llenan el hosting.
+        foreach ([2, 91, null, 'muchas'] as $keep) {
+            Livewire::test(Backups::class)
+                ->callAction('keep', data: ['keep' => $keep])
+                ->assertHasActionErrors(['keep']);
+        }
+
+        $this->assertSame(14, app(DatabaseBackup::class)->keep());
+        $this->assertSame(0, AuditLog::query()->where('auditable_type', Setting::class)->count());
+
+        foreach ([3, 90] as $keep) {
+            Livewire::test(Backups::class)
+                ->callAction('keep', data: ['keep' => $keep])
+                ->assertHasNoActionErrors();
+
+            $this->assertSame($keep, app(DatabaseBackup::class)->keep());
+        }
     }
 
     public function test_who_downloaded_each_copy_shows_on_the_page_and_stays_in_the_change_history(): void

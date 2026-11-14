@@ -4,6 +4,7 @@ namespace Tests\Feature\Services\Backup;
 
 use App\Models\Charge;
 use App\Models\Patient;
+use App\Models\Setting;
 use App\Services\Backup\DatabaseBackup;
 use Carbon\CarbonImmutable;
 use Illuminate\Foundation\Testing\LazilyRefreshDatabase;
@@ -64,8 +65,10 @@ class DatabaseBackupTest extends TestCase
 
     public function test_only_the_last_copies_are_kept(): void
     {
-        config(['consultorio.backups.keep' => 3]);
         $backup = app(DatabaseBackup::class);
+        // Mientras nadie lo cambie en la pantalla de copias, son las de dos semanas.
+        $this->assertSame(14, $backup->keep());
+        Setting::set(DatabaseBackup::KEEP_SETTING, 3);
 
         foreach (range(1, 5) as $day) {
             $this->travelTo(CarbonImmutable::parse("2026-10-{$day} 03:00", 'America/Lima'));
