@@ -387,6 +387,23 @@ class PatientsAndSetupPanelTest extends TestCase
         $this->assertSame([null, null], [Setting::get('clinic.google_rating'), Setting::get('clinic.google_reviews_count')]);
     }
 
+    public function test_the_browser_lightens_the_home_photo_and_sends_it_as_jpeg(): void
+    {
+        $this->actingAs(User::factory()->admin()->create());
+
+        // Una foto de celular o un PNG pesan más de lo que muchos servidores aceptan por archivo (2 MB):
+        // el campo le pide al navegador achicarla al tamaño en que se guarda y enviarla en JPEG.
+        Livewire::test(WebSetup::class)
+            ->assertSeeHtml([
+                "automaticallyResizeImagesMode: 'contain'",
+                "automaticallyResizeImagesHeight: '".PublicImages::MAX_SIDE."'",
+                "automaticallyResizeImagesWidth: '".PublicImages::MAX_SIDE."'",
+                'shouldAutomaticallyUpscaleImagesWhenResizing: false',
+                'shouldTransformImage: true',
+                "x-init=\"\$el.addEventListener('FilePond:init', (event) => event.detail.pond.setOptions({imageTransformOutputMimeType: 'image/jpeg',",
+            ]);
+    }
+
     public function test_the_web_setup_lists_what_is_missing_with_its_link_and_goes_away_when_all_is_done(): void
     {
         $this->actingAs(User::factory()->admin()->create());
