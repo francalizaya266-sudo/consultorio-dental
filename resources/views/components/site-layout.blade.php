@@ -2,7 +2,8 @@
     wide: páginas de contenido (inicio, tratamientos…); sin wide, columna angosta para formularios.
     whatsappFloat: false en pantallas donde el botón flotante (y, en el celular, la barra de abajo) taparía los horarios.
     footerContact: false donde la página ya muestra la dirección, el horario y el WhatsApp ("Dónde estamos"),
-        para no repetirlos en el pie: ahí queda solo la lista de páginas.
+        para no repetirlos en el pie: ahí queda solo la lista de páginas. En las demás, el pie trae lo justo para
+        ubicarse (dirección, si está abierto y WhatsApp); el horario completo y el mapa están en Contacto.
     minimalFooter: pie de una línea mientras se reserva, para que nada distraiga hasta terminar (el encabezado
         también queda solo con el nombre, que vuelve al inicio).
     jsonLd: datos estructurados de schema.org para Google.
@@ -166,47 +167,26 @@
             </p>
             <a href="{{ route('site.booking') }}" class="btn ghost">{{ SiteIcon::svg('calendar') }}Reservar cita</a>
         </div>
-        <div @class(['footer-cols', 'without-hours' => $hours->isEmpty()])>
+        <div class="footer-cols">
+            {{-- Lo justo para ubicarse: dónde queda, si está abierto y cómo escribir. El horario completo y el mapa están en Contacto. --}}
             @if ($footerContact)
-                <div>
-                    <h2>Dónde estamos</h2>
+                <div class="footer-contact">
+                    <h2>Contacto</h2>
                     @if ($clinic->fullAddress())
-                        <p>{{ $clinic->fullAddress() }}</p>
+                        <p>{{ $clinic->fullAddress() }}@if ($clinic->directionsUrl()) · <a href="{{ $clinic->directionsUrl() }}" rel="noopener" target="_blank">Cómo llegar</a>@endif</p>
                     @endif
-                    @if ($clinic->directionsUrl())
-                        <p><a href="{{ $clinic->directionsUrl() }}" rel="noopener" target="_blank">Cómo llegar</a></p>
+                    @unless ($hours->isEmpty())
+                        <p>@if ($status)<span @class(['status', 'open' => $hours->isOpen(now()->toImmutable())])>{{ $status }}</span> · @endif<a href="{{ route('site.contact') }}">Ver el horario</a></p>
+                    @endunless
+                    @if ($clinic->whatsappUrl())
+                        <p>WhatsApp: <a href="{{ $clinic->whatsappUrl() }}" rel="noopener">{{ Phone::display($clinic->whatsapp()) }}</a></p>
                     @endif
-                </div>
-                @unless ($hours->isEmpty())
-                    <div>
-                        <h2>Horario</h2>
-                        @if ($status)
-                            <p @class(['status', 'open' => $hours->isOpen(now()->toImmutable())])>{{ $status }}</p>
-                        @endif
-                        <dl class="hours">
-                            @foreach ($hours->lines() as $line)
-                                <dt>{{ $line['days'] }}</dt>
-                                <dd>@foreach ($line['hours'] as $range)<span>{{ $range }}</span>@endforeach</dd>
-                            @endforeach
-                        </dl>
-                        @if ($clinic->hoursNote())
-                            <p class="note">{{ $clinic->hoursNote() }}</p>
-                        @endif
-                    </div>
-                @endunless
-                <div>
-                    <h2>Escríbenos</h2>
-                    <p>
-                        @if ($clinic->whatsappUrl())
-                            WhatsApp: <a href="{{ $clinic->whatsappUrl() }}" rel="noopener">{{ Phone::display($clinic->whatsapp()) }}</a><br>
-                        @endif
-                        @if ($clinic->phone())
-                            Teléfono: <a href="{{ $clinic->phoneHref() }}">{{ $clinic->phone() }}</a><br>
-                        @endif
-                        @if ($clinic->email())
-                            <a href="mailto:{{ $clinic->email() }}">{{ $clinic->email() }}</a>
-                        @endif
-                    </p>
+                    @if ($clinic->phone())
+                        <p>Teléfono: <a href="{{ $clinic->phoneHref() }}">{{ $clinic->phone() }}</a></p>
+                    @endif
+                    @if ($clinic->email())
+                        <p><a href="mailto:{{ $clinic->email() }}">{{ $clinic->email() }}</a></p>
+                    @endif
                 </div>
             @endif
             <nav aria-label="Más páginas">

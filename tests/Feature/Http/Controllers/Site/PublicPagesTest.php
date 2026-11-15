@@ -15,6 +15,7 @@ use App\Support\SiteArt;
 use Carbon\CarbonImmutable;
 use Illuminate\Foundation\Testing\LazilyRefreshDatabase;
 use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Str;
 use Livewire\Livewire;
 use Tests\Concerns\CreatesAgenda;
 use Tests\TestCase;
@@ -98,9 +99,7 @@ class PublicPagesTest extends TestCase
             // La dirección, el horario y el WhatsApp salen una vez, en "Dónde estamos": el pie solo lleva las páginas.
             ->assertSeeTextInOrder(['Dónde estamos', 'Lunes a sábado', 'El consultorio', 'Política de privacidad'])
             ->assertSee('site-footer short')
-            ->assertDontSee('<h2>Dónde estamos</h2>', false)
-            ->assertDontSee('<h2>Horario</h2>', false)
-            ->assertDontSee('<h2>Escríbenos</h2>', false);
+            ->assertDontSee('class="footer-contact"', false);
     }
 
     public function test_without_the_clinic_photo_the_home_opens_with_the_3d_implant_and_explains_how_to_book(): void
@@ -208,14 +207,15 @@ class PublicPagesTest extends TestCase
             ->assertOk()
             ->assertSeeInOrder(['class="trust"', 'Horarios libres de verdad', 'Confirmas por WhatsApp', 'Pagas en el consultorio', 'class="start"'], false)
             ->assertDontSee('Precios a la vista')
-            // Sin precio que mostrar, la tarjeta del tratamiento dice cuándo se sabe.
-            ->assertSee('Precio en la evaluación');
+            // Sin precio que mostrar, la tarjeta del tratamiento dice cuándo se sabe, como texto y no en la pastilla del precio.
+            ->assertSee('<span class="price ask">Precio en la evaluación</span>', false);
 
         $evaluation->update(['show_price' => true, 'price_from' => 50]);
 
         $this->get(route('site.home'))
             ->assertOk()
             ->assertSeeInOrder(['Pagas en el consultorio', 'Precios a la vista', 'class="start"'], false)
+            ->assertSee('<span class="price">desde S/ 50</span>', false)
             ->assertDontSee('Precio en la evaluación');
     }
 
@@ -337,7 +337,7 @@ class PublicPagesTest extends TestCase
             ->assertOk()
             ->assertSeeInOrder([
                 'Nuestra especialidad', '<h2 id="especialidad">Implante dental</h2>', 'Reemplaza un diente perdido.',
-                '<a href="'.route('site.treatment', 'implante').'" class="btn">Conocer el tratamiento</a>',
+                '<a href="'.route('site.treatment', 'implante').'" class="btn">Conocer el tratamiento<svg',
                 '<img src="'.SiteArt::url('implante').'"', 'Quién te atiende',
             ], false);
 
@@ -372,33 +372,100 @@ class PublicPagesTest extends TestCase
         $this->get(route('site.home'))->assertOk()->assertDontSee('promo-band');
     }
 
-    public function test_the_home_presents_the_clinic_and_who_attends_in_one_section(): void
+    public function test_the_home_introduces_who_attends_in_brief_and_the_team_page_has_the_rest(): void
     {
         Setting::set('web.about', 'Atendemos a toda la familia desde 2015.');
 
-        // Sin doctores publicados, la presentación va sola.
+        // Sin doctores publicados, la presentación del consultorio va sola en el inicio.
         $this->get(route('site.home'))
             ->assertOk()
             ->assertSeeInOrder(['Sobre '.Setting::get('clinic.name'), 'Atendemos a toda la familia desde 2015.'])
             ->assertDontSee('Quién te atiende');
 
-        // Con un doctor, van juntos, y su botón no repite el "Reservar cita" de la página.
+        // Con un doctor: una tarjeta con su nombre, su especialidad, su colegiatura y lo primero de su presentación.
         $doctor = $this->doctorOffering(Treatment::factory()->create());
+        $doctor->update(['specialty' => 'Ortodoncia', 'cop_number' => '12345', 'rne_number' => '678', 'bio' => str_repeat('Atiendo con calma. ', 12)]);
 
         $this->get(route('site.home'))
             ->assertOk()
-            ->assertSeeInOrder(['Quién te atiende', 'Atendemos a toda la familia desde 2015.', $doctor->name])
+            ->assertSeeInOrder([
+                '<section class="section meet"', '<p class="kicker">Quién te atiende</p>', '<h2 id="equipo">'.e($doctor->name).'</h2>',
+                '<p class="specialty">Ortodoncia</p>', '<p class="credentials">COP 12345 · RNE 678</p>',
+                '<p>'.Str::limit($doctor->bio, 160).'</p>',
+                '<a href="'.route('site.team').'" class="btn quiet">Conocer al equipo<svg',
+            ], false)
+            // La presentación del consultorio y el botón para reservar con el doctor están en Equipo: aquí no se repiten.
+            ->assertDontSee('Atendemos a toda la familia desde 2015.')
             ->assertDontSee('Sobre '.Setting::get('clinic.name'))
-            ->assertDontSee('Con su número de colegiatura (COP) a la vista.')
+            ->assertDontSee('profesional del equipo')
             ->assertDontSee(route('site.booking', ['doctor' => $doctor->slug]));
 
-        // Con varios doctores, el botón de cada uno sirve para elegir con quién atenderse.
-        $other = $this->doctorOffering(Treatment::factory()->create());
+        $this->get(route('site.team'))
+            ->assertOk()
+            ->assertSeeInOrder(['Nuestro equipo', 'Atendemos a toda la familia desde 2015.', $doctor->name, route('site.booking', ['doctor' => $doctor->slug])])
+            ->assertDontSee('con colegiatura en el Colegio Odontológico del Perú');
+
+        // Con varios, el inicio presenta al primero y dice cuántos más hay; a los demás se los conoce en Equipo.
+        $second = $this->doctorOffering(Treatment::factory()->create());
 
         $this->get(route('site.home'))
             ->assertOk()
-            ->assertSee('Quiénes te atienden')
-            ->assertSee([route('site.booking', ['doctor' => $doctor->slug]), route('site.booking', ['doctor' => $other->slug])]);
+            ->assertSeeInOrder(['<p class="kicker">Quiénes te atienden</p>', '<h2 id="equipo">'.e($doctor->name).'</h2>', 'Junto con otro profesional del equipo.'], false)
+            ->assertDontSee($second->name);
+
+        $third = $this->doctorOffering(Treatment::factory()->create());
+        // Quien va primero en el orden del consultorio es a quien se presenta.
+        $third->update(['sort_order' => -1]);
+
+        $this->get(route('site.home'))
+            ->assertOk()
+            ->assertSeeInOrder(['<h2 id="equipo">'.e($third->name).'</h2>', 'Junto con otros 2 profesionales del equipo.'], false)
+            ->assertDontSee($doctor->name);
+    }
+
+    public function test_without_the_presentation_of_the_clinic_the_team_page_opens_saying_who_attends(): void
+    {
+        $doctor = $this->doctorOffering(Treatment::factory()->create());
+
+        $this->get(route('site.team'))
+            ->assertOk()
+            ->assertSee('Te atiende '.$doctor->name.', con colegiatura en el Colegio Odontológico del Perú.');
+    }
+
+    public function test_the_home_goes_from_the_services_to_the_specialty_the_steps_who_attends_the_opinions_the_questions_and_the_address(): void
+    {
+        $this->freezeMonday();
+        $implant = Treatment::factory()->evaluation()->create(['name' => 'Implante dental', 'slug' => 'implante']);
+        $this->doctorOffering($implant)->update(['specialty' => 'Implantólogo']);
+        Review::factory()->create(['author_name' => 'Rosa Huamán']);
+        SmileCase::factory()->create(['title' => 'Blanqueamiento en 2 sesiones']);
+        Faq::factory()->create(['question' => '¿Atienden a niños?']);
+        $this->campaign();
+
+        $this->get(route('site.home'))
+            ->assertOk()
+            ->assertSeeInOrder([
+                'id="servicios"', 'class="promo-band"', 'id="especialidad"', 'id="como"', 'id="equipo"', 'id="casos"', 'id="opiniones"',
+                // Las preguntas van sobre la franja celeste, antes de la dirección.
+                '<section class="section split band" aria-labelledby="preguntas">', 'id="contacto"', 'class="site-footer short"',
+            ], false);
+    }
+
+    public function test_the_home_shows_the_four_main_questions_and_links_to_all_of_them(): void
+    {
+        foreach (range(1, 5) as $number) {
+            Faq::factory()->create(['question' => "¿Pregunta {$number}?", 'sort_order' => $number]);
+        }
+        // Las preguntas de un tratamiento van en su página, no entre las principales.
+        Faq::factory()->create(['question' => '¿Duele el blanqueamiento?', 'treatment_id' => Treatment::factory()->create()->id, 'sort_order' => 0]);
+
+        $this->get(route('site.home'))
+            ->assertOk()
+            ->assertSeeInOrder(['Preguntas frecuentes', '¿Pregunta 1?', '¿Pregunta 4?', '<a href="'.route('site.faq').'" class="arrow">Ver todas las preguntas</a>'], false)
+            ->assertDontSee('¿Pregunta 5?')
+            ->assertDontSee('¿Duele el blanqueamiento?');
+
+        $this->get(route('site.faq'))->assertOk()->assertSee(['¿Pregunta 5?', '¿Duele el blanqueamiento?']);
     }
 
     public function test_the_tab_icon_and_the_image_when_sharing_are_always_there(): void
@@ -459,9 +526,9 @@ class PublicPagesTest extends TestCase
         $this->get(route('site.team'))
             ->assertOk()
             ->assertSeeInOrder(['class="action-bar"', route('site.booking'), 'https://wa.me/51918874568', 'href="tel:051321234"'], false)
-            // En el resto de páginas el pie trae el horario y todo el menú.
-            ->assertSee('<h2>Horario</h2>', false)
-            ->assertSee('El consultorio');
+            // En el resto de páginas el pie trae lo justo para ubicarse y todo el menú; el horario completo está en Contacto.
+            ->assertSeeInOrder(['class="footer-contact"', '<a href="'.route('site.contact').'">Ver el horario</a>', 'WhatsApp: <a href="https://wa.me/51918874568?', 'Teléfono: <a href="tel:051321234">(051) 32-1234</a>', 'El consultorio'], false)
+            ->assertDontSee('Lunes a sábado');
 
         // Sin teléfono fijo, "Llamar" marca el celular del consultorio.
         Setting::set('clinic.phone', null);
@@ -476,7 +543,7 @@ class PublicPagesTest extends TestCase
             ->assertSee('Escríbenos por WhatsApp')
             ->assertSee('Política de privacidad')
             ->assertDontSee('El consultorio')
-            ->assertDontSee('<h2>Horario</h2>', false);
+            ->assertDontSee('class="footer-contact"', false);
     }
 
     public function test_only_published_content_reaches_the_web(): void
@@ -719,7 +786,7 @@ class PublicPagesTest extends TestCase
             ->assertSee("3:00\u{A0}p.\u{A0}m. – 7:00\u{A0}p.\u{A0}m.")
             // "Cómo llegar" sale una vez, bajo el mapa, y el pie no repite la dirección.
             ->assertSeeInOrder(['class="map"', '>Cómo llegar</a>'], false)
-            ->assertDontSee('<h2>Dónde estamos</h2>', false)
+            ->assertDontSee('class="footer-contact"', false)
             // El correo, que antes solo estaba en el pie, no se pierde.
             ->assertSee('href="mailto:citas@consultorio.test"', false)
             ->assertSee('https://wa.me/51918874568', false)

@@ -2,9 +2,11 @@
     use App\Services\Web\ClinicInfo;
     use App\Services\Web\PublicImages;
     use App\Support\CampaignText;
+    use App\Support\Initials;
     use App\Support\Markdown;
     use App\Support\SiteArt;
     use App\Support\SiteIcon;
+    use Illuminate\Support\Str;
 
     $clinic = app(ClinicInfo::class);
     $heroImage = $clinic->heroImageUrl();
@@ -152,13 +154,28 @@
         </a>
     @endforeach
 
+    {{-- La especialidad que declara el doctor, con su tratamiento: lo que distingue al consultorio, junto a los servicios. --}}
+    @if ($specialty)
+        <section class="section feature" aria-labelledby="especialidad">
+            <div>
+                <p class="kicker">Nuestra especialidad</p>
+                <h2 id="especialidad">{{ $specialty->name }}</h2>
+                @if ($specialty->summary)
+                    <p>{{ $specialty->summary }}</p>
+                @endif
+                <a href="{{ route('site.treatment', $specialty->slug) }}" class="btn">Conocer el tratamiento{{ SiteIcon::svg('arrow-right') }}</a>
+            </div>
+            <img src="{{ SiteArt::url(SiteArt::keyFor($specialty)) }}" alt="" width="640" height="640" loading="lazy">
+        </section>
+    @endif
+
     {{-- Cómo se reserva, antes de pedir ningún dato. Solo si la web tiene algo que se pueda reservar. --}}
     @if ($featured)
         <section class="section how-band" aria-labelledby="como">
             <div class="section-head">
                 <h2 id="como">Reserva en tres pasos</h2>
                 <p>Sin llamadas ni esperas: lo haces desde tu celular.</p>
-                <a href="{{ route('site.booking') }}" class="btn small">Reservar cita{{ SiteIcon::svg('arrow-right') }}</a>
+                <a href="{{ route('site.booking') }}" class="btn">Reservar cita{{ SiteIcon::svg('arrow-right') }}</a>
             </div>
             <ol class="how">
                 <li>
@@ -181,35 +198,40 @@
         </section>
     @endif
 
-    {{-- La especialidad que declara el doctor, con su tratamiento: lo que distingue al consultorio. --}}
-    @if ($specialty)
-        <section class="section feature" aria-labelledby="especialidad">
-            <div>
-                <p class="kicker">Nuestra especialidad</p>
-                <h2 id="especialidad">{{ $specialty->name }}</h2>
-                @if ($specialty->summary)
-                    <p>{{ $specialty->summary }}</p>
+    {{--
+        Quién atiende, en breve: quien encabeza el equipo, con su especialidad y su colegiatura. Su presentación
+        completa, la del consultorio y el resto del equipo están en la página Equipo: aquí no se repiten.
+    --}}
+    @if ($lead = $doctors->first())
+        @php($others = $doctors->count() - 1)
+        <section class="section meet" aria-labelledby="equipo">
+            @if ($lead->photo_path)
+                <img src="{{ PublicImages::url($lead->photo_path) }}" alt="{{ $lead->name }}" class="portrait" loading="lazy" width="320" height="320">
+            @else
+                {{-- Sin foto: sus iniciales, nunca una foto de banco. --}}
+                <span class="portrait monogram" aria-hidden="true">{{ Initials::of($lead->name) }}</span>
+            @endif
+            <div class="who">
+                <p class="kicker">{{ $others ? 'Quiénes te atienden' : 'Quién te atiende' }}</p>
+                <h2 id="equipo">{{ $lead->name }}</h2>
+                @if ($lead->specialty)
+                    <p class="specialty">{{ $lead->specialty }}</p>
                 @endif
-                <a href="{{ route('site.treatment', $specialty->slug) }}" class="btn">Conocer el tratamiento</a>
-            </div>
-            <img src="{{ SiteArt::url(SiteArt::keyFor($specialty)) }}" alt="" width="640" height="640" loading="lazy">
-        </section>
-    @endif
-
-    {{-- Quién atiende y la presentación del consultorio van juntos: son la misma respuesta. --}}
-    @if ($doctors->isNotEmpty())
-        <section class="section band" aria-labelledby="equipo">
-            <div class="section-head">
-                <h2 id="equipo">{{ $doctors->count() === 1 ? 'Quién te atiende' : 'Quiénes te atienden' }}</h2>
-                @if ($clinic->about())
-                    <div class="prose">{{ Markdown::paragraphs($clinic->about()) }}</div>
-                @elseif ($doctors->count() === 1)
-                    <p>Con su número de colegiatura (COP) a la vista.</p>
-                @else
-                    <p>Cirujanos dentistas colegiados. Su número de colegiatura (COP) está a la vista.</p>
+                @if ($lead->cop_number || $lead->rne_number)
+                    <p class="credentials">{{ implode(' · ', array_filter([$lead->cop_number ? 'COP '.$lead->cop_number : null, $lead->rne_number ? 'RNE '.$lead->rne_number : null])) }}</p>
                 @endif
             </div>
-            @include('site.partials.doctors', ['doctors' => $doctors, 'full' => false])
+            @if ($lead->bio || $others)
+                <div class="more">
+                    @if ($lead->bio)
+                        <p>{{ Str::limit($lead->bio, 160) }}</p>
+                    @endif
+                    @if ($others)
+                        <p>{{ $others === 1 ? 'Junto con otro profesional del equipo.' : "Junto con otros {$others} profesionales del equipo." }}</p>
+                    @endif
+                </div>
+            @endif
+            <a href="{{ route('site.team') }}" class="btn quiet">Conocer al equipo{{ SiteIcon::svg('arrow-right') }}</a>
         </section>
     @elseif ($clinic->about())
         <section class="section about" aria-labelledby="nosotros">
@@ -244,8 +266,9 @@
         </section>
     @endif
 
+    {{-- Las preguntas principales, sobre una franja celeste entre dos partes blancas; todas están en su página. --}}
     @if ($faqs->isNotEmpty())
-        <section class="section split" aria-labelledby="preguntas">
+        <section class="section split band" aria-labelledby="preguntas">
             <div class="section-head">
                 <h2 id="preguntas">Preguntas frecuentes</h2>
             </div>
