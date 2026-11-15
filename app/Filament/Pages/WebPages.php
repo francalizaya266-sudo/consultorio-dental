@@ -35,6 +35,7 @@ class WebPages extends Page
         'promociones' => 'site.promotions',
         'casos' => 'site.cases',
         'opiniones' => 'site.reviews',
+        'cuenta' => 'site.account',
     ];
 
     protected static ?string $title = 'Textos de las páginas';

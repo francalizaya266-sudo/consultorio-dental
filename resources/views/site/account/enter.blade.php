@@ -1,6 +1,6 @@
-<x-site-layout title="Entrar a Mi cuenta" :noindex="true">
+<x-site-layout page="cuenta" title="Entrar a Mi cuenta" :noindex="true">
     <section class="stack">
-        <h1>Entrar a Mi cuenta</h1>
+        <h2>Entrar a Mi cuenta</h2>
         <p class="lead">Toca el botón para ver tus citas. Este celular quedará recordado y la próxima vez entrarás directo.</p>
         <form method="POST" action="{{ route('patient.link.enter', $token) }}">
             @csrf

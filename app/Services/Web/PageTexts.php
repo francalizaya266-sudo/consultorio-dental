@@ -22,10 +22,11 @@ final class PageTexts
         'promociones' => 'Promociones',
         'casos' => 'Antes y después',
         'opiniones' => 'Opiniones',
+        'cuenta' => 'Mi cuenta',
     ];
 
     /** @var list<string> Las que cierran con su propia frase; las demás cierran con la general. */
-    public const WITH_CLOSING = ['servicios', 'equipo', 'contacto', 'preguntas'];
+    public const WITH_CLOSING = ['servicios', 'equipo', 'contacto', 'preguntas', 'cuenta'];
 
     /** @var array<string, string> Lo que se edita de un encabezado y cómo se llama en el panel. */
     public const HEADER_FIELDS = [
@@ -56,6 +57,7 @@ final class PageTexts
         'promociones' => 'tag',
         'casos' => 'sparkles',
         'opiniones' => 'star',
+        'cuenta' => 'user',
     ];
 
     /** @var list<string> Las páginas cuyo cierre invita a escribir por WhatsApp en vez de a reservar. */

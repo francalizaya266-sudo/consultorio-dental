@@ -110,6 +110,14 @@ return [
                     'lead' => 'Copiadas tal como las escribieron nuestros pacientes.',
                     'photo' => null,
                 ],
+                'cuenta' => [
+                    'kicker' => 'Tu espacio personal',
+                    'title' => 'Mi cuenta',
+                    'lead' => 'Consulta las citas de tu familia, cambia el horario o cancela, y revisa tus pagos.',
+                    'photo' => null,
+                    'closing_title' => '¿Necesitas una nueva cita?',
+                    'closing_text' => 'Reserva en línea en pocos pasos.',
+                ],
             ],
         ],
 
