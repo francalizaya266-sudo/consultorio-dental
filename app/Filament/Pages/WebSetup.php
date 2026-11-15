@@ -135,7 +135,7 @@ class WebSetup extends Page
                             ->label('Sobre el consultorio')
                             ->rows(4)
                             ->maxLength(1200)
-                            ->helperText('Quiénes son y cómo atienden. Sale en el inicio.')
+                            ->helperText('Quiénes son y cómo atienden. Abre la página Equipo; sin doctores publicados, sale en el inicio.')
                             ->columnSpanFull(),
                         WebPhotoUpload::make('web.hero_image', 'inicio')
                             ->label('Foto del inicio')

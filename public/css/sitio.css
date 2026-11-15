@@ -31,6 +31,7 @@
     --sky-ink: #86c8ff;
     --sky-vivid: #66bbff;
     --mist: #f3f7fd;
+    --sky-band: #ebf3ff;
     --card-line: #e4ecf7;
     --card-shadow: 0 1px 2px rgb(12 26 46 / .05), 0 14px 32px -18px rgb(14 47 107 / .3);
     --line: #dfe6ef;
@@ -168,8 +169,8 @@ main { padding: 24px 0 96px; flex: 1 0 auto; }
 main.with-hero { padding-top: 0; background: linear-gradient(180deg, var(--mist) 0, var(--mist) 45%, var(--ground) 100%) no-repeat top / 100% 2400px; }
 main.with-hero > .wrap:first-child .flash { margin: 16px 0; }
 
-/* El pie, en el azul de la portada: la marca y "Reservar cita" arriba, las páginas al medio y lo legal abajo. */
-.site-footer { position: relative; isolation: isolate; overflow: hidden; background: linear-gradient(120deg, #06173a 0%, #0a2757 62%, #0e3c84 100%); color: #c9d6e8; padding: 56px 0 104px; margin-top: 24px; }
+/* El pie, en el azul de la portada: la marca y "Reservar cita" arriba; al medio, lo justo para ubicarse y las páginas; lo legal abajo. */
+.site-footer { position: relative; isolation: isolate; overflow: hidden; background: linear-gradient(120deg, #06173a 0%, #0a2757 62%, #0e3c84 100%); color: #c9d6e8; padding: 48px 0; margin-top: 24px; }
 .site-footer::before {
     content: ""; position: absolute; z-index: -1; width: 720px; height: 720px; right: -220px; bottom: -520px; border-radius: 50%;
     background: radial-gradient(closest-side, rgb(64 140 240 / .5), transparent);
@@ -180,32 +181,23 @@ main.with-hero > .wrap:first-child .flash { margin: 16px 0; }
 .site-footer .mark { width: 48px; height: 48px; color: #fff; }
 .site-footer .mark svg { width: 46px; height: 46px; }
 .site-footer .brand small { font-size: .875rem; color: #c9d6e8; }
-.footer-bottom { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 4px 24px; padding-top: 20px; border-top: 1px solid rgb(255 255 255 / .14); font-size: .875rem; color: var(--navy-soft); }
+/* Lo legal va junto, a la izquierda: en la esquina derecha queda el botón flotante de WhatsApp. */
+.footer-bottom { display: flex; flex-wrap: wrap; gap: 4px 24px; padding-top: 20px; border-top: 1px solid rgb(255 255 255 / .14); font-size: .875rem; color: var(--navy-soft); }
 .footer-bottom a { color: #c9d6e8; }
 .site-footer a { color: #fff; }
 .site-footer p { margin: 0 0 8px; }
 .site-footer h2 { font-family: var(--font); font-size: .8125rem; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: var(--navy-soft); margin: 0 0 12px; }
 .site-footer .status { font-weight: 700; color: #fff; }
-.site-footer .hours { grid-template-columns: auto 1fr; }
-.site-footer .hours dt, .site-footer .hours dd span { white-space: nowrap; }
-/* En celulares angostos (320) el día y sus horas no entran en una línea y empujaban toda la página de lado. */
-@media (max-width: 379px) {
-    .site-footer .hours { grid-template-columns: 1fr; gap: 0; }
-    .site-footer .hours dd { margin-bottom: 8px; }
-}
 .site-footer a { text-decoration-color: rgb(255 255 255 / .35); }
-.site-footer .note { color: var(--navy-soft); }
-.site-footer ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
+/* Las páginas van en fila y bajan de línea solas: el pie no se alarga con una lista. */
+.site-footer ul { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 10px 24px; }
 .site-footer ul a { text-decoration: none; }
 .site-footer .socials { display: flex; flex-wrap: wrap; gap: 10px; }
 .site-footer .socials a { display: grid; place-items: center; width: 44px; height: 44px; border-radius: 50%; background: rgb(255 255 255 / .1); transition: background-color .15s ease; }
 .site-footer .socials svg { width: 21px; height: 21px; }
 .footer-cols { display: grid; gap: 28px; padding-top: 28px; border-top: 1px solid rgb(255 255 255 / .14); }
-@media (min-width: 720px) { .footer-cols { grid-template-columns: repeat(2, 1fr); } }
-@media (min-width: 1080px) {
-    .footer-cols { grid-template-columns: 1fr 1.3fr 1fr 1fr; }
-    .footer-cols.without-hours { grid-template-columns: repeat(3, 1fr); }
-}
+.footer-contact p:last-child { margin-bottom: 0; }
+@media (min-width: 720px) { .footer-cols { grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr); gap: 28px 64px; } }
 
 /* Pie corto donde la página ya dio la dirección, el horario y el WhatsApp: el nombre y las páginas, en una fila. */
 .site-footer.short { padding: 40px 0 40px; }
@@ -213,7 +205,6 @@ main.with-hero > .wrap:first-child .flash { margin: 16px 0; }
 .site-footer.short .footer-cols { padding-top: 20px; }
 .site-footer.short .footer-cols { display: block; }
 .site-footer.short nav h2 { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
-.site-footer.short ul { display: flex; flex-wrap: wrap; gap: 10px 24px; }
 .site-footer .socials { margin: 16px 0 0; }
 
 /* Pie mínimo mientras se reserva: nombre, ayuda por WhatsApp y privacidad. */
@@ -607,12 +598,15 @@ details.more[open] > summary::after { transform: translateY(.06em) rotate(225deg
 /* La imagen de cada tratamiento lleva una luz azul que sigue su contorno: igual en el inicio, el tarifario, su página y la reserva. */
 :is(.services-grid .art, .price-list .icon, .treatment-art, .choice.with-art .art) img { filter: drop-shadow(0 2px 9px rgb(40 130 255 / .62)); }
 .services-grid .name { max-width: 100%; font-weight: 750; font-size: 1.0625rem; letter-spacing: -.02em; line-height: 1.2; text-wrap: balance; overflow-wrap: anywhere; }
-.services-grid .price { font-weight: 700; font-size: .9375rem; color: var(--accent); font-variant-numeric: tabular-nums; }
+/* El precio va en una pastilla celeste: es lo que más se busca en la tarjeta. Sin precio publicado, queda como texto. */
+.services-grid .price { margin: 4px 0 2px; padding: 3px 12px; border-radius: 999px; background: #e3eeff; font-weight: 750; font-size: 1rem; color: #0d3f8f; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.services-grid .price.ask { margin: 0; padding: 0; background: none; font-weight: 700; font-size: .9375rem; color: var(--accent); white-space: normal; }
 .services-grid .desc { color: var(--muted); font-size: .875rem; line-height: 1.4; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 3; line-clamp: 3; overflow: hidden; }
 /* En los celulares más angostos (320) un nombre largo, como "Blanqueamiento", tiene que entrar en su tarjeta. */
 @media (max-width: 379px) {
     .services-grid a { padding: 12px 8px 14px; }
     .services-grid .name { font-size: .9375rem; }
+    .services-grid .price { padding: 3px 9px; font-size: .875rem; }
 }
 /* De tres en tres se muestran dos filas completas; los demás están en "Ver los tratamientos". */
 @media (min-width: 560px) and (max-width: 719px) {
@@ -736,10 +730,11 @@ a.rating > span:last-child { text-decoration: underline; text-decoration-color: 
 .section > h2 { margin-bottom: 24px; }
 .section > p:last-child { margin-top: 20px; }
 @media (min-width: 900px) { .section { margin-top: 88px; } }
-/* Franja de color a todo el ancho de la pantalla, aunque el contenido siga en su columna. */
+/* Franja celeste a todo el ancho de la pantalla, aunque el contenido siga en su columna: alterna con el blanco para que la página respire. */
 .section.band .btn.quiet { background: var(--ground); }
-.section.band { background: var(--surface); box-shadow: 0 0 0 100vmax var(--surface); clip-path: inset(0 -100vmax); padding: 56px 0; }
-@media (min-width: 900px) { .section.band { padding: 88px 0; } }
+.section.band { background: var(--sky-band); box-shadow: 0 0 0 100vmax var(--sky-band); clip-path: inset(0 -100vmax); padding: 56px 0; }
+.section.band .faqs summary::after { background: var(--ground); }
+@media (min-width: 900px) { .section.band { padding: 72px 0; } }
 /* Dos columnas en pantallas grandes: el título a la izquierda, el contenido a la derecha. */
 @media (min-width: 960px) {
     .section.split { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.75fr); column-gap: 72px; align-items: start; }
@@ -786,11 +781,10 @@ a.rating > span:last-child { text-decoration: underline; text-decoration-color: 
     .how-art { display: block; width: 250px; max-width: none; height: auto; margin: -24px 0 -24px -24px; filter: drop-shadow(0 22px 22px rgb(11 31 58 / .22)); }
 }
 
-/* Nuestra especialidad: una franja azul noche con la imagen del tratamiento. */
-.feature { position: relative; isolation: isolate; overflow: hidden; display: grid; gap: 8px; padding: 28px 24px 0; border-radius: 28px; background: linear-gradient(118deg, #06173a 0%, #0a2757 52%, #0e3c84 100%); color: #fff; }
-.feature::before {
-    content: ""; position: absolute; z-index: -1; width: 520px; height: 520px; right: -160px; top: -200px; border-radius: 50%;
-    background: radial-gradient(closest-side, rgb(64 128 214 / .6), transparent);
+/* Nuestra especialidad: una franja azul noche con la imagen del tratamiento, que en pantallas anchas sobresale de la franja. */
+.feature {
+    position: relative; overflow: hidden; display: grid; gap: 8px; padding: 28px 24px 0; border-radius: 28px; color: #fff;
+    background: radial-gradient(circle 260px at calc(100% - 100px) 60px, rgb(64 128 214 / .6), transparent), linear-gradient(118deg, #06173a 0%, #0a2757 52%, #0e3c84 100%);
 }
 .feature > div { display: grid; gap: 8px; justify-items: start; }
 .feature p { margin: 0; }
@@ -798,14 +792,45 @@ a.rating > span:last-child { text-decoration: underline; text-decoration-color: 
 .feature h2 { font-size: clamp(1.75rem, 4.2vw, 2.5rem); font-weight: 750; letter-spacing: -.025em; line-height: 1.12; max-width: 15ch; }
 .feature h2 + p { margin: 6px 0 12px; color: #c9d6e8; max-width: 44ch; }
 .feature .btn { background: #fff; color: var(--ink); }
+/* En los celulares más angostos (320) el botón entra en una línea sin su flecha. */
+@media (max-width: 379px) { .feature .btn svg { display: none; } }
 .feature img { justify-self: center; width: 240px; height: auto; margin: 0 0 -20px; filter: drop-shadow(0 24px 24px rgb(0 0 0 / .35)); }
 @media (min-width: 640px) {
-    .feature { grid-template-columns: 1.2fr 1fr; align-items: center; padding: 40px; }
-    .feature img { width: 260px; margin: -56px 0; }
+    .feature { grid-template-columns: 1.2fr 1fr; align-items: center; padding: 40px; overflow: visible; }
+    .feature img { width: 300px; margin: -92px 0 -68px; filter: drop-shadow(0 14px 16px rgb(0 0 0 / .32)); }
 }
 @media (min-width: 900px) {
     .feature { padding: 56px; }
-    .feature img { width: 340px; margin: -80px 0; }
+    .feature img { width: 400px; margin: -148px 0 -84px; }
+}
+
+/*
+   Quién te atiende, en breve: una sola tarjeta con el retrato, el nombre y la colegiatura, y el paso a "Equipo".
+   En el celular, la presentación va debajo, a todo el ancho; en pantallas anchas, bajo el nombre, con el botón a la derecha.
+*/
+.meet {
+    display: grid; grid-template-columns: 72px minmax(0, 1fr); gap: 14px 16px; align-items: center; padding: 20px; border-radius: 24px;
+    background: linear-gradient(180deg, #f3f8ff 0, var(--ground) 70%); border: 1px solid var(--card-line); box-shadow: var(--card-shadow);
+}
+.meet .portrait { width: 100%; aspect-ratio: 1; object-fit: cover; border-radius: 18px; background: var(--surface); align-self: start; }
+.meet .portrait.monogram { font-size: 1.625rem; }
+.meet p { margin: 0; }
+.meet .kicker { font-size: .8125rem; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: var(--accent); }
+.meet h2 { margin: 2px 0 0; font-size: clamp(1.25rem, 3vw, 1.625rem); font-weight: 700; letter-spacing: -.025em; line-height: 1.18; }
+.meet .specialty { margin-top: 4px; font-weight: 600; }
+.meet .credentials { margin-top: 2px; color: var(--muted); font-size: .9375rem; font-variant-numeric: tabular-nums; }
+.meet .more { grid-column: 1 / -1; display: grid; gap: 4px; color: var(--muted); max-width: 62ch; }
+.meet .btn { grid-column: 1 / -1; justify-self: start; }
+@media (min-width: 560px) {
+    .meet { grid-template-columns: 88px minmax(0, 1fr); gap: 16px 20px; padding: 24px; }
+    .meet .portrait.monogram { font-size: 2rem; }
+}
+@media (min-width: 860px) {
+    .meet { grid-template-columns: 104px minmax(0, 1fr) auto; gap: 0 24px; padding: 24px 28px 24px 24px; }
+    .meet .portrait { grid-row: 1 / span 2; border-radius: 22px; align-self: center; }
+    .meet .portrait.monogram { font-size: 2.25rem; }
+    .meet .more { grid-column: 2; grid-row: 2; margin-top: 8px; }
+    .meet .btn { grid-column: 3; grid-row: 1 / span 2; justify-self: end; }
 }
 
 .page-head { margin: 8px 0 32px; }
@@ -870,7 +895,7 @@ a.rating > span:last-child { text-decoration: underline; text-decoration-color: 
 .team { display: grid; gap: 24px; }
 .doctor { display: grid; gap: 16px; align-content: start; }
 .doctor .portrait { width: 100%; aspect-ratio: 1; object-fit: cover; border-radius: 20px; background: var(--surface); }
-.doctor .monogram {
+:is(.doctor, .meet) .monogram {
     display: grid; place-items: center; color: #fff; font-size: clamp(3rem, 12vw, 5rem); font-weight: 700; letter-spacing: -.05em;
     background: radial-gradient(circle at 75% 20%, rgb(64 128 214 / .6), transparent 60%), var(--navy);
 }

@@ -19,8 +19,9 @@ use Illuminate\Http\Request;
 use Illuminate\View\View;
 
 /**
- * Inicio: próximos horarios libres, tratamientos con precio, la especialidad, equipo, casos, opiniones y contacto. A quien vuelve
- * desde su celular recordado lo saluda primero con lo suyo: su próxima cita, sus sesiones y su control.
+ * Inicio: próximos horarios libres, tratamientos con precio, la especialidad, quién atiende, casos, opiniones, las
+ * preguntas principales y contacto. A quien vuelve desde su celular recordado lo saluda primero con lo suyo: su
+ * próxima cita, sus sesiones y su control.
  */
 class HomeController extends Controller
 {
@@ -31,7 +32,8 @@ class HomeController extends Controller
         $bookable = $availability->treatments();
         $featured = $bookable->firstWhere('is_evaluation', true) ?? $bookable->first();
         $treatments = Treatment::query()->active()->where('is_public', true)->orderByDesc('is_evaluation')->orderBy('sort_order')->get();
-        $doctors = Doctor::query()->active()->where('is_public', true)->orderBy('sort_order')->get();
+        // El primero es quien el inicio presenta: con el mismo orden, el que se registró antes.
+        $doctors = Doctor::query()->active()->where('is_public', true)->orderBy('sort_order')->orderBy('id')->get();
 
         return view('site.home', [
             'welcome' => $device ? $returning->for($device->account) : null,
@@ -43,7 +45,7 @@ class HomeController extends Controller
             'doctors' => $doctors,
             'cases' => SmileCase::query()->published()->with('treatment')->limit(3)->get(),
             'reviews' => Review::query()->published()->limit(3)->get(),
-            'faqs' => Faq::query()->published()->whereNull('treatment_id')->limit(5)->get(),
+            'faqs' => Faq::query()->published()->whereNull('treatment_id')->limit(4)->get(),
             'jsonLd' => [$structuredData->dentist()],
         ]);
     }
