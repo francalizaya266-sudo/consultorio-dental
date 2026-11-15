@@ -808,8 +808,8 @@ class PublicPagesTest extends TestCase
         $this->get(route('site.contact'))
             ->assertOk()
             ->assertSee('Av. Larco 123, Miraflores')
-            // La página abre con su franja; la dirección y el horario van bajo "Nuestra ubicación".
-            ->assertSeeInOrder(['<title>Contacto y cómo llegar · ', '<h1>Contácta<em>nos</em></h1>', '<h2 id="contacto">Nuestra ubicación</h2>'], false)
+            // La página abre con su franja; la dirección y el horario van en la tarjeta "Nuestra ubicación".
+            ->assertSeeInOrder(['<title>Contacto y cómo llegar · ', '<h1>Contácta<em>nos</em></h1>', '<h2 id="contacto"><span class="badge"><svg', '</span>Nuestra ubicación</h2>', '<p class="address">Av. Larco 123, Miraflores</p>', 'Horario de atención'], false)
             ->assertSee('Lunes a sábado')
             ->assertSee("3:00\u{A0}p.\u{A0}m. – 7:00\u{A0}p.\u{A0}m.")
             // "Cómo llegar" sale una vez, bajo el mapa, y el pie no repite la dirección: lo abre la invitación a reservar.
@@ -820,6 +820,151 @@ class PublicPagesTest extends TestCase
             ->assertSee('https://wa.me/51918874568', false)
             ->assertSee('"@type":"Dentist"', false)
             ->assertSee('"addressLocality":"Miraflores"', false);
+    }
+
+    public function test_each_service_goes_in_a_card_with_its_price_what_it_is_for_and_the_way_to_its_page(): void
+    {
+        Treatment::factory()->create(['name' => 'Limpieza dental', 'slug' => 'limpieza', 'summary' => 'Quita el sarro y las manchas.', 'price_from' => 80, 'duration_minutes' => 45, 'sessions_label' => '1', 'sort_order' => 1]);
+        Treatment::factory()->create(['name' => 'Implante dental', 'slug' => 'implante', 'summary' => null, 'show_price' => false, 'duration_minutes' => 60, 'sessions_label' => null, 'sort_order' => 2]);
+
+        $response = $this->get(route('site.treatments'));
+
+        $response->assertOk()
+            ->assertSeeInOrder([
+                '<a href="'.route('site.treatment', 'limpieza').'">',
+                '<span class="name">Limpieza dental</span>', '<span class="price">desde S/ 80</span>', '<span class="desc">Quita el sarro y las manchas.</span>',
+                '<span class="meta">45 min aprox. · 1 sesión</span>', '<span class="more">Saber más<svg',
+                // Sin precio a la vista, la tarjeta dice dónde se sabe; y sin resumen, no deja un hueco.
+                '<a href="'.route('site.treatment', 'implante').'">',
+                '<span class="name">Implante dental</span>', '<span class="price ask">Precio en la evaluación</span>',
+                '<span class="meta">60 min aprox.</span>', '<span class="more">Saber más<svg',
+            ], false);
+
+        $this->assertSame(1, substr_count($response->getContent(), 'class="desc"'));
+    }
+
+    public function test_on_the_team_page_each_doctor_goes_in_a_card_with_the_training_what_they_attend_and_the_button_to_book(): void
+    {
+        $cleaning = Treatment::factory()->create(['name' => 'Limpieza dental', 'slug' => 'limpieza']);
+        $hidden = Treatment::factory()->create(['name' => 'Tratamiento interno', 'is_public' => false]);
+        $doctor = $this->doctorOffering($cleaning, $hidden);
+        $doctor->update(['specialty' => 'Ortodoncia', 'cop_number' => '12345', 'bio' => 'Atiendo a toda la familia.', 'education' => "Universidad de San Martín de Porres\n\nDiplomado en odontopediatría"]);
+
+        $this->get(route('site.team'))
+            ->assertOk()
+            ->assertSeeInOrder([
+                '<div class="team full">', '<h3>'.e($doctor->name).'</h3>', '<p class="specialty">Ortodoncia</p>', 'COP 12345',
+                '<div class="about">', '<p>Atiendo a toda la familia.</p>',
+                '<a href="'.route('site.booking', ['doctor' => $doctor->slug]).'" class="btn small" aria-label="Reservar cita con '.e($doctor->name).'"><svg', 'Reservar cita</a>',
+                '<div class="more">', '<h4>Formación</h4>', '<li>Universidad de San Martín de Porres</li>', '<li>Diplomado en odontopediatría</li>',
+                '<h4>Atiende</h4>', '<a href="'.route('site.treatment', 'limpieza').'">Limpieza dental</a>',
+            ], false)
+            // Un renglón en blanco de la formación no deja un punto vacío, y lo que no es público no se anuncia.
+            ->assertDontSee('<li></li>', false)
+            ->assertDontSee('Tratamiento interno');
+
+        // Quien no recibe reservas en la web no lleva el botón; sin formación ni servicios, su tarjeta no deja esa parte vacía.
+        $doctor->update(['accepts_online_booking' => false, 'education' => null]);
+        $doctor->treatments()->detach();
+
+        $this->get(route('site.team'))
+            ->assertOk()
+            ->assertSee('<p>Atiendo a toda la familia.</p>', false)
+            ->assertDontSee(route('site.booking', ['doctor' => $doctor->slug]))
+            ->assertDontSee(['<div class="more">', '<h4>Formación</h4>', '<h4>Atiende</h4>'], false);
+    }
+
+    public function test_the_team_page_closes_with_what_distinguishes_the_team_as_written_in_the_panel(): void
+    {
+        // Sin doctores publicados no hay a quién distinguir.
+        $this->get(route('site.team'))->assertOk()->assertDontSee('class="values"', false);
+
+        $doctor = $this->doctorOffering(Treatment::factory()->create());
+
+        // Con lo que trae el sistema: cuatro puntos, cada uno con su ícono, bajo los doctores.
+        $this->get(route('site.team'))
+            ->assertOk()
+            ->assertSeeInOrder([
+                '<h3>'.e($doctor->name).'</h3>', '<ul class="values" aria-label="Lo que nos distingue">',
+                '<strong>Colegiados</strong><span>Cada doctor con su número de colegiatura</span>',
+                '<strong>Te explicamos todo</strong><span>El presupuesto, antes de empezar</span>',
+                '<strong>Compromiso</strong><span>Con tu salud bucal</span>',
+                '<strong>Trato humano</strong><span>Tu bienestar es primero</span>',
+            ], false);
+
+        // Un punto sin título no sale aunque tenga texto, y uno sin texto sale solo con su título.
+        Setting::set('web.pages.equipo.value1_title', 'Atención en quechua');
+        Setting::set('web.pages.equipo.value2_title', null);
+        Setting::set('web.pages.equipo.value3_text', null);
+
+        $this->get(route('site.team'))
+            ->assertOk()
+            ->assertSeeInOrder(['<strong>Atención en quechua</strong><span>Cada doctor con su número de colegiatura</span>', '<strong>Compromiso</strong></li>', '<strong>Trato humano</strong>'], false)
+            ->assertDontSee(['Te explicamos todo', 'El presupuesto, antes de empezar', 'Con tu salud bucal']);
+
+        // Sin ningún punto, la franja no sale.
+        foreach ([1, 3, 4] as $number) {
+            Setting::set("web.pages.equipo.value{$number}_title", null);
+        }
+
+        $this->get(route('site.team'))->assertOk()->assertSee($doctor->name)->assertDontSee('class="values"', false);
+    }
+
+    public function test_the_contact_card_gives_each_way_to_reach_the_clinic_its_own_button(): void
+    {
+        Setting::set('clinic.address', 'Av. Larco 123');
+        Setting::set('clinic.district', 'Miraflores');
+
+        // Sin teléfono fijo ni correo: se escribe y se llama al celular del WhatsApp, y "Cómo llegar" va al pie del mapa.
+        $this->get(route('site.contact'))
+            ->assertOk()
+            ->assertSeeInOrder([
+                '<ul class="ways">',
+                '<strong>WhatsApp</strong><span>918 874 568</span>', 'class="pill" rel="noopener" aria-label="Escribir por WhatsApp">Escribir</a>',
+                '<strong>Teléfono</strong><span>918 874 568</span>', '<a href="tel:+51918874568" class="pill" aria-label="Llamar al consultorio">Llamar</a>',
+                '<div class="map-block">', '<div class="map-foot">',
+                '<strong>'.e(Setting::get('clinic.name')).'</strong><span>Av. Larco 123, Miraflores</span>', 'target="_blank">Cómo llegar</a>',
+            ], false)
+            ->assertDontSee(['<strong>Correo</strong>', '<strong>Cómo llegar</strong>'], false);
+
+        // Con teléfono fijo y correo, cada uno sale con el suyo.
+        Setting::set('clinic.phone', '(051) 32 1234');
+        Setting::set('clinic.email', 'citas@consultorio.test');
+
+        $this->get(route('site.contact'))
+            ->assertOk()
+            ->assertSeeInOrder([
+                '<strong>WhatsApp</strong><span>918 874 568</span>',
+                '<strong>Teléfono</strong><span>(051) 32 1234</span>', '<a href="tel:051321234" class="pill" aria-label="Llamar al consultorio">Llamar</a>',
+                '<strong>Correo</strong><span>citas@consultorio.test</span>', '<a href="mailto:citas@consultorio.test" class="pill">Enviar correo</a>',
+            ], false);
+
+        // Sin WhatsApp no se ofrece escribir, y se llama al fijo.
+        Setting::set('clinic.whatsapp', null);
+
+        $this->get(route('site.contact'))
+            ->assertOk()
+            ->assertSee('<a href="tel:051321234" class="pill"', false)
+            ->assertDontSee(['<strong>WhatsApp</strong>', 'wa.me'], false);
+    }
+
+    public function test_without_an_address_the_contact_card_has_no_map_and_the_link_of_the_clinic_goes_with_the_buttons(): void
+    {
+        Setting::set('clinic.address', null);
+        Setting::set('clinic.district', null);
+
+        // Sin dirección ni enlace no hay a dónde llevar: ni mapa ni "Cómo llegar".
+        $this->get(route('site.contact'))
+            ->assertOk()
+            ->assertSee('<strong>WhatsApp</strong>', false)
+            ->assertDontSee(['class="map-block"', 'class="address"', 'Cómo llegar</a>'], false);
+
+        Setting::set('clinic.maps_url', 'https://maps.app.goo.gl/consultorio');
+
+        $this->get(route('site.contact'))
+            ->assertOk()
+            ->assertSeeInOrder(['<strong>Cómo llegar</strong><span>En Google Maps</span>', '<a href="https://maps.app.goo.gl/consultorio" class="pill" rel="noopener" target="_blank">Cómo llegar</a>'], false)
+            ->assertDontSee('class="map-block"', false);
     }
 
     /**

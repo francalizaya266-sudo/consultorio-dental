@@ -77,6 +77,30 @@ class WebPagesPanelTest extends TestCase
         $this->assertNull(Setting::query()->where('key', 'web.pages.equipo.title')->first());
     }
 
+    public function test_the_points_that_distinguish_the_team_are_written_in_the_team_tab(): void
+    {
+        Livewire::test(WebPages::class)
+            ->assertSee(['Lo que distingue al equipo', 'Texto del punto 4'])
+            ->assertSchemaStateSet([
+                'web.pages.equipo.value1_title' => 'Colegiados',
+                'web.pages.equipo.value1_text' => 'Cada doctor con su número de colegiatura',
+                'web.pages.equipo.value4_title' => 'Trato humano',
+            ])
+            ->fillForm(['web' => ['pages' => ['equipo' => ['value1_title' => 'Atención en quechua', 'value1_text' => '', 'value2_title' => '']]]])
+            ->call('save')
+            ->assertHasNoFormErrors();
+
+        $this->assertSame(['Atención en quechua', null, null], array_map(fn (string $field) => Setting::get('web.pages.equipo.'.$field), ['value1_title', 'value1_text', 'value2_title']));
+
+        // Los puntos van en una franja angosta: cada uno tiene su límite.
+        Livewire::test(WebPages::class)
+            ->fillForm(['web' => ['pages' => ['equipo' => ['value3_title' => str_repeat('a', 31), 'value3_text' => str_repeat('a', 61)]]]])
+            ->call('save')
+            ->assertHasFormErrors(['web.pages.equipo.value3_title', 'web.pages.equipo.value3_text']);
+
+        $this->assertSame('Compromiso', Setting::get('web.pages.equipo.value3_title'));
+    }
+
     public function test_the_admin_uploads_and_removes_the_photo_of_a_page(): void
     {
         Storage::fake(PublicImages::DISK);

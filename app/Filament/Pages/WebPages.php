@@ -69,6 +69,7 @@ class WebPages extends Page
         foreach (PageTexts::PAGES as $page => $name) {
             $tabs[] = Tab::make($name)->schema([
                 $this->headerSection($page),
+                ...($page === PageTexts::WITH_VALUES ? [$this->valuesSection()] : []),
                 ...(in_array($page, PageTexts::WITH_CLOSING, true) ? [$this->closingSection($page)] : []),
             ]);
         }
@@ -120,6 +121,27 @@ class WebPages extends Page
                     ->helperText('Una foto real del consultorio o del equipo, horizontal. Sale a la derecha del título y se funde con el celeste. Sin foto, se usa la del inicio.')
                     ->columnSpanFull(),
             ]);
+    }
+
+    /** Los puntos de la franja celeste que va bajo los doctores, en Equipo. */
+    private function valuesSection(): Section
+    {
+        $fields = [];
+
+        foreach (array_keys(PageTexts::VALUE_ICONS) as $index) {
+            $number = $index + 1;
+            $fields[] = TextInput::make(PageTexts::valueKey($number, 'title'))
+                ->label("Punto {$number}")
+                ->maxLength(30);
+            $fields[] = TextInput::make(PageTexts::valueKey($number, 'text'))
+                ->label("Texto del punto {$number}")
+                ->maxLength(60);
+        }
+
+        return Section::make('Lo que distingue al equipo')
+            ->description('Hasta cuatro puntos cortos en una franja celeste, bajo los doctores. Un punto sin título no sale.')
+            ->columns(2)
+            ->schema($fields);
     }
 
     /** La franja azul del final, sobre el pie: la de una página o la general. */
