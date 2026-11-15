@@ -165,7 +165,7 @@
                 @endif
                 <a href="{{ route('site.treatment', $specialty->slug) }}" class="btn">Conocer el tratamiento{{ SiteIcon::svg('arrow-right') }}</a>
             </div>
-            <img src="{{ SiteArt::url(SiteArt::keyFor($specialty)) }}" alt="" width="640" height="640" loading="lazy">
+            {{ SiteArt::feature($specialty) }}
         </section>
     @endif
 

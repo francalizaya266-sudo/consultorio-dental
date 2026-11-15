@@ -66,6 +66,15 @@ class SiteArtTest extends TestCase
         }
     }
 
+    public function test_every_specialty_image_is_in_the_site_in_its_large_size_for_the_specialty_band(): void
+    {
+        $folder = dirname(__DIR__, 3).'/public/img/3d/';
+
+        foreach (['implante', 'brackets', 'endodoncia', 'corona', 'encia', 'ninos'] as $image) {
+            $this->assertFileExists($folder.$image.'-960.webp');
+        }
+    }
+
     public function test_both_layers_of_the_cover_implant_are_in_the_site_in_their_two_sizes(): void
     {
         $folder = dirname(__DIR__, 3).'/public/img/3d/';

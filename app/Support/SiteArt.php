@@ -12,7 +12,7 @@ use Illuminate\Support\HtmlString;
 final class SiteArt
 {
     /** Sube cuando se reemplaza alguna imagen: el celular las guarda un mes. */
-    private const VERSION = 2;
+    private const VERSION = 3;
 
     /** @var array<string, string> Ícono del tratamiento (TreatmentIcon) → su imagen. */
     private const BY_ICON = [
@@ -86,6 +86,25 @@ final class SiteArt
             e(self::url($key)),
             $size,
             $lazy ? ' loading="lazy"' : '',
+        ));
+    }
+
+    /**
+     * La imagen de la franja "Nuestra especialidad", que la muestra en grande: va en dos tamaños para que se vea
+     * nítida también en las pantallas de más detalle. Solo las imágenes de especialidad tienen el tamaño grande.
+     * Es un adorno junto al nombre: va sin texto alternativo.
+     */
+    public static function feature(Treatment $treatment): HtmlString
+    {
+        $key = self::keyFor($treatment);
+        $sizes = in_array($key, self::SPECIALTIES, true)
+            ? sprintf(' srcset="%s 640w, %s 960w" sizes="(min-width: 900px) 400px, (min-width: 640px) 300px, 240px"', e(self::url($key)), e(self::url($key.'-960')))
+            : '';
+
+        return new HtmlString(sprintf(
+            '<img src="%s"%s width="640" height="640" alt="" loading="lazy" decoding="async">',
+            e(self::url($key)),
+            $sizes,
         ));
     }
 
