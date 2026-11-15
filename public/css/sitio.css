@@ -51,7 +51,8 @@
     --field-line: #b7c3d3;
     --gutter: 16px;
     --measure: 720px;
-    --wide: 1180px;
+    /* En pantallas grandes el contenido crece con la pantalla (hasta 1680 px): no quedan franjas vacías a los lados. */
+    --wide: clamp(1180px, 90vw, 1680px);
     --star: #b86e00;
     --radius: 14px;
     --font: "Inter", system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
@@ -771,6 +772,8 @@ a.rating > span:last-child { text-decoration: underline; text-decoration-color: 
     .section.split { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.75fr); column-gap: 72px; align-items: start; }
     .section.split > * { grid-column: 2; }
     .section.split > .section-head { grid-column: 1; grid-row: 1 / span 4; position: sticky; top: 104px; margin: 0; }
+    /* Las preguntas llenan su columna; la respuesta se queda del ancho que se lee bien. */
+    .section.split .faqs { max-width: none; }
 }
 /* Cuando una sección abre la página (contacto), no necesita el aire de separación. */
 .wrap > .section:first-child { margin-top: 8px; }
@@ -876,6 +879,60 @@ a.rating > span:last-child { text-decoration: underline; text-decoration-color: 
     .meet .btn { grid-column: 3; grid-row: 1 / span 2; justify-self: end; }
 }
 
+/*
+   El encabezado de las páginas de contenido: una franja celeste a todo el ancho, pegada al menú, con la frase corta
+   en su pastilla, el título en dos azules, el texto, el diente de cristal y la foto, que se funde con el celeste.
+   El borde de abajo es una onda blanca. Los textos y la foto se cambian en Página web › Textos de las páginas.
+*/
+main.with-band { padding-top: 0; }
+main.with-band > .wrap:first-child .flash { margin: 16px 0; }
+.page-band {
+    position: relative; isolation: isolate; overflow: hidden; margin-bottom: 24px; padding: 22px 0 54px;
+    background: radial-gradient(70% 130% at 100% 0%, rgb(150 196 255 / .6), transparent 70%), linear-gradient(100deg, #f1f7ff 0%, #e3eeff 48%, #cfe1ff 100%);
+}
+.page-band::after {
+    content: ""; position: absolute; z-index: 1; left: 0; right: 0; bottom: -1px; height: 40px;
+    background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 1440 80' preserveAspectRatio='none'%3E%3Cpath fill='%23fff' d='M0 80V30c160 34 330 46 540 26C780 34 930 4 1140 12c120 5 220 26 300 46v22Z'/%3E%3C/svg%3E") center / 100% 100% no-repeat;
+}
+.page-band > .wrap { position: relative; z-index: 2; }
+.band-text { position: relative; }
+.page-band .kicker {
+    display: inline-flex; align-items: center; gap: 8px; margin: 0 0 12px; padding: 5px 14px 5px 5px; border-radius: 20px;
+    background: rgb(255 255 255 / .66); box-shadow: inset 0 0 0 1px rgb(255 255 255 / .9), 0 6px 16px -10px rgb(14 47 107 / .35);
+    font-weight: 600; font-size: .9375rem; line-height: 1.3; color: var(--btn);
+}
+.page-band .kicker span { flex: none; display: grid; place-items: center; width: 28px; height: 28px; border-radius: 50%; background: #1c62d6; color: #fff; }
+.page-band .kicker svg { width: 16px; height: 16px; }
+.page-band h1 { font-size: clamp(2.125rem, 8.4vw, 2.75rem); font-weight: 700; letter-spacing: -.03em; line-height: 1.08; color: #0a1f4f; }
+.page-band h1 em { font-style: normal; color: #1c62d6; }
+.page-band .lead { max-width: 58ch; margin-top: 14px; color: #3a4a64; }
+/* El diente de cristal: en el celular va detrás del texto, en la esquina; en pantallas anchas, entre el texto y la foto. */
+.band-art { position: absolute; z-index: -1; right: -18px; bottom: -64px; width: 132px; max-width: none; height: auto; opacity: .7; pointer-events: none; }
+/* Con foto, en el celular: la foto abre la franja y se va perdiendo en el celeste; el diente monta sobre su esquina. */
+.band-photo { margin: 0; aspect-ratio: 3 / 1; -webkit-mask: linear-gradient(180deg, #000 52%, transparent); mask: linear-gradient(180deg, #000 52%, transparent); }
+.band-photo img { width: 100%; height: 100%; object-fit: cover; object-position: 50% 35%; }
+.page-band.with-photo { padding-top: 0; }
+.page-band.with-photo .band-art { z-index: 0; right: -2px; top: -92px; bottom: auto; width: 104px; opacity: 1; }
+@media (min-width: 760px) {
+    .page-band, .page-band.with-photo { display: grid; align-items: center; min-height: clamp(280px, 18vw, 340px); margin-bottom: 32px; padding: 36px 0 84px; }
+    .page-band::after { height: 72px; }
+    .page-band h1 { font-size: clamp(2.75rem, 5vw, 4.25rem); }
+    .page-band .lead { font-size: 1.1875rem; }
+    .page-band .kicker { margin-bottom: 14px; font-size: 1rem; }
+    .band-text { max-width: 70%; }
+    .band-art, .page-band.with-photo .band-art { z-index: 0; top: 50%; right: 4%; bottom: auto; width: clamp(170px, 17vw, 270px); margin-top: calc(clamp(170px, 17vw, 270px) / -2 - 12px); opacity: 1; }
+    /* La foto llena el lado derecho y se funde hacia el texto; encima, un velo celeste que la aclara donde empieza. */
+    .band-photo {
+        --to-text: linear-gradient(90deg, transparent 0, rgb(0 0 0 / .5) 22%, #000 50%);
+        position: absolute; z-index: -1; inset: 0 0 0 auto; width: 50%; aspect-ratio: auto; -webkit-mask: var(--to-text); mask: var(--to-text);
+    }
+    .band-photo::after { content: ""; position: absolute; inset: 0; background: linear-gradient(90deg, rgb(227 238 255 / .72) 0, rgb(227 238 255 / .3) 34%, transparent 62%); }
+    .page-band.with-photo .band-text { max-width: 54%; }
+    .page-band.with-photo .band-art { right: auto; left: 56%; }
+}
+
+/* Lo que una página dice antes de su contenido, bajo el encabezado: la presentación del consultorio en Equipo. */
+.page-intro { margin: 0 0 32px; max-width: 68ch; font-size: 1.125rem; }
 .page-head { margin: 8px 0 32px; }
 .page-head h1 { font-size: clamp(2rem, 6.4vw, 3.25rem); font-weight: 750; letter-spacing: -.025em; line-height: 1.1; }
 .page-head .lead { max-width: 52ch; color: var(--muted); }
@@ -1009,8 +1066,6 @@ a.rating > span:last-child { text-decoration: underline; text-decoration-color: 
 .faqs .prose { padding: 0 52px 12px 0; color: var(--muted); }
 .faq-group h2 { font-size: 1.5rem; }
 .faq-group .section-head { margin-bottom: 16px; }
-/* Bajo el título de la página, el primer grupo no necesita todo el aire de una sección. */
-.page-head + .section { margin-top: 24px; }
 @media (min-width: 900px) { .faq-group + .faq-group { margin-top: 72px; } }
 .faq-group h2 a { color: var(--ink); text-decoration: none; }
 
@@ -1029,7 +1084,11 @@ a.rating > span:last-child { text-decoration: underline; text-decoration-color: 
 .map-block { display: grid; gap: 14px; justify-items: start; }
 .map { width: 100%; border-radius: 20px; overflow: hidden; background: var(--surface); aspect-ratio: 4 / 3; }
 .map iframe { width: 100%; height: 100%; border: 0; display: block; }
-@media (min-width: 900px) { .contact { grid-template-columns: 1fr 1.2fr; gap: 48px; align-items: start; } }
+@media (min-width: 900px) {
+    .contact { grid-template-columns: 1fr 1.2fr; gap: 48px; align-items: start; }
+    /* Al lado de la dirección, el mapa no crece con la pantalla: se queda de un alto cómodo. */
+    .map { aspect-ratio: auto; height: clamp(360px, 30vw, 480px); }
+}
 
 /* Tratamiento */
 

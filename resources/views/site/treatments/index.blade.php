@@ -4,13 +4,8 @@
 
     $district = app(ClinicInfo::class)->district();
 @endphp
-<x-site-layout title="Nuestros servicios" :wide="true" :json-ld="$jsonLd"
+<x-site-layout page="servicios" :wide="true" :json-ld="$jsonLd"
     :description="'Servicios y tratamientos dentales'.($district ? ' en '.$district : '').' con duración y precio referencial. Reserva tu evaluación en línea.'">
-    <section class="page-head">
-        <h1>Nuestros servicios</h1>
-        <p class="lead">Cuánto dura cada uno y desde cuánto cuesta. El precio exacto te lo da el doctor en tu evaluación, antes de empezar, y se paga en el consultorio.</p>
-    </section>
-
     @if ($treatments->isEmpty())
         <p class="panel">Pronto publicaremos nuestros servicios. Mientras tanto, escríbenos por WhatsApp.</p>
     @else

@@ -3,7 +3,7 @@
 
     $clinic = app(ClinicInfo::class);
 @endphp
-<x-site-layout title="Contacto y cómo llegar" :wide="true" :json-ld="$jsonLd" :footer-contact="false"
+<x-site-layout page="contacto" title="Contacto y cómo llegar" :wide="true" :json-ld="$jsonLd" :footer-contact="false"
     :description="'Dirección, horario de atención, WhatsApp y mapa'.($clinic->fullAddress() ? ': '.$clinic->fullAddress() : '').'.'">
-    @include('site.partials.contact', ['headingLevel' => 'h1', 'heading' => 'Contacto'])
+    @include('site.partials.contact', ['heading' => 'Nuestra ubicación'])
 </x-site-layout>

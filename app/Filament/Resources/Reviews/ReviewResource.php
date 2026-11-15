@@ -42,7 +42,7 @@ class ReviewResource extends Resource
 
     protected static ?string $navigationParentItem = 'Página web';
 
-    protected static ?int $navigationSort = 4;
+    protected static ?int $navigationSort = 5;
 
     protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedChatBubbleBottomCenterText;
 

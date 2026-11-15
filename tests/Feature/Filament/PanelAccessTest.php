@@ -11,6 +11,7 @@ use App\Filament\Pages\Earnings;
 use App\Filament\Pages\OwingBalances;
 use App\Filament\Pages\Settings;
 use App\Filament\Pages\Summary;
+use App\Filament\Pages\WebPages;
 use App\Filament\Pages\WebSetup;
 use App\Filament\Resources\Accounts\AccountResource;
 use App\Filament\Resources\Appointments\AppointmentResource;
@@ -105,6 +106,7 @@ class PanelAccessTest extends TestCase
             'antes y después' => ['cases', [true, false, false]],
             'ajustes' => ['settings', [true, false, false]],
             'puesta a punto de la web' => ['web', [true, false, false]],
+            'textos de las páginas de la web' => ['web.pages', [true, false, false]],
             'copias de seguridad' => ['backups', [true, false, false]],
         ];
     }
@@ -165,6 +167,7 @@ class PanelAccessTest extends TestCase
             'cases' => SmileCaseResource::getUrl('index'),
             'settings' => Settings::getUrl(),
             'web' => WebSetup::getUrl(),
+            'web.pages' => WebPages::getUrl(),
             'owing' => OwingBalances::getUrl(),
             'backups' => Backups::getUrl(),
         };

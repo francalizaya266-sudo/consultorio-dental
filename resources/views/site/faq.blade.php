@@ -1,12 +1,5 @@
-@php
-    $whatsappUrl = app(\App\Services\Web\ClinicInfo::class)->whatsappUrl('Hola, tengo una pregunta.');
-@endphp
-<x-site-layout title="Preguntas frecuentes" :wide="true" :json-ld="$jsonLd" description="Respuestas sobre citas, pagos, tratamientos y cómo llegar.">
-    <section class="page-head">
-        <h1>Preguntas frecuentes</h1>
-        <p class="lead">¿No encuentras tu duda? @if ($whatsappUrl)<a href="{{ $whatsappUrl }}" rel="noopener">Escríbenos por WhatsApp</a>@else Escríbenos por WhatsApp @endif y te respondemos.</p>
-    </section>
-
+{{-- Quien no encuentra su duda tiene el WhatsApp en la franja que cierra la página. --}}
+<x-site-layout page="preguntas" :wide="true" :json-ld="$jsonLd" description="Respuestas sobre citas, pagos, tratamientos y cómo llegar.">
     @if ($general->isEmpty() && $byTreatment->isEmpty())
         <p class="panel">Pronto publicaremos las preguntas más comunes.</p>
     @endif

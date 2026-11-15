@@ -18,6 +18,7 @@ use App\Models\TreatmentPackage;
 use App\Models\User;
 use App\Services\Backup\DatabaseBackup;
 use App\Services\Backup\OffsiteCopies;
+use App\Services\Web\PageTexts;
 use App\Support\Money;
 use Carbon\CarbonImmutable;
 use Illuminate\Database\Eloquent\Builder;
@@ -51,7 +52,10 @@ final class ChangeHistory
         OffsiteCopies::DELETED => 'Se borró del sistema',
     ];
 
-    /** @var array<string, string> Cada ajuste (de Ajustes y de la puesta a punto de la página web) con su nombre en pantalla. */
+    /**
+     * @var array<string, string> Cada ajuste (de Ajustes y de la puesta a punto de la página web) con su nombre en pantalla.
+     *                            Los textos de cada página de la web llevan el suyo en PageTexts::settings(): ver settingName().
+     */
     public const SETTINGS = [
         'clinic.name' => 'Nombre del consultorio',
         'clinic.whatsapp' => 'WhatsApp del consultorio',
@@ -216,6 +220,28 @@ final class ChangeHistory
 
     private const FILES = ['photo_path', 'image_path', 'web.logo', 'web.hero_image'];
 
+    /** El nombre de un ajuste en pantalla, o null si no lo edita ninguna hoja. */
+    public static function settingName(string $key): ?string
+    {
+        return self::SETTINGS[$key] ?? PageTexts::settings()[$key] ?? null;
+    }
+
+    /** De un texto de una página de la web (web.pages.{página}.{dato}), qué dato es: dice si es un texto largo o una foto. */
+    private static function pageField(string $name): ?string
+    {
+        return str_starts_with($name, 'web.pages.') ? Str::afterLast($name, '.') : null;
+    }
+
+    private static function isLong(string $name): bool
+    {
+        return in_array($name, self::LONG, true) || self::pageField($name) === 'lead';
+    }
+
+    private static function isFile(string $name): bool
+    {
+        return in_array($name, self::FILES, true) || self::pageField($name) === 'photo';
+    }
+
     /** La sección de Configuración donde se hizo el cambio. */
     public static function section(AuditLog $log): string
     {
@@ -270,7 +296,7 @@ final class ChangeHistory
         if ($log->auditable_type === Setting::class) {
             $key = (string) ($record?->key ?? $values['key'] ?? '');
 
-            return self::SETTINGS[$key] ?? ($key !== '' ? $key : 'Un ajuste');
+            return self::settingName($key) ?? ($key !== '' ? $key : 'Un ajuste');
         }
 
         if ($log->auditable_type === DoctorSchedule::class) {
@@ -349,10 +375,10 @@ final class ChangeHistory
 
             // De un ajuste se guarda solo su valor: el dato es el ajuste mismo.
             $name = $setting ? (string) $settingKey : $attribute;
-            $long = in_array($name, self::LONG, true);
+            $long = self::isLong($name);
 
             $changes[] = [
-                'field' => $setting ? (self::SETTINGS[$name] ?? $name) : (self::FIELDS[$log->auditable_type][$attribute] ?? Str::headline($attribute)),
+                'field' => $setting ? (self::settingName($name) ?? $name) : (self::FIELDS[$log->auditable_type][$attribute] ?? Str::headline($attribute)),
                 'before' => self::value($name, $old[$attribute] ?? null, $long),
                 'after' => self::value($name, $new[$attribute] ?? null, $long),
                 'long' => $long,
@@ -417,7 +443,7 @@ final class ChangeHistory
         }
 
         if (blank($value)) {
-            return in_array($name, self::FILES, true) ? 'Sin foto' : 'Vacío';
+            return self::isFile($name) ? 'Sin foto' : 'Vacío';
         }
 
         if (is_array($value)) {
@@ -425,7 +451,7 @@ final class ChangeHistory
         }
 
         return match (true) {
-            in_array($name, self::FILES, true) => 'Una foto',
+            self::isFile($name) => 'Una foto',
             in_array($name, self::MONEY, true) => Money::format($value),
             in_array($name, self::HOURS, true) => self::clock($value),
             in_array($name, self::DATES, true) => self::date($value),

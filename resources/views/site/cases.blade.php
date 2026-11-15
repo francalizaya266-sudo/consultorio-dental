@@ -1,9 +1,4 @@
-<x-site-layout title="Antes y después" :wide="true" :json-ld="$jsonLd" description="Resultados reales de pacientes que autorizaron mostrar sus fotos.">
-    <section class="page-head">
-        <h1>Antes y después</h1>
-        <p class="lead">Resultados de pacientes que nos autorizaron a mostrar sus fotos. Cada caso es distinto: en tu evaluación el doctor te dice qué puedes esperar.</p>
-    </section>
-
+<x-site-layout page="casos" :wide="true" :json-ld="$jsonLd" description="Resultados reales de pacientes que autorizaron mostrar sus fotos.">
     @if ($treatments->count() > 1)
         <nav class="chips" aria-label="Filtrar por tratamiento">
             <a href="{{ route('site.cases') }}" class="chip" @if (! $selected) aria-current="page" @endif>Todos</a>

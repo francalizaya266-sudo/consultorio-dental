@@ -3,6 +3,7 @@
 namespace Tests\Feature\Filament;
 
 use App\Filament\Pages\Settings;
+use App\Filament\Pages\WebPages;
 use App\Filament\Pages\WebSetup;
 use App\Filament\Resources\AuditLogs\AuditLogResource;
 use App\Filament\Resources\AuditLogs\Pages\ManageAuditLogs;
@@ -61,6 +62,33 @@ class ChangeHistoryTest extends TestCase
         $again = AuditLog::query()->with('auditable')->where('auditable_type', Setting::class)->latest('id')->first();
         $this->assertSame([['value' => 30], ['value' => 60]], [$again->old_values, $again->new_values]);
         $this->assertSame('30 días → 60 días', ChangeHistory::summary($again));
+    }
+
+    public function test_a_change_to_the_texts_of_a_page_of_the_website_is_told_with_the_name_of_the_page(): void
+    {
+        $this->actingAs(User::factory()->admin()->create());
+
+        Livewire::test(WebPages::class)
+            ->fillForm(['web' => ['pages' => [
+                'servicios' => ['title' => 'Tratamientos dentales', 'lead' => 'Elige el tuyo y reserva.'],
+                'inicio' => ['closing_text' => ''],
+            ]]])
+            ->call('save')
+            ->assertHasNoFormErrors();
+
+        // La foto de una página se guarda como la del inicio: aquí basta con lo que queda anotado.
+        Setting::set('web.pages.equipo.photo', 'paginas/equipo.jpg');
+
+        $changes = AuditLog::query()->with('auditable')->where('auditable_type', Setting::class)->get()->keyBy(fn (AuditLog $change) => $change->auditable->key);
+        $this->assertSame(['web.pages.equipo.photo', 'web.pages.inicio.closing_text', 'web.pages.servicios.lead', 'web.pages.servicios.title'], $changes->keys()->sort()->values()->all());
+
+        $told = fn (string $key): array => [ChangeHistory::section($changes[$key]), ChangeHistory::subject($changes[$key]), ChangeHistory::summary($changes[$key])];
+
+        $this->assertSame(['Ajustes y página web', 'Título de la página Servicios', 'Nuestros servicios → Tratamientos dentales'], $told('web.pages.servicios.title'));
+        // Un texto largo no se copia entero y una foto no se muestra por su archivo.
+        $this->assertSame(['Ajustes y página web', 'Texto bajo el título de la página Servicios', 'Se cambió el texto'], $told('web.pages.servicios.lead'));
+        $this->assertSame(['Ajustes y página web', 'Texto del cierre general de la web', 'Reserva tu cita hoy y luce una sonrisa saludable. → Vacío'], $told('web.pages.inicio.closing_text'));
+        $this->assertSame(['Ajustes y página web', 'Foto de la página Equipo', 'Sin foto → Una foto'], $told('web.pages.equipo.photo'));
     }
 
     public function test_what_the_system_writes_down_by_itself_is_not_a_change_of_somebody(): void
@@ -184,6 +212,7 @@ class ChangeHistoryTest extends TestCase
         $keys = fn (string $page): array => array_keys((new ReflectionMethod($page, 'settingKeys'))->invoke(null));
 
         $this->assertSame([], array_values(array_diff([...$keys(Settings::class), ...$keys(WebSetup::class)], array_keys(ChangeHistory::SETTINGS))));
+        $this->assertSame([], array_values(array_filter($keys(WebPages::class), fn (string $key) => ChangeHistory::settingName($key) === null)));
 
         foreach (ChangeHistory::FIELDS as $class => $labels) {
             $unnamed = array_diff((new $class)->getFillable(), array_keys($labels), ChangeHistory::INTERNAL, ['password', 'name', 'key']);
