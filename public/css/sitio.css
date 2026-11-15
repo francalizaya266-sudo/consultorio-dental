@@ -169,13 +169,33 @@ main { padding: 24px 0 96px; flex: 1 0 auto; }
 main.with-hero { padding-top: 0; background: linear-gradient(180deg, var(--mist) 0, var(--mist) 45%, var(--ground) 100%) no-repeat top / 100% 2400px; }
 main.with-hero > .wrap:first-child .flash { margin: 16px 0; }
 
-/* El pie, en el azul de la portada: la marca y "Reservar cita" arriba; al medio, lo justo para ubicarse y las páginas; lo legal abajo. */
-.site-footer { position: relative; isolation: isolate; overflow: hidden; background: linear-gradient(120deg, #06173a 0%, #0a2757 62%, #0e3c84 100%); color: #c9d6e8; padding: 48px 0; margin-top: 24px; }
-.site-footer::before {
-    content: ""; position: absolute; z-index: -1; width: 720px; height: 720px; right: -220px; bottom: -520px; border-radius: 50%;
-    background: radial-gradient(closest-side, rgb(64 140 240 / .5), transparent);
+/*
+   El pie, en el azul de la portada. Lo abre la invitación a reservar, en una franja de azul vivo que monta sobre su
+   borde; debajo, la marca, lo justo para ubicarse y las páginas; lo legal al final.
+*/
+.site-footer {
+    position: relative; color: #c9d6e8; padding: 0 0 48px; margin-top: 56px;
+    background: radial-gradient(circle 360px at calc(100% - 140px) calc(100% + 160px), rgb(64 140 240 / .5), transparent), linear-gradient(120deg, #06173a 0%, #0a2757 62%, #0e3c84 100%);
 }
 .site-footer .wrap { display: grid; gap: 28px; }
+.footer-cta {
+    --wave: 120px; --swell: 210px;
+    display: grid; grid-template-columns: 56px minmax(0, 1fr); align-items: center; gap: 16px; margin: -56px 0 4px; padding: 20px; border-radius: 24px; color: #fff;
+    background:
+        radial-gradient(circle var(--wave) at calc(100% + 10px) calc(100% + var(--wave) * .42), #5c9df5 calc(var(--wave) - 1px), transparent var(--wave)),
+        radial-gradient(circle var(--swell) at calc(100% - var(--swell) * .18) calc(100% + var(--swell) * .58), rgb(74 141 240 / .5) calc(var(--swell) - 1px), transparent var(--swell)),
+        linear-gradient(100deg, #0a2977 0%, #0c3a9f 46%, #1c62d6 100%);
+    box-shadow: 0 24px 40px -24px rgb(3 12 32 / .8);
+}
+.footer-cta img { width: 72px; max-width: none; height: auto; margin: -8px; filter: drop-shadow(0 8px 10px rgb(0 0 0 / .3)); }
+.site-footer .footer-cta p { margin: 0; color: #e3ecff; }
+.footer-cta strong { display: block; margin-bottom: 4px; text-wrap: balance; font: 700 clamp(1.1875rem, 2.6vw, 1.625rem)/1.2 var(--display); letter-spacing: -.02em; color: #fff; }
+.footer-cta .btn { grid-column: 1 / -1; background: #fff; color: var(--ink); }
+@media (min-width: 720px) {
+    .footer-cta { --wave: 150px; --swell: 260px; grid-template-columns: 84px minmax(0, 1fr) auto; gap: 24px; padding: 26px 40px; border-radius: 28px; }
+    .footer-cta img { width: 112px; margin: -14px; }
+    .footer-cta .btn { grid-column: auto; min-width: 200px; }
+}
 .footer-top { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 16px 24px; }
 .site-footer .name { display: flex; align-items: center; gap: 12px; font-size: clamp(1.25rem, 3.4vw, 1.5rem); font-weight: 800; letter-spacing: -.025em; line-height: 1.1; color: #fff; margin: 0; }
 .site-footer .mark { width: 48px; height: 48px; color: #fff; }
@@ -198,20 +218,31 @@ main.with-hero > .wrap:first-child .flash { margin: 16px 0; }
 .footer-cols { display: grid; gap: 28px; padding-top: 28px; border-top: 1px solid rgb(255 255 255 / .14); }
 .footer-contact p:last-child { margin-bottom: 0; }
 @media (min-width: 720px) { .footer-cols { grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr); gap: 28px 64px; } }
+/* En pantallas anchas la marca va a la izquierda y lo demás a su lado: el pie no deja media franja vacía. */
+@media (min-width: 960px) {
+    .site-footer .wrap { grid-template-columns: auto minmax(0, 1fr); column-gap: 72px; }
+    .footer-cta, .footer-bottom { grid-column: 1 / -1; }
+    .footer-top { align-self: start; }
+    .footer-cols { padding-top: 0; border-top: 0; }
+}
 
 /* Pie corto donde la página ya dio la dirección, el horario y el WhatsApp: el nombre y las páginas, en una fila. */
-.site-footer.short { padding: 40px 0 40px; }
+.site-footer.short { padding-bottom: 40px; }
 .site-footer.short .wrap { gap: 20px; }
 .site-footer.short .footer-cols { padding-top: 20px; }
 .site-footer.short .footer-cols { display: block; }
 .site-footer.short nav h2 { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
 .site-footer .socials { margin: 16px 0 0; }
+@media (min-width: 960px) {
+    .site-footer.short .footer-top { align-self: center; }
+    .site-footer.short .footer-cols { padding-top: 0; align-self: center; justify-self: end; }
+    .site-footer.short ul, .site-footer.short .socials { justify-content: flex-end; }
+}
 
 /* Pie mínimo mientras se reserva: nombre, ayuda por WhatsApp y privacidad. */
-.site-footer.minimal { padding: 28px 0; }
+.site-footer.minimal { padding: 28px 0; margin-top: 24px; background: linear-gradient(120deg, #06173a 0%, #0a2757 62%, #0e3c84 100%); }
 .site-footer.minimal .wrap { display: flex; flex-wrap: wrap; align-items: baseline; gap: 8px 24px; }
 .site-footer.minimal .name { font-size: 1.25rem; margin-right: auto; }
-.site-footer.minimal::before { display: none; }
 .site-footer.minimal p { margin: 0; }
 
 /* Tipografía */
@@ -781,26 +812,38 @@ a.rating > span:last-child { text-decoration: underline; text-decoration-color: 
     .how-art { display: block; width: 250px; max-width: none; height: auto; margin: -24px 0 -24px -24px; filter: drop-shadow(0 22px 22px rgb(11 31 58 / .22)); }
 }
 
-/* Nuestra especialidad: una franja azul noche con la imagen del tratamiento, que en pantallas anchas sobresale de la franja. */
+/*
+   Nuestra especialidad: una franja en azul vivo, más claro hacia la derecha, con la imagen del tratamiento, que en
+   pantallas anchas sobresale por arriba. Detrás de la imagen, dos discos de luz; en la esquina, dos ondas claras.
+   Los cuatro adornos se achican juntos en el celular (--k).
+*/
 .feature {
+    --k: .7; --disc: 50% calc(100% - 134px);
+    --wave: calc(190px * var(--k)); --swell: calc(330px * var(--k)); --halo: calc(150px * var(--k)); --ring: calc(230px * var(--k));
     position: relative; overflow: hidden; display: grid; gap: 8px; padding: 28px 24px 0; border-radius: 28px; color: #fff;
-    background: radial-gradient(circle 260px at calc(100% - 100px) 60px, rgb(64 128 214 / .6), transparent), linear-gradient(118deg, #06173a 0%, #0a2757 52%, #0e3c84 100%);
+    background:
+        radial-gradient(circle var(--wave) at calc(100% + 10px) calc(100% + var(--wave) * .42), #5c9df5 calc(var(--wave) - 1px), transparent var(--wave)),
+        radial-gradient(circle var(--swell) at calc(100% - var(--swell) * .18) calc(100% + var(--swell) * .58), rgb(74 141 240 / .5) calc(var(--swell) - 1px), transparent var(--swell)),
+        radial-gradient(circle var(--halo) at var(--disc), rgb(255 255 255 / .1) calc(var(--halo) - 1px), transparent var(--halo)),
+        radial-gradient(circle var(--ring) at var(--disc), rgb(255 255 255 / .07) calc(var(--ring) - 1px), transparent var(--ring)),
+        linear-gradient(100deg, #0a2977 0%, #0c3a9f 46%, #1c62d6 100%);
 }
 .feature > div { display: grid; gap: 8px; justify-items: start; }
 .feature p { margin: 0; }
-.feature .kicker { font-size: .8125rem; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: var(--navy-soft); }
+.feature .kicker { font-size: .8125rem; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: #c3d8ff; }
 .feature h2 { font-size: clamp(1.75rem, 4.2vw, 2.5rem); font-weight: 750; letter-spacing: -.025em; line-height: 1.12; max-width: 15ch; }
-.feature h2 + p { margin: 6px 0 12px; color: #c9d6e8; max-width: 44ch; }
+.feature h2 + p { margin: 6px 0 12px; color: #e3ecff; max-width: 44ch; }
 .feature .btn { background: #fff; color: var(--ink); }
 /* En los celulares más angostos (320) el botón entra en una línea sin su flecha. */
 @media (max-width: 379px) { .feature .btn svg { display: none; } }
-.feature img { justify-self: center; width: 240px; height: auto; margin: 0 0 -20px; filter: drop-shadow(0 24px 24px rgb(0 0 0 / .35)); }
+.feature img { justify-self: center; width: 240px; height: auto; margin: -4px 0 10px; filter: drop-shadow(0 12px 14px rgb(0 0 0 / .32)); }
 @media (min-width: 640px) {
-    .feature { grid-template-columns: 1.2fr 1fr; align-items: center; padding: 40px; overflow: visible; }
+    /* La imagen sale por arriba; por abajo se recorta con la franja, para que su sombra no caiga fuera. */
+    .feature { --k: .86; --disc: calc(100% - 190px) 50%; grid-template-columns: 1.2fr 1fr; align-items: center; padding: 40px; overflow: visible; clip-path: inset(-240px 0 0 round 0 0 28px 28px); }
     .feature img { width: 300px; margin: -92px 0 -68px; filter: drop-shadow(0 14px 16px rgb(0 0 0 / .32)); }
 }
 @media (min-width: 900px) {
-    .feature { padding: 56px; }
+    .feature { --k: 1; --disc: calc(100% - 290px) 50%; padding: 56px; }
     .feature img { width: 400px; margin: -148px 0 -84px; }
 }
 
@@ -1106,8 +1149,7 @@ a.chip { text-decoration: none; display: inline-flex; align-items: center; }
     body:has(.action-bar) .site-header .btn,
     body:has(.action-bar) .hero .row,
     body:has(.action-bar) .quick-actions .in-bar,
-    body:has(.action-bar) .how-band .section-head .btn,
-    body:has(.action-bar) .footer-top .btn { display: none; }
+    body:has(.action-bar) .how-band .section-head .btn { display: none; }
     body:has(.action-bar) .quick .next-free .more { display: inline-block; }
     body:has(.action-bar) .hero .lead { margin-bottom: 0; }
     body:has(.action-bar) .hero .rating { margin: 14px 0 0; }
@@ -1140,7 +1182,7 @@ a.chip { text-decoration: none; display: inline-flex; align-items: center; }
     .free-times a:hover { background: #d6e3f5; }
     .promo-card:hover { background: var(--surface-strong); }
     .price-list a:hover { box-shadow: inset 0 0 0 2px var(--accent); }
-    .feature .btn:hover { background: var(--surface-strong); }
+    :is(.feature, .footer-cta) .btn:hover { background: var(--surface-strong); }
     .price-list a:hover .name, .promo-card:hover strong { text-decoration: underline; text-underline-offset: .15em; text-decoration-thickness: 1px; }
     .promo-band:hover strong { text-decoration: underline; text-underline-offset: .15em; }
     .faqs summary:hover { color: var(--accent); }

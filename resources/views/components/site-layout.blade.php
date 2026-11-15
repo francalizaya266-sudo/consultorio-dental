@@ -13,6 +13,7 @@
 @php
     use App\Services\Web\ClinicInfo;
     use App\Support\Phone;
+    use App\Support\SiteArt;
     use App\Support\SiteIcon;
     use App\Support\TreatmentIcon;
 
@@ -160,12 +161,17 @@
 @else
 <footer @class(['site-footer', 'short' => ! $footerContact])>
     <div class="wrap wide">
+        {{-- El cierre de cada página: la invitación a reservar, en una franja que monta sobre el borde del pie. --}}
+        <div class="footer-cta">
+            <img src="{{ SiteArt::url('diente-320') }}" alt="" width="320" height="320" loading="lazy" decoding="async">
+            <p><strong>Tu salud bucal, en buenas manos</strong> Reserva tu cita hoy y luce una sonrisa saludable.</p>
+            <a href="{{ route('site.booking') }}" class="btn">Reservar cita{{ SiteIcon::svg('arrow-right') }}</a>
+        </div>
         <div class="footer-top">
             <p class="name">
                 <span class="mark">{{ TreatmentIcon::svg('tooth') }}</span>
                 <span class="brand">{{ $name }}@if ($tagline)<small>{{ $tagline }}</small>@endif</span>
             </p>
-            <a href="{{ route('site.booking') }}" class="btn ghost">{{ SiteIcon::svg('calendar') }}Reservar cita</a>
         </div>
         <div class="footer-cols">
             {{-- Lo justo para ubicarse: dónde queda, si está abierto y cómo escribir. El horario completo y el mapa están en Contacto. --}}

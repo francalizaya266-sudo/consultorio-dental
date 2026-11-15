@@ -303,13 +303,16 @@ class PublicPagesTest extends TestCase
             ->assertSee('<span class="brand">'.Setting::get('clinic.name').'</span>', false)
             ->assertDontSee('Dentistas en');
 
-        // El pie: la marca con "Reservar cita", las redes cargadas como íconos con su nombre, y lo legal al final.
+        // El pie: lo abre la invitación a reservar; debajo, la marca, las redes cargadas como íconos con su nombre, y lo legal al final.
         $this->get(route('site.team'))
             ->assertOk()
             ->assertSeeInOrder(['class="site-nav"', 'Inicio</a>', 'aria-current="page"', 'Equipo</a>'], false)
             ->assertSeeInOrder([
+                'class="footer-cta"',
+                '<img src="'.SiteArt::url('diente-320').'" alt=""',
+                'Tu salud bucal, en buenas manos',
+                '<a href="'.route('site.booking').'" class="btn">Reservar cita<svg',
                 'class="footer-top"',
-                '<a href="'.route('site.booking').'" class="btn ghost">',
                 'El consultorio',
                 '<a href="https://instagram.com/consultorio" rel="noopener" target="_blank" aria-label="Instagram" title="Instagram"><svg',
                 '<a href="https://tiktok.com/@consultorio" rel="noopener" target="_blank" aria-label="TikTok" title="TikTok"><svg',
@@ -338,8 +341,12 @@ class PublicPagesTest extends TestCase
             ->assertSeeInOrder([
                 'Nuestra especialidad', '<h2 id="especialidad">Implante dental</h2>', 'Reemplaza un diente perdido.',
                 '<a href="'.route('site.treatment', 'implante').'" class="btn">Conocer el tratamiento<svg',
-                '<img src="'.SiteArt::url('implante').'"', 'Quién te atiende',
+                // La imagen va en grande: lleva también su tamaño de más detalle.
+                '<img src="'.SiteArt::url('implante').'" srcset="'.SiteArt::url('implante').' 640w, '.SiteArt::url('implante-960').' 960w"', 'Quién te atiende',
             ], false);
+
+        // Solo las imágenes de especialidad tienen ese tamaño: cualquier otra iría en el suyo.
+        $this->assertStringNotContainsString('srcset', (string) SiteArt::feature(Treatment::factory()->make(['name' => 'Limpieza dental', 'slug' => 'limpieza'])));
 
         // Si el consultorio no publica ese tratamiento, la franja no aparece.
         $implant->update(['is_public' => false]);
@@ -543,7 +550,9 @@ class PublicPagesTest extends TestCase
             ->assertSee('Escríbenos por WhatsApp')
             ->assertSee('Política de privacidad')
             ->assertDontSee('El consultorio')
-            ->assertDontSee('class="footer-contact"', false);
+            ->assertDontSee('class="footer-contact"', false)
+            // Ya está reservando: el pie no lo vuelve a invitar.
+            ->assertDontSee('class="footer-cta"', false);
     }
 
     public function test_only_published_content_reaches_the_web(): void
@@ -784,8 +793,8 @@ class PublicPagesTest extends TestCase
             ->assertSee('<h1 id="contacto">Contacto</h1>', false)
             ->assertSee('Lunes a sábado')
             ->assertSee("3:00\u{A0}p.\u{A0}m. – 7:00\u{A0}p.\u{A0}m.")
-            // "Cómo llegar" sale una vez, bajo el mapa, y el pie no repite la dirección.
-            ->assertSeeInOrder(['class="map"', '>Cómo llegar</a>'], false)
+            // "Cómo llegar" sale una vez, bajo el mapa, y el pie no repite la dirección: lo abre la invitación a reservar.
+            ->assertSeeInOrder(['class="map"', '>Cómo llegar</a>', 'class="footer-cta"', 'Reservar cita<svg'], false)
             ->assertDontSee('class="footer-contact"', false)
             // El correo, que antes solo estaba en el pie, no se pierde.
             ->assertSee('href="mailto:citas@consultorio.test"', false)
