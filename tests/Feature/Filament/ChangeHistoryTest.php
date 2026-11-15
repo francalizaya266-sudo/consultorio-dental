@@ -71,6 +71,7 @@ class ChangeHistoryTest extends TestCase
         Livewire::test(WebPages::class)
             ->fillForm(['web' => ['pages' => [
                 'servicios' => ['title' => 'Tratamientos dentales', 'lead' => 'Elige el tuyo y reserva.'],
+                'equipo' => ['value2_title' => 'Sin dolor'],
                 'inicio' => ['closing_text' => ''],
             ]]])
             ->call('save')
@@ -80,7 +81,7 @@ class ChangeHistoryTest extends TestCase
         Setting::set('web.pages.equipo.photo', 'paginas/equipo.jpg');
 
         $changes = AuditLog::query()->with('auditable')->where('auditable_type', Setting::class)->get()->keyBy(fn (AuditLog $change) => $change->auditable->key);
-        $this->assertSame(['web.pages.equipo.photo', 'web.pages.inicio.closing_text', 'web.pages.servicios.lead', 'web.pages.servicios.title'], $changes->keys()->sort()->values()->all());
+        $this->assertSame(['web.pages.equipo.photo', 'web.pages.equipo.value2_title', 'web.pages.inicio.closing_text', 'web.pages.servicios.lead', 'web.pages.servicios.title'], $changes->keys()->sort()->values()->all());
 
         $told = fn (string $key): array => [ChangeHistory::section($changes[$key]), ChangeHistory::subject($changes[$key]), ChangeHistory::summary($changes[$key])];
 
@@ -89,6 +90,7 @@ class ChangeHistoryTest extends TestCase
         $this->assertSame(['Ajustes y página web', 'Texto bajo el título de la página Servicios', 'Se cambió el texto'], $told('web.pages.servicios.lead'));
         $this->assertSame(['Ajustes y página web', 'Texto del cierre general de la web', 'Reserva tu cita hoy y luce una sonrisa saludable. → Vacío'], $told('web.pages.inicio.closing_text'));
         $this->assertSame(['Ajustes y página web', 'Foto de la página Equipo', 'Sin foto → Una foto'], $told('web.pages.equipo.photo'));
+        $this->assertSame(['Ajustes y página web', 'Punto 2 de la página Equipo', 'Te explicamos todo → Sin dolor'], $told('web.pages.equipo.value2_title'));
     }
 
     public function test_what_the_system_writes_down_by_itself_is_not_a_change_of_somebody(): void

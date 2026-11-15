@@ -41,6 +41,12 @@ final class PageTexts
         'closing_text' => 'Texto del cierre',
     ];
 
+    /** La página que lleva, bajo los doctores, la franja con lo que distingue al equipo. */
+    public const WITH_VALUES = 'equipo';
+
+    /** @var list<string> El ícono de cada punto de esa franja (SiteIcon): tantos puntos como íconos. */
+    public const VALUE_ICONS = ['award', 'chat-check', 'shield-check', 'heart'];
+
     /** @var array<string, string> El ícono que acompaña a la frase corta de cada página (SiteIcon). */
     private const ICONS = [
         'servicios' => 'heart',
@@ -83,7 +89,20 @@ final class PageTexts
             }
         }
 
+        foreach (array_keys(self::VALUE_ICONS) as $index) {
+            $number = $index + 1;
+            $name = self::PAGES[self::WITH_VALUES];
+            $settings[self::valueKey($number, 'title')] = "Punto {$number} de la página {$name}";
+            $settings[self::valueKey($number, 'text')] = "Texto del punto {$number} de la página {$name}";
+        }
+
         return $settings;
+    }
+
+    /** El ajuste de un punto de la franja de Equipo: su título ("title") o su texto ("text"). Los puntos se cuentan desde 1. */
+    public static function valueKey(int $number, string $part): string
+    {
+        return self::key(self::WITH_VALUES, "value{$number}_{$part}");
     }
 
     /** Si el cierre de la página invita a escribir por WhatsApp en vez de a reservar. */
@@ -162,6 +181,27 @@ final class PageTexts
             'text' => $this->text($own, 'closing_text'),
             'whatsapp' => $whatsapp && $own === $page,
         ];
+    }
+
+    /**
+     * Los puntos de la franja de Equipo que tienen título, cada uno con su ícono y su texto.
+     *
+     * @return list<array{icon: string, title: string, text: string|null}>
+     */
+    public function teamValues(): array
+    {
+        $values = [];
+
+        foreach (self::VALUE_ICONS as $index => $icon) {
+            $number = $index + 1;
+            $title = $this->text(self::WITH_VALUES, "value{$number}_title");
+
+            if ($title !== null) {
+                $values[] = ['icon' => $icon, 'title' => $title, 'text' => $this->text(self::WITH_VALUES, "value{$number}_text")];
+            }
+        }
+
+        return $values;
     }
 
     private function text(string $page, string $field): ?string
