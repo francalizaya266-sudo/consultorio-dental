@@ -2,11 +2,13 @@
     Días con horarios libres y los horarios del día elegido.
     slotsNote: aviso junto a los horarios (cuántos lleva elegidos al proponer un cambio).
     slotsFull: ya eligió todos los que puede; los demás horarios no se pueden tocar hasta quitar uno.
+    headingLevel: el nivel de los dos títulos ("Día" y el día elegido); h2 si no se dice otro.
 --}}
 @php
     use App\Support\Dates;
     use Carbon\CarbonImmutable;
 
+    $headingLevel ??= 'h2';
     $groups = $this->visibleSlots->groupBy(fn (array $slot) => $slot['time'] < '12:00' ? 'Por la mañana' : 'Por la tarde');
 @endphp
 @if ($availableDays === [])
@@ -15,7 +17,7 @@
     </div>
 @else
     <div class="stack">
-        <h2>Día</h2>
+        <{{ $headingLevel }}>Día</{{ $headingLevel }}>
         <div class="days" role="group" aria-label="Días con horarios libres">
             @foreach ($availableDays as $day)
                 @php($d = CarbonImmutable::parse($day))
@@ -29,7 +31,7 @@
     </div>
 
     <div class="stack" wire:key="times-{{ $date }}-{{ $doctorId }}">
-        <h2>{{ Dates::day($date) }}</h2>
+        <{{ $headingLevel }}>{{ Dates::day($date) }}</{{ $headingLevel }}>
         @if ($slotsNote)
             <p class="times-note" role="status">{{ $slotsNote }}</p>
         @endif

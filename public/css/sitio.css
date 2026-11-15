@@ -245,6 +245,9 @@ main.with-hero > .wrap:first-child .flash { margin: 16px 0; }
 .site-footer.minimal .wrap { display: flex; flex-wrap: wrap; align-items: baseline; gap: 8px 24px; }
 .site-footer.minimal .name { font-size: 1.25rem; margin-right: auto; }
 .site-footer.minimal p { margin: 0; }
+/* Con la franja de ayuda (Reservar cita), la franja monta sobre el borde del pie, como en las demás páginas. */
+.site-footer.minimal.with-cta { padding-top: 0; margin-top: 80px; }
+.site-footer.minimal .footer-cta { flex: 1 0 100%; margin-bottom: 12px; }
 
 /* Tipografía */
 
@@ -309,12 +312,30 @@ dl.facts dd { margin: 0; font-weight: 650; min-width: 0; overflow-wrap: anywhere
 
 /* Reserva: pasos */
 
-/* Cada paso con su nombre: se sabe en cuál va y cuántos faltan. */
-.steps { display: flex; gap: 6px; margin: 0 0 20px; padding: 0; list-style: none; }
-.steps li { flex: 1; position: relative; padding-top: 14px; font-size: .8125rem; font-weight: 600; line-height: 1.25; color: var(--muted); }
-.steps li::before { content: ""; position: absolute; inset: 0 0 auto; height: 6px; border-radius: 999px; background: var(--surface-strong); }
-.steps li.done::before { background: var(--accent); }
-.steps li[aria-current="step"] { color: var(--accent); font-weight: 700; }
+/*
+   Cada paso con su número y su nombre, unidos por una línea: se sabe en cuál va y cuántos faltan. El que ya pasó
+   lleva un visto. En el celular el nombre va bajo el número; en pantallas anchas, al lado.
+*/
+.steps { display: flex; margin: 0; padding: 0; list-style: none; counter-reset: paso; }
+.steps li { flex: 1; position: relative; display: grid; justify-items: center; align-content: start; gap: 6px; counter-increment: paso; font-size: .8125rem; font-weight: 600; line-height: 1.25; text-align: center; color: var(--muted); }
+.steps li::before {
+    content: counter(paso); position: relative; z-index: 1; display: grid; place-items: center; width: 34px; height: 34px; border-radius: 50%;
+    background: var(--ground); box-shadow: inset 0 0 0 2px var(--surface-strong); font: 700 .9375rem/1 var(--display); color: var(--muted);
+}
+.steps li:not(:last-child)::after { content: ""; position: absolute; top: 16px; left: calc(50% + 24px); width: calc(100% - 48px); height: 2px; border-radius: 2px; background: var(--surface-strong); }
+.steps li[aria-current="step"] { color: var(--btn); font-weight: 700; }
+.steps li[aria-current="step"]::before { background: linear-gradient(160deg, #2a72e8, #0c3a9f); box-shadow: 0 8px 16px -8px rgb(12 58 159 / .7); color: #fff; }
+.steps li.done:not([aria-current])::before {
+    content: ""; box-shadow: none;
+    background: #1c62d6 url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23fff' stroke-width='2.4' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m5 12.6 4.4 4.4L19 7.4'/%3E%3C/svg%3E") center / 20px no-repeat;
+}
+.steps li.done:not([aria-current])::after { background: #1c62d6; }
+@media (min-width: 640px) {
+    .steps li { flex: 1 1 auto; display: flex; align-items: center; gap: 10px; font-size: 1rem; text-align: left; white-space: nowrap; }
+    .steps li:last-child { flex: none; }
+    .steps li::before { flex: none; width: 38px; height: 38px; font-size: 1rem; }
+    .steps li:not(:last-child)::after { position: static; flex: 1; width: auto; min-width: 20px; margin: 0 16px 0 6px; }
+}
 
 .choice-list { display: grid; gap: 10px; margin: 0; padding: 0; list-style: none; }
 .choice {
@@ -397,7 +418,7 @@ a.choice { text-decoration: none; }
 .field .error { color: var(--bad); font-weight: 600; font-size: .9375rem; }
 .field .hint.ok { color: var(--ok); font-weight: 600; }
 .form-problems { margin: 0; padding: 12px 14px; border-radius: 12px; background: var(--bad-bg); color: var(--bad); font-weight: 600; }
-h1:focus { outline: none; }
+h1:focus, .step-title:focus { outline: none; }
 .input, select.input, textarea.input {
     width: 100%; min-height: 52px; padding: 12px 14px; font: 400 1.0625rem/1.3 var(--font); color: var(--ink);
     background: #fff; border: 2px solid var(--field-line); border-radius: 12px;
@@ -913,6 +934,12 @@ main.with-band > .wrap:first-child .flash { margin: 16px 0; }
 .band-photo img { width: 100%; height: 100%; object-fit: cover; object-position: 50% 35%; }
 .page-band.with-photo { padding-top: 0; }
 .page-band.with-photo .band-art { z-index: 0; right: -2px; top: -92px; bottom: auto; width: 104px; opacity: 1; }
+/* Mientras se reserva, en el celular la franja va corta: la frase y el título, sin foto ni texto. */
+@media (max-width: 759px) {
+    .page-band.brief { margin-bottom: 20px; padding: 18px 0 46px; }
+    .page-band.brief :is(.band-photo, .lead) { display: none; }
+    .page-band.brief .band-art { z-index: -1; top: auto; right: -18px; bottom: -64px; width: 132px; opacity: .7; }
+}
 @media (min-width: 760px) {
     .page-band, .page-band.with-photo { display: grid; align-items: center; min-height: clamp(280px, 18vw, 340px); margin-bottom: 32px; padding: 36px 0 84px; }
     .page-band::after { height: 72px; }
@@ -1242,6 +1269,71 @@ main.with-band > .wrap:first-child .flash { margin: 16px 0; }
 }
 @media (min-width: 1200px) {
     .appointments { grid-template-columns: repeat(auto-fit, minmax(400px, 1fr)); align-items: start; }
+}
+
+/*
+   Reservar cita: la reserva va en una tarjeta que monta sobre la onda del encabezado. Arriba, los pasos; debajo, el
+   paso; y en pantallas anchas, a la derecha, el resumen de la cita, que acompaña al bajar. En el celular va sin
+   tarjeta, a todo el ancho, y el resumen sale en el último paso, sobre el formulario.
+*/
+.booking { position: relative; scroll-margin-top: 80px; }
+/* La línea de carga va pegada arriba y no ocupa lugar: al aparecer no empuja lo que se está tocando. */
+.booking > .loading-line { position: absolute; top: -12px; left: 0; right: 0; margin: 0; }
+.booking .step-title { font-size: clamp(1.625rem, 5vw, 2rem); font-weight: 750; letter-spacing: -.025em; }
+.booking h3 { font-family: var(--display); font-size: 1.25rem; font-weight: 700; letter-spacing: -.02em; }
+.booking .choice-list { grid-template-columns: repeat(auto-fill, minmax(min(100%, 360px), 1fr)); }
+.booking .choice-list li { display: grid; }
+.booking form { max-width: var(--measure); }
+.booking.is-done { max-width: var(--measure); margin-inline: auto; }
+.pick { display: grid; grid-template-columns: minmax(0, 1fr); gap: 16px; }
+.booking-summary { display: none; }
+@media (min-width: 640px) {
+    .booking { z-index: 3; padding: 26px 28px 32px; border-radius: 28px; background: var(--ground); border: 1px solid var(--card-line); box-shadow: var(--card-shadow); }
+    .booking > .loading-line { top: 0; left: 28px; right: 28px; border-radius: 0 0 3px 3px; }
+    .booking.is-done { padding: 32px 40px 40px; }
+}
+@media (min-width: 760px) {
+    .booking { margin-top: -76px; }
+}
+@media (min-width: 1000px) {
+    .booking:not(.is-done) { display: grid; grid-template-columns: minmax(0, 1fr) 320px; column-gap: 36px; align-items: start; padding: 28px 32px 36px; }
+    .booking > * { grid-column: 1; }
+    .booking > .steps { grid-column: 1 / -1; }
+    /* El resumen ocupa la columna derecha junto a todo lo que haya a la izquierda: avisos y paso. */
+    .booking > .booking-summary {
+        grid-column: 2; grid-row: 2 / span 4; position: sticky; top: 88px; display: grid; gap: 16px; padding: 22px; border-radius: 22px;
+        background: linear-gradient(180deg, #eaf2ff 0, #f5f9ff 100%); border: 1px solid var(--card-line);
+    }
+    .booking-summary h2 { display: flex; align-items: center; gap: 10px; font-size: 1.25rem; letter-spacing: -.02em; color: var(--btn); }
+    .booking-summary h2 svg { flex: none; width: 26px; height: 26px; color: #1c62d6; }
+    .booking-summary :is(.chosen, dl, .price-line, .assurances) { margin: 0; }
+    .booking-summary .chosen { display: grid; grid-template-columns: 72px minmax(0, 1fr); align-items: center; gap: 14px; padding: 12px; border-radius: 16px; background: var(--ground); box-shadow: 0 1px 2px rgb(12 26 46 / .05); }
+    .booking-summary .art { display: grid; place-items: center; width: 72px; height: 72px; border-radius: 16px; background: linear-gradient(160deg, #eef4fd, #dfeafb); }
+    .booking-summary .art img { width: 96%; height: auto; filter: drop-shadow(0 2px 9px rgb(40 130 255 / .62)); }
+    .booking-summary .chosen p { display: grid; gap: 2px; margin: 0; min-width: 0; }
+    .booking-summary .chosen span, .booking-summary dt { font-size: .875rem; font-weight: 600; color: var(--muted); }
+    .booking-summary .chosen strong { font: 700 1.125rem/1.25 var(--display); letter-spacing: -.015em; color: #1c62d6; overflow-wrap: anywhere; }
+    .booking-summary .chosen small { font-size: .875rem; color: var(--muted); }
+    .booking-summary dl { display: grid; gap: 12px; padding: 0 4px; }
+    .booking-summary dl div { display: grid; grid-template-columns: 22px minmax(0, 1fr); column-gap: 12px; }
+    .booking-summary dt { display: contents; }
+    .booking-summary dt svg { grid-row: span 2; width: 22px; height: 22px; margin-top: 2px; color: #1c62d6; }
+    .booking-summary dd { grid-column: 2; margin: 0; font-weight: 650; overflow-wrap: anywhere; }
+    .booking-summary .pending { font-weight: 500; color: var(--muted); }
+    .booking-summary .price-line { padding: 14px 4px 0; border-top: 1px solid var(--surface-strong); font-weight: 650; }
+    .booking-summary .assurances { display: grid; gap: 8px; padding: 14px 16px; border-radius: 16px; background: var(--ground); list-style: none; font-size: .9375rem; }
+    .booking-summary .assurances li { display: grid; grid-template-columns: 20px minmax(0, 1fr); gap: 10px; align-items: start; }
+    .booking-summary .assurances svg { width: 20px; height: 20px; padding: 3px; border-radius: 50%; background: var(--ok-bg); color: var(--ok); stroke-width: 2.6; }
+    /* El resumen ya dice lo elegido: el del último paso queda para el celular. */
+    .booking section:not(.booked) > .summary { display: none; }
+}
+@media (min-width: 1200px) {
+    .booking:not(.is-done) { grid-template-columns: minmax(0, 1fr) 348px; column-gap: 44px; }
+}
+/* Con espacio de sobra, los días a un lado y los horarios al otro. */
+@media (min-width: 1400px) {
+    .pick { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 20px 40px; align-items: start; }
+    .pick > :is(.with-whom, .panel) { grid-column: 1 / -1; }
 }
 
 /* Contacto */

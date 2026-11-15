@@ -534,11 +534,11 @@ class BookingWizardTest extends TestCase
         Setting::set('clinic.whatsapp', '912 345 678');
 
         Livewire::test(BookingWizard::class)
-            ->assertSeeHtmlInOrder(['aria-current="step"', 'Motivo</li>', 'Día y hora</li>', 'Tus datos</li>'])
+            ->assertSeeHtmlInOrder(['aria-current="step"', 'Servicio</li>', 'Día y hora</li>', 'Tus datos</li>'])
             ->assertSee('Tengo dolor o es urgente')
             ->assertSeeHtml('href="https://wa.me/51912345678?text=Hola%2C%20tengo%20dolor%20y%20necesito%20una%20cita%20lo%20antes%20posible."')
             ->call('chooseTreatment', $evaluation->id)
-            ->assertSeeHtmlInOrder(['Motivo</li>', 'aria-current="step"', 'Día y hora</li>', 'Tus datos</li>'])
+            ->assertSeeHtmlInOrder(['Servicio</li>', 'aria-current="step"', 'Día y hora</li>', 'Tus datos</li>'])
             ->assertDontSee('Tengo dolor o es urgente');
     }
 
@@ -556,6 +556,67 @@ class BookingWizardTest extends TestCase
                 'No sé qué necesito: evaluación', 'desde S/ 50', 'Revisión completa y presupuesto.', '30 min aprox.',
             ])
             ->assertSeeHtmlInOrder(['<img src="'.SiteArt::url('blanqueamiento-192').'"', 'Blanqueamiento', 'desde S/ 450', '90 min aprox.']);
+    }
+
+    public function test_the_summary_follows_what_has_been_chosen_and_says_what_is_still_missing(): void
+    {
+        $this->freezeMonday();
+        $cleaning = Treatment::factory()->create(['name' => 'Limpieza dental', 'slug' => 'limpieza-dental', 'price_from' => 120, 'duration_minutes' => 45]);
+        $doctor = $this->doctorOffering($cleaning);
+        $summary = '<aside class="booking-summary" aria-labelledby="resumen">';
+
+        Livewire::test(BookingWizard::class)
+            // Al empezar, todo está por elegir.
+            ->assertSeeHtmlInOrder([$summary, 'Resumen de tu cita</h2>', '<strong class="pending">Por elegir</strong>', 'Día</dt>', '<dd class="pending">Por elegir</dd>', 'Hora</dt>', '<dd class="pending">Por elegir</dd>'])
+            ->assertDontSeeHtml(['Doctor</dt>', 'class="price-line"'])
+            ->call('chooseTreatment', $cleaning->id)
+            // Con el servicio: su imagen, cuánto dura, el día que está a la vista, el único doctor que lo atiende y el precio.
+            ->assertSeeHtmlInOrder([
+                $summary,
+                '<img src="'.SiteArt::url('limpieza-192').'"', 'sizes="72px" width="72" height="72" alt="" decoding="async">',
+                '>Limpieza dental</strong>', '<small>45 min aprox.</small>',
+                'Día</dt>', '>Lunes 2 de noviembre</dd>',
+                'Hora</dt>', '<dd class="pending">Por elegir</dd>',
+                'Doctor</dt>', '<dd>'.e($doctor->name).'</dd>',
+                '<p class="price-line">Precio: desde S/ 120.</p>',
+            ])
+            ->call('chooseTime', '10:00')
+            ->assertSeeHtmlInOrder([$summary, '>Lunes 2 de noviembre</dd>', 'Hora</dt>', ">10:00\u{00A0}a.\u{00A0}m.</dd>", '<dd>'.e($doctor->name).'</dd>'])
+            // De vuelta en el primer paso, el servicio está otra vez por elegir.
+            ->call('back', 2)
+            ->assertSeeHtmlInOrder([$summary, '<strong class="pending">Por elegir</strong>'])
+            ->assertDontSeeHtml('class="price-line"')
+            ->call('chooseTreatment', $cleaning->id)
+            ->call('chooseTime', '10:00')
+            ->set('phone', '987 654 321')
+            ->set('firstName', 'María')
+            ->set('lastName', 'Quispe Rojas')
+            ->set('acceptsPrivacy', true)
+            ->call('book')
+            ->assertSet('step', 4)
+            // Con la cita reservada, lo que cuenta es la cita: ya no hay pasos ni resumen.
+            ->assertDontSeeHtml(['booking-summary', 'class="steps"']);
+    }
+
+    public function test_with_several_doctors_the_summary_names_one_only_when_it_is_chosen(): void
+    {
+        $this->freezeMonday();
+        $cleaning = Treatment::factory()->create();
+        $first = $this->doctorOffering($cleaning);
+        $second = $this->doctorOffering($cleaning);
+
+        Livewire::test(BookingWizard::class)
+            ->call('chooseTreatment', $cleaning->id)
+            // "El primero disponible": todavía no se sabe con quién.
+            ->assertDontSeeHtml('Doctor</dt>')
+            ->call('selectDoctor', $second->id)
+            ->assertSeeHtmlInOrder(['Doctor</dt>', '<dd>'.e($second->name).'</dd>'])
+            ->call('selectDoctor', null)
+            ->assertDontSeeHtml('Doctor</dt>')
+            // Con el horario elegido, el doctor es el de ese horario.
+            ->call('selectDoctor', $first->id)
+            ->call('chooseTime', '10:00')
+            ->assertSeeHtmlInOrder(['Doctor</dt>', '<dd>'.e($first->name).'</dd>']);
     }
 
     public function test_relatives_with_the_same_first_name_are_told_apart_by_their_surname(): void

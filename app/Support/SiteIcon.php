@@ -30,6 +30,7 @@ final class SiteIcon
         'award' => '<circle cx="12" cy="9" r="5.5"/><path d="M8.6 13.4 7.5 20.5 12 18l4.5 2.5-1.1-7.1M9.8 9.1l1.6 1.6 2.9-3"/>',
         'shield-check' => '<path d="M12 3.5 5 6v5.5c0 4.3 2.9 7.6 7 9 4.1-1.4 7-4.7 7-9V6l-7-2.5Z"/><path d="m9 11.8 2.2 2.2 3.9-4.1"/>',
         'user' => '<circle cx="12" cy="8.5" r="3.7"/><path d="M5 19.5c.8-3.2 3.6-5 7-5s6.2 1.8 7 5"/>',
+        'check' => '<path d="m5 12.6 4.4 4.4L19 7.4"/>',
         'search' => '<circle cx="11" cy="11" r="6.5"/><path d="m16 16 4.5 4.5"/>',
         'arrow-right' => '<path d="M5 12h14M13 6l6 6-6 6"/>',
         'arrow-down' => '<path d="M12 5v14M6 13l6 6 6-6"/>',

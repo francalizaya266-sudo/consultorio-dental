@@ -6,13 +6,29 @@
     use App\Support\Money;
     use App\Support\Phone;
     use App\Support\SiteArt;
+    use App\Support\SiteIcon;
     use Illuminate\Support\Arr;
+
+    // Lo que lleva elegido, para el resumen. De vuelta en el primer paso, el servicio está otra vez por elegir.
+    $chosenTreatment = $step >= 2 ? $this->treatment : null;
+    // El doctor: el del horario elegido; antes de elegirlo, el que pidió o el único que atiende el servicio.
+    $chosenSlot = $step === 3 ? $this->daySlots->firstWhere('time', $time) : null;
+    $chosenDoctor = match (true) {
+        $chosenSlot !== null => $this->doctors->firstWhere('id', $chosenSlot['doctor_id']),
+        $step === 2 => $this->doctors->firstWhere('id', $doctorId) ?? ($this->doctors->count() === 1 ? $this->doctors->first() : null),
+        default => null,
+    };
 @endphp
-{{-- data-treatment: con él, el paso queda en la dirección de la página y "atrás" o recargar no pierden lo elegido. --}}
-<div class="stack-lg" data-treatment="{{ $this->treatment?->slug }}">
+{{--
+    La reserva va en una tarjeta bajo el encabezado de la página: arriba, los pasos numerados; a la izquierda, el
+    paso; a la derecha, en pantallas anchas, el resumen de lo que lleva elegido (en el celular, el resumen sale
+    en el último paso, sobre el formulario).
+    data-treatment: con él, el paso queda en la dirección de la página y "atrás" o recargar no pierden lo elegido.
+--}}
+<div @class(['stack-lg', 'booking', 'is-done' => $step === 4]) data-treatment="{{ $this->treatment?->slug }}">
     @if ($step < 4)
         <ol class="steps" aria-label="Paso {{ $step }} de 3">
-            @foreach (['Motivo', 'Día y hora', 'Tus datos'] as $index => $name)
+            @foreach (['Servicio', 'Día y hora', 'Tus datos'] as $index => $name)
                 <li @class(['done' => $index < $step]) @if ($index + 1 === $step) aria-current="step" @endif>{{ $name }}</li>
             @endforeach
         </ol>
@@ -37,7 +53,7 @@
     {{-- Paso 1: qué necesita --}}
     @if ($step === 1)
         <section class="stack" aria-labelledby="paso-1">
-            <h1 id="paso-1" tabindex="-1">¿Qué necesitas?</h1>
+            <h2 id="paso-1" class="step-title" tabindex="-1">¿Qué necesitas?</h2>
             <p class="lead">Elige el motivo de tu cita. Si lo que buscas no está aquí, empieza con una evaluación: ahí el doctor te da el diagnóstico y el presupuesto.</p>
 
             {{-- Con el celular recordado ya se sabe si está en tratamiento: se dice ahora, no al final. --}}
@@ -86,22 +102,25 @@
     @if ($step === 2 && $this->treatment)
         <section class="stack" aria-labelledby="paso-2">
             <button type="button" class="link-btn" data-step-back>← Cambiar servicio</button>
-            <h1 id="paso-2" tabindex="-1">Elige día y hora</h1>
+            <h2 id="paso-2" class="step-title" tabindex="-1">Elige día y hora</h2>
             <p class="lead">{{ $this->treatment->name }} · {{ $this->treatment->duration_minutes }} min aprox.</p>
 
-            @if ($this->doctors->count() > 1)
-                <div class="stack">
-                    <h2>Con quién</h2>
-                    <div class="chips wrap" role="group" aria-label="Doctor">
-                        <button type="button" class="chip" aria-pressed="{{ $doctorId === null ? 'true' : 'false' }}" wire:click="selectDoctor(null)">El primero disponible</button>
-                        @foreach ($this->doctors as $doctor)
-                            <button type="button" class="chip" aria-pressed="{{ $doctorId === $doctor->id ? 'true' : 'false' }}" wire:click="selectDoctor({{ $doctor->id }})">{{ $doctor->name }}</button>
-                        @endforeach
+            {{-- En pantallas anchas, los días a un lado y los horarios al otro. --}}
+            <div class="pick">
+                @if ($this->doctors->count() > 1)
+                    <div class="stack with-whom">
+                        <h3>Con quién</h3>
+                        <div class="chips wrap" role="group" aria-label="Doctor">
+                            <button type="button" class="chip" aria-pressed="{{ $doctorId === null ? 'true' : 'false' }}" wire:click="selectDoctor(null)">El primero disponible</button>
+                            @foreach ($this->doctors as $doctor)
+                                <button type="button" class="chip" aria-pressed="{{ $doctorId === $doctor->id ? 'true' : 'false' }}" wire:click="selectDoctor({{ $doctor->id }})">{{ $doctor->name }}</button>
+                            @endforeach
+                        </div>
                     </div>
-                </div>
-            @endif
+                @endif
 
-            @include('livewire.site.partials.slot-picker', ['action' => 'chooseTime', 'selectedTimes' => [], 'slotsNote' => null, 'slotsFull' => false])
+                @include('livewire.site.partials.slot-picker', ['action' => 'chooseTime', 'selectedTimes' => [], 'slotsNote' => null, 'slotsFull' => false, 'headingLevel' => 'h3'])
+            </div>
         </section>
     @endif
 
@@ -109,14 +128,13 @@
     @if ($step === 3 && $this->treatment)
         <section class="stack" aria-labelledby="paso-3">
             <button type="button" class="link-btn" data-step-back>← Cambiar horario</button>
-            <h1 id="paso-3" tabindex="-1">Tus datos</h1>
+            <h2 id="paso-3" class="step-title" tabindex="-1">Tus datos</h2>
 
             <div class="summary">
                 <p class="what">{{ $this->treatment->name }}</p>
                 <p style="margin: 4px 0 0">{{ Dates::day($date) }}, {{ Dates::time($time) }}</p>
-                @php($chosen = $this->daySlots->firstWhere('time', $time))
-                @if ($chosen)
-                    <p class="muted" style="margin: 2px 0 0">con {{ $this->doctors->firstWhere('id', $chosen['doctor_id'])?->name }}</p>
+                @if ($chosenSlot)
+                    <p class="muted" style="margin: 2px 0 0">con {{ $chosenDoctor?->name }}</p>
                 @endif
                 @if ($price = CampaignText::price($this->treatment, $this->campaign))
                     <p class="price-line">{{ $price }}</p>
@@ -264,7 +282,7 @@
         <section class="stack booked" aria-labelledby="listo">
             {{-- La cita quedó hecha: lo dice el diente sonriente antes que el texto. --}}
             <img src="{{ SiteArt::url('sonrisa') }}" alt="" width="450" height="410" class="done-art">
-            <h1 id="listo" tabindex="-1">¡Tu cita quedó reservada!</h1>
+            <h2 id="listo" class="step-title" tabindex="-1">¡Tu cita quedó reservada!</h2>
             <div class="summary">
                 <p class="what">{{ $appointment->treatment->name }}</p>
                 <p style="margin: 4px 0 0">{{ Dates::day($appointment->starts_at->toImmutable()) }}, {{ Dates::time($appointment->starts_at->format('H:i')) }}</p>
@@ -276,7 +294,7 @@
 
             {{-- Qué sigue: la cita queda por confirmar, cómo guardarla y dónde es. --}}
             <div class="stack">
-                <h2>Qué sigue</h2>
+                <h3>Qué sigue</h3>
                 <ol class="next-steps">
                     <li>
                         <strong>Confirma tu asistencia.</strong>
@@ -324,11 +342,59 @@
             @endif
         </section>
     @endif
+
+    {{-- El resumen de lo que lleva elegido, a la derecha en pantallas anchas. Lo que falta dice "Por elegir". --}}
+    @if ($step < 4)
+        <aside class="booking-summary" aria-labelledby="resumen">
+            <h2 id="resumen">{{ SiteIcon::svg('calendar-check') }}Resumen de tu cita</h2>
+            <div class="chosen">
+                <span class="art">
+                    @if ($chosenTreatment)
+                        {{ SiteArt::treatment($chosenTreatment, 72, lazy: false) }}
+                    @else
+                        <img src="{{ SiteArt::url('diente-192') }}" width="72" height="72" alt="" decoding="async">
+                    @endif
+                </span>
+                <p>
+                    <span>Servicio</span>
+                    <strong @class(['pending' => ! $chosenTreatment])>{{ $chosenTreatment?->name ?? 'Por elegir' }}</strong>
+                    @if ($chosenTreatment)
+                        <small>{{ $chosenTreatment->duration_minutes }} min aprox.</small>
+                    @endif
+                </p>
+            </div>
+            <dl>
+                <div>
+                    <dt>{{ SiteIcon::svg('calendar') }}Día</dt>
+                    <dd @class(['pending' => ! $chosenTreatment || ! $date])>{{ $chosenTreatment && $date ? Dates::day($date) : 'Por elegir' }}</dd>
+                </div>
+                <div>
+                    <dt>{{ SiteIcon::svg('clock') }}Hora</dt>
+                    <dd @class(['pending' => $step < 3])>{{ $step === 3 ? Dates::time($time) : 'Por elegir' }}</dd>
+                </div>
+                @if ($chosenDoctor)
+                    <div>
+                        <dt>{{ SiteIcon::svg('user') }}Doctor</dt>
+                        <dd>{{ $chosenDoctor->name }}</dd>
+                    </div>
+                @endif
+            </dl>
+            @if ($chosenTreatment && ($price = CampaignText::price($chosenTreatment, $this->campaign)))
+                <p class="price-line">{{ $price }}</p>
+            @endif
+            {{-- Lo que pasa al reservar, tal como lo hace el sistema: nada de esto es una promesa aparte. --}}
+            <ul class="assurances">
+                <li>{{ SiteIcon::svg('check') }}No se cobra nada ahora</li>
+                <li>{{ SiteIcon::svg('check') }}Te escribimos por WhatsApp para confirmar</li>
+                <li>{{ SiteIcon::svg('check') }}Puedes cambiar el horario o cancelar</li>
+            </ul>
+        </aside>
+    @endif
 </div>
 
 {{--
-    En el celular cada paso empieza arriba (antes "¡Tu cita quedó reservada!" aparecía a medias) y, si falta
-    un dato, la pantalla va al primero. El paso queda en la dirección de la página: el botón "atrás" vuelve
+    En el celular cada paso empieza arriba, en los pasos numerados (antes "¡Tu cita quedó reservada!" aparecía a
+    medias) y, si falta un dato, la pantalla va al primero. El paso queda en la dirección de la página: el botón "atrás" vuelve
     al paso anterior en vez de sacar de la reserva, y recargar no pierde el tratamiento ni el horario.
 --}}
 @script
@@ -366,8 +432,8 @@
 
         cameFromHistory = false;
         step = next;
-        window.scrollTo(0, 0);
-        root.querySelector('h1')?.focus({ preventScroll: true });
+        root.scrollIntoView();
+        root.querySelector('.step-title')?.focus({ preventScroll: true });
     }));
 
     window.addEventListener('popstate', (event) => {
