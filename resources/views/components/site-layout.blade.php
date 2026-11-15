@@ -7,19 +7,27 @@
     minimalFooter: pie de una línea mientras se reserva, para que nada distraiga hasta terminar (el encabezado
         también queda solo con el nombre, que vuelve al inicio).
     jsonLd: datos estructurados de schema.org para Google.
+    page: la página ("servicios", "equipo"…) cuyo encabezado y cierre se editan en el panel (PageTexts). Con ella,
+        la página abre con su franja celeste a todo el ancho: frase corta, título en dos colores, texto, el diente
+        de cristal y la foto. Sin ella, la página pone su propio título y cierra con la frase general.
     hero (slot): franja de portada a todo el ancho de la pantalla, antes de la columna del contenido (el inicio).
 --}}
-@props(['title' => null, 'description' => null, 'noindex' => false, 'whatsappFloat' => true, 'footerContact' => true, 'minimalFooter' => false, 'wide' => false, 'image' => null, 'jsonLd' => []])
+@props(['title' => null, 'description' => null, 'noindex' => false, 'whatsappFloat' => true, 'footerContact' => true, 'minimalFooter' => false, 'wide' => false, 'image' => null, 'jsonLd' => [], 'page' => null])
 @php
     use App\Services\Web\ClinicInfo;
+    use App\Services\Web\PageTexts;
     use App\Support\Phone;
     use App\Support\SiteArt;
     use App\Support\SiteIcon;
     use App\Support\TreatmentIcon;
 
     $clinic = app(ClinicInfo::class);
+    $texts = app(PageTexts::class);
+    $closing = $texts->closing($page);
     $sections = $clinic->sections();
     $name = $clinic->name();
+    // Una página con encabezado editable lleva su título también en la pestaña, salvo que pida otro.
+    $title ??= $page ? $texts->plainTitle($page) : null;
     $pageTitle = $title ? $title.' · '.$name : $name.($clinic->district() ? ' · Dentistas en '.$clinic->district() : '');
     $description ??= $clinic->intro();
     $hours = $clinic->hours();
@@ -136,11 +144,35 @@
         <div class="wrap wide">@include('site.partials.flash')</div>
     @endif
     {{ $hero }}
+@elseif ($page)
+<main id="contenido" class="with-band">
+    @if (session('status') || session('error'))
+        <div class="wrap wide">@include('site.partials.flash')</div>
+    @endif
+    {{-- El encabezado de la página: la foto, a la derecha, se funde con el celeste; el diente de cristal va entre el texto y la foto. --}}
+    @php([$titleStart, $titleAccent, $titleEnd] = $texts->titleParts($page))
+    <div @class(['page-band', 'with-photo' => $bandPhoto = $texts->photoUrl($page)])>
+        @if ($bandPhoto)
+            <figure class="band-photo"><img src="{{ $bandPhoto }}" alt="" fetchpriority="high"></figure>
+        @endif
+        <div class="wrap wide">
+            <div class="band-text">
+                @if ($texts->kicker($page))
+                    <p class="kicker"><span>{{ SiteIcon::svg($texts->icon($page)) }}</span>{{ $texts->kicker($page) }}</p>
+                @endif
+                <h1>{{ $titleStart }}@if ($titleAccent !== '')<em>{{ $titleAccent }}</em>@endif{{ $titleEnd }}</h1>
+                @if ($texts->lead($page))
+                    <p class="lead">{{ $texts->lead($page) }}</p>
+                @endif
+            </div>
+            <img src="{{ SiteArt::url('cristal-diente-360') }}" srcset="{{ SiteArt::url('cristal-diente-360') }} 360w, {{ SiteArt::url('cristal-diente') }} 720w" sizes="(min-width: 900px) 260px, 150px" width="720" height="720" alt="" class="band-art">
+        </div>
+    </div>
 @else
 <main id="contenido">
 @endisset
     <div @class(['wrap', 'wide' => $wide])>
-        @unless (isset($hero))
+        @unless (isset($hero) || $page)
             @include('site.partials.flash')
         @endunless
 
@@ -161,11 +193,15 @@
 @else
 <footer @class(['site-footer', 'short' => ! $footerContact])>
     <div class="wrap wide">
-        {{-- El cierre de cada página: la invitación a reservar, en una franja que monta sobre el borde del pie. --}}
+        {{-- El cierre de cada página, en una franja que monta sobre el borde del pie: su frase (PageTexts) y su botón. --}}
         <div class="footer-cta">
             <img src="{{ SiteArt::url('diente-320') }}" alt="" width="320" height="320" loading="lazy" decoding="async">
-            <p><strong>Tu salud bucal, en buenas manos</strong> Reserva tu cita hoy y luce una sonrisa saludable.</p>
-            <a href="{{ route('site.booking') }}" class="btn">Reservar cita{{ SiteIcon::svg('arrow-right') }}</a>
+            <p><strong>{{ $closing['title'] }}</strong> {{ $closing['text'] }}</p>
+            @if ($closing['whatsapp'])
+                <a href="{{ $clinic->whatsappUrl('Hola, tengo una pregunta.') }}" class="btn" rel="noopener">{{ SiteIcon::svg('whatsapp') }}Escribir por WhatsApp</a>
+            @else
+                <a href="{{ route('site.booking') }}" class="btn">Reservar cita{{ SiteIcon::svg('arrow-right') }}</a>
+            @endif
         </div>
         <div class="footer-top">
             <p class="name">

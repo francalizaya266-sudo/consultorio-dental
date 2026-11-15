@@ -4,19 +4,12 @@
 
     $about = app(ClinicInfo::class)->about();
 @endphp
-<x-site-layout title="Nuestro equipo" :wide="true" :json-ld="$jsonLd"
+<x-site-layout page="equipo" :wide="true" :json-ld="$jsonLd"
     description="Quién te atiende: especialidad, formación y número de colegiatura (COP).">
-    <section class="page-head">
-        <h1>Nuestro equipo</h1>
-        {{-- La presentación del consultorio abre la página; sin ella, una frase sobre quién atiende. --}}
-        @if ($about)
-            <div class="lead prose">{{ Markdown::paragraphs($about) }}</div>
-        @elseif ($doctors->count() === 1)
-            <p class="lead">Te atiende {{ $doctors->first()->name }}, con colegiatura en el Colegio Odontológico del Perú.</p>
-        @else
-            <p class="lead">Cirujanos dentistas colegiados en el Colegio Odontológico del Perú. Puedes elegir con quién atenderte al reservar.</p>
-        @endif
-    </section>
+    {{-- La presentación del consultorio, bajo el encabezado de la página. --}}
+    @if ($about)
+        <div class="page-intro prose">{{ Markdown::paragraphs($about) }}</div>
+    @endif
 
     @if ($doctors->isEmpty())
         <p class="panel">Pronto presentaremos a nuestro equipo.</p>

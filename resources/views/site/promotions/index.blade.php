@@ -2,12 +2,7 @@
     use App\Services\Web\PublicImages;
     use App\Support\CampaignText;
 @endphp
-<x-site-layout title="Promociones" :wide="true" :json-ld="$jsonLd" description="Promociones vigentes del consultorio. Reserva en línea con tu código.">
-    <section class="page-head">
-        <h1>Promociones</h1>
-        <p class="lead">Las promociones se aplican al pagar en el consultorio. Reserva desde aquí y el código queda guardado en tu cita.</p>
-    </section>
-
+<x-site-layout page="promociones" :wide="true" :json-ld="$jsonLd" description="Promociones vigentes del consultorio. Reserva en línea con tu código.">
     @if ($campaigns->isEmpty())
         <p class="panel">Ahora no tenemos promociones vigentes. Síguenos en redes o escríbenos por WhatsApp para enterarte de las próximas.</p>
     @else

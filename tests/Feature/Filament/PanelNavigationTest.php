@@ -42,10 +42,10 @@ class PanelNavigationTest extends TestCase
             ->assertSeeInOrder(['Configuración', 'Ajustes', 'Tratamientos', 'Textos de consentimiento', 'Página web'])
             ->assertDontSee(['Campañas', 'Antes y después', 'Opiniones', 'Preguntas frecuentes']);
 
-        // La web se edita desde un solo lugar: primero su puesta a punto y el enlace para verla.
+        // La web se edita desde un solo lugar: primero su puesta a punto, los textos de cada página y el enlace para verla.
         $this->get(CampaignResource::getUrl('index'))
             ->assertOk()
-            ->assertSeeInOrder(['Página web', 'Puesta a punto', 'Ver la página', 'Campañas', 'Antes y después', 'Opiniones', 'Preguntas frecuentes'])
+            ->assertSeeInOrder(['Página web', 'Puesta a punto', 'Textos de las páginas', 'Ver la página', 'Campañas', 'Antes y después', 'Opiniones', 'Preguntas frecuentes'])
             ->assertSee(route('site.home'));
 
         $this->get(Settings::getUrl())

@@ -43,6 +43,65 @@ return [
             'about' => null,
             // Foto real del consultorio o del equipo, arriba del inicio.
             'hero_image' => null,
+            // El encabezado y la franja de cierre de cada página (Página web › Textos de las páginas). En el título,
+            // la última palabra sale en azul; para elegir otra parte se encierra entre asteriscos.
+            'pages' => [
+                // El cierre del inicio y de las páginas que no tienen el suyo.
+                'inicio' => [
+                    'closing_title' => 'Tu salud bucal, en buenas manos',
+                    'closing_text' => 'Reserva tu cita hoy y luce una sonrisa saludable.',
+                ],
+                'servicios' => [
+                    'kicker' => 'Tu sonrisa, nuestra prioridad',
+                    'title' => 'Nuestros servicios',
+                    'lead' => 'Cuánto dura cada uno y desde cuánto cuesta. El precio exacto te lo da el doctor en tu evaluación, antes de empezar, y se paga en el consultorio.',
+                    'photo' => null,
+                    'closing_title' => '¿Listo para cuidar tu sonrisa?',
+                    'closing_text' => 'Reserva tu cita en línea y te confirmamos por WhatsApp.',
+                ],
+                'equipo' => [
+                    'kicker' => 'Profesionales comprometidos con tu salud',
+                    'title' => 'Nuestro equipo',
+                    'lead' => 'Conoce a quienes te atienden: su especialidad, su formación y su número de colegiatura.',
+                    'photo' => null,
+                    'closing_title' => 'Reserva tu cita con nuestro equipo',
+                    'closing_text' => 'Estamos listos para cuidar de tu sonrisa.',
+                ],
+                'contacto' => [
+                    'kicker' => 'Estamos aquí para ayudarte',
+                    'title' => 'Contácta*nos*',
+                    'lead' => 'Escríbenos, llámanos o visítanos. Con gusto resolvemos tus dudas y reservamos tu cita.',
+                    'photo' => null,
+                    'closing_title' => 'Reserva tu cita hoy',
+                    'closing_text' => 'Elige el día y la hora en línea; te confirmamos por WhatsApp.',
+                ],
+                'preguntas' => [
+                    'kicker' => 'Resolvemos tus dudas',
+                    'title' => 'Preguntas frecuentes',
+                    'lead' => 'Encuentra aquí las respuestas a las dudas más comunes sobre nuestros servicios y tus citas.',
+                    'photo' => null,
+                    'closing_title' => '¿No encontraste tu respuesta?',
+                    'closing_text' => 'Escríbenos y con gusto te ayudamos.',
+                ],
+                'promociones' => [
+                    'kicker' => 'Ofertas vigentes',
+                    'title' => 'Promociones',
+                    'lead' => 'Las promociones se aplican al pagar en el consultorio. Reserva desde aquí y el código queda guardado en tu cita.',
+                    'photo' => null,
+                ],
+                'casos' => [
+                    'kicker' => 'Resultados reales',
+                    'title' => 'Antes y después',
+                    'lead' => 'Resultados de pacientes que nos autorizaron a mostrar sus fotos. Cada caso es distinto: en tu evaluación el doctor te dice qué puedes esperar.',
+                    'photo' => null,
+                ],
+                'opiniones' => [
+                    'kicker' => 'Lo que dicen nuestros pacientes',
+                    'title' => 'Opiniones de pacientes',
+                    'lead' => 'Copiadas tal como las escribieron nuestros pacientes.',
+                    'photo' => null,
+                ],
+            ],
         ],
 
         'agenda' => [

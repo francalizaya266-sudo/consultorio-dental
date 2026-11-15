@@ -7,6 +7,7 @@ use App\Filament\Pages\Auth\RequestPasswordReset;
 use App\Filament\Pages\Backups;
 use App\Filament\Pages\Dashboard;
 use App\Filament\Pages\Settings;
+use App\Filament\Pages\WebPages;
 use App\Filament\Pages\WebSetup;
 use App\Filament\Resources\AuditLogs\AuditLogResource;
 use App\Filament\Resources\Campaigns\CampaignResource;
@@ -77,9 +78,10 @@ class AdminPanelProvider extends PanelProvider
         ConsentTemplateResource::class,
     ];
 
-    /** @var list<class-string> Todo lo de la página web, en un solo lugar: primero su puesta a punto. */
+    /** @var list<class-string> Todo lo de la página web, en un solo lugar: primero su puesta a punto y los textos de cada página. */
     private const WEB = [
         WebSetup::class,
+        WebPages::class,
         CampaignResource::class,
         SmileCaseResource::class,
         ReviewResource::class,
@@ -184,7 +186,7 @@ class AdminPanelProvider extends PanelProvider
                     ->visible(fn () => self::firstUrl(self::WEB) !== null),
                 NavigationItem::make('Ver la página')
                     ->parentItem('Página web')
-                    ->sort(1)
+                    ->sort(2)
                     ->icon(Heroicon::OutlinedArrowTopRightOnSquare)
                     ->url(fn () => route('site.home'), shouldOpenInNewTab: true)
                     ->visible(fn () => self::firstUrl(self::WEB) !== null),

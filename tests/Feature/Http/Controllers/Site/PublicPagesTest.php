@@ -11,12 +11,15 @@ use App\Models\Setting;
 use App\Models\SmileCase;
 use App\Models\Treatment;
 use App\Models\TreatmentPackage;
+use App\Services\Web\ClinicInfo;
+use App\Services\Web\PublicImages;
 use App\Support\SiteArt;
 use Carbon\CarbonImmutable;
 use Illuminate\Foundation\Testing\LazilyRefreshDatabase;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Str;
 use Livewire\Livewire;
+use PHPUnit\Framework\Attributes\DataProvider;
 use Tests\Concerns\CreatesAgenda;
 use Tests\TestCase;
 
@@ -282,12 +285,19 @@ class PublicPagesTest extends TestCase
             ->assertOk()
             ->assertSeeInOrder(['<main id="contenido" class="with-hero">', '<div class="flash ok" role="status">¡Listo! La cita de Rosa quedó confirmada.</div>', '<div class="hero-band">'], false);
 
-        // En el resto de páginas el aviso sigue arriba del contenido, y no hay portada.
+        // En las páginas que abren con su franja celeste, el aviso también va antes de ella.
         $this->withSession(['error' => 'Ese enlace ya venció.'])
             ->get(route('site.team'))
             ->assertOk()
-            ->assertSeeInOrder(['<main id="contenido">', 'Ese enlace ya venció.', 'Nuestro equipo'], false)
+            ->assertSeeInOrder(['<main id="contenido" class="with-band">', 'Ese enlace ya venció.', '<div class="page-band">', '<h1>Nuestro <em>equipo</em></h1>'], false)
             ->assertDontSee('hero-band');
+
+        // En las demás el aviso sigue arriba del contenido, y no hay portada ni franja.
+        $this->withSession(['error' => 'Ese enlace ya venció.'])
+            ->get(route('site.privacy'))
+            ->assertOk()
+            ->assertSeeInOrder(['<main id="contenido">', 'Ese enlace ya venció.', '<h1>'], false)
+            ->assertDontSee(['hero-band', 'page-band']);
     }
 
     public function test_the_header_and_the_footer_carry_the_brand_the_home_link_and_the_social_networks(): void
@@ -310,7 +320,7 @@ class PublicPagesTest extends TestCase
             ->assertSeeInOrder([
                 'class="footer-cta"',
                 '<img src="'.SiteArt::url('diente-320').'" alt=""',
-                'Tu salud bucal, en buenas manos',
+                'Reserva tu cita con nuestro equipo',
                 '<a href="'.route('site.booking').'" class="btn">Reservar cita<svg',
                 'class="footer-top"',
                 'El consultorio',
@@ -430,13 +440,21 @@ class PublicPagesTest extends TestCase
             ->assertDontSee($doctor->name);
     }
 
-    public function test_without_the_presentation_of_the_clinic_the_team_page_opens_saying_who_attends(): void
+    public function test_the_presentation_of_the_clinic_goes_under_the_band_of_the_team_page(): void
     {
         $doctor = $this->doctorOffering(Treatment::factory()->create());
 
+        // Sin presentación, del encabezado se pasa directo a los doctores.
         $this->get(route('site.team'))
             ->assertOk()
-            ->assertSee('Te atiende '.$doctor->name.', con colegiatura en el Colegio Odontológico del Perú.');
+            ->assertSeeInOrder(['<div class="page-band">', '<h3>'.e($doctor->name).'</h3>'], false)
+            ->assertDontSee('class="page-intro', false);
+
+        Setting::set('web.about', 'Atendemos a toda la familia desde 2015.');
+
+        $this->get(route('site.team'))
+            ->assertOk()
+            ->assertSeeInOrder(['<div class="page-band">', '<div class="page-intro prose"><p>Atendemos a toda la familia desde 2015.</p></div>', '<h3>'.e($doctor->name).'</h3>'], false);
     }
 
     public function test_the_home_goes_from_the_services_to_the_specialty_the_steps_who_attends_the_opinions_the_questions_and_the_address(): void
@@ -715,7 +733,7 @@ class PublicPagesTest extends TestCase
         $this->get(route('site.treatments'))
             ->assertOk()
             // Al paciente se le habla de "servicios", en el título de la página y en el de la pestaña.
-            ->assertSee(['<title>Nuestros servicios · ', '<h1>Nuestros servicios</h1>'], false)
+            ->assertSee(['<title>Nuestros servicios · ', '<h1>Nuestros <em>servicios</em></h1>'], false)
             ->assertSee('<span class="icon"><img src="'.SiteArt::url('limpieza-192').'"', false)
             ->assertSee('<img src="'.SiteArt::url('evaluacion').'" alt="" width="640" height="640" loading="lazy">', false)
             ->assertSee('<a href="'.route('site.booking').'" class="btn">Reservar cita</a>', false)
@@ -790,7 +808,8 @@ class PublicPagesTest extends TestCase
         $this->get(route('site.contact'))
             ->assertOk()
             ->assertSee('Av. Larco 123, Miraflores')
-            ->assertSee('<h1 id="contacto">Contacto</h1>', false)
+            // La página abre con su franja; la dirección y el horario van bajo "Nuestra ubicación".
+            ->assertSeeInOrder(['<title>Contacto y cómo llegar · ', '<h1>Contácta<em>nos</em></h1>', '<h2 id="contacto">Nuestra ubicación</h2>'], false)
             ->assertSee('Lunes a sábado')
             ->assertSee("3:00\u{A0}p.\u{A0}m. – 7:00\u{A0}p.\u{A0}m.")
             // "Cómo llegar" sale una vez, bajo el mapa, y el pie no repite la dirección: lo abre la invitación a reservar.
@@ -801,6 +820,142 @@ class PublicPagesTest extends TestCase
             ->assertSee('https://wa.me/51918874568', false)
             ->assertSee('"@type":"Dentist"', false)
             ->assertSee('"addressLocality":"Miraflores"', false);
+    }
+
+    /**
+     * Cada página de contenido con la frase corta y el título con que viene el sistema.
+     *
+     * @return array<string, array{0: string, 1: string, 2: string, 3: string}>
+     */
+    public static function pagesWithBand(): array
+    {
+        return [
+            'servicios' => ['site.treatments', 'Tu sonrisa, nuestra prioridad', '<h1>Nuestros <em>servicios</em></h1>', 'Nuestros servicios'],
+            'equipo' => ['site.team', 'Profesionales comprometidos con tu salud', '<h1>Nuestro <em>equipo</em></h1>', 'Nuestro equipo'],
+            // Lo que va entre asteriscos es lo que sale en azul, aunque sea media palabra.
+            'contacto' => ['site.contact', 'Estamos aquí para ayudarte', '<h1>Contácta<em>nos</em></h1>', 'Contacto y cómo llegar'],
+            'preguntas' => ['site.faq', 'Resolvemos tus dudas', '<h1>Preguntas <em>frecuentes</em></h1>', 'Preguntas frecuentes'],
+            // Un título de una sola palabra va entero en azul oscuro.
+            'promociones' => ['site.promotions', 'Ofertas vigentes', '<h1>Promociones</h1>', 'Promociones'],
+            'casos' => ['site.cases', 'Resultados reales', '<h1>Antes y <em>después</em></h1>', 'Antes y después'],
+            'opiniones' => ['site.reviews', 'Lo que dicen nuestros pacientes', '<h1>Opiniones de <em>pacientes</em></h1>', 'Opiniones de pacientes'],
+        ];
+    }
+
+    #[DataProvider('pagesWithBand')]
+    public function test_each_content_page_opens_with_its_band(string $route, string $kicker, string $heading, string $tabTitle): void
+    {
+        $this->get(route($route))
+            ->assertOk()
+            ->assertSeeInOrder([
+                '<title>'.$tabTitle.' · ',
+                '<main id="contenido" class="with-band">',
+                '<div class="page-band">',
+                '<p class="kicker"><span><svg',
+                '</span>'.$kicker.'</p>',
+                $heading,
+                '<p class="lead">',
+                '<img src="'.SiteArt::url('cristal-diente-360').'" srcset="'.SiteArt::url('cristal-diente-360').' 360w, '.SiteArt::url('cristal-diente').' 720w"',
+            ], false)
+            // Sin foto de la página ni del inicio, la franja va sin foto.
+            ->assertDontSee('band-photo');
+    }
+
+    public function test_the_band_of_a_page_shows_the_texts_saved_in_the_panel(): void
+    {
+        Setting::set('web.pages.servicios.kicker', 'Más de 20 años en Juliaca');
+        Setting::set('web.pages.servicios.title', 'Tratamientos *dentales* para todos');
+        Setting::set('web.pages.servicios.lead', 'Elige el tuyo y reserva.');
+
+        // El título va también en la pestaña, sin los asteriscos que marcan lo que sale en azul.
+        $this->get(route('site.treatments'))
+            ->assertOk()
+            ->assertSeeInOrder([
+                '<title>Tratamientos dentales para todos · ',
+                '</span>Más de 20 años en Juliaca</p>',
+                '<h1>Tratamientos <em>dentales</em> para todos</h1>',
+                '<p class="lead">Elige el tuyo y reserva.</p>',
+            ], false)
+            ->assertDontSee('Nuestros servicios');
+
+        // Vacías, la frase corta y el texto no salen; el título vuelve al que trae el sistema.
+        Setting::set('web.pages.servicios.kicker', null);
+        Setting::set('web.pages.servicios.title', null);
+        Setting::set('web.pages.servicios.lead', null);
+
+        $this->get(route('site.treatments'))
+            ->assertOk()
+            ->assertSee('<h1>Nuestros <em>servicios</em></h1>', false)
+            ->assertDontSee(['class="kicker"', '<p class="lead">'], false);
+    }
+
+    public function test_the_band_uses_the_photo_of_the_page_or_else_the_one_of_the_home(): void
+    {
+        Setting::set('web.hero_image', 'inicio/consultorio.jpg');
+
+        $this->get(route('site.team'))
+            ->assertOk()
+            ->assertSeeInOrder(['<div class="page-band with-photo">', '<figure class="band-photo"><img src="'.PublicImages::url('inicio/consultorio.jpg').'" alt="" fetchpriority="high"></figure>', '<h1>Nuestro <em>equipo</em></h1>'], false);
+
+        Setting::set('web.pages.equipo.photo', 'paginas/equipo.jpg');
+
+        $this->get(route('site.team'))
+            ->assertOk()
+            ->assertSee('<figure class="band-photo"><img src="'.PublicImages::url('paginas/equipo.jpg').'"', false)
+            ->assertDontSee('<figure class="band-photo"><img src="'.PublicImages::url('inicio/consultorio.jpg').'"', false);
+
+        // La foto de una página no pasa a las demás.
+        $this->get(route('site.contact'))
+            ->assertOk()
+            ->assertSee('<figure class="band-photo"><img src="'.PublicImages::url('inicio/consultorio.jpg').'"', false);
+    }
+
+    public function test_each_page_closes_with_its_own_phrase_or_with_the_general_one(): void
+    {
+        $book = '<a href="'.route('site.booking').'" class="btn">Reservar cita<svg';
+
+        $this->get(route('site.treatments'))
+            ->assertOk()
+            ->assertSeeInOrder(['class="footer-cta"', '<strong>¿Listo para cuidar tu sonrisa?</strong> Reserva tu cita en línea y te confirmamos por WhatsApp.</p>', $book], false);
+
+        // Quien no encontró su duda escribe por WhatsApp desde el cierre de la página.
+        $this->get(route('site.faq'))
+            ->assertOk()
+            ->assertSeeInOrder([
+                'class="footer-cta"',
+                '<strong>¿No encontraste tu respuesta?</strong> Escríbenos y con gusto te ayudamos.</p>',
+                '<a href="'.e(app(ClinicInfo::class)->whatsappUrl('Hola, tengo una pregunta.')).'" class="btn" rel="noopener"><svg',
+                'Escribir por WhatsApp</a>',
+            ], false)
+            ->assertDontSee($book, false);
+
+        // El inicio y las páginas sin cierre propio llevan la frase general, que también se cambia en el panel.
+        Setting::set('web.pages.inicio.closing_title', 'Te esperamos');
+        Setting::set('web.pages.inicio.closing_text', null);
+
+        foreach (['site.home', 'site.promotions', 'site.privacy'] as $route) {
+            $this->get(route($route))
+                ->assertOk()
+                ->assertSeeInOrder(['class="footer-cta"', '<strong>Te esperamos</strong> </p>', $book], false)
+                ->assertDontSee('Tu salud bucal, en buenas manos');
+        }
+
+        $this->get(route('site.treatments'))->assertOk()->assertSee('¿Listo para cuidar tu sonrisa?')->assertDontSee('Te esperamos');
+
+        // Sin título guardado, el cierre no queda mudo: vuelve el que trae el sistema.
+        Setting::set('web.pages.inicio.closing_title', null);
+
+        $this->get(route('site.home'))->assertOk()->assertSee('<strong>Tu salud bucal, en buenas manos</strong>', false);
+    }
+
+    public function test_without_whatsapp_the_questions_page_closes_inviting_to_book(): void
+    {
+        Setting::set('clinic.whatsapp', null);
+
+        $this->get(route('site.faq'))
+            ->assertOk()
+            ->assertSeeInOrder(['class="footer-cta"', '<strong>Tu salud bucal, en buenas manos</strong>', '<a href="'.route('site.booking').'" class="btn">Reservar cita<svg'], false)
+            ->assertDontSee(['¿No encontraste tu respuesta?', 'Escribir por WhatsApp']);
     }
 
     public function test_the_sitemap_lists_public_pages_and_robots_keeps_private_ones_out(): void
