@@ -1132,10 +1132,117 @@ main.with-band > .wrap:first-child .flash { margin: 16px 0; }
 .menu[open] > .menu-panel { transform-origin: top center; animation: drop-in .18s var(--ease-out); }
 @keyframes drop-in { from { opacity: 0; transform: translateY(-6px); } }
 .faqs .prose { padding: 0 52px 12px 0; color: var(--muted); }
-.faq-group h2 { font-size: 1.5rem; }
-.faq-group .section-head { margin-bottom: 16px; }
-@media (min-width: 900px) { .faq-group + .faq-group { margin-top: 72px; } }
+
+/*
+   La página de preguntas: el buscador arriba, los temas (las generales y cada servicio con preguntas) y cada
+   pregunta en su tarjeta. En el celular los temas son una fila de pastillas; en pantallas grandes, una tarjeta al lado.
+*/
+.faq-page { display: grid; grid-template-columns: minmax(0, 1fr); gap: 18px; }
+.faq-page:not(.with-topics) { max-width: 920px; margin-inline: auto; }
+.faq-page [hidden] { display: none !important; }
+.faq-search {
+    display: none; align-items: center; gap: 12px; min-height: 56px; padding: 0 20px; border-radius: 999px;
+    background: var(--ground); border: 1px solid var(--card-line); box-shadow: var(--card-shadow); color: var(--accent);
+    transition: border-color .15s ease, box-shadow .15s ease;
+}
+.js .faq-search { display: flex; }
+.faq-search:focus-within { border-color: var(--accent); box-shadow: 0 0 0 3px rgb(28 98 214 / .2), var(--card-shadow); }
+.faq-search svg { flex: none; width: 22px; height: 22px; }
+.faq-search input { flex: 1; width: 100%; min-width: 0; padding: 14px 0; border: 0; background: none; font: inherit; color: var(--ink); outline: none; }
+.faq-search input::placeholder { color: var(--muted); }
+.faq-topics { min-width: 0; }
+.faq-topics h2 { display: none; }
+.faq-topics ul { list-style: none; display: flex; gap: 8px; overflow-x: auto; margin: 0 calc(var(--gutter) * -1); padding: 2px var(--gutter) 6px; scrollbar-width: none; }
+.faq-topics ul::-webkit-scrollbar { display: none; }
+.faq-topics a {
+    display: flex; align-items: center; gap: 8px; padding: 5px 16px 5px 5px; border-radius: 999px; white-space: nowrap;
+    background: var(--ground); border: 1px solid var(--card-line); color: var(--ink); font-weight: 650; font-size: .9375rem; text-decoration: none;
+    transition: background-color .15s ease, border-color .15s ease, color .15s ease;
+}
+.faq-topics a[aria-current] { background: #e3eeff; border-color: #b9d2f8; color: #0d3f8f; }
+.topic-icon { flex: none; display: grid; place-items: center; width: 34px; height: 34px; border-radius: 50%; background: #e3eeff; color: #1c62d6; }
+.faq-topics a[aria-current] .topic-icon { background: var(--ground); }
+.topic-icon:has(img) { background: linear-gradient(160deg, #d3e4ff, #a4c5fa); }
+.topic-icon svg { width: 19px; height: 19px; }
+.topic-icon img { width: 28px; height: 28px; }
+.faq-list { display: grid; gap: 28px; min-width: 0; align-content: start; }
+.faq-none { margin: 0; }
+.faq-group { display: grid; gap: 12px; scroll-margin-top: 96px; }
+.faq-group h2 { font-size: 1.25rem; letter-spacing: -.02em; }
 .faq-group h2 a { color: var(--ink); text-decoration: none; }
+.faq-list .faqs { gap: 12px; max-width: none; border-bottom: 0; }
+.faq-list .faqs details { border: 1px solid var(--card-line); border-radius: 18px; background: var(--ground); box-shadow: var(--card-shadow); }
+.faq-list .faqs summary { padding: 18px 64px 18px 20px; border-radius: 18px; font-family: var(--display); font-weight: 600; font-size: 1.0625rem; letter-spacing: -.02em; line-height: 1.3; }
+.faq-list .faqs summary::after {
+    content: ""; right: 16px; width: 34px; height: 34px; margin-top: -17px;
+    background: #eef4ff url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%231c62d6' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E") center / 18px no-repeat;
+}
+.faq-list .faqs details[open] summary::after { transform: rotate(180deg); }
+.faq-list .faqs .prose { padding: 0 20px 18px; }
+@media (min-width: 900px) {
+    .faq-page { gap: 22px 26px; }
+    .faq-page.with-topics { grid-template-columns: 300px minmax(0, 1fr); align-items: start; }
+    .faq-search { grid-column: 1 / -1; }
+    .faq-topics { position: sticky; top: 96px; padding: 22px 14px 14px; border-radius: 24px; background: var(--ground); border: 1px solid var(--card-line); box-shadow: var(--card-shadow); }
+    .faq-topics h2 { display: block; margin: 0 8px 12px; padding-bottom: 12px; font-size: 1.25rem; letter-spacing: -.02em; background: linear-gradient(var(--accent), var(--accent)) left bottom / 56px 3px no-repeat; }
+    .faq-topics ul { flex-direction: column; gap: 2px; overflow: visible; margin: 0; padding: 0; }
+    .faq-topics a { padding: 7px 34px 7px 8px; border: 0; border-radius: 14px; background: none; white-space: normal; position: relative; }
+    .faq-topics a[aria-current]::after {
+        content: ""; position: absolute; right: 12px; top: 50%; width: 16px; height: 16px; margin-top: -8px;
+        background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%231c62d6' stroke-width='2.4' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m9 6 6 6-6 6'/%3E%3C/svg%3E") center / contain no-repeat;
+    }
+    .faq-list .faqs summary { padding: 20px 68px 20px 24px; font-size: 1.125rem; }
+    .faq-list .faqs summary::after { right: 18px; }
+    .faq-list .faqs .prose { padding: 0 24px 20px; }
+}
+
+/*
+   Mi cuenta: a un lado, de quién es la cuenta y el paso a cada parte; al otro, cada parte en su tarjeta.
+   En el celular va todo en una columna: el saludo, las citas y lo demás, con "Salir" al final.
+*/
+.account { display: grid; grid-template-columns: minmax(0, 1fr); gap: 26px; }
+.account-side { display: contents; }
+.account-side .who { display: flex; align-items: center; gap: 14px; }
+.account-side .avatar {
+    flex: none; display: grid; place-items: center; width: 56px; height: 56px; border-radius: 50%;
+    background: linear-gradient(160deg, #2a72e8, #0c3a9f); color: #fff; font-family: var(--display); font-weight: 700; font-size: 1.25rem; letter-spacing: .01em;
+    box-shadow: 0 10px 20px -10px rgb(12 58 159 / .7);
+}
+.account-side .avatar svg { width: 28px; height: 28px; }
+.account-side h2 { font-size: 1.5rem; letter-spacing: -.025em; line-height: 1.15; }
+.account-side .who p { margin: 4px 0 0; color: var(--muted); }
+.account-side .who p span { white-space: nowrap; }
+.account-side nav { display: none; }
+.account-side .leave { order: 2; margin: 0; }
+.account-main { display: grid; gap: 32px; min-width: 0; }
+.account-card { display: grid; gap: 14px; align-content: start; min-width: 0; }
+.account-card > p { margin: 0; }
+.account-card h2 { display: flex; align-items: center; gap: 10px; font-size: 1.375rem; letter-spacing: -.02em; line-height: 1.2; scroll-margin-top: 96px; }
+.account-card h2 svg { flex: none; width: 26px; height: 26px; color: #1c62d6; }
+.account-card > .spread { align-items: center; }
+@media (max-width: 479px) { .account-card > .spread h2 svg { display: none; } }
+.appointments, .family { display: grid; gap: 12px; }
+.family { margin-top: 10px; }
+@media (min-width: 900px) {
+    .account { grid-template-columns: 300px minmax(0, 1fr); align-items: start; }
+    .account-side {
+        display: grid; gap: 18px; position: sticky; top: 96px; padding: 28px 16px 18px; border-radius: 24px;
+        background: linear-gradient(180deg, #f3f8ff 0, var(--ground) 200px); border: 1px solid var(--card-line); box-shadow: var(--card-shadow);
+    }
+    .account-side .who { flex-direction: column; gap: 14px; text-align: center; }
+    .account-side .avatar { width: 96px; height: 96px; font-size: 2rem; }
+    .account-side .avatar svg { width: 44px; height: 44px; }
+    .account-side nav { display: grid; gap: 2px; padding-top: 14px; border-top: 1px solid var(--card-line); }
+    .account-side nav a { display: flex; align-items: center; gap: 12px; padding: 10px 12px; border-radius: 14px; color: var(--ink); font-weight: 650; text-decoration: none; transition: background-color .15s ease, color .15s ease; }
+    .account-side nav svg { flex: none; width: 22px; height: 22px; color: #1c62d6; }
+    .account-side .leave { padding: 0 12px; }
+    .account-main { gap: 22px; }
+    .account-card { padding: 24px; border-radius: 24px; background: var(--ground); border: 1px solid var(--card-line); box-shadow: var(--card-shadow); }
+    .family { grid-template-columns: repeat(auto-fit, minmax(340px, 1fr)); }
+}
+@media (min-width: 1200px) {
+    .appointments { grid-template-columns: repeat(auto-fit, minmax(400px, 1fr)); align-items: start; }
+}
 
 /* Contacto */
 
@@ -1351,12 +1458,13 @@ a.chip { text-decoration: none; display: inline-flex; align-items: center; }
     .price-list a:hover .more svg { transform: translateX(2px); }
     :is(.feature, .footer-cta) .btn:hover { background: var(--surface-strong); }
     .price-list a:hover .name { color: var(--accent); }
+    .account-side nav a:hover, .faq-topics a:hover { background: #e3eeff; color: #0d3f8f; }
     .promo-card:hover strong { text-decoration: underline; text-underline-offset: .15em; text-decoration-thickness: 1px; }
     .promo-band:hover strong { text-decoration: underline; text-underline-offset: .15em; }
     .team.full .doctor .treatments a:hover { background: #d6e5ff; }
     .pill:hover { background: #d6e5ff; }
     .faqs summary:hover { color: var(--accent); }
-    .faqs summary:hover::after { background: var(--surface-strong); }
+    .faqs summary:hover::after { background-color: var(--surface-strong); }
     .chip:not([aria-current="page"]):not([aria-pressed="true"]):hover { background: var(--surface-strong); }
 }
 
@@ -1379,6 +1487,7 @@ a.chip { text-decoration: none; display: inline-flex; align-items: center; }
     *, *::before, *::after { transition-property: color, background-color, border-color, opacity !important; }
     .btn:active, .choice:active, .chip:active, .day:active, .time:active, .free-times a:active { transform: none; }
     .faqs details[open] summary::after { transform: none; content: "−"; }
+    .faq-list .faqs details[open] summary::after { transform: rotate(180deg); content: ""; }
     .faqs details[open] > .prose, .menu[open] > .menu-panel { animation: fade .15s ease; }
     .done-art { animation: fade .2s ease both; }
     .services-grid a:hover { transform: none; }

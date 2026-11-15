@@ -967,6 +967,44 @@ class PublicPagesTest extends TestCase
             ->assertDontSee('class="map-block"', false);
     }
 
+    public function test_the_questions_page_has_a_search_box_and_groups_the_questions_by_topic(): void
+    {
+        // Sin preguntas publicadas no hay qué buscar.
+        $this->get(route('site.faq'))->assertOk()->assertSee('Pronto publicaremos las preguntas más comunes.')->assertDontSee('faq-page');
+
+        $whitening = Treatment::factory()->create(['name' => 'Blanqueamiento', 'slug' => 'blanqueamiento']);
+        Faq::factory()->create(['question' => '¿Duele el blanqueamiento?', 'treatment_id' => $whitening->id, 'sort_order' => 0]);
+        Faq::factory()->create(['question' => '¿Cómo pago?', 'answer' => 'En efectivo o con Yape.', 'sort_order' => 1]);
+
+        $this->get(route('site.faq'))
+            ->assertOk()
+            ->assertSeeInOrder([
+                '<div class="faq-page with-topics">',
+                '<div class="faq-search" role="search">', '<input type="search" id="buscar-pregunta" placeholder="Buscar una pregunta…"',
+                '<nav class="faq-topics" aria-labelledby="temas">', '<h2 id="temas">Temas</h2>',
+                '<a href="#preguntas" data-topic="" aria-current="true">', 'Todas</a>',
+                // Las generales van primero aunque una de un servicio tenga un orden menor. Cada servicio lleva su imagen.
+                '<a href="#faq-generales" data-topic="faq-generales">', 'Generales</a>',
+                '<a href="#faq-de-blanqueamiento" data-topic="faq-de-blanqueamiento"><span class="topic-icon"><img src="'.SiteArt::url('blanqueamiento-192').'"', 'Blanqueamiento</a>',
+                '<section class="faq-group" id="faq-generales" aria-label="Generales">', '<h2>Generales</h2>', '<summary>¿Cómo pago?</summary>', '<p>En efectivo o con Yape.</p>',
+                '<section class="faq-group" id="faq-de-blanqueamiento" aria-label="Blanqueamiento">',
+                '<h2><a href="'.route('site.treatment', 'blanqueamiento').'">Blanqueamiento</a></h2>', '<summary>¿Duele el blanqueamiento?</summary>',
+                // El aviso de que la búsqueda no encontró nada espera escondido.
+                '<p class="panel faq-none" role="status" hidden>No encontramos preguntas con esas palabras.',
+            ], false);
+    }
+
+    public function test_with_a_single_topic_the_questions_page_shows_the_questions_without_topics(): void
+    {
+        Faq::factory()->create(['question' => '¿Atienden a niños?']);
+        Faq::factory()->create(['question' => '¿Pregunta en borrador?', 'is_published' => false]);
+
+        $this->get(route('site.faq'))
+            ->assertOk()
+            ->assertSeeInOrder(['<div class="faq-page">', 'class="faq-search"', '<section class="faq-group" id="faq-generales" aria-label="Generales">', '<summary>¿Atienden a niños?</summary>'], false)
+            ->assertDontSee(['class="faq-topics"', '<h2>Generales</h2>', '¿Pregunta en borrador?'], false);
+    }
+
     /**
      * Cada página de contenido con la frase corta y el título con que viene el sistema.
      *

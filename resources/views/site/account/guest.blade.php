@@ -8,12 +8,9 @@
         ? 'https://wa.me/'.Phone::forWhatsApp($clinicWhatsapp).'?text='.rawurlencode('Hola, pedí mi enlace para entrar a Mi cuenta. Mi celular es '.Phone::display($requested).'.')
         : null;
 @endphp
-<x-site-layout title="Mi cuenta" :noindex="true">
+<x-site-layout page="cuenta" :noindex="true">
     <section class="stack-lg">
-        <div class="stack">
-            <h1>Mi cuenta</h1>
-            <p class="lead">Aquí ves y manejas las citas de tu familia. No necesitas contraseña: entras con el enlace que te enviamos por WhatsApp, y desde ahí este celular queda recordado.</p>
-        </div>
+        <p class="lead">No necesitas contraseña: entras con el enlace que te enviamos por WhatsApp, y desde ahí este celular queda recordado.</p>
 
         @if ($requested)
             <div class="panel stack" role="status">

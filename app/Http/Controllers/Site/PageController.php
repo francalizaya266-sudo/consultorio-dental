@@ -10,6 +10,7 @@ use App\Models\SmileCase;
 use App\Models\Treatment;
 use App\Services\Web\StructuredData;
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Http\Request;
 use Illuminate\View\View;
 
@@ -56,9 +57,19 @@ class PageController extends Controller
     {
         $faqs = Faq::query()->published()->with('treatment')->get();
 
+        // Cada tema junta sus preguntas: primero las generales y después las de cada servicio.
+        $topics = $faqs->groupBy(fn (Faq $faq) => (string) $faq->treatment?->slug)
+            ->map(fn (Collection $questions, string $slug) => [
+                'id' => $slug === '' ? 'faq-generales' : 'faq-de-'.$slug,
+                'name' => $questions->first()->treatment?->name ?? 'Generales',
+                'treatment' => $questions->first()->treatment,
+                'faqs' => $questions,
+            ])
+            ->sortBy(fn (array $topic) => $topic['treatment'] === null ? 0 : 1)
+            ->values();
+
         return view('site.faq', [
-            'general' => $faqs->whereNull('treatment_id'),
-            'byTreatment' => $faqs->whereNotNull('treatment_id')->groupBy(fn (Faq $faq) => $faq->treatment->name),
+            'topics' => $topics,
             'jsonLd' => array_filter([
                 $this->structuredData->breadcrumbs(['Preguntas frecuentes' => route('site.faq')]),
                 $faqs->isNotEmpty() ? $this->structuredData->faqPage($faqs) : null,

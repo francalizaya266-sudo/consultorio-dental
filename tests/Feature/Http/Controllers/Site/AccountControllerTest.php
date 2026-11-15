@@ -28,6 +28,7 @@ use App\Models\WhatsappMessage;
 use App\Services\Access\DeviceService;
 use App\Services\Access\MagicLinkService;
 use App\Services\Billing\BillingService;
+use App\Support\Initials;
 use Illuminate\Foundation\Testing\LazilyRefreshDatabase;
 use Livewire\Livewire;
 use Tests\Concerns\CreatesAgenda;
@@ -68,6 +69,41 @@ class AccountControllerTest extends TestCase
             ->assertDontSee('Mateo');
     }
 
+    public function test_the_account_opens_with_its_band_who_it_belongs_to_and_the_way_to_each_part(): void
+    {
+        // Quien todavía no entró ve el encabezado de la página y cómo pedir su enlace; la página no va a Google.
+        $this->get(route('site.account'))
+            ->assertOk()
+            ->assertSee(['<title>Mi cuenta · ', '<meta name="robots" content="noindex">'], false)
+            ->assertSeeInOrder([
+                '<div class="page-band">', 'Tu espacio personal</p>', '<h1>Mi <em>cuenta</em></h1>', 'Pedir mi enlace',
+                'class="footer-cta"', '<strong>¿Necesitas una nueva cita?</strong> Reserva en línea en pocos pasos.</p>',
+            ], false)
+            ->assertDontSee('account-side');
+
+        // Con el celular recordado: a un lado, de quién es la cuenta y el paso a cada parte. Sin verificar, los planes no se anuncian.
+        $this->rememberDevice()
+            ->get(route('site.account'))
+            ->assertOk()
+            ->assertSeeInOrder([
+                '<h1>Mi <em>cuenta</em></h1>', '<aside class="account-side">', '<span class="avatar" aria-hidden="true">'.Initials::of($this->mother->full_name).'</span>',
+                '<h2>Hola, Rosa</h2>', 'Citas de tu familia · <span>987 654 321</span>',
+                '<a href="#proximas">', 'Próximas citas</a>', '<a href="#anteriores">', 'Pagos, citas anteriores y datos</a>', 'Salir en este celular',
+                '<h2 id="proximas">', 'Próximas citas</h2>', '<h2 id="anteriores">', 'Planes, pagos, citas anteriores y datos</h2>',
+            ], false)
+            ->assertDontSee(['href="#planes"', 'id="planes"'], false);
+
+        // El encabezado y el cierre son los del panel (Página web › Textos de las páginas).
+        Setting::set('web.pages.cuenta.title', 'Tus *citas*');
+        Setting::set('web.pages.cuenta.kicker', null);
+        Setting::set('web.pages.cuenta.closing_title', '¿Otra cita?');
+
+        $this->get(route('site.account'))
+            ->assertOk()
+            ->assertSee(['<title>Tus citas · ', '<h1>Tus <em>citas</em></h1>', '<strong>¿Otra cita?</strong>'], false)
+            ->assertDontSee('Tu espacio personal');
+    }
+
     public function test_a_remembered_device_sees_the_family_upcoming_appointments_but_not_personal_data(): void
     {
         $upcoming = Appointment::factory()->for($this->child)->at('2026-11-04 10:00')->confirmed()->create();
@@ -92,7 +128,9 @@ class AccountControllerTest extends TestCase
         Appointment::factory()->for($this->mother)->at('2026-10-20 10:00')->create(['status' => AppointmentStatus::Completed]);
         $token = basename(app(MagicLinkService::class)->issue($this->account, MagicLinkPurpose::Access));
 
-        $this->get(route('patient.link', $token))->assertOk()->assertSee('Entrar a Mi cuenta');
+        $this->get(route('patient.link', $token))
+            ->assertOk()
+            ->assertSeeInOrder(['<title>Entrar a Mi cuenta · ', '<h1>Mi <em>cuenta</em></h1>', '<h2>Entrar a Mi cuenta</h2>'], false);
 
         $response = $this->post(route('patient.link.enter', $token))
             ->assertRedirect(route('site.account'))
@@ -142,6 +180,8 @@ class AccountControllerTest extends TestCase
         $this->withSession(['patient.elevated_until' => now()->addMinutes(10)->getTimestamp()])
             ->get(route('site.account'))
             ->assertOk()
+            // Ya verificado, los planes tienen su paso en la tarjeta de la cuenta y su propia tarjeta.
+            ->assertSeeInOrder(['<a href="#planes">', 'Planes y pagos</a>', '<a href="#anteriores">', 'Citas anteriores y datos</a>', '<h2 id="planes">'], false)
             ->assertSeeInOrder(['Planes y pagos', 'Ortodoncia', 'Por pagar', 'Rosa · Dra. Vega', 'Pagado S/ 800.00 de S/ 2,000.00'])
             ->assertSeeInOrder(['Falta pagar', 'S/ 1,200.00', 'Para pagar ya', 'S/ 600.00', 'Próximo pago', 'S/ 600.00 · Miércoles 2 de diciembre', 'Cuota 2 de 2'])
             ->assertSeeInOrder(['Tratamientos: 1 de 2 hechos', 'Colocación de brackets', 'Hecho', 'Control de ortodoncia', '3 de 10 sesiones'])
@@ -262,6 +302,8 @@ class AccountControllerTest extends TestCase
             ->assertOk()
             ->assertSee('Citas de este celular')
             ->assertSee('Cita de Carlos')
+            // Sin titular reconocido, el saludo no lleva nombre ni iniciales.
+            ->assertSee(['<span class="avatar" aria-hidden="true"><svg', '<h2>Hola</h2>'], false)
             ->assertDontSee(['Hola, Carlos', 'Tu cita']);
 
         $this->get(route('site.home'))

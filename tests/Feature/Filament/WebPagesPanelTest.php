@@ -129,8 +129,8 @@ class WebPagesPanelTest extends TestCase
     public function test_each_page_has_its_tab_with_a_link_to_see_it(): void
     {
         Livewire::test(WebPages::class)
-            ->assertSeeInOrder(['Servicios', 'Equipo', 'Contacto', 'Preguntas frecuentes', 'Promociones', 'Antes y después', 'Opiniones', 'Cierre general'])
-            ->assertSee([route('site.treatments'), route('site.faq'), route('site.reviews')])
+            ->assertSeeInOrder(['Servicios', 'Equipo', 'Contacto', 'Preguntas frecuentes', 'Promociones', 'Antes y después', 'Opiniones', 'Mi cuenta', 'Cierre general'])
+            ->assertSee([route('site.treatments'), route('site.faq'), route('site.reviews'), route('site.account')])
             // Las páginas sin cierre propio dicen con qué cierran.
             ->assertSee('Esta página cierra con la frase de la pestaña Cierre general.')
             ->assertSee('con el botón para escribir por WhatsApp');
