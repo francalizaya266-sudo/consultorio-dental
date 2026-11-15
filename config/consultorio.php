@@ -118,6 +118,15 @@ return [
                     'closing_title' => '¿Necesitas una nueva cita?',
                     'closing_text' => 'Reserva en línea en pocos pasos.',
                 ],
+                // Mientras se reserva, el cierre ofrece ayuda por WhatsApp en vez de invitar a reservar.
+                'reservar' => [
+                    'kicker' => 'Reserva tu cita',
+                    'title' => 'Reservar cita',
+                    'lead' => 'Elige el servicio, el día y la hora que prefieras. Te confirmamos por WhatsApp.',
+                    'photo' => null,
+                    'closing_title' => '¿Necesitas ayuda?',
+                    'closing_text' => 'Escríbenos por WhatsApp y te ayudamos con tu reserva.',
+                ],
             ],
         ],
 

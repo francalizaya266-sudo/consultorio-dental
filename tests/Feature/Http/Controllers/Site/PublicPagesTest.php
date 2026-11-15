@@ -570,7 +570,52 @@ class PublicPagesTest extends TestCase
             ->assertDontSee('El consultorio')
             ->assertDontSee('class="footer-contact"', false)
             // Ya está reservando: el pie no lo vuelve a invitar.
-            ->assertDontSee('class="footer-cta"', false);
+            ->assertDontSee('<a href="'.route('site.booking').'" class="btn">Reservar cita<svg', false);
+    }
+
+    public function test_the_booking_page_names_each_step_under_its_band_and_closes_offering_help_by_whatsapp(): void
+    {
+        $this->doctorOffering(Treatment::factory()->evaluation()->create());
+
+        $this->get(route('site.booking'))
+            ->assertOk()
+            ->assertSeeInOrder([
+                '<title>Reservar cita · ',
+                // En el celular la franja va corta, para que el primer paso quede a la vista.
+                '<div class="page-band brief">',
+                '</span>Reserva tu cita</p>',
+                '<h1>Reservar <em>cita</em></h1>',
+                // El título de la página es el de la franja: cada paso lleva el suyo un nivel más abajo.
+                '<h2 id="paso-1" class="step-title" tabindex="-1">¿Qué necesitas?</h2>',
+                '<footer class="site-footer minimal with-cta">',
+                'class="footer-cta"',
+                '<strong>¿Necesitas ayuda?</strong> Escríbenos por WhatsApp y te ayudamos con tu reserva.</p>',
+                '<a href="'.e(app(ClinicInfo::class)->whatsappUrl('Hola, tengo una duda con mi reserva.')).'" class="btn" rel="noopener"><svg',
+                'Escribir por WhatsApp</a>',
+            ], false)
+            // La ayuda ya va en la franja: el pie no la repite en una línea.
+            ->assertDontSee('¿Alguna duda?');
+
+        // Lo que se guarda en el panel es lo que sale.
+        Setting::set('web.pages.reservar.title', 'Reserva tu *hora*');
+        Setting::set('web.pages.reservar.closing_title', '¿Te ayudamos?');
+        Setting::set('web.pages.reservar.closing_text', null);
+
+        $this->get(route('site.booking'))
+            ->assertOk()
+            ->assertSee(['<title>Reserva tu hora · ', '<h1>Reserva tu <em>hora</em></h1>', '<strong>¿Te ayudamos?</strong> </p>'], false)
+            ->assertDontSee('¿Necesitas ayuda?');
+    }
+
+    public function test_without_whatsapp_the_booking_page_closes_without_the_help_band(): void
+    {
+        Setting::set('clinic.whatsapp', null);
+
+        $this->get(route('site.booking'))
+            ->assertOk()
+            ->assertSee('<footer class="site-footer minimal">', false)
+            // Tampoco cierra con la frase general: ya está reservando.
+            ->assertDontSee(['class="footer-cta"', '¿Necesitas ayuda?', '¿Alguna duda?', 'Tu salud bucal, en buenas manos'], false);
     }
 
     public function test_only_published_content_reaches_the_web(): void

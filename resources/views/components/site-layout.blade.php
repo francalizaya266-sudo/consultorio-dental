@@ -5,7 +5,8 @@
         para no repetirlos en el pie: ahí queda solo la lista de páginas. En las demás, el pie trae lo justo para
         ubicarse (dirección, si está abierto y WhatsApp); el horario completo y el mapa están en Contacto.
     minimalFooter: pie de una línea mientras se reserva, para que nada distraiga hasta terminar (el encabezado
-        también queda solo con el nombre, que vuelve al inicio).
+        también queda solo con el nombre, que vuelve al inicio). Si la página cierra con su franja de ayuda por
+        WhatsApp (Reservar cita), la franja va sobre ese pie.
     jsonLd: datos estructurados de schema.org para Google.
     page: la página ("servicios", "equipo"…) cuyo encabezado y cierre se editan en el panel (PageTexts). Con ella,
         la página abre con su franja celeste a todo el ancho: frase corta, título en dos colores, texto, el diente
@@ -151,7 +152,8 @@
     @endif
     {{-- El encabezado de la página: la foto, a la derecha, se funde con el celeste; el diente de cristal va entre el texto y la foto. --}}
     @php([$titleStart, $titleAccent, $titleEnd] = $texts->titleParts($page))
-    <div @class(['page-band', 'with-photo' => $bandPhoto = $texts->photoUrl($page)])>
+    {{-- brief: mientras se reserva, en el celular la franja va corta (sin foto ni texto) y el primer paso queda a la vista. --}}
+    <div @class(['page-band', 'with-photo' => $bandPhoto = $texts->photoUrl($page), 'brief' => $minimalFooter])>
         @if ($bandPhoto)
             <figure class="band-photo"><img src="{{ $bandPhoto }}" alt="" fetchpriority="high"></figure>
         @endif
@@ -181,10 +183,14 @@
 </main>
 
 @if ($minimalFooter)
-    <footer class="site-footer minimal">
+    {{-- Mientras reserva, la franja de cierre ofrece ayuda por WhatsApp; sin ella, la ayuda va en una línea del pie. --}}
+    <footer @class(['site-footer', 'minimal', 'with-cta' => $closing['whatsapp']])>
         <div class="wrap wide">
+            @if ($closing['whatsapp'])
+                @include('site.partials.closing', ['message' => 'Hola, tengo una duda con mi reserva.'])
+            @endif
             <p class="name">{{ $name }}</p>
-            @if ($clinic->whatsappUrl())
+            @if (! $closing['whatsapp'] && $clinic->whatsappUrl())
                 <p>¿Alguna duda? <a href="{{ $clinic->whatsappUrl('Hola, tengo una duda con mi reserva.') }}" rel="noopener">Escríbenos por WhatsApp</a></p>
             @endif
             <p><a href="{{ route('site.privacy') }}">Política de privacidad</a></p>
@@ -194,15 +200,7 @@
 <footer @class(['site-footer', 'short' => ! $footerContact])>
     <div class="wrap wide">
         {{-- El cierre de cada página, en una franja que monta sobre el borde del pie: su frase (PageTexts) y su botón. --}}
-        <div class="footer-cta">
-            <img src="{{ SiteArt::url('diente-320') }}" alt="" width="320" height="320" loading="lazy" decoding="async">
-            <p><strong>{{ $closing['title'] }}</strong> {{ $closing['text'] }}</p>
-            @if ($closing['whatsapp'])
-                <a href="{{ $clinic->whatsappUrl('Hola, tengo una pregunta.') }}" class="btn" rel="noopener">{{ SiteIcon::svg('whatsapp') }}Escribir por WhatsApp</a>
-            @else
-                <a href="{{ route('site.booking') }}" class="btn">Reservar cita{{ SiteIcon::svg('arrow-right') }}</a>
-            @endif
-        </div>
+        @include('site.partials.closing', ['message' => 'Hola, tengo una pregunta.'])
         <div class="footer-top">
             <p class="name">
                 <span class="mark">{{ TreatmentIcon::svg('tooth') }}</span>
