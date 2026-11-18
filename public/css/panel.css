@@ -1383,6 +1383,11 @@ a.dash-name:hover { color: var(--primary-600); }
 .slot-buttons { display: grid !important; grid-template-columns: repeat(auto-fill, minmax(5.5rem, 1fr)); gap: .5rem; }
 .slot-buttons label { justify-content: center; font-variant-numeric: tabular-nums; }
 
+/* "Otra hora": la hora y los minutos también se tocan, como un teclado de seis por fila. Así las horas quedan en
+   mañana, tarde y noche, y los minutos en dos medias horas. */
+.time-buttons { grid-template-columns: repeat(6, minmax(0, 1fr)); }
+.time-buttons .fi-btn { padding-inline: .25rem; font-variant-numeric: tabular-nums; }
+
 /* Mientras un widget carga: líneas grises con la forma de una tarjeta, no una caja vacía. */
 .fi-loading-section {
     position: relative;
