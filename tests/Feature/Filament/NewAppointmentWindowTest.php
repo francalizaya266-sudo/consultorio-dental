@@ -151,6 +151,53 @@ class NewAppointmentWindowTest extends TestCase
             ->assertActionDataSet(['manual_time' => '18:20']);
     }
 
+    public function test_another_time_is_chosen_with_two_taps_instead_of_typing_it(): void
+    {
+        $window = Livewire::test(Agenda::class)
+            ->mountAction('createAppointment', ['patient' => $this->patient->id, 'doctor' => $this->doctor->id, 'date' => '2026-11-03', 'treatment' => $this->treatment->id])
+            ->setActionData(['manual' => true])
+            ->assertMountedActionModalSee('Toca la hora y, si no es en punto, los minutos.')
+            // Sin hora no se agenda, y se dice en los botones de la hora.
+            ->callMountedAction()
+            ->assertHasFormErrors(['manual_hour' => 'Completa el campo hora.'])
+            // Con solo tocar la hora queda en punto.
+            ->setActionData(['manual_hour' => '19'])
+            ->assertActionDataSet(['manual_time' => '19:00', 'manual_minute' => '00'])
+            ->setActionData(['manual_minute' => '20'])
+            ->assertActionDataSet(['manual_time' => '19:20'])
+            ->assertMountedActionModalSee("La cita empieza a las 19:20 (7:20\u{00A0}p.\u{00A0}m.).")
+            ->setActionData(['manual_hour' => '07'])
+            ->assertActionDataSet(['manual_time' => '07:20'])
+            ->assertMountedActionModalSee('La cita empieza a las 07:20.');
+
+        $window->callMountedAction()->assertHasNoFormErrors();
+
+        $this->assertSame('2026-11-03 07:20', Appointment::query()->whereBelongsTo($this->patient)->sole()->starts_at->format('Y-m-d H:i'));
+    }
+
+    public function test_the_minutes_tapped_first_wait_for_the_hour(): void
+    {
+        Livewire::test(Agenda::class)
+            ->mountAction('createAppointment', ['doctor' => $this->doctor->id, 'date' => '2026-11-03', 'treatment' => $this->treatment->id])
+            ->setActionData(['manual' => true])
+            ->setActionData(['manual_minute' => '45'])
+            ->assertActionDataSet(['manual_time' => null])
+            ->setActionData(['manual_hour' => '21'])
+            ->assertActionDataSet(['manual_time' => '21:45']);
+    }
+
+    public function test_the_hour_that_was_already_chosen_comes_marked_in_the_buttons(): void
+    {
+        Livewire::test(Agenda::class)
+            ->mountAction('createAppointment', ['doctor' => $this->doctor->id, 'date' => '2026-11-03', 'time' => '16:00', 'treatment' => $this->treatment->id])
+            ->setActionData(['manual' => true])
+            ->assertActionDataSet(['manual_time' => '16:00', 'manual_hour' => '16', 'manual_minute' => '00'])
+            // Una hora que no es de las que se ofrecen (de 06 a 22, de cinco en cinco) igual tiene su botón.
+            ->setActionData(['manual_time' => '23:07'])
+            ->assertActionDataSet(['manual_hour' => '23', 'manual_minute' => '07'])
+            ->assertMountedActionModalSee("La cita empieza a las 23:07 (11:07\u{00A0}p.\u{00A0}m.).");
+    }
+
     public function test_it_says_how_long_the_visit_lasts_when_it_ends_and_its_price(): void
     {
         $free = Treatment::factory()->create(['duration_minutes' => 45, 'price_from' => 0]);

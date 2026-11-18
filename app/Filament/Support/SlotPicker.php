@@ -21,7 +21,6 @@ use Filament\Forms\Components\DatePicker;
 use Filament\Forms\Components\Field;
 use Filament\Forms\Components\Hidden;
 use Filament\Forms\Components\Select;
-use Filament\Forms\Components\TimePicker;
 use Filament\Forms\Components\Toggle;
 use Filament\Forms\Components\ToggleButtons;
 use Filament\Schemas\Components\Component;
@@ -36,6 +35,11 @@ use Illuminate\Support\HtmlString;
  */
 final class SlotPicker
 {
+    /** Con "Otra hora" se ofrecen las horas de 06 a 22: lo que un consultorio puede llegar a atender fuera de su horario. */
+    private const FIRST_MANUAL_HOUR = 6;
+
+    private const LAST_MANUAL_HOUR = 22;
+
     /**
      * @param  Appointment|null  $moving  Cita que se mueve: su tratamiento es fijo y su horario no cuenta como ocupado.
      * @return list<Component|Field>
@@ -107,15 +111,41 @@ final class SlotPicker
                     if ($state && blank($get('manual_time'))) {
                         $set('manual_time', $get('slot') ?? $get('preferred_time'));
                     }
+
+                    self::showManualTime($get, $set);
                 }),
 
-            TimePicker::make('manual_time')
+            // La hora de "Otra hora". Ya no se escribe: la arman los dos grupos de botones de abajo.
+            Hidden::make('manual_time')
+                ->afterStateUpdated(fn (Get $get, Set $set) => self::showManualTime($get, $set)),
+
+            // Dos toques, la hora y los minutos, como los horarios libres (antes había que teclearla en un cuadro
+            // vacío). Con solo tocar la hora queda "en punto".
+            ToggleButtons::make('manual_hour')
                 ->label('Hora')
-                ->seconds(false)
-                ->minutesStep(5)
+                ->options(fn (Get $get) => self::hourOptions($get('manual_time')))
+                ->inline()
+                ->fullWidth()
+                ->extraAttributes(['class' => 'slot-buttons time-buttons'])
                 ->live()
+                ->afterStateUpdated(fn (Get $get, Set $set) => self::composeManualTime($get, $set))
                 ->visible(fn (Get $get) => (bool) $get('manual'))
-                ->required(fn (Get $get) => (bool) $get('manual')),
+                // Obligatoria mientras no haya una hora completa; el asterisco no se quita al elegirla.
+                ->required(fn (Get $get) => $get('manual') && blank($get('manual_time')))
+                ->markAsRequired()
+                ->dehydrated(false),
+
+            ToggleButtons::make('manual_minute')
+                ->label('Minutos')
+                ->helperText(fn (Get $get) => self::manualTimeHint($get('manual_time')))
+                ->options(fn (Get $get) => self::minuteOptions($get('manual_time')))
+                ->inline()
+                ->fullWidth()
+                ->extraAttributes(['class' => 'slot-buttons time-buttons'])
+                ->live()
+                ->afterStateUpdated(fn (Get $get, Set $set) => self::composeManualTime($get, $set))
+                ->visible(fn (Get $get) => (bool) $get('manual'))
+                ->dehydrated(false),
 
             // "Otra hora" deja elegir una que ya pasó (sirve para anotar a quien vino sin cita): antes se pregunta.
             Checkbox::make('past_time_ok')
@@ -137,6 +167,86 @@ final class SlotPicker
         ];
     }
 
+    /**
+     * Las horas que se ofrecen con "Otra hora": de 6 de la mañana a 10 de la noche, más la que ya esté puesta si cae
+     * fuera (una hora que llegó de otro lado nunca queda sin su botón).
+     *
+     * @return array<int|string, string> "16" => "16"
+     */
+    private static function hourOptions(?string $current): array
+    {
+        $hours = range(self::FIRST_MANUAL_HOUR, self::LAST_MANUAL_HOUR);
+
+        if (($time = self::manualTimeParts($current)) !== null) {
+            $hours[] = $time['hour'];
+        }
+
+        sort($hours);
+
+        return collect($hours)->unique()->mapWithKeys(fn (int $hour) => [sprintf('%02d', $hour) => sprintf('%02d', $hour)])->all();
+    }
+
+    /**
+     * Los minutos, de cinco en cinco, más los que ya estén puestos si no son múltiplo de cinco.
+     *
+     * @return array<int|string, string> "05" => ":05"
+     */
+    private static function minuteOptions(?string $current): array
+    {
+        $minutes = range(0, 55, 5);
+
+        if (($time = self::manualTimeParts($current)) !== null) {
+            $minutes[] = $time['minute'];
+        }
+
+        sort($minutes);
+
+        return collect($minutes)->unique()->mapWithKeys(fn (int $minute) => [sprintf('%02d', $minute) => sprintf(':%02d', $minute)])->all();
+    }
+
+    /** Bajo los minutos: la hora que quedó (por la tarde, también como se dice: "4:20 p. m.") o qué falta tocar. */
+    private static function manualTimeHint(?string $current): string
+    {
+        $time = self::manualTimeParts($current);
+
+        return match (true) {
+            $time === null => 'Toca la hora y, si no es en punto, los minutos.',
+            $time['hour'] >= 13 => "La cita empieza a las {$current} (".Dates::time($current).').',
+            default => "La cita empieza a las {$current}.",
+        };
+    }
+
+    /** Al tocar la hora o los minutos: la hora completa. Sin minutos todavía, queda en punto; sin hora, espera. */
+    private static function composeManualTime(Get $get, Set $set): void
+    {
+        if (blank($get('manual_hour'))) {
+            return;
+        }
+
+        if (blank($get('manual_minute'))) {
+            $set('manual_minute', '00');
+        }
+
+        $set('manual_time', sprintf('%02d:%02d', (int) $get('manual_hour'), (int) $get('manual_minute')));
+    }
+
+    /** La hora que ya está puesta (la que se eligió o se tocó en la agenda) queda marcada en los botones. */
+    private static function showManualTime(Get $get, Set $set): void
+    {
+        if (($time = self::manualTimeParts($get('manual_time'))) !== null) {
+            $set('manual_hour', sprintf('%02d', $time['hour']));
+            $set('manual_minute', sprintf('%02d', $time['minute']));
+        }
+    }
+
+    /** @return array{hour: int, minute: int}|null Null si todavía no hay una hora completa. */
+    private static function manualTimeParts(?string $time): ?array
+    {
+        return preg_match('/^(\d{1,2}):(\d{2})/', (string) $time, $parts) === 1
+            ? ['hour' => (int) $parts[1], 'minute' => (int) $parts[2]]
+            : null;
+    }
+
     /** "Luis Quispe tiene esa hora (de 10:00 a 10:30). Márcalo solo si…" */
     private static function overbookWarning(?Appointment $inTheWay): ?string
     {
@@ -147,7 +257,7 @@ final class SlotPicker
     }
 
     /**
-     * Con "Otra hora" en una cita nueva: la cita que ya ocupa la hora escrita. Null si esa hora está libre, si falta
+     * Con "Otra hora" en una cita nueva: la cita que ya ocupa la hora elegida. Null si esa hora está libre, si falta
      * algún dato o si lo que estorba es un bloqueo (encima de un bloqueo no hay sobrecupo).
      */
     private static function appointmentInTheWay(Get $get): ?Appointment
@@ -175,7 +285,7 @@ final class SlotPicker
         return request()->attributes->get($memo);
     }
 
-    /** Con "Otra hora", la fecha y hora escritas ya quedaron atrás. */
+    /** Con "Otra hora", la fecha y hora elegidas ya quedaron atrás. */
     private static function manualTimeIsPast(Get $get): bool
     {
         if (! $get('manual') || blank($get('date')) || blank($get('manual_time'))) {
