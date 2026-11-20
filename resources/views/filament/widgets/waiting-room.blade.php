@@ -1,5 +1,5 @@
 <x-filament-widgets::widget>
-    <x-filament::section heading="Sala de espera" icon="heroicon-o-user-group" wire:poll.30s>
+    <x-filament::section heading="Sala de espera" icon="heroicon-o-user-group" :id="\App\Filament\Widgets\WaitingRoom::ANCHOR" class="dash-anchor" wire:poll.30s>
         @forelse ($patients as $patient)
             <a href="{{ $patient['url'] }}" class="dash-waiting">
                 <span>

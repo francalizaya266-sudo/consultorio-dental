@@ -19,6 +19,17 @@ final class DoctorDay
      */
     public function next(): ?Appointment
     {
+        return $this->upcoming(1)->first();
+    }
+
+    /**
+     * Los que vienen, en el orden en que se atienden: primero los que esperan en sala (por orden de
+     * llegada) y después las citas que faltan, por hora. El segundo es el "Después:" de "Tu próximo paciente".
+     *
+     * @return Collection<int, Appointment>
+     */
+    public function upcoming(int $count = 2): Collection
+    {
         return Appointment::query()
             ->where('doctor_id', $this->doctorId)
             ->whereDate('starts_at', today())
@@ -31,7 +42,8 @@ final class DoctorDay
             ->orderByRaw('case when status = ? then 0 else 1 end', [AppointmentStatus::CheckedIn->value])
             ->orderByRaw('case when status = ? then checked_in_at end', [AppointmentStatus::CheckedIn->value])
             ->orderBy('starts_at')
-            ->first();
+            ->limit($count)
+            ->get();
     }
 
     /** Cuántos pacientes suyos esperan en sala ahora. */

@@ -3,6 +3,7 @@
 namespace App\Filament\Widgets;
 
 use App\Enums\AppointmentStatus;
+use App\Enums\TodayView;
 use App\Filament\Actions\AppointmentActions;
 use App\Filament\Actions\RegisterPaymentAction;
 use App\Filament\Concerns\RefreshesWithToday;
@@ -47,7 +48,7 @@ class DayMomentCard extends Widget implements HasActions, HasSchemas
         /** @var User|null $user */
         $user = auth()->user();
 
-        return (bool) $user?->managesAllAgendas() && self::content() !== null;
+        return (bool) $user?->managesAllAgendas() && TodayView::current($user) === TodayView::Clinic && self::content() !== null;
     }
 
     /** El mismo "Confirmar" de la agenda, para las citas de hoy que siguen pendientes. */

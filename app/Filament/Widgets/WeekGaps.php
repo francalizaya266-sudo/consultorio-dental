@@ -2,6 +2,7 @@
 
 namespace App\Filament\Widgets;
 
+use App\Enums\TodayView;
 use App\Filament\Concerns\RefreshesWithToday;
 use App\Filament\Pages\Agenda;
 use App\Filament\Resources\WaitlistEntries\WaitlistEntryResource;
@@ -32,7 +33,7 @@ class WeekGaps extends Widget
         /** @var User|null $user */
         $user = auth()->user();
 
-        return (bool) $user?->managesAllAgendas();
+        return (bool) $user?->managesAllAgendas() && TodayView::current($user) === TodayView::Clinic;
     }
 
     /**

@@ -4,6 +4,7 @@ namespace App\Filament\Widgets;
 
 use App\Enums\AppointmentStatus;
 use App\Enums\RescheduleRequestStatus;
+use App\Enums\TodayView;
 use App\Filament\Concerns\RefreshesWithToday;
 use App\Filament\Pages\Agenda;
 use App\Filament\Pages\CashClosing as CashClosingPage;
@@ -14,16 +15,19 @@ use App\Models\Appointment;
 use App\Models\Payment;
 use App\Models\User;
 use App\Services\Billing\CashClosing;
+use App\Support\Dates;
 use App\Support\Money;
 use Carbon\CarbonImmutable;
 use Filament\Widgets\Widget;
+use Illuminate\Database\Eloquent\Builder;
 
 /**
- * Los números del día, grandes y a la vista. Solo se colorea el que espera una acción (alguien sin
- * confirmar, alguien que se fue debiendo); el resto queda neutro para que lo urgente resalte.
- * Recepción ve lo cobrado (las horas libres están en "Huecos de la semana"); el doctor, sus
- * solicitudes de cambio y sus avisos (recepción los tiene en "Por hacer hoy"). Quién está en sala
- * no se repite aquí: lo dicen la sala de espera y "Tu próximo paciente". Cada número lleva a su lista.
+ * Los números del día: cuatro, en una fila y a la vista. Solo se marca el que espera una acción (alguien sin
+ * confirmar, alguien que se fue debiendo) o una espera larga; el resto queda neutro para que lo urgente resalte.
+ * En "Toda la clínica": las citas, quién está en sala ahora (con scroll la sala puede quedar abajo, y una espera
+ * larga no debe pasar desapercibida), por confirmar y lo cobrado. En "Mi consulta": mis citas, mis por confirmar,
+ * las solicitudes de cambio y los avisos por enviar; quién me espera ya lo dice "Tu próximo paciente".
+ * Cada número lleva a su lista.
  */
 class TodayStats extends Widget
 {
@@ -42,20 +46,32 @@ class TodayStats extends Widget
         /** @var User $user */
         $user = auth()->user();
 
-        return ['stats' => array_values(array_filter([
-            $this->appointments(),
-            $this->unconfirmed(),
-            ...($user->managesAllAgendas()
-                ? [$this->collectedToday($user)]
-                : [$this->pendingRequests(), $this->dueMessages()]),
-        ]))];
+        if (TodayView::current($user) === TodayView::Clinic) {
+            return ['stats' => array_values(array_filter([
+                $this->appointments(),
+                $this->waitingRoom(),
+                $this->unconfirmed(),
+                $this->collectedToday($user),
+            ]))];
+        }
+
+        // Al doctor la lista ya le trae solo lo suyo; al administrador que atiende, "Mi consulta" la acota a su agenda.
+        $doctorId = $user->managesAllAgendas() ? $user->doctorId() : null;
+
+        return ['stats' => [
+            $this->appointments($doctorId, 'Mis citas de hoy'),
+            $this->unconfirmed($doctorId),
+            $this->pendingRequests(),
+            $this->dueMessages(),
+        ]];
     }
 
     /** @return array{label: string, value: int, hint: string, color: string, icon: string, url: string} */
-    private function appointments(): array
+    private function appointments(?int $doctorId = null, string $label = 'Citas de hoy'): array
     {
         // Las mismas que lista "Agenda de hoy", justo debajo: todas menos las canceladas.
         $today = AppointmentResource::getEloquentQuery()
+            ->when($doctorId, fn (Builder $query) => $query->where('doctor_id', $doctorId))
             ->whereDate('starts_at', today())
             ->where('status', '!=', AppointmentStatus::Cancelled)
             ->pluck('status');
@@ -65,7 +81,7 @@ class TodayStats extends Widget
         $missed = $today->filter(fn (AppointmentStatus $status) => $status === AppointmentStatus::NoShow)->count();
 
         return [
-            'label' => 'Citas de hoy',
+            'label' => $label,
             'value' => $today->count(),
             // Cuánto va del día; "atendidas" siempre, para que el cero se lea como cero y no como olvido.
             'hint' => collect([
@@ -85,9 +101,10 @@ class TodayStats extends Widget
     }
 
     /** @return array{label: string, value: int, hint: string, color: string, icon: string, url: string} */
-    private function unconfirmed(): array
+    private function unconfirmed(?int $doctorId = null): array
     {
         $count = AppointmentResource::getEloquentQuery()
+            ->when($doctorId, fn (Builder $query) => $query->where('doctor_id', $doctorId))
             ->awaitingConfirmation()
             ->todayOrTomorrow()
             ->count();
@@ -99,7 +116,27 @@ class TodayStats extends Widget
             'color' => $count > 0 ? 'warning' : 'gray',
             'icon' => 'heroicon-o-phone',
             // La pestaña trae todas las que faltan confirmar; con las fechas en el filtro quedan las de hoy y mañana, que son las que se cuentan aquí.
-            'url' => AppointmentResource::toConfirmUrl(today(), today()->addDay()),
+            'url' => AppointmentResource::toConfirmUrl(today(), today()->addDay(), doctorId: $doctorId),
+        ];
+    }
+
+    /**
+     * Quién está en sala ahora y cuánto lleva el que más espera: las mismas personas que la sala de espera, a la
+     * que lleva. Desde TodayAppointments::LONG_WAIT_MINUTES se marca en rojo.
+     *
+     * @return array{label: string, value: int, hint: string, color: string, icon: string, url: string}
+     */
+    private function waitingRoom(): array
+    {
+        $longest = WaitingRoom::waitingMinutes();
+
+        return [
+            'label' => 'En sala ahora',
+            'value' => $longest->count(),
+            'hint' => $longest->isEmpty() ? 'Nadie esperando' : 'El que más espera: '.Dates::duration($longest->max()),
+            'color' => $longest->max() >= TodayAppointments::LONG_WAIT_MINUTES ? 'danger' : 'gray',
+            'icon' => 'heroicon-o-user-group',
+            'url' => '#'.WaitingRoom::ANCHOR,
         ];
     }
 

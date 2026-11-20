@@ -5,6 +5,7 @@ namespace App\Filament\Widgets;
 use App\Enums\AppointmentStatus;
 use App\Enums\MessageTemplateKey;
 use App\Enums\RescheduleRequestStatus;
+use App\Enums\TodayView;
 use App\Filament\Actions\SendWhatsAppAction;
 use App\Filament\Concerns\RefreshesWithToday;
 use App\Filament\Pages\TomorrowTray;
@@ -71,7 +72,7 @@ class FollowUpsToday extends Widget implements HasActions, HasSchemas
         /** @var User|null $user */
         $user = auth()->user();
 
-        return (bool) $user?->managesAllAgendas();
+        return (bool) $user?->managesAllAgendas() && TodayView::current($user) === TodayView::Clinic;
     }
 
     /** Abre WhatsApp con el aviso del grupo para ese paciente, listo para retocar y enviar. */

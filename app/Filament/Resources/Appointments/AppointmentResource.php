@@ -72,13 +72,15 @@ class AppointmentResource extends Resource
 
     /**
      * La pestaña "Por confirmar" con esas fechas ya puestas en el filtro: la lista trae las mismas citas que cuenta
-     * quien enlaza (la tarjeta de Hoy, el aviso de citas sin confirmar).
+     * quien enlaza (la tarjeta de Hoy, el aviso de citas sin confirmar). Con $doctorId, solo las de ese doctor
+     * ("Mi consulta" del administrador que atiende).
      */
-    public static function toConfirmUrl(CarbonInterface $from, CarbonInterface $until, bool $onlyToCall = false): string
+    public static function toConfirmUrl(CarbonInterface $from, CarbonInterface $until, bool $onlyToCall = false, ?int $doctorId = null): string
     {
         return self::getUrl('index', ['tab' => 'pending', 'filters' => array_filter([
             'dates' => ['from' => $from->toDateString(), 'until' => $until->toDateString()],
             'to_call' => $onlyToCall ? ['isActive' => true] : null,
+            'doctor_id' => $doctorId !== null ? ['value' => $doctorId] : null,
         ])]);
     }
 

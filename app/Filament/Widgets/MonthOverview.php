@@ -2,6 +2,7 @@
 
 namespace App\Filament\Widgets;
 
+use App\Enums\TodayView;
 use App\Filament\Pages\Earnings;
 use App\Filament\Pages\OwingBalances;
 use App\Filament\Pages\Summary;
@@ -34,7 +35,8 @@ class MonthOverview extends StatsOverviewWidget
         /** @var User|null $user */
         $user = auth()->user();
 
-        return ReportAccess::canView($user);
+        // En "Mi consulta" del administrador que atiende no van los números de toda la clínica; el doctor ve los suyos.
+        return ReportAccess::canView($user) && (TodayView::current($user) === TodayView::Clinic || ! $user->managesAllAgendas());
     }
 
     public function getSectionContentComponent(): Component

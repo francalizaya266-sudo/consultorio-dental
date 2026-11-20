@@ -2,6 +2,7 @@
 
 namespace App\Filament\Pages;
 
+use App\Enums\TodayView;
 use App\Filament\Actions\CreateAppointmentAction;
 use App\Filament\Actions\RegisterPaymentAction;
 use App\Filament\Actions\WalkInAction;
@@ -11,9 +12,11 @@ use App\Filament\Widgets\DayMomentCard;
 use App\Filament\Widgets\FollowUpsToday;
 use App\Filament\Widgets\MonthOverview;
 use App\Filament\Widgets\NextPatient;
+use App\Filament\Widgets\OpenConsultations;
 use App\Filament\Widgets\SystemHealth;
 use App\Filament\Widgets\TodayAppointments;
 use App\Filament\Widgets\TodayStats;
+use App\Filament\Widgets\TodayViewSwitch;
 use App\Filament\Widgets\WaitingRoom;
 use App\Filament\Widgets\WeekGaps;
 use Filament\Actions\Action;
@@ -21,15 +24,18 @@ use Filament\Pages\Dashboard as BaseDashboard;
 use Filament\Schemas\Components\Grid;
 use Filament\Schemas\Components\Group;
 use Filament\Schemas\Schema;
+use Filament\Support\Enums\Width;
 use Filament\Support\Icons\Heroicon;
+use Illuminate\Support\Str;
 
 /**
- * El inicio como dashboard: todo lo del día en la primera pantalla. Arriba, los números del día y lo que toca
- * según la hora (antes de abrir, confirmar; al terminar, cerrar el día);
- * al centro, la agenda de hoy (y, para el doctor, su próximo paciente); al costado, la sala de espera,
- * lo que hay que hacer y los huecos de la semana; y al final, cómo va el mes. En el celular va en ese
- * mismo orden: primero lo del día, lo del mes al último. Cada tarjeta decide si se muestra con el
- * mismo permiso de la pantalla a la que lleva. Si a alguien no le toca nada del costado, el centro
+ * El inicio como dashboard: lo del día arriba y lo demás al bajar. Arriba, el selector de vista (solo el
+ * administrador que atiende), los avisos del sistema en una línea, los números del día y lo que toca según la
+ * hora (antes de abrir, confirmar; al terminar, cerrar el día); al centro, la agenda de hoy (y, para quien
+ * atiende, su próximo paciente); al costado, la sala de espera, las atenciones sin terminar, lo que hay que
+ * hacer y los huecos de la semana; y al final, cómo va el mes. En el celular va en ese mismo orden. Cada
+ * tarjeta decide si se muestra con el mismo permiso de la pantalla a la que lleva, y según la vista
+ * (TodayView): "Mi consulta" o "Toda la clínica". Si a alguien no le toca nada del costado, el centro
  * ocupa todo el ancho.
  */
 class Dashboard extends BaseDashboard
@@ -38,13 +44,13 @@ class Dashboard extends BaseDashboard
     public const CHANGED = 'today-changed';
 
     /** @var list<class-string> Arriba, a todo el ancho. */
-    private const TOP = [SystemHealth::class, TodayStats::class, DayMomentCard::class];
+    private const TOP = [TodayViewSwitch::class, SystemHealth::class, TodayStats::class, DayMomentCard::class];
 
     /** @var list<class-string> La columna ancha: lo de hoy. */
     private const MAIN = [NextPatient::class, TodayAppointments::class];
 
-    /** @var list<class-string> La columna angosta. */
-    private const SIDE = [WaitingRoom::class, FollowUpsToday::class, WeekGaps::class];
+    /** @var list<class-string> La columna angosta (en monitores grandes, dos columnas: panel.css, .dash-side). */
+    private const SIDE = [WaitingRoom::class, OpenConsultations::class, FollowUpsToday::class, WeekGaps::class];
 
     /** @var list<class-string> Debajo de la columna ancha (en el celular, al final de todo). */
     private const MONTH = [MonthOverview::class];
@@ -53,9 +59,48 @@ class Dashboard extends BaseDashboard
 
     protected static ?string $navigationLabel = 'Hoy';
 
+    /** Todo el ancho del monitor: en uno grande la agenda no aprieta nombres y el costado va en dos columnas. */
+    protected Width|string|null $maxContentWidth = Width::Full;
+
+    /** El selector de vista es un enlace (?vista=clinica): al abrirlo, la elección queda guardada. */
+    public function mount(): void
+    {
+        $view = TodayView::tryFrom((string) request()->query(TodayView::QUERY));
+
+        if ($view !== null && TodayView::canChoose(auth()->user())) {
+            $view->remember();
+        }
+    }
+
+    /** "Buenos días, Dr. Jassmanny": el saludo según la hora, con el trato y el primer nombre. */
+    public function getHeading(): string
+    {
+        $greeting = match (true) {
+            now()->hour < 12 => 'Buenos días',
+            now()->hour < 19 => 'Buenas tardes',
+            default => 'Buenas noches',
+        };
+        $name = trim((string) auth()->user()?->name);
+
+        if ($name === '') {
+            return $greeting;
+        }
+
+        // "Dr. Jassmanny Neil Vega" saluda a "Dr. Jassmanny"; "María López", a "María".
+        $first = preg_match('/^(Dra?\.?)\s+(\S+)/iu', $name, $match) ? $match[1].' '.$match[2] : Str::before($name, ' ');
+
+        return "{$greeting}, {$first}";
+    }
+
     public function getSubheading(): string
     {
         return ucfirst(today()->translatedFormat('l j \d\e F'));
+    }
+
+    /** Para el estilo propio de "Hoy" en panel.css (.today-page), sin tocar las demás pantallas. */
+    public function getPageClasses(): array
+    {
+        return ['today-page'];
     }
 
     /** @return list<class-string> */
@@ -66,7 +111,8 @@ class Dashboard extends BaseDashboard
 
     /**
      * Tres bloques en el orden en que se leen en el celular: hoy, el costado y el mes. En pantalla
-     * ancha el costado ocupa las dos filas (panel.css, .dash-side) y el mes queda bajo la agenda.
+     * ancha el costado ocupa las dos filas (panel.css, .dash-side) y el mes queda bajo la agenda; en un
+     * monitor grande el costado se abre en dos columnas.
      */
     public function content(Schema $schema): Schema
     {
@@ -79,11 +125,15 @@ class Dashboard extends BaseDashboard
             Grid::make(['default' => 1, 'lg' => 3])
                 ->extraAttributes(['class' => 'dash-layout'])
                 ->schema(array_values(array_filter([
-                    Group::make($this->getWidgetsSchemaComponents(self::MAIN))->columnSpan($wide),
+                    Group::make($this->getWidgetsSchemaComponents(self::MAIN))
+                        ->columnSpan($wide)
+                        ->extraAttributes(['class' => 'dash-main']),
                     $side === [] ? null : Group::make($side)
                         ->columnSpan(['default' => 1, 'lg' => 1])
                         ->extraAttributes(['class' => 'dash-side']),
-                    $month === [] ? null : Group::make($month)->columnSpan($wide),
+                    $month === [] ? null : Group::make($month)
+                        ->columnSpan($wide)
+                        ->extraAttributes(['class' => 'dash-below']),
                 ]))),
         ]);
     }

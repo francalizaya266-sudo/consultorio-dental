@@ -3,6 +3,7 @@
 namespace App\Filament\Widgets;
 
 use App\Enums\AppointmentStatus;
+use App\Enums\TodayView;
 use App\Filament\Actions\AppointmentActions;
 use App\Filament\Concerns\RefreshesWithToday;
 use App\Filament\Pages\Dashboard;
@@ -48,13 +49,15 @@ class TodayAppointments extends TableWidget
         /** @var User $user */
         $user = auth()->user();
 
-        $showDoctor = AppointmentsTable::showsDoctor($user);
+        $onlyDoctor = self::onlyDoctor($user);
+        $showDoctor = $onlyDoctor === null && AppointmentsTable::showsDoctor($user);
         $seesMoney = $user->can('viewAny', Charge::class);
 
         return $table
-            ->heading('Agenda de hoy')
+            ->heading($onlyDoctor !== null ? 'Mi agenda de hoy' : 'Agenda de hoy')
             ->query(fn () => AppointmentResource::getEloquentQuery()
                 ->with(['patient' => fn ($patient) => $patient->with('account')->when($seesMoney, fn ($q) => $q->withBalance()), 'treatment', 'doctor'])
+                ->when($onlyDoctor, fn ($query) => $query->where('doctor_id', $onlyDoctor))
                 ->whereDate('starts_at', today())
                 ->where('status', '!=', AppointmentStatus::Cancelled))
             ->columns([
@@ -120,10 +123,19 @@ class TodayAppointments extends TableWidget
         $this->dispatch(Dashboard::CHANGED);
     }
 
+    /** En "Mi consulta" del administrador que atiende, solo su agenda (al doctor la lista ya le trae solo la suya). */
+    private static function onlyDoctor(User $user): ?int
+    {
+        return $user->managesAllAgendas() && TodayView::current($user) === TodayView::Mine ? $user->doctorId() : null;
+    }
+
     private function nextId(): ?int
     {
         if ($this->nextId === null) {
+            $onlyDoctor = self::onlyDoctor(auth()->user());
+
             $this->nextId = AppointmentResource::getEloquentQuery()
+                ->when($onlyDoctor, fn ($query) => $query->where('doctor_id', $onlyDoctor))
                 ->whereDate('starts_at', today())
                 ->where('starts_at', '>=', now())
                 ->whereIn('status', [AppointmentStatus::Pending, AppointmentStatus::Confirmed])

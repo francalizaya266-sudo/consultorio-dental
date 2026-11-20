@@ -41,6 +41,10 @@
                         <div><dt>En sala</dt><dd>{{ $othersWaiting === 1 ? '1 paciente más espera' : $othersWaiting.' pacientes más esperan' }}</dd></div>
                     @endif
                 </dl>
+
+                @if ($after)
+                    <p class="dash-next-after"><span>Después</span> <time>{{ $after['time'] }}</time> {{ $after['text'] }}</p>
+                @endif
             @else
                 <div class="dash-empty">
                     <x-filament::icon icon="heroicon-o-check-circle" class="dash-empty-icon" />
@@ -48,29 +52,6 @@
                 </div>
             @endif
 
-            @if ($open !== [])
-                <section class="dash-group" aria-labelledby="open-consultations">
-                    <header class="dash-group-head">
-                        <h3 id="open-consultations">Atenciones sin terminar <span class="dash-count is-warning">{{ $openCount }}</span></h3>
-                    </header>
-                    <ul class="dash-rows">
-                        @foreach ($open as $consultation)
-                            <li>
-                                <div class="dash-row-text">
-                                    <span class="dash-name">{{ $consultation['name'] }}</span>
-                                    <small @class(['dash-late' => $consultation['late']])>{{ $consultation['detail'] }}</small>
-                                </div>
-                                <div class="dash-row-actions">
-                                    <x-filament::link :href="$consultation['url']" icon="heroicon-m-pencil-square" size="sm">Continuar</x-filament::link>
-                                </div>
-                            </li>
-                        @endforeach
-                    </ul>
-                    @if ($openCount > count($open))
-                        <x-filament::link :href="$openUrl" size="sm" class="dash-group-more">Ver las {{ $openCount }}</x-filament::link>
-                    @endif
-                </section>
-            @endif
         </x-filament::section>
     </div>
 

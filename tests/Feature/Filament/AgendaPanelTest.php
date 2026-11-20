@@ -53,11 +53,12 @@ class AgendaPanelTest extends TestCase
         $doctor = $this->doctorOffering($treatment);
         Appointment::factory()->for($doctor)->for($treatment)->at('2026-11-02 10:00')->create();
 
-        foreach ([User::factory()->admin()->create(), User::factory()->reception()->create(), $doctor->user] as $user) {
+        // El doctor ve "Mi consulta": sus citas.
+        foreach ([[User::factory()->admin()->create(), 'Citas de hoy'], [User::factory()->reception()->create(), 'Citas de hoy'], [$doctor->user, 'Mis citas de hoy']] as [$user, $appointmentsLabel]) {
             $this->actingAs($user);
 
             $this->get(Dashboard::getUrl())->assertOk();
-            Livewire::test(TodayStats::class)->assertSee(['Citas de hoy', 'Por confirmar']);
+            Livewire::test(TodayStats::class)->assertSee([$appointmentsLabel, 'Por confirmar']);
             Livewire::test(TodayAppointments::class)->assertOk();
             $this->get(AppointmentResource::getUrl('index'))->assertOk();
             $this->get(AppointmentResource::newUrl())->assertOk();

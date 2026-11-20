@@ -3,7 +3,7 @@
      Solo se pinta el número de lo que no puede esperar: citas sin cerrar, avisos, solicitudes, cuotas vencidas, el laboratorio y el inventario. --}}
 @php($firstWithRows = collect($sections)->search(fn (array $section) => $section['rows'] !== []))
 @php($urgent = ['left-open', 'messages', 'requests', 'installments', 'lab', 'supplies', 'batches'])
-<x-filament-widgets::widget>
+<x-filament-widgets::widget class="dash-tall">
     <x-filament::section heading="Por hacer hoy" icon="heroicon-o-clipboard-document-check" description="Avisos, respuestas y a quién escribirle hoy.">
         <x-slot name="afterHeader">
             {{ $this->addNoteAction }}
